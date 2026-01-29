@@ -431,6 +431,20 @@ public class AntFarmRpcCall {
                         + VERSION + "\"}]");
     }
 
+    /**
+     * Npc小鸡通用完成任务
+     * @param taskId
+     * @param taskSceneCode
+     * @return
+     */
+    public static String doNpcChickenTask(String taskId,String taskSceneCode) {
+        return RequestManager.requestString(
+                "com.alipay.antfarm.doFarmTask",
+                "[{\"bizKey\":\""+taskId+"\",\"requestType\":\"NORMAL\",\"sceneCode\":\"ANTFARM\"," +
+                        "\"source\":\"H5\",\"taskSceneCode\":\""+taskSceneCode+"\",\"version\":\""+VERSION+"\"}]"
+        );
+    }
+
     public static String queryTabVideoUrl() {
         return RequestManager.requestString("com.alipay.antfarm.queryTabVideoUrl",
                 "[{\"requestType\":\"NORMAL\",\"sceneCode\":\"ANTFARM\",\"source\":\"H5\",\"version\":\"" + VERSION

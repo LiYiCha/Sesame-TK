@@ -254,8 +254,8 @@ class AntFarm : ModelTask() {
     private var useSmartSchedulerManager: BooleanModelField? = null
     private var hasFence: Boolean = false       // 是否正在使用篱笆
     private var fenceCountDown: Int = 0
-    // 雇佣NPC
-    private var npcAnimalType: ChoiceModelField? = null
+    // 雇佣NPC（多选，按优先级排序）
+    private var npcAnimalType: SelectModelField? = null
     // NPC配置定义
     private enum class NpcConfig(val animalId: String, val source: String, val nickName: String) {
         NONE("", "", "关闭"),
@@ -270,6 +270,21 @@ class AntFarm : ModelTask() {
 
             fun getByIndex(index: Int): NpcConfig {
                 return entries.toTypedArray().getOrElse(index) { NONE }
+            }
+
+            fun getByNickName(nickName: String): NpcConfig? {
+                return entries.find { it.nickName == nickName }
+            }
+
+            fun getEntityList(): List<MapperEntity> {
+                return entries.filter { it != NONE }.map { config ->
+                    object : MapperEntity() {
+                        init {
+                            id = config.animalId
+                            name = config.nickName
+                        }
+                    }
+                }
             }
         }
     }
@@ -461,12 +476,11 @@ class AntFarm : ModelTask() {
                 hireAnimalList = it
             })
         modelFields.addField(
-            ChoiceModelField(
+            SelectModelField(
                 "npcAnimalType",
-                "雇佣NPC小鸡(满产自动重雇)",
-                NpcConfig.NONE.ordinal,
-                NpcConfig.nickNames
-            ).also { npcAnimalType = it })
+                "雇佣NPC小鸡(多选按优先级,满产自动重雇)",
+                LinkedHashSet<String?>()
+            ) { NpcConfig.getEntityList() }.also { npcAnimalType = it })
         modelFields.addField(
             BooleanModelField(
                 "sendBackAnimal",
@@ -666,7 +680,7 @@ class AntFarm : ModelTask() {
             }
 
             // 处理NPC小鸡逻辑 (大表鸽/黄金鸡/农场鸡)
-            if (npcAnimalType!!.value != NpcConfig.NONE.ordinal) {
+            if (npcAnimalType!!.value.isNotEmpty()) {
                 handleNpcAnimalLogic()
                 tc.countDebug("NPC小鸡任务")
             }
@@ -3748,15 +3762,24 @@ class AntFarm : ModelTask() {
     }
 
     /**
-     * 统一处理NPC小鸡的雇佣、切换、领奖与任务
+     * 统一处理NPC小鸡的雇佣、切换、领奖与任务（支持多选优先级）
      */
     private suspend fun handleNpcAnimalLogic() {
         try {
-            val selectedIndex = npcAnimalType?.value ?: 0
-            val targetConfig = NpcConfig.getByIndex(selectedIndex)
-            if (targetConfig == NpcConfig.NONE) return
+            // 1. 获取用户选择的 NPC 列表（按优先级排序）
+            val selectedNpcNames = npcAnimalType?.value ?: LinkedHashSet()
+            if (selectedNpcNames.isEmpty()) return
 
-            // 1. 同步最新状态以获取准确的 NPC 信息
+            // 将选中的名称转换为配置列表（保持顺序，即优先级）
+            val priorityConfigs = selectedNpcNames.mapNotNull { name ->
+                NpcConfig.getByNickName(name)
+            }.filter { it != NpcConfig.NONE }
+
+            if (priorityConfigs.isEmpty()) return
+
+            Log.record(TAG, "NPC小鸡🤖[优先级列表: ${priorityConfigs.joinToString(" > ") { it.nickName }}]")
+
+            // 2. 同步最新状态以获取准确的 NPC 信息
             val syncRes = AntFarmRpcCall.syncAnimalStatus(ownerFarmId, "SYNC_NPC", "QUERY_FARM_INFO")
             val joSync = JSONObject(syncRes)
             if (ResChecker.checkRes(TAG, joSync)) {
@@ -3766,7 +3789,7 @@ class AntFarm : ModelTask() {
                 return
             }
 
-            // 2. 从更新后的全局列表中查找 NPC 小鸡
+            // 3. 从更新后的全局列表中查找 NPC 小鸡
             var currentNpcAnimal: Animal? = null
             var currentNpcJson: JSONObject? = null
 
@@ -3787,22 +3810,49 @@ class AntFarm : ModelTask() {
                 }
             }
 
-            // 3. 决策逻辑
+            // 4. 决策逻辑
             if (currentNpcAnimal == null) {
-                // 场景A: 当前没有NPC -> 直接雇佣目标NPC
-                Log.record(TAG, "NPC小鸡🤖[当前未雇佣，准备雇佣${targetConfig.nickName}]")
-                hireNpc(targetConfig)
+                // 场景A: 当前没有NPC -> 按照优先级顺序尝试雇佣
+                Log.record(TAG, "NPC小鸡🤖[当前未雇佣，按优先级尝试雇佣]")
+                tryHireByPriority(priorityConfigs)
             } else {
                 // 场景B: 当前有NPC
                 val currentId = currentNpcAnimal.animalId
-                // 注意：这里比较 ID 需要确保 targetConfig.animalId 是准确的静态配置
-                if (currentId == targetConfig.animalId) {
-                    // B1: 正是选中的这只 -> 检查奖励是否已满及任务
-                    checkRewardAndTask(currentNpcAnimal, currentNpcJson, targetConfig)
+                val currentConfig = priorityConfigs.find { it.animalId == currentId }
+
+                if (currentConfig != null) {
+                    // B1: 当前 NPC 在优先级列表中
+                    // 检查是否有优先级更高的 NPC 可用（不在冷却中）
+                    val higherPriorityAvailable = priorityConfigs.takeWhile { it != currentConfig }
+                        .any { !isNpcInCooldown(it) }
+
+                    if (higherPriorityAvailable) {
+                        // 有优先级更高的 NPC 可用，切换
+                        val currentName = currentNpcAnimal.masterUserInfoVO?.get("nickName") as? String ?: "未知NPC"
+                        Log.record(TAG, "NPC小鸡🤖[检测到优先级更高的NPC可用，准备切换]")
+
+                        // 遣返当前
+                        val sendBackRes = AntFarmRpcCall.sendBackNpcAnimal(
+                            currentNpcAnimal.animalId,
+                            currentNpcAnimal.currentFarmId,
+                            currentNpcAnimal.masterFarmId
+                        )
+                        if (ResChecker.checkRes(TAG, JSONObject(sendBackRes))) {
+                            Log.farm("NPC小鸡🤖[已遣返${currentName}]")
+                            delay(1500)
+                            // 按优先级雇佣新的
+                            tryHireByPriority(priorityConfigs)
+                        } else {
+                            Log.record(TAG, "NPC小鸡🤖[遣返失败，暂停切换]")
+                        }
+                    } else {
+                        // 当前 NPC 优先级最高（或更高优先级的都在冷却中）-> 检查奖励是否已满及任务
+                        checkRewardAndTask(currentNpcAnimal, currentNpcJson, currentConfig)
+                    }
                 } else {
-                    // B2: 是其他类型的NPC -> 遣返旧的，雇佣新的
+                    // B2: 当前 NPC 不在优先级列表中 -> 遣返旧的，雇佣新的
                     val currentName = currentNpcAnimal.masterUserInfoVO?.get("nickName") as? String ?: "未知NPC"
-                    Log.record(TAG, "NPC小鸡🤖[检测到${currentName}，目标是${targetConfig.nickName}，执行切换]")
+                    Log.record(TAG, "NPC小鸡🤖[检测到${currentName}不在优先级列表中，执行切换]")
 
                     // 遣返当前
                     val sendBackRes = AntFarmRpcCall.sendBackNpcAnimal(
@@ -3813,8 +3863,8 @@ class AntFarm : ModelTask() {
                     if (ResChecker.checkRes(TAG, JSONObject(sendBackRes))) {
                         Log.farm("NPC小鸡🤖[已遣返${currentName}]")
                         delay(1500)
-                        // 雇佣新的
-                        hireNpc(targetConfig)
+                        // 按优先级雇佣新的
+                        tryHireByPriority(priorityConfigs)
                     } else {
                         Log.record(TAG, "NPC小鸡🤖[遣返失败，暂停切换]")
                     }
@@ -3825,21 +3875,191 @@ class AntFarm : ModelTask() {
         }
     }
 
+    /**
+     * 按照优先级顺序尝试雇佣NPC
+     */
+    private suspend fun tryHireByPriority(priorityConfigs: List<NpcConfig>) {
+        for (config in priorityConfigs) {
+            // 跳过冷却中的NPC
+            if (isNpcInCooldown(config)) {
+                val cooldownInfo = getNpcCooldownInfo(config)
+                Log.record(TAG, "NPC小鸡🤖[${config.nickName}冷却中$cooldownInfo，尝试下一个]")
+                continue
+            }
+
+            Log.record(TAG, "NPC小鸡🤖[尝试雇佣${config.nickName}...]")
+
+            if (hireNpc(config)) {
+                Log.farm("NPC小鸡🤖[成功雇佣${config.nickName}]")
+                return
+            }
+
+            delay(1000)
+        }
+
+        Log.record(TAG, "NPC小鸡🤖[所有优先级NPC雇佣失败或都在冷却期]")
+    }
+
+    /**
+     * 雇佣NPC，返回是否成功（会自动记录冷却状态）
+     */
     private fun hireNpc(config: NpcConfig): Boolean {
         try {
+            // 检查是否在冷却期
+            if (isNpcInCooldown(config)) {
+                val cooldownInfo = getNpcCooldownInfo(config)
+                Log.record(TAG, "NPC小鸡🤖[${config.nickName}处于冷却期$cooldownInfo，跳过雇佣]")
+                return false
+            }
+
             val s = AntFarmRpcCall.hireNpcAnimal(config.animalId, config.source)
             val jo = JSONObject(s)
+
+            // 检查是否是冷却相关的失败
+            val memo = jo.optString("memo", "")
+            val resultDesc = jo.optString("resultDesc", "")
+            val isCooldownError = isCooldownError(memo) || isCooldownError(resultDesc)
+
             if (ResChecker.checkRes(TAG, jo)) {
                 Log.farm("NPC小鸡🤖[成功雇佣${config.nickName}]")
                 syncAnimalStatus(ownerFarmId) // 刷新状态
                 return true
+            } else if (isCooldownError) {
+                // 记录冷却状态
+                recordNpcCooldown(config, jo.optString("resultDesc", jo.optString("memo", "冷却中")))
+                Log.record(TAG, "NPC小鸡🤖[${config.nickName}冷却中，已记录冷却状态]")
             } else {
-                Log.record(TAG, "NPC小鸡🤖[雇佣${config.nickName}失败: ${jo.optString("memo")}]")
+                Log.record(TAG, "NPC小鸡🤖[雇佣${config.nickName}失败: $memo]")
             }
         } catch (e: Exception) {
             Log.printStackTrace(TAG, "hireNpc err", e)
         }
         return false
+    }
+
+    /**
+     * 雇佣NPC（带冷却状态记录和错误提示）
+     */
+    private fun hireNpcWithFallback(config: NpcConfig): Boolean {
+        val success = hireNpc(config)
+        if (!success) {
+            // 如果失败，检查是否在冷却期
+            if (isNpcInCooldown(config)) {
+                val cooldownInfo = getNpcCooldownInfo(config)
+                Log.record(TAG, "NPC小鸡🤖[${config.nickName}冷却中$cooldownInfo，将尝试雇佣其他NPC]")
+            }
+        }
+        return success
+    }
+
+    /**
+     * 尝试雇佣其他可用的NPC（跳过当前失败的NPC）
+     */
+    private suspend fun tryHireAlternativeNpc(excludedConfig: NpcConfig) {
+        val alternativeConfigs = NpcConfig.entries.filter { it != NpcConfig.NONE && it != excludedConfig }
+
+        if (alternativeConfigs.isEmpty()) {
+            Log.record(TAG, "NPC小鸡🤖[没有其他可用的NPC类型]")
+            return
+        }
+
+        Log.record(TAG, "NPC小鸡🤖[尝试雇佣其他可用的NPC...]")
+
+        for (config in alternativeConfigs) {
+            // 跳过冷却中的NPC
+            if (isNpcInCooldown(config)) {
+                val cooldownInfo = getNpcCooldownInfo(config)
+                Log.record(TAG, "NPC小鸡🤖[${config.nickName}冷却中$cooldownInfo，跳过]")
+                continue
+            }
+
+            Log.record(TAG, "NPC小鸡🤖[尝试雇佣${config.nickName}...]")
+
+            if (hireNpc(config)) {
+                Log.farm("NPC小鸡🤖[成功切换到${config.nickName}]")
+                return
+            }
+
+            delay(1000)
+        }
+
+        Log.record(TAG, "NPC小鸡🤖[所有NPC雇佣失败或都在冷却期]")
+    }
+
+    /**
+     * 判断是否是冷却相关的错误信息
+     */
+    private fun isCooldownError(message: String): Boolean {
+        val cooldownKeywords = listOf("冷却", "cooldown", "cd", "CD", "等待", "次数不足", "今日已达上限", "hireLimit")
+        return cooldownKeywords.any { message.contains(it, ignoreCase = true) }
+    }
+
+    /**
+     * 记录NPC冷却状态
+     */
+    private fun recordNpcCooldown(config: NpcConfig, reason: String) {
+        try {
+            val today = LocalDate.now().toString()
+            val uid = UserMap.currentUid
+            val key = "NPC_COOLDOWN_${config.name}_$uid"
+            val timestamp = System.currentTimeMillis()
+
+            // 保存冷却开始时间和原因，有效期到次日0点
+            DataStore.put(key, "$timestamp|$reason")
+        } catch (e: Exception) {
+            Log.printStackTrace(TAG, "recordNpcCooldown err", e)
+        }
+    }
+
+    /**
+     * 检查NPC是否在冷却期
+     */
+    private fun isNpcInCooldown(config: NpcConfig): Boolean {
+        try {
+            val uid = UserMap.currentUid
+            val key = "NPC_COOLDOWN_${config.name}_$uid"
+            val data = DataStore.get(key, String::class.java) ?: return false
+
+            val parts = data.split("|")
+            if (parts.size >= 2) {
+                val timestamp = parts[0].toLongOrNull() ?: return false
+
+                // 检查是否还在今天（冷却到次日0点）
+                val todayStart = TimeUtil.getTodayCalendarByTimeStr("0000")?.timeInMillis ?: 0
+                if (timestamp < todayStart) {
+                    // 冷却期已过，清理记录
+                    DataStore.remove(key)
+                    return false
+                }
+
+                return true
+            }
+        } catch (e: Exception) {
+            Log.printStackTrace(TAG, "isNpcInCooldown err", e)
+        }
+        return false
+    }
+
+    /**
+     * 获取NPC冷却信息
+     */
+    private fun getNpcCooldownInfo(config: NpcConfig): String {
+        return try {
+            val uid = UserMap.currentUid
+            val key = "NPC_COOLDOWN_${config.name}_$uid"
+            val data = DataStore.get(key, String::class.java) ?: ""
+
+            if (data.isNotEmpty()) {
+                val parts = data.split("|")
+                if (parts.size >= 2) {
+                    return "(${parts[1]})"
+                }
+            }
+            ""
+        } catch (e: Exception) {
+            Log.printStackTrace(TAG, "getNpcCooldownInfo err", e)
+            ""
+        }
     }
 
     private suspend fun checkRewardAndTask(animal: Animal, animalJson: JSONObject?, config: NpcConfig) {
@@ -3939,6 +4159,10 @@ class AntFarm : ModelTask() {
                             val awardCount = task.optInt("awardCount", 0)
                             Log.farm("NPC任务🤖[完成: $title, 奖励: $awardCount 黄金票]")
                         }
+                    }
+                    // 通用任务提交
+                    else if(TaskStatus.TODO.name == taskStatus){
+                        AntFarmRpcCall.doNpcChickenTask(bizKey,"ANTFARM_CAIFU_NPC_TASK")
                     }
                     // 2. 做任务 (仅处理 TRIGGER 类型，如"开始攒黄金"、"领体验金")
                     else if (TaskStatus.TODO.name == taskStatus && taskMode == "TRIGGER") {
