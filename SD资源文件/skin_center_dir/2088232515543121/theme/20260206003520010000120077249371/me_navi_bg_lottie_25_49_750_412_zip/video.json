@@ -1,0 +1,15 @@
+{
+	"op":49,
+	"ip":0,
+	"w":750,
+	"videoParam":{
+		"contentMode":1,
+		"transparentVideo":"false",
+		"supportAudio":"false",
+		"isMuted":"true"
+	},
+	"h":412,
+	"videofilePath":"lottieVideo.mp4",
+	"type":"video",
+	"fr":25
+}

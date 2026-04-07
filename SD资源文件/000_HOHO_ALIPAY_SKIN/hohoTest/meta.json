@@ -1,0 +1,47 @@
+{
+  "description": "HOHO自定义背景",
+  "themeColor": "#5E1A24",
+  "resource": [
+    {
+      "position": "z01.0001",
+      "description": "付款码背景",
+      "type": "image",
+      "imageList": [
+        {
+          "path": "background_2x1_2.png",
+          "resolution": 2
+        },
+        {
+          "path": "background_16x9_1.png",
+          "resolution": 1.78
+        },
+        {
+          "path": "background_4x3.png",
+          "resolution": 1.33
+        }
+      ]
+    },
+    {
+      "position": "z02.0001",
+      "description": "付款码卡头背景颜色",
+      "type": "gradient",
+      "gradient": {
+        "start": "#0000FF",
+        "end": "#FFFFFF",
+        "degrade": 90
+      }
+    },
+    {
+      "position": "z02.0002",
+      "description": "付款码卡头中间logo",
+      "type": "image",
+      "image": "logo_2.png"
+    },
+    {
+      "position": "z02.0003",
+      "description": "付款码卡头右侧水印",
+      "type": "image",
+      "image": "mask_2.png"
+    }
+  ]
+}

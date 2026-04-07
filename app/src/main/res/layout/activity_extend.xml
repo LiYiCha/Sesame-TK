@@ -1,0 +1,115 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:orientation="vertical"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/background">
+
+    <include layout="@layout/base_title" />
+
+    <ScrollView
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:padding="16dp">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical">
+
+            <!-- 树项目相关按钮 -->
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="🌳 树项目查询"
+                android:textSize="18sp"
+                android:textStyle="bold"
+                android:textColor="@color/textColorPrimary"
+                android:layout_marginBottom="12dp" />
+
+            <Button
+                android:id="@+id/get_tree_items"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="查询未解锁项目"
+                android:layout_marginBottom="8dp"
+                style="@style/Widget.App.Button.Main" />
+
+            <Button
+                android:id="@+id/get_newTree_items"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="查询树苗上新"
+                android:layout_marginBottom="8dp"
+                style="@style/Widget.App.Button.Main" />
+
+            <Button
+                android:id="@+id/query_area_trees"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="查询未解锁地区"
+                android:layout_marginBottom="8dp"
+                style="@style/Widget.App.Button.Main" />
+
+            <Button
+                android:id="@+id/get_unlock_treeItems"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="查询树苗余量"
+                android:layout_marginBottom="16dp"
+                style="@style/Widget.App.Button.Main" />
+
+            <!-- 运行控制相关按钮 -->
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="▶️ 运行控制"
+                android:textSize="18sp"
+                android:textStyle="bold"
+                android:textColor="@color/textColorPrimary"
+                android:layout_marginBottom="12dp" />
+
+            <Button
+                android:id="@+id/re_run"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="重新运行"
+                android:layout_marginBottom="8dp"
+                style="@style/Widget.App.Button.Main" />
+
+            <Button
+                android:id="@+id/keep_run"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="继续运行"
+                android:layout_marginBottom="8dp"
+                style="@style/Widget.App.Button.Main" />
+
+            <Button
+                android:id="@+id/relogin"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="重新登录"
+                android:layout_marginBottom="8dp"
+                style="@style/Widget.App.Button.Main" />
+
+            <Button
+                android:id="@+id/restart_module"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="模块重新加载"
+                android:layout_marginBottom="8dp"
+                style="@style/Widget.App.Button.Main" />
+
+            <Button
+                android:id="@+id/check_status"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="检查运行状态"
+                android:layout_marginBottom="8dp"
+                style="@style/Widget.App.Button.Main" />
+        </LinearLayout>
+
+    </ScrollView>
+
+</LinearLayout>

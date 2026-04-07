@@ -1,0 +1,47 @@
+{
+  "description": "阿狸-新春花灯会",
+  "themeColor": "#5E1A24",
+  "resource": [
+    {
+      "position": "z01.0001",
+      "description": "付款码背景",
+      "type": "image",
+      "imageList": [
+        {
+          "path": "background_2x1",
+          "resolution": 2
+        },
+        {
+          "path": "background_16x9",
+          "resolution": 1.78
+        },
+        {
+          "path": "background_4x3",
+          "resolution": 1.33
+        }
+      ]
+    },
+    {
+      "position": "z02.0001",
+      "description": "付款码卡头背景颜色",
+      "type": "gradient",
+      "gradient": {
+        "start": "#A82A4B",
+        "end": "#A82A4B",
+        "degrade": 0
+      }
+    },
+    {
+      "position": "z02.0002",
+      "description": "付款码卡头中间logo",
+      "type": "image",
+      "image": "logo"
+    },
+    {
+      "position": "z02.0003",
+      "description": "付款码卡头右侧水印",
+      "type": "image",
+      "image": "mask"
+    }
+  ]
+}
