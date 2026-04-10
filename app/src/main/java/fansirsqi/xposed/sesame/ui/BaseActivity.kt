@@ -3,13 +3,16 @@ package fansirsqi.xposed.sesame.ui
 import android.content.Context
 import android.content.pm.PackageManager
 import android.content.res.Configuration
+import android.graphics.Color
 import android.os.Bundle
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.ContextCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import com.google.android.material.appbar.MaterialToolbar
 import fansirsqi.xposed.sesame.R
+import fansirsqi.xposed.sesame.data.RunType.*
 import fansirsqi.xposed.sesame.data.ViewAppInfo
 import fansirsqi.xposed.sesame.util.PermissionUtil
 
@@ -72,6 +75,13 @@ open class BaseActivity : AppCompatActivity() {
         super.onContentChanged()
         setSupportActionBar(toolbar)
 
+        when (ViewAppInfo.getRunType()) {
+            DISABLE -> setBaseTitleTextColor(
+                ContextCompat.getColor(this, R.color.not_active_text)
+            )
+            ACTIVE, LOADED -> setBaseTitleTextColor(Color.WHITE)
+            else -> setBaseTitleTextColor(Color.WHITE)
+        }
         // 文字居中显示，MaterialToolbar 会自动处理状态栏高度
         toolbar.setContentInsetsAbsolute(0, 0)
         toolbar.title = baseTitle

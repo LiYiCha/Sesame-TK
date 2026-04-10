@@ -17,7 +17,7 @@ public class Logback {
     }
     public static List<String> logNames = List.of(
             "runtime", "system", "record", "debug", "forest",
-            "farm", "other", "error", "capture");
+            "farm", "other", "error", "capture", "http");
     public static void configureLogbackDirectly() {
         LoggerContext lc = (LoggerContext) LoggerFactory.getILoggerFactory();
         lc.stop();

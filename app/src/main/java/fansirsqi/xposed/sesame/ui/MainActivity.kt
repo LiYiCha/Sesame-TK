@@ -41,6 +41,8 @@ import fansirsqi.xposed.sesame.newui.DeviceInfoUtil
 import fansirsqi.xposed.sesame.newui.WatermarkView
 import fansirsqi.xposed.sesame.ui.extra.activity.HelpActivity
 import fansirsqi.xposed.sesame.ui.extra.activity.RpcDebugActivity
+import fansirsqi.xposed.sesame.ui.network.NetworkListActivity
+import fansirsqi.xposed.sesame.ui.network.NetworkPacketListActivity
 import fansirsqi.xposed.sesame.ui.update.UpdateConfig
 import fansirsqi.xposed.sesame.util.FansirsqiUtil
 import fansirsqi.xposed.sesame.util.Files
@@ -299,11 +301,11 @@ class MainActivity : BaseActivity() {
             menu.add(0, 2, 2, R.string.view_error_log_file)    // 异常日志
             menu.add(0, 3, 3, R.string.view_all_log_file)      // 全部日志
             menu.add(0, 4, 4, R.string.view_runtim_log_file)   // 运行日志
-            menu.add(0, 5, 5, R.string.view_capture)           // 抓包记录
+            menu.add(0, 5, 5, R.string.view_capture)           // 抓包记录 (旧版)
             menu.add(0, 6, 6, R.string.extend)                 // 扩展功能
             menu.add(0, 7, 7, R.string.settings)               // 设置
             menu.add(0, 8, 8, R.string.test_post)              // 模拟请求(RpcDebugActivity)
-            menu.add(0, 9, 9, R.string.debug_log)              // Debug日志
+            menu.add(0, 9, 9, "流量抓包查看")                   // 新版抓包浏览器
             if (BuildConfig.DEBUG) {
                 menu.add(0, 10, 10, R.string.clearn)           // 清空配置
             }
@@ -353,7 +355,7 @@ class MainActivity : BaseActivity() {
                 allIt.data = runtimeData.toUri()
                 startActivity(allIt)
             }
-            //抓包日志
+            // 抓包日志
             5 -> {
                 var captureData = "file://"
                 captureData += Files.getCaptureLogFile().absolutePath
@@ -373,15 +375,9 @@ class MainActivity : BaseActivity() {
                 val rpcDebugIntent = Intent(this, RpcDebugActivity::class.java)
                 startActivity(rpcDebugIntent)
             }
-            //dubug日志
+            // 流量抓包查看
             9 -> {
-                var debugData = "file://"
-                debugData += Files.getDebugLogFile().absolutePath
-                val debugIt = Intent(this, LogViewerComposeActivity::class.java)
-                debugIt.putExtra("nextLine", false)
-                debugIt.putExtra("canClear", true)
-                debugIt.data = debugData.toUri()
-                startActivity(debugIt)
+                startActivity(Intent(this, NetworkPacketListActivity::class.java))
             }
             //清空配置
             10 -> AlertDialog.Builder(this).setTitle("⚠️ 警告").setMessage("🤔 确认清除所有模块配置？").setPositiveButton(R.string.ok) { _: DialogInterface?, _: Int ->

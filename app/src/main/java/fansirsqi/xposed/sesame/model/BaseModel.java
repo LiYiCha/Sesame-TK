@@ -96,6 +96,21 @@ public class BaseModel extends Model {
     public static final BooleanModelField debugMode = new BooleanModelField("debugMode", "开启抓包(基于新接口)", false);
 
     /**
+     * 是否开启网络抓包 (HTTP/HTTPS)
+     */
+    /**
+     * 是否开启网络抓包 (HTTP/HTTPS)
+     */
+    @Getter
+    public static final BooleanModelField enableHttpCapture = new BooleanModelField("enableHttpCapture", "开启网络抓包(HTTP/HTTPS)", false);
+
+    /**
+     * 抓包域名过滤 (关键词排除)
+     */
+    @Getter
+    public static final StringModelField httpCaptureFilter = new StringModelField("httpCaptureFilter", "抓包黑名单(关键词逗号分隔)", "log.alipay.com,mdap.alipay.com,diagnose.alipay.com");
+
+    /**
      * 是否自动获取token
      */
     @Getter
@@ -236,6 +251,8 @@ public class BaseModel extends Model {
         modelFields.addField(autoTokenEnabled);//是否自动获取token
         modelFields.addField(enableSkinModule);//是否启用皮肤模块
         modelFields.addField(enableMonitorSkinModule);//是否启用监控多主题导出
+        modelFields.addField(enableHttpCapture);//是否启用http网络请求抓包
+        modelFields.addField(httpCaptureFilter); //抓包黑名单
         modelFields.addField(sendHookData);//启用Hook数据转发
         modelFields.addField(sendHookDataUrl);//Hook数据转发地址
         modelFields.addField(batteryPerm);//是否申请支付宝的后台运行权限

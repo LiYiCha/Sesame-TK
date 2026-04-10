@@ -20,6 +20,7 @@ public class Log {
     private static final Logger OTHER_LOGGER;
     private static final Logger ERROR_LOGGER;
     private static final Logger CAPTURE_LOGGER;
+    private static final Logger HTTP_LOGGER;
 
     static {
         Logback.configureLogbackDirectly();
@@ -32,6 +33,7 @@ public class Log {
         OTHER_LOGGER = LoggerFactory.getLogger("other");
         ERROR_LOGGER = LoggerFactory.getLogger("error");
         CAPTURE_LOGGER = LoggerFactory.getLogger("capture");
+        HTTP_LOGGER = LoggerFactory.getLogger("http");
     }
     private static final String separator = "==================================================";
     private static String truncateLogMessage(String message) {
@@ -131,6 +133,14 @@ public class Log {
 
     public static void capture(String TAG, String message) {
         capture("[" + TAG + "]: " + message);
+    }
+
+    public static void http(String message) {
+        HTTP_LOGGER.info("{}", message);
+    }
+
+    public static void http(String TAG, String message) {
+        http("[" + TAG + "]: " + message);
     }
 
     public static void printStackTrace(Throwable th) {

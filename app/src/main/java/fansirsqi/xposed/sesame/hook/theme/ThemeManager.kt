@@ -18,8 +18,10 @@ object ThemeManager {
 
     private const val TAG = "ThemeManager"
 
-    // 支付宝内部存储路径
-    private const val INTERNAL_STORAGE_PATH = "/data/data/com.eg.android.AlipayGphone/files/skin_center_dir"
+    // 支付宝内部存储路径 (动态获取，支持分身应用)
+    val INTERNAL_STORAGE_PATH: String
+        get() = AppContext.getAppContext()?.let { File(it.filesDir, "skin_center_dir").absolutePath }
+            ?: "/data/data/com.eg.android.AlipayGphone/files/skin_center_dir"
 
     // 外部存储路径（SD卡）
     private val EXTERNAL_STORAGE_PATH: String
@@ -200,7 +202,7 @@ object ThemeManager {
         // 检查更新操作
         val updateFile = File(UPDATE_PATH)
         if (updateFile.exists()) {
-            executeUpdateOperation(userId, userThemeDir)
+            applyTheme(userId, userThemeDir)
             updateFile.deleteRecursively()
         }
     }
@@ -308,26 +310,58 @@ object ThemeManager {
      * 5. 重新读取缓存
      * 6. 刷新 UI
      */
-    private fun executeUpdateOperation(userId: String, userThemeDir: File) {
+    /**
+     * 自动恢复主题（如果缺失）
+     */
+    fun restoreThemeIfMissing(userId: String) {
+        try {
+            val selectedThemeFile = File(EXTERNAL_STORAGE_PATH, SELECTED_THEME_FILE)
+            if (!selectedThemeFile.exists()) return
+
+            val selectedThemeId = selectedThemeFile.readText().trim()
+            if (selectedThemeId.isEmpty()) return
+
+            val userThemeDir = File(INTERNAL_STORAGE_PATH, userId)
+            val themeBaseDir = File(userThemeDir, "theme")
+            val targetThemeDir = File(themeBaseDir, selectedThemeId)
+
+            // 检查目标主题目录是否存在，以及核心配置文件是否存在
+            if (!targetThemeDir.exists() || !File(targetThemeDir, "theme_info.json").exists()) {
+                Log.runtime(TAG, "⚠️ 当前选中主题文件丢失或不完整 ($selectedThemeId)，尝试自动恢复...")
+                applyTheme(userId, userThemeDir, quiet = true)
+            }
+        } catch (e: Exception) {
+            Log.runtime(TAG, "⚠️ 检查自动恢复时出错: ${e.message}")
+        }
+    }
+
+    /**
+     * 执行更新/应用操作
+     *
+     * @param userId 用户ID
+     * @param userThemeDir 用户主题基础目录
+     * @param quiet 是否静默模式（不显示 Toast）
+     */
+    fun applyTheme(userId: String, userThemeDir: File, quiet: Boolean = false) {
         try {
             val selectedThemeFile = File(EXTERNAL_STORAGE_PATH, SELECTED_THEME_FILE)
             if (!selectedThemeFile.exists()) {
                 Log.runtime(TAG, "✗ 主题更新失败: 未选择主题")
-                showToast("主题更新失败: 未选择主题")
+                if (!quiet) showToast("主题更新失败: 未选择主题")
                 return
             }
 
             val selectedThemeId = selectedThemeFile.readText().trim()
             if (selectedThemeId.isEmpty()) {
                 Log.runtime(TAG, "✗ 主题更新失败: 主题ID为空")
-                showToast("主题更新失败: 主题ID为空")
+                if (!quiet) showToast("主题更新失败: 主题ID为空")
                 return
             }
 
             val sourceThemeDir = File(EXTERNAL_STORAGE_PATH, "$THEMES_FOLDER/$selectedThemeId")
             if (!sourceThemeDir.exists()) {
                 Log.runtime(TAG, "✗ 主题更新失败: 主题不存在")
-                showToast("主题更新失败: 主题不存在")
+                if (!quiet) showToast("主题更新失败: 主题不存在")
                 return
             }
 
@@ -366,7 +400,7 @@ object ThemeManager {
                 val themeInfoFile = File(targetThemeDir, "theme_info.json")
                 if (!themeInfoFile.exists()) {
                     Log.runtime(TAG, "✗ theme_info.json 不存在")
-                    showToast("主题更新失败: theme_info.json 不存在")
+                    if (!quiet) showToast("主题更新失败: theme_info.json 不存在")
                     return
                 }
 
@@ -397,17 +431,17 @@ object ThemeManager {
                 notifySkinChanged()
 
                 Log.runtime(TAG, "✅ 主题切换成功: ${updatedThemeInfo.name}")
-                showToast("主题已切换: ${updatedThemeInfo.name}")
+                if (!quiet) showToast("主题已切换: ${updatedThemeInfo.name}")
 
             } catch (e: Exception) {
                 Log.runtime(TAG, "✗ 主题更新失败: ${e.message}")
                 Log.printStackTrace(TAG, e)
-                showToast("主题更新失败: ${e.message}")
+                if (!quiet) showToast("主题更新失败: ${e.message}")
             }
         } catch (e: Exception) {
             Log.runtime(TAG, "✗ 主题更新失败: ${e.message}")
             Log.printStackTrace(TAG, e)
-            showToast("主题更新失败: ${e.message}")
+            if (!quiet) showToast("主题更新失败: ${e.message}")
         }
     }
 
@@ -521,7 +555,7 @@ object ThemeManager {
                     "userId" to userId,
                     "md5" to themeInfo.md5,
                     "appSquareMd5" to themeInfo.md5,
-                    "cacheTime" to (themeInfo.cacheTime + 10L * 365 * 24 * 3600),
+                    "cacheTime" to (themeInfo.cacheTime + 365 * 24 * 3600),
                     "versionLimit" to themeInfo.versionLimit,
                     "isDiySkin" to false,
                     "name" to themeInfo.name,

@@ -2,41 +2,17 @@ package fansirsqi.xposed.sesame.hook;
 
 import android.annotation.SuppressLint;
 import android.app.Activity;
-import android.app.AlarmManager;
 import android.app.Application;
-import android.app.PendingIntent;
 import android.app.Service;
-import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
-import android.content.IntentFilter;
-import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
-import android.os.PowerManager;
-
-import androidx.annotation.NonNull;
-
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Member;
 import java.lang.reflect.Method;
-import java.text.SimpleDateFormat;
-import java.util.Calendar;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Locale;
 import java.util.Map;
-import java.util.Objects;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.RejectedExecutionException;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.ScheduledFuture;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.AtomicReference;
 import de.robv.android.xposed.IXposedHookLoadPackage;
 import de.robv.android.xposed.XC_MethodHook;
 import de.robv.android.xposed.XC_MethodReplacement;
@@ -55,12 +31,15 @@ import fansirsqi.xposed.sesame.hook.internal.LocationHelper;
 import fansirsqi.xposed.sesame.hook.internal.SecurityBodyHelper;
 import fansirsqi.xposed.sesame.hook.keepalive.SmartSchedulerManager;
 import fansirsqi.xposed.sesame.hook.lifecycle.LifecycleManager;
+import fansirsqi.xposed.sesame.hook.network.HttpCaptureHook;
+import fansirsqi.xposed.sesame.hook.network.NetworkHook;
 import fansirsqi.xposed.sesame.hook.rpc.bridge.RpcVersion;
 import fansirsqi.xposed.sesame.hook.scheduler.AlarmScheduler;
 import fansirsqi.xposed.sesame.hook.scheduler.TaskScheduler;
 import fansirsqi.xposed.sesame.data.General;
 import fansirsqi.xposed.sesame.hook.skin.SkinHook;
 import fansirsqi.xposed.sesame.hook.theme.ThemeHookV2;
+import fansirsqi.xposed.sesame.model.BaseModel;
 import fansirsqi.xposed.sesame.util.Log;
 
 public class ApplicationHook implements IXposedHookLoadPackage {
@@ -285,17 +264,6 @@ public class ApplicationHook implements IXposedHookLoadPackage {
                                 Log.runtime(TAG, "获取目标应用版本信息失败");
                                 Log.printStackTrace(e);
                             }
-                            // 处理主题操作
-                            try {
-                                fansirsqi.xposed.sesame.hook.theme.ThemeManager.INSTANCE.handleThemeOperations();
-                                // 如果启用了主题模块，启动监控
-                                if (fansirsqi.xposed.sesame.model.BaseModel.getEnableMonitorSkinModule().getValue()) {
-                                    fansirsqi.xposed.sesame.hook.theme.ThemeManager.INSTANCE.startOperationMonitor();
-                                }
-                            } catch (Throwable t) {
-                                Log.runtime(TAG, "主题操作处理异常");
-                                Log.printStackTrace(TAG, t);
-                            }
 
                             super.afterHookedMethod(param);
                         }
@@ -328,6 +296,26 @@ public class ApplicationHook implements IXposedHookLoadPackage {
             ThemeHookV2.setupHooks(AppContext.getClassLoader());
         } catch (Throwable t) {
             Log.runtime(TAG, "主题Hook模块初始化异常:"+t);
+            Log.printStackTrace(TAG, t);
+        }
+        // 处理主题操作
+        try {
+            fansirsqi.xposed.sesame.hook.theme.ThemeManager.INSTANCE.handleThemeOperations();
+            // 如果启用了主题模块，启动监控
+            if (BaseModel.getEnableMonitorSkinModule().getValue()) {
+                fansirsqi.xposed.sesame.hook.theme.ThemeManager.INSTANCE.startOperationMonitor();
+            }
+        } catch (Throwable t) {
+            Log.runtime(TAG, "主题操作处理异常");
+            Log.printStackTrace(TAG, t);
+        }
+        // 初始化网络监控拦截模块
+        try {
+            if (BaseModel.getEnableHttpCapture().getValue()) {
+                NetworkHook.setupHooks(AppContext.getClassLoader());
+            }
+        } catch (Throwable t) {
+            Log.runtime(TAG, "网络模块初始化异常:"+t);
             Log.printStackTrace(TAG, t);
         }
 
@@ -424,6 +412,7 @@ public class ApplicationHook implements IXposedHookLoadPackage {
                         }
                     });
             Log.runtime(TAG, "hook login successfully");
+
         } catch (Throwable t) {
             Log.runtime(TAG, "hook login err");
             Log.printStackTrace(TAG, t);
@@ -462,7 +451,8 @@ public class ApplicationHook implements IXposedHookLoadPackage {
                                 AuthCodeHelper.INSTANCE.init(AppContext.getClassLoader());
                                 AuthCodeHelper.INSTANCE.getAuthCode("2021005114632037");
                             }
-
+                            // 注册抓包 Hook
+                            HttpCaptureHook.setup(lpparam.classLoader);
                             // 注册广播接收器，使用回调接口
                             SesameReceiver.register(appService, new SesameReceiver.BroadcastCallback() {
                                 @Override

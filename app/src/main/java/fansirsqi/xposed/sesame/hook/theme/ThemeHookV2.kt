@@ -187,59 +187,57 @@ object ThemeHookV2 {
         }
     }
 
+    // 缓存区
+    @Volatile
+    private var cachedThemeInfo: ThemeInfo? = null
+    @Volatile
+    private var cachedUserId: String? = null
+    private var lastThemeFileModified: Long = 0
+
     /**
-     * 动态读取主题信息
-     *
-     * 优先从theme_info.json读取预处理的数据
-     * 如果不存在，回退到动态读取meta.json
-     *
-     * @param userId 用户ID
-     * @return 主题信息，如果未找到则返回null
+     * 动态读取主题信息 - 增加内存缓存优化
      */
     private fun loadThemeInfo(userId: String): ThemeInfo? {
         try {
-            // 1. 找到主题目录
-            val themeBaseDir = File("/data/data/com.eg.android.AlipayGphone/files/skin_center_dir/$userId/theme")
-            if (!themeBaseDir.exists()) {
-                Log.runtime(TAG, "⚠️ 主题目录不存在: ${themeBaseDir.absolutePath}")
-                return null
-            }
+            val themeBaseDir = File(ThemeManager.INTERNAL_STORAGE_PATH, "$userId/theme")
+            if (!themeBaseDir.exists()) themeBaseDir.mkdirs()
 
-            // 2. 查找所有主题目录
+            // 1. 寻找主题目录
             val themeDirs = themeBaseDir.listFiles { it.isDirectory }
-            if (themeDirs == null || themeDirs.isEmpty()) {
-                Log.runtime(TAG, "⚠️ 未找到主题目录")
+            if (themeDirs.isNullOrEmpty()) {
+                ThemeManager.restoreThemeIfMissing(userId)
                 return null
             }
 
-            // 3. 优先查找有 theme_info.json 的主题（自定义主题）
-            val customThemes = themeDirs.filter { File(it, "theme_info.json").exists() }
-
-            val themeDir = if (customThemes.isNotEmpty()) {
-                // 如果有多个自定义主题，取最新的（按修改时间排序）
-                customThemes.maxByOrNull { it.lastModified() }!!
-            } else {
-                // 如果没有自定义主题，取第一个（可能是官方主题）
-                themeDirs[0]
-            }
+            val themeDir = themeDirs.filter { File(it, "theme_info.json").exists() }.maxByOrNull { it.lastModified() }
+                ?: themeDirs[0]
 
             val themeInfoFile = File(themeDir, "theme_info.json")
 
-            // 4. 优先读取预处理的theme_info.json
+            // 2. 检查内存缓存是否有效 (根据文件修改时间判断)
+            val currentModified = if (themeInfoFile.exists()) themeInfoFile.lastModified() else 0
+            if (cachedThemeInfo != null && lastThemeFileModified == currentModified && currentModified != 0L) {
+                return cachedThemeInfo
+            }
+
+            // 3. 缓存失效，重新读取
             if (themeInfoFile.exists()) {
                 try {
-                    // 手动解析 JSON，避免 Jackson 反序列化 Kotlin data class 的问题
                     val json = JsonUtil.parseObject(themeInfoFile.readText(), Map::class.java) as Map<String, Any>
                     val themeInfo = ThemeInfo.fromMap(json)
-                    Log.runtime(TAG, "✓ 从theme_info.json加载主题信息: ${themeInfo.name}")
+                    
+                    // 更新缓存
+                    cachedThemeInfo = themeInfo
+                    lastThemeFileModified = currentModified
+                    
+                    Log.runtime(TAG, "⚡ 主题配置已更新 (I/O): ${themeInfo.name}")
                     return themeInfo
                 } catch (e: Exception) {
                     Log.runtime(TAG, "⚠️ 解析theme_info.json失败: ${e.message}")
                 }
             }
 
-            // 5. 回退：动态读取meta.json（兼容性）
-            Log.runtime(TAG, "⚠️ theme_info.json不存在，回退到动态读取")
+            // 4. 回退方案 (不进行内存缓存，因为元数据可能不稳定)
             return loadThemeInfoFromMeta(themeDir, userId)
 
         } catch (e: Exception) {
@@ -462,53 +460,37 @@ object ThemeHookV2 {
     }
 
     /**
-     * 获取当前用户ID
+     * 获取当前用户ID - 增加内存缓存优化
      */
     private fun getCurrentUserId(classLoader: ClassLoader): String? {
-        return try {
-            // 方案1：直接访问 UserMap（在 Xposed 环境中，我们的类已经被注入）
+        // 1. 优先使用内存缓存
+        if (!cachedUserId.isNullOrEmpty()) {
+            return cachedUserId
+        }
+
+        try {
+            // 2. 方案1：从 UserMap 获取
             try {
                 val currentUid = fansirsqi.xposed.sesame.util.maps.UserMap.currentUid
                 if (!currentUid.isNullOrEmpty()) {
-                    Log.runtime(TAG, "✓ 从 UserMap 获取用户ID: $currentUid")
+                    cachedUserId = currentUid
                     return currentUid
                 }
-            } catch (e: Exception) {
-                Log.runtime(TAG, "⚠️ 从 UserMap 获取用户ID失败: ${e.message}")
-            }
+            } catch (e: Exception) {}
 
-            // 方案2：从支付宝的类中获取
+            // 3. 方案2：从支付宝内部工具获取
             try {
                 val scCommonUtilClass = classLoader.loadClass("com.alipay.mobile.skincenter.util.SCCommonUtil")
-                val getCurrentUserIdMethod = scCommonUtilClass.getDeclaredMethod("getCurrentUserId")
-                val userId = getCurrentUserIdMethod.invoke(null) as? String
+                val userId = XposedHelpers.callStaticMethod(scCommonUtilClass, "getCurrentUserId") as? String
                 if (!userId.isNullOrEmpty()) {
-                    Log.runtime(TAG, "✓ 从 SCCommonUtil 获取用户ID: $userId")
+                    cachedUserId = userId
                     return userId
                 }
-            } catch (e: Exception) {
-                Log.runtime(TAG, "⚠️ 从 SCCommonUtil 获取用户ID失败: ${e.message}")
-            }
+            } catch (e: Exception) {}
 
-            // 方案3：从文件系统扫描（回退）
-            val skinCenterDir = File("/data/data/com.eg.android.AlipayGphone/files/skin_center_dir")
-            if (skinCenterDir.exists()) {
-                val userDirs = skinCenterDir.listFiles { file ->
-                    file.isDirectory && file.name.matches(Regex("^\\d+$"))
-                }
-                if (userDirs != null && userDirs.isNotEmpty()) {
-                    val userId = userDirs[0].name
-                    Log.runtime(TAG, "✓ 从文件系统扫描获取用户ID: $userId")
-                    return userId
-                }
-            }
-
-            Log.runtime(TAG, "⚠️ 所有方法都无法获取用户ID")
-            null
+            return null
         } catch (e: Exception) {
-            Log.runtime(TAG, "❌ 获取用户ID失败: ${e.message}")
-            Log.printStackTrace(TAG, e)
-            null
+            return null
         }
     }
 
