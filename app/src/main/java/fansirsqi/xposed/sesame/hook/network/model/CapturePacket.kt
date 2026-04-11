@@ -8,19 +8,19 @@ import java.util.UUID
  */
 data class CapturePacket(
     val id: String = UUID.randomUUID().toString(),
-    var url: String = "",
-    var method: String = "",
-    var host: String = "",
-    var startTime: Long = System.currentTimeMillis(),
-    var endTime: Long = 0,
-    var duration: Long = 0,
+    val url: String = "",
+    val method: String = "",
+    val host: String = "",
+    val startTime: Long = System.currentTimeMillis(),
+    val endTime: Long = 0,
+    val duration: Long = 0,
     var requestHeaders: Map<String, String>? = null,
     var responseHeaders: Map<String, String>? = null,
-    var responseCode: Int = 0,
+    val responseCode: Int = 0,
     var requestBodyFile: String? = null,
     var responseBodyFile: String? = null,
     var isImage: Boolean = false,
-    var contentType: String? = null,
-    var protocol: String = "HTTP", // HTTP or RPC
-    var errorMessage: String? = null
+    val contentType: String? = null,
+    val protocol: String = "HTTP", // HTTP or RPC
+    val errorMessage: String? = null
 ) : Serializable

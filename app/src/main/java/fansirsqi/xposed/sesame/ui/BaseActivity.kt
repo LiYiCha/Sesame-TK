@@ -20,21 +20,27 @@ open class BaseActivity : AppCompatActivity() {
     companion object {
         private const val REQUEST_EXTERNAL_STORAGE = 1
     }
-    // Toolbar 懒加载
-    protected val toolbar: MaterialToolbar by lazy { findViewById(R.id.x_toolbar) }
+    // Toolbar 安全获取：兼容 Compose 模式
+    protected val toolbar: MaterialToolbar? by lazy { 
+        try {
+            findViewById<MaterialToolbar>(R.id.x_toolbar)
+        } catch (e: Exception) {
+            null
+        }
+    }
 
     // 基础标题
     open var baseTitle: String?
         get() = ViewAppInfo.appTitle
         set(value) {
-            toolbar.title = value
+            toolbar?.title = value
         }
 
     // 基础副标题
     open var baseSubtitle: String?
         get() = null
         set(value) {
-            toolbar.subtitle = value
+            toolbar?.subtitle = value
         }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -73,23 +79,27 @@ open class BaseActivity : AppCompatActivity() {
 
     override fun onContentChanged() {
         super.onContentChanged()
-        setSupportActionBar(toolbar)
+        
+        // 只有当存在传统的 Toolbar 时才执行这些逻辑
+        toolbar?.let { tb ->
+            setSupportActionBar(tb)
 
-        when (ViewAppInfo.getRunType()) {
-            DISABLE -> setBaseTitleTextColor(
-                ContextCompat.getColor(this, R.color.not_active_text)
-            )
-            ACTIVE, LOADED -> setBaseTitleTextColor(Color.WHITE)
-            else -> setBaseTitleTextColor(Color.WHITE)
+            when (ViewAppInfo.getRunType()) {
+                DISABLE -> setBaseTitleTextColor(
+                    ContextCompat.getColor(this, R.color.not_active_text)
+                )
+                ACTIVE, LOADED -> setBaseTitleTextColor(Color.WHITE)
+                else -> setBaseTitleTextColor(Color.WHITE)
+            }
+            // 文字居中显示，MaterialToolbar 会自动处理状态栏高度
+            tb.setContentInsetsAbsolute(0, 0)
+            tb.title = baseTitle
+            tb.subtitle = baseSubtitle
         }
-        // 文字居中显示，MaterialToolbar 会自动处理状态栏高度
-        toolbar.setContentInsetsAbsolute(0, 0)
-        toolbar.title = baseTitle
-        toolbar.subtitle = baseSubtitle
     }
 
     fun setBaseTitleTextColor(color: Int) {
-        toolbar.setTitleTextColor(color)
+        toolbar?.setTitleTextColor(color)
     }
 
     override fun attachBaseContext(newBase: Context) {
@@ -104,8 +114,8 @@ open class BaseActivity : AppCompatActivity() {
         if ((newConfig.diff(resources.configuration) and Configuration.UI_MODE_NIGHT_MASK) != 0) {
             recreate()
         } else {
-            toolbar.title = baseTitle
-            toolbar.subtitle = baseSubtitle
+            toolbar?.let { it.title = baseTitle }
+            toolbar?.let { it.subtitle = baseSubtitle }
         }
     }
 }

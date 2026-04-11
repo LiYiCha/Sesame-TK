@@ -77,29 +77,23 @@ object HttpCaptureHook {
      */
     private fun captureAlipayTraffic(request: Any, response: Any, startTime: Long) {
         try {
-            val packet = CapturePacket()
-            packet.startTime = startTime
-            packet.protocol = "HTTP"
-            
             // --- 提取请求信息 ---
             val url = XposedHelpers.callMethod(request, "getUrl")?.toString() ?: "unknown"
-            packet.url = url
-            packet.method = XposedHelpers.callMethod(request, "getRequestMethod")?.toString() ?: "UNKNOWN"
+            val method = XposedHelpers.callMethod(request, "getRequestMethod")?.toString() ?: "UNKNOWN"
             
+            var currentHost = "unknown"
             try {
                 val uri = URI(url)
-                packet.host = uri.host ?: ""
-                if (packet.host.isNullOrEmpty() && url.contains("://")) {
-                    // 补充逻辑：处理一些不规范的 URL
-                    packet.host = url.substringAfter("://").substringBefore("/").substringBefore("?")
+                currentHost = uri.host ?: ""
+                if (currentHost.isEmpty() && url.contains("://")) {
+                    currentHost = url.substringAfter("://").substringBefore("/").substringBefore("?")
                 }
             } catch (e: Exception) {
-                packet.host = "invalid-url"
+                currentHost = "invalid-url"
             }
 
             // --- 域名过滤逻辑 ---
             val filterKeywords = BaseModel.httpCaptureFilter.value
-            val currentHost = packet.host ?: ""
             if (!filterKeywords.isNullOrBlank()) {
                 val keywords = filterKeywords.split(",").map { it.trim() }.filter { it.isNotEmpty() }
                 val match = keywords.find { currentHost.contains(it, ignoreCase = true) }
@@ -108,6 +102,7 @@ object HttpCaptureHook {
                     return
                 }
             }
+
             val reqHeadersMap = mutableMapOf<String, String>()
             val reqHeadersList = XposedHelpers.callMethod(request, "getHeaders") as? List<*>
             reqHeadersList?.forEach { header ->
@@ -117,23 +112,23 @@ object HttpCaptureHook {
                     if (name != null) reqHeadersMap[name] = value ?: ""
                 }
             }
-            packet.requestHeaders = reqHeadersMap
             
-            // 提取请求体 (增加大小检查)
+            // 提取请求体
             val reqDataRaw = XposedHelpers.callMethod(request, "getReqData") as? ByteArray
+            var errorMsg: String? = null
             val reqData = if (reqDataRaw != null && reqDataRaw.size > MAX_BODY_SIZE) {
-                packet.errorMessage = "Request body too large (${reqDataRaw.size} bytes), skipped."
+                errorMsg = "Request body too large (${reqDataRaw.size} bytes), skipped."
                 null
             } else {
                 reqDataRaw
             }
             
             // --- 提取响应信息 ---
-            packet.responseCode = XposedHelpers.callMethod(response, "getCode") as? Int ?: 0
-            packet.endTime = System.currentTimeMillis()
-            packet.duration = packet.endTime - packet.startTime
+            val responseCode = XposedHelpers.callMethod(response, "getCode") as? Int ?: 0
+            val endTime = System.currentTimeMillis()
+            val duration = endTime - startTime
             
-            // 提取响应头 (使用容错字段名)
+            // 提取响应头
             val resHeadersMap = mutableMapOf<String, String>()
             val httpUrlHeader = XposedHelpers.callMethod(response, "getHeader")
             if (httpUrlHeader != null) {
@@ -146,10 +141,9 @@ object HttpCaptureHook {
                     if (k != null) resHeadersMap[k.toString()] = v?.toString() ?: ""
                 }
             }
-            packet.responseHeaders = resHeadersMap
-            packet.contentType = resHeadersMap["Content-Type"] ?: resHeadersMap["content-type"]
+            val contentType = resHeadersMap["Content-Type"] ?: resHeadersMap["content-type"]
             
-            // 提取响应体 (兼容字段 + 增加大小检查)
+            // 提取响应体
             val resDataRaw = try {
                 XposedHelpers.getObjectField(response, "mResData") as? ByteArray
             } catch (e: Throwable) {
@@ -157,11 +151,27 @@ object HttpCaptureHook {
             }
             val resData = if (resDataRaw != null && resDataRaw.size > MAX_BODY_SIZE) {
                 val msg = "Response body too large (${resDataRaw.size} bytes), capture skipped to prevent OOM."
-                packet.errorMessage = if (packet.errorMessage == null) msg else "${packet.errorMessage}\n$msg"
+                errorMsg = if (errorMsg == null) msg else "$errorMsg\n$msg"
                 null
             } else {
                 resDataRaw
             }
+
+            // --- 创建不可变数据包 ---
+            val packet = CapturePacket(
+                url = url,
+                method = method,
+                host = currentHost,
+                startTime = startTime,
+                endTime = endTime,
+                duration = duration,
+                requestHeaders = reqHeadersMap,
+                responseHeaders = resHeadersMap,
+                responseCode = responseCode,
+                errorMessage = errorMsg,
+                contentType = contentType,
+                protocol = "HTTP"
+            )
 
             // --- 文件持久化 ---
             CaptureFileManager.save(packet, reqData, resData)

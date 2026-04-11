@@ -41,7 +41,6 @@ import fansirsqi.xposed.sesame.newui.DeviceInfoUtil
 import fansirsqi.xposed.sesame.newui.WatermarkView
 import fansirsqi.xposed.sesame.ui.extra.activity.HelpActivity
 import fansirsqi.xposed.sesame.ui.extra.activity.RpcDebugActivity
-import fansirsqi.xposed.sesame.ui.network.NetworkListActivity
 import fansirsqi.xposed.sesame.ui.network.NetworkPacketListActivity
 import fansirsqi.xposed.sesame.ui.update.UpdateConfig
 import fansirsqi.xposed.sesame.util.FansirsqiUtil
