@@ -7,6 +7,8 @@ import androidx.compose.material3.MaterialTheme
 import fansirsqi.xposed.sesame.hook.network.model.CapturePacket
 import fansirsqi.xposed.sesame.ui.BaseActivity
 
+import fansirsqi.xposed.sesame.ui.theme.app.SesameTheme
+
 /**
  * 抓包详情页：展示请求概览、请求体、响应体 (已迁移到 Compose)
  */
@@ -23,7 +25,7 @@ class NetworkDetailActivity : BaseActivity() {
 
         // 2. 渲染 UI
         setContent {
-            MaterialTheme {
+            SesameTheme {
                 NetworkDetailScreen(
                     viewModel = viewModel,
                     packet = packet,

@@ -19,6 +19,9 @@ import androidx.compose.material.icons.filled.*
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import fansirsqi.xposed.sesame.ui.theme.app.SesameTheme
+import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.rounded.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -83,7 +86,7 @@ class LogViewerComposeActivity : ComponentActivity() {
         }
 
         setContent {
-            LogViewerTheme {
+            SesameTheme {
                 LogViewerScreen(
                     viewModel = viewModel,
                     canClear = canClear,
@@ -177,36 +180,7 @@ class LogViewerComposeActivity : ComponentActivity() {
     }
 }
 
-/**
- * 日志查看器主题（支持系统主题）
- */
-@Composable
-fun LogViewerTheme(content: @Composable () -> Unit) {
-    val isDarkTheme = isSystemInDarkTheme()
-
-    val colorScheme = if (isDarkTheme) {
-        darkColorScheme(
-            primary = Color(0xFF90CAF9),
-            background = Color(0xFF0B0B0C),
-            surface = Color(0xFF1E1E1E),
-            onBackground = Color(0xFFE6E6E6),
-            onSurface = Color(0xFFE6E6E6)
-        )
-    } else {
-        lightColorScheme(
-            primary = Color(0xFF1976D2),
-            background = Color(0xFFFFFFFF),
-            surface = Color(0xFFF5F5F5),
-            onBackground = Color(0xFF1F1F1F),
-            onSurface = Color(0xFF1F1F1F)
-        )
-    }
-
-    MaterialTheme(
-        colorScheme = colorScheme,
-        content = content
-    )
-}
+// LogViewerTheme removed as it is replaced by SesameTheme
 
 /**
  * 日志查看器主屏幕
@@ -230,10 +204,10 @@ fun LogViewerScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("日志查看器") },
+                title = { Text("日志查看器", style = MaterialTheme.typography.titleMedium) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.Default.ArrowBack, "返回")
+                        Icon(Icons.AutoMirrored.Rounded.ArrowBack, "返回")
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -243,19 +217,19 @@ fun LogViewerScreen(
                 actions = {
                     // 搜索按钮
                     IconButton(onClick = { showSearchPanel = !showSearchPanel }) {
-                        Icon(Icons.Default.Search, "搜索")
+                        Icon(Icons.Rounded.Search, "搜索")
                     }
                     // 筛选按钮
                     IconButton(onClick = { showFilterPanel = !showFilterPanel }) {
-                        Icon(Icons.Default.FilterList, "筛选")
+                        Icon(Icons.Rounded.FilterList, "筛选")
                     }
                     // 日志级别过滤按钮
                     IconButton(onClick = { showLevelFilter = !showLevelFilter }) {
-                        Icon(Icons.Default.Settings, "日志级别")
+                        Icon(Icons.Rounded.Settings, "日志级别")
                     }
                     // 更多菜单
                     IconButton(onClick = { showMenu = true }) {
-                        Icon(Icons.Default.MoreVert, "更多")
+                        Icon(Icons.Rounded.MoreVert, "更多")
                     }
                     DropdownMenu(
                         expanded = showMenu,

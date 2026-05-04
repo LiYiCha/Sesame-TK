@@ -30,19 +30,23 @@
         <item name="android:colorBackground">@color/background</item>
     </style>
 
-    <style name="Widget.App.Button.Main" parent="Widget.Material3.Button">
+    <style name="Widget.App.Button.Main" parent="Widget.Material3.Button.ElevatedButton">
         <item name="android:textColor">@color/textColorPrimary</item>
-        <item name="backgroundTint">@color/main_button</item>
-        <item name="rippleColor">@color/button_pressed</item>
+        <item name="backgroundTint">#F8F9FA</item>
+        <item name="rippleColor">#150984E3</item>
         <item name="iconTint">@null</item>
+        <item name="iconSize">32dp</item>
         <item name="iconGravity">top</item>
-        <item name="cornerRadius">12dp</item>
-        <item name="iconPadding">2dp</item>
-        <item name="android:padding">12dp</item>
+        <item name="android:insetTop">0dp</item>
+        <item name="android:insetBottom">0dp</item>
+        <item name="android:paddingTop">16dp</item>
+        <item name="android:paddingBottom">16dp</item>
         <item name="android:textSize">12sp</item>
-        <item name="iconSize">48dp</item>
-        <item name="android:layout_width">113dp</item>
+        <item name="android:layout_width">0dp</item>
         <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_weight">1</item>
+        <item name="cornerRadius">16dp</item>
+        <item name="elevation">1dp</item>
     </style>
 
     <!--请求-->

@@ -18,6 +18,7 @@ import fansirsqi.xposed.sesame.util.Files
 import fansirsqi.xposed.sesame.util.Log
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -62,6 +63,21 @@ class NetworkPacketViewModel : ViewModel() {
             }
         }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val statistics: StateFlow<NetworkStats> = displayPackets.map { packets ->
+        val total = packets.size
+        val success = packets.count { it.responseCode in 200..299 }
+        val error = packets.count { it.responseCode >= 400 || it.responseCode == 0 }
+        val rate = if (total > 0) (success.toFloat() / total * 100).toInt() else 0
+        NetworkStats(total, success, error, rate)
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), NetworkStats())
+
+    data class NetworkStats(
+        val total: Int = 0,
+        val success: Int = 0,
+        val error: Int = 0,
+        val successRate: Int = 0
+    )
 
     /**
      * 加载数据。如果 dateStr 为空，则自动寻找最佳日期（今日优先，否则寻找最近的历史记录）
@@ -154,7 +170,7 @@ class NetworkPacketViewModel : ViewModel() {
         }
     }
 
-    fun clearAllLogs() {
+    fun clearAllHistory() {
         viewModelScope.launch(Dispatchers.IO) {
             _isLoading.value = true
             CaptureFileManager.clearAll()
@@ -169,6 +185,10 @@ class NetworkPacketViewModel : ViewModel() {
 
     fun updateSearchQuery(query: String) {
         _searchQuery.value = query
+    }
+
+    fun getDailyFolders(): List<String> {
+        return CaptureFileManager.getDailyFolders()
     }
 
     override fun onCleared() {

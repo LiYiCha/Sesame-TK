@@ -13,7 +13,6 @@ import kotlinx.coroutines.launch
 import java.io.File
 
 import fansirsqi.xposed.sesame.util.NetworkUtils
-import java.io.File
 
 class NetworkDetailViewModel : ViewModel() {
 

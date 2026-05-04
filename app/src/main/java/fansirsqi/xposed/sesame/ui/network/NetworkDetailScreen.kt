@@ -2,6 +2,7 @@ package fansirsqi.xposed.sesame.ui.network
 
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.pager.HorizontalPager
@@ -12,7 +13,9 @@ import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.rounded.*
 import androidx.compose.material3.*
+import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -20,20 +23,20 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import fansirsqi.xposed.sesame.hook.network.model.CapturePacket
+import fansirsqi.xposed.sesame.ui.theme.app.SesameColors
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.*
-
-import androidx.compose.ui.platform.LocalClipboardManager
-import androidx.compose.ui.text.AnnotatedString
-import androidx.compose.material.icons.rounded.ContentCopy
-import androidx.compose.material.icons.rounded.Check
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -51,67 +54,62 @@ fun NetworkDetailScreen(
         viewModel.loadBodies(packet)
     }
 
-    val statusColor = when {
-        packet.responseCode in 200..299 -> Color(0xFF4CAF50)
-        packet.responseCode in 400..499 -> Color(0xFFFF9800)
-        packet.responseCode >= 500 -> Color(0xFFF44336)
-        else -> MaterialTheme.colorScheme.outline
-    }
+    val statusColor = SesameColors.getStatusColor(packet.responseCode)
 
     Scaffold(
-        containerColor = MaterialTheme.colorScheme.surfaceContainerLowest,
+        containerColor = MaterialTheme.colorScheme.background,
         topBar = {
-            Surface(
-                tonalElevation = 2.dp,
-                shadowElevation = 2.dp
-            ) {
-                Column {
-                    TopAppBar(
-                        title = {
-                            Column {
-                                Text(
-                                    packet.host ?: "数据包详情",
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.Bold,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                                Text(
-                                    packet.url ?: "",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.outline,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                            }
-                        },
-                        navigationIcon = {
-                            IconButton(onClick = onBack) {
-                                Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "返回")
-                            }
-                        },
-                        actions = {
-                            IconButton(onClick = { clipboardManager.setText(AnnotatedString(packet.url ?: "")) }) {
-                                Icon(Icons.Rounded.ContentCopy, contentDescription = "复制 URL", modifier = Modifier.size(20.dp))
-                            }
+            Column(modifier = Modifier.background(Color.White)) {
+                TopAppBar(
+                    title = {
+                        Text(
+                            packet.host ?: "数据包详情",
+                            style = MaterialTheme.typography.titleSmall,
+                            color = MaterialTheme.colorScheme.onBackground
+                        )
+                    },
+                    navigationIcon = {
+                        IconButton(onClick = onBack) {
+                            Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "返回")
                         }
-                    )
-                    PrimaryTabRow(
-                        selectedTabIndex = pagerState.currentPage,
-                        containerColor = MaterialTheme.colorScheme.surface,
-                        divider = {}
-                    ) {
-                        tabs.forEachIndexed { index, title ->
-                            Tab(
-                                selected = pagerState.currentPage == index,
-                                onClick = {
-                                    coroutineScope.launch { pagerState.animateScrollToPage(index) }
-                                },
-                                text = { Text(title, fontWeight = if(pagerState.currentPage == index) FontWeight.Bold else FontWeight.Normal) }
-                            )
+                    },
+                    actions = {
+                        IconButton(onClick = { clipboardManager.setText(AnnotatedString(packet.url ?: "")) }) {
+                            Icon(Icons.Rounded.ContentCopy, contentDescription = "复制 URL", modifier = Modifier.size(20.dp))
                         }
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.White)
+                )
+                
+                TabRow(
+                    selectedTabIndex = pagerState.currentPage,
+                    containerColor = Color.White,
+                    divider = {},
+                    indicator = { tabPositions ->
+                        TabRowDefaults.SecondaryIndicator(
+                            Modifier.tabIndicatorOffset(tabPositions[pagerState.currentPage]),
+                            height = 2.dp,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                ) {
+                    tabs.forEachIndexed { index, title ->
+                        Tab(
+                            selected = pagerState.currentPage == index,
+                            onClick = {
+                                coroutineScope.launch { pagerState.animateScrollToPage(index) }
+                            },
+                            text = { 
+                                Text(
+                                    title, 
+                                    style = MaterialTheme.typography.labelLarge,
+                                    color = if(pagerState.currentPage == index) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline
+                                ) 
+                            }
+                        )
                     }
                 }
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant, thickness = 0.5.dp)
             }
         }
     ) { padding ->
@@ -122,7 +120,7 @@ fun NetworkDetailScreen(
         ) { page ->
             when (page) {
                 0 -> OverviewTab(packet, statusColor)
-                1 -> BodyTab(title = "Request Content", bodyFlow = viewModel.requestBody)
+                1 -> BodyTab(bodyFlow = viewModel.requestBody, themeColor = SesameColors.Secondary)
                 2 -> ResponseTab(viewModel)
             }
         }
@@ -135,53 +133,52 @@ private fun OverviewTab(packet: CapturePacket, statusColor: Color) {
     
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(16.dp)
+        contentPadding = PaddingValues(20.dp)
     ) {
         item {
-            DetailCard(title = "基础状态", accentColor = statusColor) {
-                InfoRow("URL", packet.url ?: "-", isFullWidth = true)
-                Row(modifier = Modifier.fillMaxWidth()) {
-                    Box(modifier = Modifier.weight(1f)) { InfoRow("Method", packet.method ?: "-") }
-                    Box(modifier = Modifier.weight(1f)) { InfoRow("Status", packet.responseCode.toString(), valueColor = statusColor) }
-                }
-                Row(modifier = Modifier.fillMaxWidth()) {
-                    Box(modifier = Modifier.weight(1f)) { InfoRow("Duration", "${packet.duration}ms") }
-                    Box(modifier = Modifier.weight(1f)) { InfoRow("Protocol", packet.protocol) }
-                }
-                InfoRow("Time", timeFormat.format(Date(packet.startTime)))
+            SectionTitle("基础信息")
+            InfoDocumentRow("请求地址", packet.url ?: "-", isFullWidth = true)
+            Row {
+                Box(modifier = Modifier.weight(1f)) { InfoDocumentRow("方法", packet.method ?: "-") }
+                Box(modifier = Modifier.weight(1f)) { InfoDocumentRow("状态码", if(packet.responseCode == 0) "PENDING" else packet.responseCode.toString(), valueColor = statusColor) }
             }
+            Row {
+                Box(modifier = Modifier.weight(1f)) { InfoDocumentRow("耗时", "${packet.duration}ms") }
+                Box(modifier = Modifier.weight(1f)) { InfoDocumentRow("协议", packet.protocol) }
+            }
+            InfoDocumentRow("开始时间", timeFormat.format(Date(packet.startTime)))
+            
+            Spacer(modifier = Modifier.height(24.dp))
         }
 
         if (!packet.requestHeaders.isNullOrEmpty()) {
             item {
-                DetailCard(title = "请求头 (Request Headers)", accentColor = MaterialTheme.colorScheme.primary) {
-                    packet.requestHeaders?.entries?.sortedBy { it.key }?.forEach { (k, v) -> 
-                        InfoRow(k, v) 
-                    }
+                SectionTitle("请求头")
+                packet.requestHeaders?.entries?.sortedBy { it.key }?.forEach { (k, v) -> 
+                    InfoDocumentRow(k, v) 
                 }
+                Spacer(modifier = Modifier.height(24.dp))
             }
         }
 
         if (!packet.responseHeaders.isNullOrEmpty()) {
             item {
-                DetailCard(title = "响应头 (Response Headers)", accentColor = MaterialTheme.colorScheme.tertiary) {
-                    packet.responseHeaders?.entries?.sortedBy { it.key }?.forEach { (k, v) -> 
-                        InfoRow(k, v) 
-                    }
+                SectionTitle("响应头")
+                packet.responseHeaders?.entries?.sortedBy { it.key }?.forEach { (k, v) -> 
+                    InfoDocumentRow(k, v) 
                 }
+                Spacer(modifier = Modifier.height(24.dp))
             }
         }
-        
-        item { Spacer(modifier = Modifier.height(24.dp)) }
     }
 }
 
 @Composable
-private fun BodyTab(title: String, bodyFlow: StateFlow<String?>) {
+private fun BodyTab(bodyFlow: StateFlow<String?>, themeColor: Color) {
     val body by bodyFlow.collectAsState()
     val clipboardManager = LocalClipboardManager.current
     
-    Box(modifier = Modifier.fillMaxSize()) {
+    Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -189,9 +186,9 @@ private fun BodyTab(title: String, bodyFlow: StateFlow<String?>) {
                 .padding(16.dp)
         ) {
             Surface(
-                color = MaterialTheme.colorScheme.surfaceContainer,
+                color = Color.White,
                 shape = RoundedCornerShape(12.dp),
-                border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFE1E4E8))
             ) {
                 SelectionContainer {
                     Text(
@@ -199,25 +196,27 @@ private fun BodyTab(title: String, bodyFlow: StateFlow<String?>) {
                         style = MaterialTheme.typography.bodySmall.copy(
                             fontFamily = FontFamily.Monospace,
                             fontSize = 11.sp,
-                            lineHeight = 16.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                            lineHeight = 18.sp,
+                            color = Color(0xFF2D3436)
                         ),
-                        modifier = Modifier.fillMaxWidth().padding(12.dp)
+                        modifier = Modifier.fillMaxWidth().padding(16.dp)
                     )
                 }
             }
-            Spacer(modifier = Modifier.height(80.dp))
+            Spacer(modifier = Modifier.height(100.dp))
         }
         
         if (!body.isNullOrBlank()) {
-            ExtendedFloatingActionButton(
+            Button(
                 onClick = { clipboardManager.setText(AnnotatedString(body!!)) },
-                icon = { Icon(Icons.Rounded.ContentCopy, contentDescription = null) },
-                text = { Text("复制内容") },
-                modifier = Modifier.align(Alignment.BottomEnd).padding(24.dp),
-                containerColor = MaterialTheme.colorScheme.primaryContainer,
-                contentColor = MaterialTheme.colorScheme.onPrimaryContainer
-            )
+                modifier = Modifier.align(Alignment.BottomCenter).padding(24.dp).fillMaxWidth(),
+                shape = RoundedCornerShape(12.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = themeColor)
+            ) {
+                Icon(Icons.Rounded.ContentCopy, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("复制内容")
+            }
         }
     }
 }
@@ -228,7 +227,7 @@ private fun ResponseTab(viewModel: NetworkDetailViewModel) {
     val body by viewModel.responseBody.collectAsState()
     val clipboardManager = LocalClipboardManager.current
 
-    Box(modifier = Modifier.fillMaxSize()) {
+    Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -236,24 +235,23 @@ private fun ResponseTab(viewModel: NetworkDetailViewModel) {
                 .padding(16.dp)
         ) {
             if (image != null) {
-                Card(
+                Surface(
                     shape = RoundedCornerShape(12.dp),
-                    elevation = CardDefaults.cardElevation(2.dp),
-                    modifier = Modifier.fillMaxWidth(),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+                    color = Color.White,
+                    border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFE1E4E8))
                 ) {
                     Image(
                         bitmap = image!!.asImageBitmap(),
                         contentDescription = null,
-                        modifier = Modifier.fillMaxWidth().background(Color.White),
+                        modifier = Modifier.fillMaxWidth().padding(8.dp),
                         contentScale = ContentScale.Inside
                     )
                 }
             } else {
                 Surface(
-                    color = MaterialTheme.colorScheme.surfaceContainer,
+                    color = Color.White,
                     shape = RoundedCornerShape(12.dp),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                    border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFE1E4E8))
                 ) {
                     SelectionContainer {
                         Text(
@@ -261,71 +259,65 @@ private fun ResponseTab(viewModel: NetworkDetailViewModel) {
                             style = MaterialTheme.typography.bodySmall.copy(
                                 fontFamily = FontFamily.Monospace,
                                 fontSize = 11.sp,
-                                lineHeight = 16.sp
+                                lineHeight = 18.sp,
+                                color = Color(0xFF2D3436)
                             ),
-                            modifier = Modifier.fillMaxWidth().padding(12.dp)
+                            modifier = Modifier.fillMaxWidth().padding(16.dp)
                         )
                     }
                 }
             }
-            Spacer(modifier = Modifier.height(80.dp))
+            Spacer(modifier = Modifier.height(100.dp))
         }
 
         if (!body.isNullOrBlank() && image == null) {
-            ExtendedFloatingActionButton(
+            Button(
                 onClick = { clipboardManager.setText(AnnotatedString(body!!)) },
-                icon = { Icon(Icons.Rounded.ContentCopy, contentDescription = null) },
-                text = { Text("复制响应") },
-                modifier = Modifier.align(Alignment.BottomEnd).padding(24.dp),
-                containerColor = MaterialTheme.colorScheme.secondaryContainer,
-                contentColor = MaterialTheme.colorScheme.onSecondaryContainer
-            )
-        }
-    }
-}
-
-@Composable
-private fun DetailCard(title: String, accentColor: Color, content: @Composable ColumnScope.() -> Unit) {
-    Card(
-        modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        elevation = CardDefaults.cardElevation(0.5.dp)
-    ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(modifier = Modifier.size(4.dp, 16.dp).clip(RoundedCornerShape(2.dp)).background(accentColor))
+                modifier = Modifier.align(Alignment.BottomCenter).padding(24.dp).fillMaxWidth(),
+                shape = RoundedCornerShape(12.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = SesameColors.Success)
+            ) {
+                Icon(Icons.Rounded.ContentCopy, contentDescription = null, modifier = Modifier.size(18.dp))
                 Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                    text = title,
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.ExtraBold,
-                    color = accentColor
-                )
+                Text("复制响应")
             }
-            Spacer(modifier = Modifier.height(12.dp))
-            content()
         }
     }
 }
 
 @Composable
-private fun InfoRow(key: String, value: String, isFullWidth: Boolean = false, valueColor: Color = MaterialTheme.colorScheme.onSurface) {
+private fun SectionTitle(title: String) {
+    Text(
+        text = title.uppercase(),
+        style = MaterialTheme.typography.labelSmall,
+        color = MaterialTheme.colorScheme.primary,
+        modifier = Modifier.padding(top = 16.dp, bottom = 8.dp)
+    )
+}
+
+@Composable
+private fun InfoDocumentRow(key: String, value: String, isFullWidth: Boolean = false, valueColor: Color = Color(0xFF2D3436)) {
     Column(modifier = Modifier.padding(vertical = 6.dp).fillMaxWidth()) {
         Text(
             text = key,
             style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.outline
+            color = Color(0xFFB2BEC3),
+            fontWeight = FontWeight.Bold
         )
+        Spacer(modifier = Modifier.height(2.dp))
         SelectionContainer {
             Text(
                 text = value,
                 style = MaterialTheme.typography.bodyMedium.copy(
                     fontWeight = FontWeight.Medium,
-                    color = valueColor
+                    color = valueColor,
+                    fontSize = 13.sp
                 ),
-                maxLines = if(isFullWidth) 10 else 2
+                maxLines = if(isFullWidth) 10 else 2,
+                overflow = TextOverflow.Ellipsis
             )
         }
+        Spacer(modifier = Modifier.height(4.dp))
+        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f), thickness = 0.5.dp)
     }
 }

@@ -3,6 +3,9 @@ package fansirsqi.xposed.sesame.util
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.util.zip.GZIPInputStream
+import android.content.Context
+import android.net.ConnectivityManager
+import fansirsqi.xposed.sesame.hook.context.AppContext
 
 object NetworkUtils {
 
@@ -43,5 +46,37 @@ object NetworkUtils {
     fun bytesToString(data: ByteArray): String {
         val decompressed = decompressGzip(data) ?: return "[Decompression Failed]"
         return String(decompressed, Charsets.UTF_8)
+    }
+
+    /**
+     * 检查网络是否可用
+     */
+    fun isNetworkAvailable(): Boolean {
+        val context = AppContext.getAppContext() ?: return true
+        return try {
+            val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+            val networkInfo = cm.activeNetworkInfo
+            networkInfo != null && networkInfo.isConnected
+        } catch (e: Exception) {
+            true
+        }
+    }
+
+    /**
+     * 获取网络类型名称
+     */
+    fun getNetworkType(): String {
+        val context = AppContext.getAppContext() ?: return "Unknown"
+        return try {
+            val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+            val networkInfo = cm.activeNetworkInfo
+            if (networkInfo != null && networkInfo.isConnected) {
+                networkInfo.typeName
+            } else {
+                "No Network"
+            }
+        } catch (e: Exception) {
+            "Unknown"
+        }
     }
 }

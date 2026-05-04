@@ -19,8 +19,9 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.lightColorScheme
 import androidx.compose.ui.graphics.Color
+import androidx.compose.runtime.mutableStateOf
+import fansirsqi.xposed.sesame.ui.theme.app.SesameTheme
 import androidx.compose.ui.platform.ComposeView
 import androidx.core.content.ContextCompat
 import androidx.core.net.toUri
@@ -39,6 +40,7 @@ import fansirsqi.xposed.sesame.entity.UserEntity
 import fansirsqi.xposed.sesame.newui.DeviceInfoCard
 import fansirsqi.xposed.sesame.newui.DeviceInfoUtil
 import fansirsqi.xposed.sesame.newui.WatermarkView
+import fansirsqi.xposed.sesame.ui.extension.ExtensionListActivity
 import fansirsqi.xposed.sesame.ui.extra.activity.HelpActivity
 import fansirsqi.xposed.sesame.ui.extra.activity.RpcDebugActivity
 import fansirsqi.xposed.sesame.ui.network.NetworkPacketListActivity
@@ -60,7 +62,7 @@ class MainActivity : BaseActivity() {
     private val TAG = "MainActivity"
     private var userNameArray = arrayOf("默认")
     private var userEntityArray = arrayOf<UserEntity?>(null)
-    private lateinit var oneWord: TextView
+    private val oneWordText = mutableStateOf("")
     private var hasPermissions = false
     private var isClick = false
     private val viewHandler = Handler(Looper.getMainLooper())
@@ -83,15 +85,14 @@ class MainActivity : BaseActivity() {
         }
 
         setContentView(R.layout.activity_main)
-        oneWord = findViewById(R.id.one_word)
         val deviceInfo: ComposeView = findViewById(R.id.device_info)
         val v = WatermarkView.install(this)
         deviceInfo.setContent {
-            val customColorScheme = lightColorScheme(
-                primary = Color(0xFF3F51B5), onPrimary = Color.White, background = Color(0xFFF5F5F5), onBackground = Color.Black
-            )
-            MaterialTheme(colorScheme = customColorScheme) {
-                DeviceInfoCard(DeviceInfoUtil.showInfo(verifyId))
+            SesameTheme {
+                DeviceInfoCard(
+                    info = DeviceInfoUtil.showInfo(verifyId),
+                    oneWord = oneWordText.value
+                )
             }
         }
 
@@ -137,7 +138,7 @@ class MainActivity : BaseActivity() {
         //随机一言
         lifecycleScope.launch {
             val result = FansirsqiUtil.getOneWord()
-            oneWord.text = result
+            oneWordText.value = result
         }
         
 //        // 初始化更新管理器
@@ -267,21 +268,11 @@ class MainActivity : BaseActivity() {
                 return
             }
 
-            R.id.btn_friend_watch -> {
-                startActivity(Intent(this, fansirsqi.xposed.sesame.ui.extension.ExtensionListActivity::class.java))
+            R.id.btn_extend_function -> {
+                startActivity(Intent(this, ExtensionListActivity::class.java))
                 return
             }
 
-            R.id.one_word -> {
-                oneWord.text = "正在获取句子，请稍后……"
-                //updateSubTitle(RunType.LOADED.nickName)
-
-                lifecycleScope.launch {
-                    val result = FansirsqiUtil.getOneWord()
-                    oneWord.text = result
-                }
-                return
-            }
         }
         val it = Intent(this, LogViewerComposeActivity::class.java)
         it.putExtra("canClear", true);

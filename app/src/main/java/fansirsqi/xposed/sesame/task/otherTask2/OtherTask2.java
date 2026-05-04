@@ -147,9 +147,7 @@ public class OtherTask2 extends ModelTask {
                     }),
                         new TaskWrapper("包裹游历",()->{
                             if (baoGuo.getValue()) {
-                                if (!Status.hasFlagToday("")) {
-                                    baoguo.INSTANCE.handle();
-                                }
+                                baoguo.INSTANCE.handle();
                             }
                         }),
 

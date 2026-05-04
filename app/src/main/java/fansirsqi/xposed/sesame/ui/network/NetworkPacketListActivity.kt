@@ -7,6 +7,8 @@ import androidx.activity.viewModels
 import androidx.compose.material3.MaterialTheme
 import fansirsqi.xposed.sesame.ui.BaseActivity
 
+import fansirsqi.xposed.sesame.ui.theme.app.SesameTheme
+
 /**
  * 抓包流水列表页：直接入口
  */
@@ -25,7 +27,7 @@ class NetworkPacketListActivity : BaseActivity() {
 
         // 3. 渲染 Compose UI
         setContent {
-            MaterialTheme {
+            SesameTheme {
                 NetworkPacketListScreen(
                     viewModel = viewModel,
                     onBack = { finish() },
