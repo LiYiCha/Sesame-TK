@@ -12,6 +12,9 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import java.io.File
 
+import fansirsqi.xposed.sesame.util.NetworkUtils
+import java.io.File
+
 class NetworkDetailViewModel : ViewModel() {
 
     private val _requestBody = MutableStateFlow<String?>(null)
@@ -25,12 +28,24 @@ class NetworkDetailViewModel : ViewModel() {
 
     fun loadBodies(packet: CapturePacket) {
         viewModelScope.launch(Dispatchers.IO) {
+            // 重置状态
+            _requestBody.value = null
+            _responseBody.value = null
+            _responseImage.value = null
+
             // 加载请求体
             packet.requestBodyFile?.let { path ->
                 val file = File(path)
                 if (file.exists()) {
-                    val raw = file.readText()
-                    _requestBody.value = formatIfJson(raw)
+                    try {
+                        val bytes = file.readBytes()
+                        val raw = NetworkUtils.bytesToString(bytes)
+                        _requestBody.value = formatIfJson(raw)
+                    } catch (e: Exception) {
+                        _requestBody.value = "加载失败: ${e.message}"
+                    }
+                } else {
+                    _requestBody.value = "(文件已被清理或不存在)"
                 }
             }
 
@@ -45,18 +60,31 @@ class NetworkDetailViewModel : ViewModel() {
                             _responseBody.value = "图片解码失败"
                         }
                     } else {
-                        val raw = file.readText()
-                        _responseBody.value = formatIfJson(raw)
+                        try {
+                            val bytes = file.readBytes()
+                            val raw = NetworkUtils.bytesToString(bytes)
+                            _responseBody.value = formatIfJson(raw)
+                        } catch (e: Exception) {
+                            _responseBody.value = "加载失败: ${e.message}"
+                        }
                     }
+                } else {
+                    _responseBody.value = "(文件已被清理或不存在)"
                 }
             }
         }
     }
 
     private fun formatIfJson(raw: String): String {
+        if (raw.isBlank()) return raw
         return try {
-            val obj = JsonUtil.parseObject(raw, Any::class.java)
-            JsonUtil.formatJson(obj)
+            val trimmed = raw.trim()
+            if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
+                val obj = JsonUtil.parseObject(raw, Any::class.java)
+                JsonUtil.formatJson(obj)
+            } else {
+                raw
+            }
         } catch (e: Exception) {
             raw
         }

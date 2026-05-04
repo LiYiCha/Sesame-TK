@@ -26,15 +26,16 @@ import fansirsqi.xposed.sesame.hook.network.model.CapturePacket
 fun NetworkPacketListScreen(
     viewModel: NetworkPacketViewModel,
     onBack: () -> Unit,
-    onPacketClick: (CapturePacket) -> Unit,
-    onClear: () -> Unit
+    onPacketClick: (CapturePacket) -> Unit
 ) {
     val packets by viewModel.displayPackets.collectAsState()
     val viewingDate by viewModel.viewingDate.collectAsState()
     val searchQuery by viewModel.searchQuery.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
+    val autoScroll by viewModel.autoScroll.collectAsState()
     
     var isSearchActive by remember { mutableStateOf(false) }
+    var showMenu by remember { mutableStateOf(false) }
 
     Scaffold(
         topBar = {
@@ -74,11 +75,37 @@ fun NetworkPacketListScreen(
                             Icon(Icons.Rounded.Search, contentDescription = "搜索")
                         }
                     }
-                    IconButton(onClick = onClear) {
-                        Icon(
-                            imageVector = Icons.Rounded.DeleteSweep, 
-                            contentDescription = "清空当前所有记录",
-                            tint = MaterialTheme.colorScheme.error
+                    IconButton(onClick = { showMenu = true }) {
+                        Icon(Icons.Rounded.MoreVert, contentDescription = "更多选项")
+                    }
+                    DropdownMenu(
+                        expanded = showMenu,
+                        onDismissRequest = { showMenu = false }
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text("自动滚动 (${if(autoScroll) "开" else "关"})") },
+                            leadingIcon = { Icon(if(autoScroll) Icons.Rounded.VerticalAlignBottom else Icons.Rounded.VerticalAlignTop, contentDescription = null) },
+                            onClick = { 
+                                viewModel.toggleAutoScroll()
+                                showMenu = false
+                            }
+                        )
+                        HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+                        DropdownMenuItem(
+                            text = { Text("清空当日记录", color = MaterialTheme.colorScheme.error) },
+                            leadingIcon = { Icon(Icons.Rounded.DeleteSweep, contentDescription = null, tint = MaterialTheme.colorScheme.error) },
+                            onClick = { 
+                                viewModel.clearCurrentDateLogs()
+                                showMenu = false
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("清空所有历史", color = MaterialTheme.colorScheme.error) },
+                            leadingIcon = { Icon(Icons.Rounded.DeleteForever, contentDescription = null, tint = MaterialTheme.colorScheme.error) },
+                            onClick = { 
+                                viewModel.clearAllLogs()
+                                showMenu = false
+                            }
                         )
                     }
                 },
@@ -94,7 +121,17 @@ fun NetworkPacketListScreen(
             } else if (packets.isEmpty()) {
                 EmptyStateView()
             } else {
+                val listState = androidx.compose.foundation.lazy.rememberLazyListState()
+                
+                // 自动滚动逻辑
+                LaunchedEffect(packets.size) {
+                    if (autoScroll && packets.isNotEmpty()) {
+                        listState.animateScrollToItem(0)
+                    }
+                }
+
                 LazyColumn(
+                    state = listState,
                     modifier = Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(12.dp)
                 ) {
@@ -103,7 +140,7 @@ fun NetworkPacketListScreen(
                             packet = packet,
                             onClick = { onPacketClick(packet) }
                         )
-                        Spacer(modifier = Modifier.height(8.dp))
+                        Spacer(modifier = Modifier.height(10.dp))
                     }
                 }
             }

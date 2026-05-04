@@ -29,7 +29,6 @@ class NetworkPacketListActivity : BaseActivity() {
                 NetworkPacketListScreen(
                     viewModel = viewModel,
                     onBack = { finish() },
-                    onClear = { viewModel.clearLogs() },
                     onPacketClick = { packet ->
                         val intent = Intent(this, NetworkDetailActivity::class.java)
                         intent.putExtra("packet", packet)

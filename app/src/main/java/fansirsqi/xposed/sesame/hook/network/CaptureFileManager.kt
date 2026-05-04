@@ -16,11 +16,8 @@ import java.util.*
 object CaptureFileManager {
     private const val TAG = "CaptureFileManager"
     private val BASE_DIR = File(Files.MAIN_DIR, "capture")
-    private val BODY_DIR = File(BASE_DIR, "bodies")
-
     init {
         Files.ensureDir(BASE_DIR)
-        Files.ensureDir(BODY_DIR)
     }
 
     /**
@@ -31,19 +28,23 @@ object CaptureFileManager {
             val dateStr = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date(packet.startTime))
             val timeStr = SimpleDateFormat("HHmmss_SSS", Locale.getDefault()).format(Date(packet.startTime))
             
+            // 按日期分子目录存储 Body，方便管理和清理
+            val dailyDir = File(BASE_DIR, dateStr)
+            if (!dailyDir.exists()) dailyDir.mkdirs()
+
             val shortId = if (packet.id.length >= 8) packet.id.substring(0, 8) else packet.id
             val baseFileName = "${timeStr}_${shortId}"
 
-            // 1. 保存请求体/响应体 (Binary)
-            saveBody(BODY_DIR, "${baseFileName}_req.bin", reqBody)?.let { packet.requestBodyFile = it }
-            saveBody(BODY_DIR, "${baseFileName}_res.bin", resBody)?.let { 
+            // 保存到日期目录
+            saveBody(dailyDir, "${baseFileName}_req.bin", reqBody)?.let { packet.requestBodyFile = it }
+            saveBody(dailyDir, "${baseFileName}_res.bin", resBody)?.let { 
                 packet.responseBodyFile = it
                 if (packet.contentType?.contains("image", ignoreCase = true) == true) {
                     packet.isImage = true
                 }
             }
 
-            // 2. 元数据通过 Logback 存储，解决跨进程写入权限难题
+            // 元数据通过 Logback 存储 (http.log 现在是纯 JSON 行)
             val metadataJson = JsonUtil.formatJson(packet, false)
             Log.http(metadataJson)
 
@@ -59,49 +60,57 @@ object CaptureFileManager {
             file.writeBytes(data)
             file.absolutePath
         } catch (e: Exception) {
-            Log.capture(TAG, "❌ 写入数据体失败: ${e.message} 路径: ${name}")
+            Log.capture(TAG, "Body 保存失败: ${e.message}")
             null
         }
     }
 
     /**
-     * 获取所有日期（扫描 Logback 备份文件）
+     * 获取历史抓包日期的文件夹列表
      */
     fun getDailyFolders(): List<String> {
-        val folders = mutableSetOf<String>()
-        // 1. 今日
-        folders.add(SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date()))
+        val folders = BASE_DIR.listFiles { f -> f.isDirectory && f.name.matches(Regex("\\d{4}-\\d{2}-\\d{2}")) }
+        return folders?.map { it.name }?.sortedDescending() ?: emptyList()
+    }
+
+    /**
+     * 获取指定日期的所有日志文件（包括当前和备份）
+     */
+    private fun getLogFilesForDate(dateStr: String): List<File> {
+        val today = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
+        val logFiles = mutableListOf<File>()
         
-        // 2. 历史回溯 (扫描 bak 目录下的 http 备份文件)
-        val bakDir = File(Files.LOG_DIR, "bak")
-        if (bakDir.exists()) {
-            bakDir.listFiles { f -> f.name.startsWith("http-") }?.forEach { f ->
-                // 文件名格式如: http-2024-04-10.0.log
-                val match = Regex("http-(\\d{4}-\\d{2}-\\d{2})").find(f.name)
-                match?.groupValues?.get(1)?.let { folders.add(it) }
-            }
+        if (dateStr == today) {
+            logFiles.add(File(Files.LOG_DIR, "http.log"))
         }
-        return folders.toList().sortedDescending()
+        
+        val bakDir = File(Files.LOG_DIR, "bak")
+        bakDir.listFiles { f -> f.name.contains("http-$dateStr") }?.let {
+            logFiles.addAll(it)
+        }
+        return logFiles
+    }
+
+    /**
+     * 解析单行日志为数据包对象
+     */
+    fun parseLine(line: String): CapturePacket? {
+        return try {
+            val jsonStart = line.indexOf("{")
+            if (jsonStart != -1) {
+                val json = line.substring(jsonStart)
+                JsonUtil.parseObject(json, CapturePacket::class.java)
+            } else null
+        } catch (e: Exception) {
+            null
+        }
     }
 
     /**
      * 从 Logback 日志中提取指定日期的抓包列表
      */
     fun getPacketsForDate(dateStr: String): List<CapturePacket> {
-        val today = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
-        val logFiles = mutableListOf<File>()
-        
-        // 如果是今天，首先读取活跃日志文件
-        if (dateStr == today) {
-            logFiles.add(File(Files.LOG_DIR, "http.log"))
-        }
-        
-        // 读取该日期的所有备份记录
-        val bakDir = File(Files.LOG_DIR, "bak")
-        bakDir.listFiles { f -> f.name.contains("http-$dateStr") }?.let {
-            logFiles.addAll(it)
-        }
-
+        val logFiles = getLogFilesForDate(dateStr)
         val packets = mutableListOf<CapturePacket>()
         
         for (file in logFiles) {
@@ -109,13 +118,7 @@ object CaptureFileManager {
             try {
                 file.bufferedReader().useLines { lines ->
                     lines.forEach { line ->
-                        val jsonStart = line.indexOf("{")
-                        if (jsonStart != -1) {
-                            val json = line.substring(jsonStart)
-                            JsonUtil.parseObject(json, CapturePacket::class.java)?.let {
-                                packets.add(it)
-                            }
-                        }
+                        parseLine(line)?.let { packets.add(it) }
                     }
                 }
             } catch (e: Exception) {
@@ -123,8 +126,37 @@ object CaptureFileManager {
             }
         }
         
-        // 仅在返回前做一次按时间排序，确保 UI 展示有序
         return packets.sortedByDescending { it.startTime }
+    }
+
+    /**
+     * 清空指定日期的记录
+     */
+    fun clearForDate(dateStr: String): Boolean {
+        return try {
+            val today = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
+            
+            // 1. 删除备份日志
+            val bakDir = File(Files.LOG_DIR, "bak")
+            bakDir.listFiles { f -> f.name.contains("http-$dateStr") }?.forEach { it.delete() }
+            
+            // 2. 如果是今天，清空活跃日志
+            if (dateStr == today) {
+                val httpLog = File(Files.LOG_DIR, "http.log")
+                if (httpLog.exists()) httpLog.writeText("")
+            }
+            
+            // 3. 物理删除该日期的所有 Body 文件夹
+            val dailyDir = File(BASE_DIR, dateStr)
+            if (dailyDir.exists()) {
+                fansirsqi.xposed.sesame.util.Files.delFile(dailyDir)
+            }
+            
+            true
+        } catch (e: Exception) {
+            Log.capture(TAG, "清空日期 $dateStr 记录失败: ${e.message}")
+            false
+        }
     }
 
     /**
@@ -135,7 +167,6 @@ object CaptureFileManager {
             // 1. 清空二进制存储
             Files.delFile(BASE_DIR)
             Files.ensureDir(BASE_DIR)
-            Files.ensureDir(BODY_DIR)
             
             // 2. 清空抓包日志
             val httpLog = File(Files.LOG_DIR, "http.log")
@@ -147,7 +178,7 @@ object CaptureFileManager {
             
             true
         } catch (e: Exception) {
-            Log.capture(TAG, "清空记录失败: ${e.message}")
+            Log.capture(TAG, "清空所有记录失败: ${e.message}")
             false
         }
     }

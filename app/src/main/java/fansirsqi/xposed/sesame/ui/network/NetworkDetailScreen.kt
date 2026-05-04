@@ -30,6 +30,11 @@ import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.*
 
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.material.icons.rounded.ContentCopy
+import androidx.compose.material.icons.rounded.Check
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun NetworkDetailScreen(
@@ -40,6 +45,7 @@ fun NetworkDetailScreen(
     val tabs = listOf("概览", "请求", "响应")
     val pagerState = rememberPagerState(pageCount = { tabs.size })
     val coroutineScope = rememberCoroutineScope()
+    val clipboardManager = LocalClipboardManager.current
     
     LaunchedEffect(packet.id) {
         viewModel.loadBodies(packet)
@@ -66,19 +72,27 @@ fun NetworkDetailScreen(
                                 Text(
                                     packet.host ?: "数据包详情",
                                     style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.Bold
+                                    fontWeight = FontWeight.Bold,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
                                 )
                                 Text(
                                     packet.url ?: "",
                                     style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.outline,
-                                    maxLines = 1
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
                                 )
                             }
                         },
                         navigationIcon = {
                             IconButton(onClick = onBack) {
                                 Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "返回")
+                            }
+                        },
+                        actions = {
+                            IconButton(onClick = { clipboardManager.setText(AnnotatedString(packet.url ?: "")) }) {
+                                Icon(Icons.Rounded.ContentCopy, contentDescription = "复制 URL", modifier = Modifier.size(20.dp))
                             }
                         }
                     )
@@ -165,29 +179,45 @@ private fun OverviewTab(packet: CapturePacket, statusColor: Color) {
 @Composable
 private fun BodyTab(title: String, bodyFlow: StateFlow<String?>) {
     val body by bodyFlow.collectAsState()
+    val clipboardManager = LocalClipboardManager.current
     
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(16.dp)
-    ) {
-        Surface(
-            color = MaterialTheme.colorScheme.surfaceContainer,
-            shape = RoundedCornerShape(12.dp)
+    Box(modifier = Modifier.fillMaxSize()) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(16.dp)
         ) {
-            SelectionContainer {
-                Text(
-                    text = body ?: "(Empty / Loading...)",
-                    style = MaterialTheme.typography.bodySmall.copy(
-                        fontFamily = FontFamily.Monospace,
-                        fontSize = 11.sp,
-                        lineHeight = 16.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    ),
-                    modifier = Modifier.fillMaxWidth().padding(12.dp)
-                )
+            Surface(
+                color = MaterialTheme.colorScheme.surfaceContainer,
+                shape = RoundedCornerShape(12.dp),
+                border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+            ) {
+                SelectionContainer {
+                    Text(
+                        text = body ?: "(Empty / Loading...)",
+                        style = MaterialTheme.typography.bodySmall.copy(
+                            fontFamily = FontFamily.Monospace,
+                            fontSize = 11.sp,
+                            lineHeight = 16.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        ),
+                        modifier = Modifier.fillMaxWidth().padding(12.dp)
+                    )
+                }
             }
+            Spacer(modifier = Modifier.height(80.dp))
+        }
+        
+        if (!body.isNullOrBlank()) {
+            ExtendedFloatingActionButton(
+                onClick = { clipboardManager.setText(AnnotatedString(body!!)) },
+                icon = { Icon(Icons.Rounded.ContentCopy, contentDescription = null) },
+                text = { Text("复制内容") },
+                modifier = Modifier.align(Alignment.BottomEnd).padding(24.dp),
+                containerColor = MaterialTheme.colorScheme.primaryContainer,
+                contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+            )
         }
     }
 }
@@ -196,43 +226,60 @@ private fun BodyTab(title: String, bodyFlow: StateFlow<String?>) {
 private fun ResponseTab(viewModel: NetworkDetailViewModel) {
     val image by viewModel.responseImage.collectAsState()
     val body by viewModel.responseBody.collectAsState()
+    val clipboardManager = LocalClipboardManager.current
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(16.dp)
-    ) {
-        if (image != null) {
-            Card(
-                shape = RoundedCornerShape(12.dp),
-                elevation = CardDefaults.cardElevation(2.dp),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Image(
-                    bitmap = image!!.asImageBitmap(),
-                    contentDescription = null,
-                    modifier = Modifier.fillMaxWidth().background(Color.White),
-                    contentScale = ContentScale.Inside
-                )
-            }
-        } else {
-            Surface(
-                color = MaterialTheme.colorScheme.surfaceContainer,
-                shape = RoundedCornerShape(12.dp)
-            ) {
-                SelectionContainer {
-                    Text(
-                        text = body ?: "(Empty / No Content)",
-                        style = MaterialTheme.typography.bodySmall.copy(
-                            fontFamily = FontFamily.Monospace,
-                            fontSize = 11.sp,
-                            lineHeight = 16.sp
-                        ),
-                        modifier = Modifier.fillMaxWidth().padding(12.dp)
+    Box(modifier = Modifier.fillMaxSize()) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(16.dp)
+        ) {
+            if (image != null) {
+                Card(
+                    shape = RoundedCornerShape(12.dp),
+                    elevation = CardDefaults.cardElevation(2.dp),
+                    modifier = Modifier.fillMaxWidth(),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+                ) {
+                    Image(
+                        bitmap = image!!.asImageBitmap(),
+                        contentDescription = null,
+                        modifier = Modifier.fillMaxWidth().background(Color.White),
+                        contentScale = ContentScale.Inside
                     )
                 }
+            } else {
+                Surface(
+                    color = MaterialTheme.colorScheme.surfaceContainer,
+                    shape = RoundedCornerShape(12.dp),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                ) {
+                    SelectionContainer {
+                        Text(
+                            text = body ?: "(Empty / No Content)",
+                            style = MaterialTheme.typography.bodySmall.copy(
+                                fontFamily = FontFamily.Monospace,
+                                fontSize = 11.sp,
+                                lineHeight = 16.sp
+                            ),
+                            modifier = Modifier.fillMaxWidth().padding(12.dp)
+                        )
+                    }
+                }
             }
+            Spacer(modifier = Modifier.height(80.dp))
+        }
+
+        if (!body.isNullOrBlank() && image == null) {
+            ExtendedFloatingActionButton(
+                onClick = { clipboardManager.setText(AnnotatedString(body!!)) },
+                icon = { Icon(Icons.Rounded.ContentCopy, contentDescription = null) },
+                text = { Text("复制响应") },
+                modifier = Modifier.align(Alignment.BottomEnd).padding(24.dp),
+                containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                contentColor = MaterialTheme.colorScheme.onSecondaryContainer
+            )
         }
     }
 }

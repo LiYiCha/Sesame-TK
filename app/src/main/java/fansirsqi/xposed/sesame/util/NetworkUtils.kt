@@ -1,41 +1,47 @@
 package fansirsqi.xposed.sesame.util
 
-import android.Manifest
-import android.content.Context
-import android.net.ConnectivityManager
-import android.net.NetworkCapabilities
-import androidx.annotation.RequiresPermission
-import fansirsqi.xposed.sesame.hook.ApplicationHook
+import java.io.ByteArrayInputStream
+import java.io.ByteArrayOutputStream
+import java.util.zip.GZIPInputStream
 
 object NetworkUtils {
 
-    @RequiresPermission(Manifest.permission.ACCESS_NETWORK_STATE)
-    fun isNetworkAvailable(): Boolean {
-        val context = ApplicationHook.getAppContext() ?: return false
-        val connectivityManager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager ?: return false
-        val network = connectivityManager.activeNetwork ?: return false
-        val activeNetwork = connectivityManager.getNetworkCapabilities(network) ?: return false
-        return when {
-            activeNetwork.hasTransport(NetworkCapabilities.TRANSPORT_VPN) -> true
-            activeNetwork.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) -> true
-            activeNetwork.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) -> true
-            activeNetwork.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET) -> true
-            else -> false
-        }
+    /**
+     * 判断数据是否为 GZIP 格式
+     */
+    fun isGzip(data: ByteArray): Boolean {
+        if (data.size < 2) return false
+        val header = (data[0].toInt() and 0xff) or ((data[1].toInt() and 0xff) shl 8)
+        return header == GZIPInputStream.GZIP_MAGIC
     }
 
-    @RequiresPermission(Manifest.permission.ACCESS_NETWORK_STATE)
-    fun getNetworkType(): String {
-        val context = ApplicationHook.getAppContext() ?: return "UNKNOWN"
-        val connectivityManager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager ?: return "UNKNOWN"
-        val network = connectivityManager.activeNetwork ?: return "NONE"
-        val activeNetwork = connectivityManager.getNetworkCapabilities(network) ?: return "UNKNOWN"
-        return when {
-            activeNetwork.hasTransport(NetworkCapabilities.TRANSPORT_VPN) -> "VPN"
-            activeNetwork.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) -> "WIFI"
-            activeNetwork.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) -> "移动数据"
-            activeNetwork.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET) -> "以太网"
-            else -> "UNKNOWN"
+    /**
+     * 解压 GZIP 数据
+     */
+    fun decompressGzip(data: ByteArray): ByteArray? {
+        if (!isGzip(data)) return data
+        
+        return try {
+            val bais = ByteArrayInputStream(data)
+            val gzis = GZIPInputStream(bais)
+            val baos = ByteArrayOutputStream()
+            val buffer = ByteArray(1024)
+            var len: Int
+            while (gzis.read(buffer).also { len = it } != -1) {
+                baos.write(buffer, 0, len)
+            }
+            baos.toByteArray()
+        } catch (e: Exception) {
+            Log.error("NetworkUtils", "GZIP 解压失败: ${e.message}")
+            null
         }
+    }
+    
+    /**
+     * 尝试将字节数组转为字符串，自动处理 GZIP
+     */
+    fun bytesToString(data: ByteArray): String {
+        val decompressed = decompressGzip(data) ?: return "[Decompression Failed]"
+        return String(decompressed, Charsets.UTF_8)
     }
 }

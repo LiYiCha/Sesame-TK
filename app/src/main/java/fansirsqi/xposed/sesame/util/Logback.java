@@ -57,7 +57,11 @@ public class Logback {
 
         PatternLayoutEncoder ple = new PatternLayoutEncoder();
         ple.setContext(loggerContext);
-        ple.setPattern("%d{dd日 HH:mm:ss.SS} %msg%n");
+        if ("http".equals(logName)) {
+            ple.setPattern("%msg%n");
+        } else {
+            ple.setPattern("%d{dd日 HH:mm:ss.SS} %msg%n");
+        }
         ple.start();
 
         rfa.setEncoder(ple);

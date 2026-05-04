@@ -14,7 +14,19 @@ import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.*
 
+import fansirsqi.xposed.sesame.util.Files
+import fansirsqi.xposed.sesame.util.Log
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.withContext
+import java.io.File
+import java.io.RandomAccessFile
+
 class NetworkPacketViewModel : ViewModel() {
+
+    private val TAG = "NetworkPacketViewModel"
+    private val POLL_INTERVAL = 1000L
 
     private val _allPackets = MutableStateFlow<List<CapturePacket>>(emptyList())
     
@@ -30,6 +42,13 @@ class NetworkPacketViewModel : ViewModel() {
     private val _isLoading = MutableStateFlow(false)
     val isLoading: StateFlow<Boolean> = _isLoading
 
+    // 自动滚动
+    private val _autoScroll = MutableStateFlow(true)
+    val autoScroll: StateFlow<Boolean> = _autoScroll
+
+    private var watchJob: Job? = null
+    private var raf: RandomAccessFile? = null
+
     // 最终展示的响应式列表
     val displayPackets: StateFlow<List<CapturePacket>> = combine(_allPackets, _searchQuery) { packets, query ->
         if (query.isBlank()) {
@@ -37,9 +56,9 @@ class NetworkPacketViewModel : ViewModel() {
         } else {
             val q = query.lowercase()
             packets.filter {
-                it.url?.lowercase()?.contains(q) == true ||
-                it.host?.lowercase()?.contains(q) == true ||
-                it.method?.lowercase()?.contains(q) == true
+                it.url.lowercase().contains(q) ||
+                it.host.lowercase().contains(q) ||
+                it.method.lowercase().contains(q)
             }
         }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
@@ -51,25 +70,91 @@ class NetworkPacketViewModel : ViewModel() {
         viewModelScope.launch(Dispatchers.IO) {
             _isLoading.value = true
             
+            val today = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
             val finalDate = if (!dateStr.isNullOrBlank()) {
                 dateStr
             } else {
-                val today = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
                 val folders = CaptureFileManager.getDailyFolders()
                 if (folders.contains(today)) {
                     today
                 } else {
-                    folders.firstOrNull() ?: today // 获取最新的文件夹（通常列表是倒序的）
+                    folders.firstOrNull() ?: today
                 }
             }
 
             _viewingDate.value = finalDate
             _allPackets.value = CaptureFileManager.getPacketsForDate(finalDate)
             _isLoading.value = false
+
+            // 如果是今天，开启实时监听
+            if (finalDate == today) {
+                startWatching()
+            } else {
+                stopWatching()
+            }
         }
     }
 
-    fun clearLogs() {
+    private fun startWatching() {
+        stopWatching()
+        val logFile = File(Files.LOG_DIR, "http.log")
+        if (!logFile.exists()) return
+
+        watchJob = viewModelScope.launch(Dispatchers.IO) {
+            try {
+                raf = RandomAccessFile(logFile, "r").apply {
+                    seek(logFile.length())
+                }
+
+                while (isActive) {
+                    val currentLen = logFile.length()
+                    val currentPointer = raf?.filePointer ?: 0L
+
+                    if (currentLen < currentPointer) {
+                        raf?.seek(0)
+                    }
+
+                    if (currentLen > currentPointer) {
+                        var line = raf?.readLine()
+                        while (line != null) {
+                            // readLine() 读取的是 ISO-8859-1，需要转回 UTF-8
+                            val utf8Line = String(line.toByteArray(Charsets.ISO_8859_1), Charsets.UTF_8)
+                            CaptureFileManager.parseLine(utf8Line)?.let { packet ->
+                                withContext(Dispatchers.Main) {
+                                    _allPackets.value = listOf(packet) + _allPackets.value
+                                }
+                            }
+                            line = raf?.readLine()
+                        }
+                    }
+                    delay(POLL_INTERVAL)
+                }
+            } catch (e: Exception) {
+                Log.error(TAG, "实时监听失败: ${e.message}")
+            }
+        }
+    }
+
+    private fun stopWatching() {
+        watchJob?.cancel()
+        watchJob = null
+        try {
+            raf?.close()
+        } catch (e: Exception) { }
+        raf = null
+    }
+
+    fun clearCurrentDateLogs() {
+        viewModelScope.launch(Dispatchers.IO) {
+            _isLoading.value = true
+            val date = _viewingDate.value
+            CaptureFileManager.clearForDate(date)
+            _allPackets.value = emptyList()
+            _isLoading.value = false
+        }
+    }
+
+    fun clearAllLogs() {
         viewModelScope.launch(Dispatchers.IO) {
             _isLoading.value = true
             CaptureFileManager.clearAll()
@@ -78,7 +163,16 @@ class NetworkPacketViewModel : ViewModel() {
         }
     }
 
+    fun toggleAutoScroll() {
+        _autoScroll.value = !_autoScroll.value
+    }
+
     fun updateSearchQuery(query: String) {
         _searchQuery.value = query
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        stopWatching()
     }
 }
