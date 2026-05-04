@@ -64,28 +64,28 @@
                             android:id="@+id/btn_forest_log"
                             style="@style/Widget.App.Button.Main"
                             android:layout_margin="6dp"
-                            android:backgroundTint="#E3F2FD"
+                            android:backgroundTint="#E8F5E9"
                             android:onClick="onClick"
                             android:text="@string/forest_log"
-                            app:icon="@drawable/forest" />
+                            app:icon="@drawable/ic_forest" />
 
                         <com.google.android.material.button.MaterialButton
                             android:id="@+id/btn_farm_log"
                             style="@style/Widget.App.Button.Main"
                             android:layout_margin="6dp"
-                            android:backgroundTint="#FFF3E0"
+                            android:backgroundTint="#E8F5E9"
                             android:onClick="onClick"
                             android:text="@string/farm_log"
-                            app:icon="@drawable/farm2" />
+                            app:icon="@drawable/ic_farm" />
 
                         <com.google.android.material.button.MaterialButton
                             android:id="@+id/btn_other_log"
                             style="@style/Widget.App.Button.Main"
                             android:layout_margin="6dp"
-                            android:backgroundTint="#F3E5F5"
+                            android:backgroundTint="#E8F5E9"
                             android:onClick="onClick"
                             android:text="@string/other_log"
-                            app:icon="@drawable/all_log" />
+                            app:icon="@drawable/ic_all_log" />
                     </LinearLayout>
 
                     <!-- 第二行：系统工具类 (淡灰色/浅绿色系) -->
@@ -101,25 +101,25 @@
                             android:backgroundTint="#E8F5E9"
                             android:onClick="onClick"
                             android:text="@string/extend_function"
-                            app:icon="@drawable/friend" />
+                            app:icon="@drawable/ic_extension" />
 
                         <com.google.android.material.button.MaterialButton
                             android:id="@+id/btn_github"
                             style="@style/Widget.App.Button.Main"
                             android:layout_margin="6dp"
-                            android:backgroundTint="#ECEFF1"
+                            android:backgroundTint="#E8F5E9"
                             android:onClick="onClick"
                             android:text="@string/visit_github"
-                            app:icon="@drawable/github" />
+                            app:icon="@drawable/ic_github" />
 
                         <com.google.android.material.button.MaterialButton
                             android:id="@+id/btn_settings"
                             style="@style/Widget.App.Button.Main"
                             android:layout_margin="6dp"
-                            android:backgroundTint="#F1F2F6"
+                            android:backgroundTint="#E8F5E9"
                             android:onClick="onClick"
                             android:text="@string/settings"
-                            app:icon="@drawable/setting" />
+                            app:icon="@drawable/ic_setting" />
                     </LinearLayout>
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>

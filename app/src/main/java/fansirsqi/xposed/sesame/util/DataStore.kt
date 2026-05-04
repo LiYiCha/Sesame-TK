@@ -45,11 +45,15 @@ object DataStore {
         onChangeListener = listener
     }
 
+    private var isInitialized = false
+
     /**
      * 初始化 DataStore
      * @param dir 存储目录
      */
     fun init(dir: File) {
+        if (isInitialized) return
+        isInitialized = true
         // 1. 确保目录存在 (修复崩溃的核心)
         if (!dir.exists()) {
             if (!dir.mkdirs()) {

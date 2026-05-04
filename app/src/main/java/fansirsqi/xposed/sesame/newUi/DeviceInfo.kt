@@ -45,18 +45,21 @@ class PreviewDeviceInfoProvider : PreviewParameterProvider<Map<String, String>> 
 
 @Composable
 fun DeviceInfoCard(info: Map<String, String>, oneWord: String? = null) {
+    val mintBg = Color(0xFFE9F5E9)
+    val deepGreen = Color(0xFF2D5A27)
+
     Card(
         modifier = Modifier
             .fillMaxWidth()
             .padding(12.dp),
         shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        colors = CardDefaults.cardColors(containerColor = Color.White),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Surface(
-                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f),
+                    color = mintBg,
                     shape = CircleShape,
                     modifier = Modifier.size(40.dp)
                 ) {
@@ -64,7 +67,7 @@ fun DeviceInfoCard(info: Map<String, String>, oneWord: String? = null) {
                         Icon(
                             Icons.Rounded.Smartphone,
                             contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary,
+                            tint = deepGreen,
                             modifier = Modifier.size(20.dp)
                         )
                     }
@@ -74,12 +77,13 @@ fun DeviceInfoCard(info: Map<String, String>, oneWord: String? = null) {
                     Text(
                         text = "设备状态",
                         style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.onSurface
+                        fontWeight = FontWeight.Bold,
+                        color = deepGreen
                     )
                     Text(
                         text = "当前环境及模块运行信息",
                         style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.outline
+                        color = deepGreen.copy(alpha = 0.6f)
                     )
                 }
             }
@@ -87,17 +91,17 @@ fun DeviceInfoCard(info: Map<String, String>, oneWord: String? = null) {
             Spacer(modifier = Modifier.height(20.dp))
             
             info.forEach { (label, value) ->
-                DeviceInfoRow(label, value)
+                DeviceInfoRow(label, value, deepGreen, mintBg)
             }
 
             if (!oneWord.isNullOrBlank()) {
                 Spacer(modifier = Modifier.height(16.dp))
-                Divider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                HorizontalDivider(color = mintBg)
                 Spacer(modifier = Modifier.height(16.dp))
                 Text(
                     text = oneWord,
                     style = MaterialTheme.typography.bodySmall.copy(fontFamily = androidx.compose.ui.text.font.FontFamily.Serif),
-                    color = MaterialTheme.colorScheme.outline,
+                    color = deepGreen.copy(alpha = 0.7f),
                     modifier = Modifier.fillMaxWidth(),
                     textAlign = androidx.compose.ui.text.style.TextAlign.Center
                 )
@@ -107,9 +111,8 @@ fun DeviceInfoCard(info: Map<String, String>, oneWord: String? = null) {
 }
 
 @Composable
-private fun DeviceInfoRow(label: String, value: String) {
+private fun DeviceInfoRow(label: String, value: String, accentColor: Color, dotColor: Color) {
     var showFull by remember { mutableStateOf(false) }
-    val context = LocalContext.current
     
     val isSensitive = label == "Verify ID"
     val displayValue = if (isSensitive && !showFull) "••••••••••••" else value
@@ -128,19 +131,19 @@ private fun DeviceInfoRow(label: String, value: String) {
             modifier = Modifier
                 .size(6.dp)
                 .clip(CircleShape)
-                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.4f))
+                .background(accentColor.copy(alpha = 0.4f))
         )
         Spacer(modifier = Modifier.width(10.dp))
         Text(
             text = label,
             style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.outline,
+            color = accentColor.copy(alpha = 0.6f),
             modifier = Modifier.width(100.dp)
         )
         Text(
             text = displayValue,
             style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
-            color = MaterialTheme.colorScheme.onSurface,
+            color = accentColor,
             modifier = Modifier.weight(1f)
         )
         
@@ -149,7 +152,7 @@ private fun DeviceInfoRow(label: String, value: String) {
                 if (showFull) Icons.Rounded.VisibilityOff else Icons.Rounded.Visibility,
                 contentDescription = null,
                 modifier = Modifier.size(16.dp),
-                tint = MaterialTheme.colorScheme.outline
+                tint = accentColor.copy(alpha = 0.5f)
             )
         }
     }

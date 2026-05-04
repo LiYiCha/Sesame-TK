@@ -20,6 +20,10 @@ object CaptureFileManager {
         Files.ensureDir(BASE_DIR)
     }
 
+    fun getCaptureDir(): File = BASE_DIR
+    
+    fun getTodayDate(): String = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
+
     /**
      * 保存抓包数据 (Logback 架构)
      */
@@ -95,38 +99,53 @@ object CaptureFileManager {
      * 解析单行日志为数据包对象
      */
     fun parseLine(line: String): CapturePacket? {
+        if (line.isBlank()) return null
         return try {
             val jsonStart = line.indexOf("{")
-            if (jsonStart != -1) {
-                val json = line.substring(jsonStart)
+            val jsonEnd = line.lastIndexOf("}")
+            if (jsonStart != -1 && jsonEnd != -1 && jsonEnd > jsonStart) {
+                // 提取 JSON 并去除前后空白符
+                val json = line.substring(jsonStart, jsonEnd + 1).trim()
                 JsonUtil.parseObject(json, CapturePacket::class.java)
-            } else null
+            } else {
+                null
+            }
         } catch (e: Exception) {
+            Log.error(TAG, "解析日志行失败: ${e.message} | 行内容: $line")
             null
         }
     }
 
     /**
-     * 从 Logback 日志中提取指定日期的抓包列表
+     * 获取指定日期的所有原始日志行（按时间倒序：最新的在前）
      */
-    fun getPacketsForDate(dateStr: String): List<CapturePacket> {
+    fun getRawLinesForDate(dateStr: String): List<String> {
         val logFiles = getLogFilesForDate(dateStr)
-        val packets = mutableListOf<CapturePacket>()
+        val allLines = mutableListOf<String>()
+        
+        // Logback 的 http.log 是最新的，bak 文件是旧的
+        // 我们按顺序读取，每读完一个文件就反转其内部行（如果需要最新的在前）
+        // 或者更简单：全部读取后按文件顺序排列，由于 http.log 总是最新的，
+        // 我们应该先处理 http.log，然后处理 bak 文件（按索引从小到大）
         
         for (file in logFiles) {
             if (!file.exists()) continue
             try {
-                file.bufferedReader().useLines { lines ->
-                    lines.forEach { line ->
-                        parseLine(line)?.let { packets.add(it) }
-                    }
-                }
+                val lines = file.readLines()
+                // 文件内部是正序的（最新的在最后），所以反转
+                allLines.addAll(lines.reversed())
             } catch (e: Exception) {
-                Log.error(TAG, "解析日志文件失败: ${file.name}, ${e.message}")
+                Log.error(TAG, "读取日志文件失败: ${file.name}, ${e.message}")
             }
         }
-        
-        return packets.sortedByDescending { it.startTime }
+        return allLines
+    }
+
+    /**
+     * 从 Logback 日志中提取指定日期的抓包列表 (旧方法，保留兼容性或用于小数据量)
+     */
+    fun getPacketsForDate(dateStr: String): List<CapturePacket> {
+        return getRawLinesForDate(dateStr).mapNotNull { parseLine(it) }
     }
 
     /**

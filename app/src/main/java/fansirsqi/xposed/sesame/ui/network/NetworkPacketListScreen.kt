@@ -3,6 +3,7 @@ package fansirsqi.xposed.sesame.ui.network
 import androidx.compose.animation.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -11,11 +12,15 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.*
 import androidx.compose.material3.*
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -23,8 +28,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import fansirsqi.xposed.sesame.hook.network.model.CapturePacket
 import fansirsqi.xposed.sesame.ui.theme.app.SesameColors
+import java.util.*
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun NetworkPacketListScreen(
     viewModel: NetworkPacketViewModel,
@@ -32,18 +38,51 @@ fun NetworkPacketListScreen(
     onPacketClick: (CapturePacket) -> Unit
 ) {
     val packets by viewModel.displayPackets.collectAsState()
+    val stats by viewModel.statistics.collectAsState()
+    val hasMore by viewModel.hasMore.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
     val autoScroll by viewModel.autoScroll.collectAsState()
     val searchQuery by viewModel.searchQuery.collectAsState()
-    val stats by viewModel.statistics.collectAsState()
+    val blacklist by viewModel.blacklist.collectAsState()
     
     var isSearchActive by remember { mutableStateOf(false) }
     var showMenu by remember { mutableStateOf(false) }
     var showHistoryDialog by remember { mutableStateOf(false) }
+    var showBlacklistSheet by remember { mutableStateOf(false) }
+
+    val sheetState = rememberModalBottomSheetState()
+
+    val mintBg = Color(0xFFE9F5E9)
+    val deepGreen = Color(0xFF2D5A27)
 
     Scaffold(
-        containerColor = MaterialTheme.colorScheme.background,
+        containerColor = SesameColors.Background,
         topBar = {
+            @Composable
+            fun AppBarIconWithText(
+                icon: @Composable () -> Unit,
+                label: String,
+                onClick: () -> Unit
+            ) {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier = Modifier.clickable(
+                        interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
+                        indication = null,
+                        onClick = onClick
+                    ).padding(horizontal = 8.dp)
+                ) {
+                    Box(modifier = Modifier.size(24.dp), contentAlignment = Alignment.Center) {
+                        icon()
+                    }
+                    Text(
+                        text = label,
+                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
+                        color = deepGreen.copy(alpha = 0.7f)
+                    )
+                }
+            }
+
             TopAppBar(
                 title = {
                     if (isSearchActive) {
@@ -57,35 +96,74 @@ fun NetworkPacketListScreen(
                         )
                     } else {
                         Column {
-                            Text("流量抓包", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onBackground)
-                            Text("实时监控应用网络请求", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
+                            Text("流量抓包", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = deepGreen)
+                            Text("实时监控应用网络请求", style = MaterialTheme.typography.labelSmall, color = deepGreen.copy(alpha = 0.6f))
                         }
                     }
                 },
                 navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "返回")
-                    }
+                    AppBarIconWithText(
+                        icon = { Icon(Icons.AutoMirrored.Rounded.ArrowBack, null, tint = deepGreen, modifier = Modifier.size(20.dp)) },
+                        label = "返回",
+                        onClick = onBack
+                    )
                 },
                 actions = {
                     if (!isSearchActive) {
-                        IconButton(onClick = { isSearchActive = true }) {
-                            Icon(Icons.Rounded.Search, contentDescription = "搜索")
-                        }
-                    }
-                    IconButton(onClick = { showMenu = true }) {
-                        Icon(Icons.Rounded.MoreVert, contentDescription = "更多")
+                        AppBarIconWithText(
+                            icon = { Icon(Icons.Rounded.Search, null, tint = deepGreen, modifier = Modifier.size(20.dp)) },
+                            label = "搜索",
+                            onClick = { isSearchActive = true }
+                        )
                     }
                     
-                    DropdownMenu(
-                        expanded = showMenu,
-                        onDismissRequest = { showMenu = false }
-                    ) {
-                        DropdownMenuItem(
-                            text = { Text("历史记录") },
+                    Box {
+                        AppBarIconWithText(
+                            icon = { Icon(Icons.Rounded.MoreVert, null, tint = deepGreen, modifier = Modifier.size(20.dp)) },
+                            label = "更多",
+                            onClick = { showMenu = true }
+                        )
+                        
+                        DropdownMenu(
+                            expanded = showMenu,
+                            onDismissRequest = { showMenu = false }
+                        ) {
+                            DropdownMenuItem(
+                                text = { Text("新建模拟请求", fontWeight = FontWeight.Bold, color = deepGreen) },
+                                leadingIcon = { Icon(Icons.Rounded.Add, contentDescription = null, tint = deepGreen) },
+                                onClick = {
+                                    showMenu = false
+                                    val emptyPacket = CapturePacket(
+                                        id = UUID.randomUUID().toString(),
+                                        url = "https://",
+                                        method = "GET",
+                                        startTime = System.currentTimeMillis()
+                                    )
+                                    onPacketClick(emptyPacket)
+                                }
+                            )
+                            HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+                            DropdownMenuItem(
+                                text = { Text("历史捕获记录") },
                             leadingIcon = { Icon(Icons.Rounded.History, contentDescription = null) },
                             onClick = { 
+                                showMenu = false
                                 showHistoryDialog = true
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("生成测试数据") },
+                            leadingIcon = { Icon(Icons.Rounded.BugReport, contentDescription = null, tint = MaterialTheme.colorScheme.tertiary) },
+                            onClick = {
+                                showMenu = false
+                                viewModel.addTestData()
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("过滤配置") },
+                            leadingIcon = { Icon(Icons.Rounded.FilterAlt, contentDescription = null) },
+                            onClick = { 
+                                showBlacklistSheet = true
                                 showMenu = false
                             }
                         )
@@ -115,13 +193,12 @@ fun NetworkPacketListScreen(
                             }
                         )
                     }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.background
-                )
-            )
-        }
-    ) { padding ->
+                }
+            },
+            colors = TopAppBarDefaults.topAppBarColors(containerColor = mintBg)
+        )
+    }
+) { padding ->
         Column(modifier = Modifier.padding(padding).fillMaxSize()) {
             // Dashboard Summary
             DashboardHeader(stats)
@@ -134,9 +211,25 @@ fun NetworkPacketListScreen(
                 } else {
                     val listState = androidx.compose.foundation.lazy.rememberLazyListState()
                     
+                    // 自动滚动到顶部
                     LaunchedEffect(packets.size) {
-                        if (autoScroll && packets.isNotEmpty()) {
+                        if (autoScroll && packets.isNotEmpty() && !isLoading) {
                             listState.animateScrollToItem(0)
+                        }
+                    }
+
+                    // 触底加载更多
+                    val shouldLoadMore = remember {
+                        derivedStateOf {
+                            val lastVisibleItem = listState.layoutInfo.visibleItemsInfo.lastOrNull()
+                                ?: return@derivedStateOf false
+                            lastVisibleItem.index >= listState.layoutInfo.totalItemsCount - 5
+                        }
+                    }
+
+                    LaunchedEffect(shouldLoadMore.value) {
+                        if (shouldLoadMore.value && hasMore && !isLoading) {
+                            viewModel.loadMore()
                         }
                     }
 
@@ -146,11 +239,49 @@ fun NetworkPacketListScreen(
                         contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
                     ) {
                         items(packets, key = { it.id }) { packet ->
-                            ModernPacketItem(
-                                packet = packet,
-                                onClick = { onPacketClick(packet) }
-                            )
+                            var showPacketMenu by remember { mutableStateOf(false) }
+                            
+                            Box {
+                                ModernPacketItem(
+                                    packet = packet,
+                                    onClick = { onPacketClick(packet) },
+                                    onLongClick = { showPacketMenu = true }
+                                )
+                                
+                                DropdownMenu(
+                                    expanded = showPacketMenu,
+                                    onDismissRequest = { showPacketMenu = false }
+                                ) {
+                                    DropdownMenuItem(
+                                        text = { Text("拉黑该域名 (${packet.host})") },
+                                        leadingIcon = { Icon(Icons.Rounded.Block, contentDescription = null, tint = MaterialTheme.colorScheme.error) },
+                                        onClick = {
+                                            viewModel.toggleBlacklist(packet.host)
+                                            showPacketMenu = false
+                                        }
+                                    )
+                                    DropdownMenuItem(
+                                        text = { Text("仅看该域名") },
+                                        leadingIcon = { Icon(Icons.Rounded.FilterList, contentDescription = null) },
+                                        onClick = {
+                                            viewModel.updateSearchQuery(packet.host)
+                                            showPacketMenu = false
+                                        }
+                                    )
+                                }
+                            }
                             Spacer(modifier = Modifier.height(8.dp))
+                        }
+
+                        if (hasMore) {
+                            item {
+                                Box(
+                                    modifier = Modifier.fillMaxWidth().padding(16.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
+                                }
+                            }
                         }
                     }
                 }
@@ -188,6 +319,173 @@ fun NetworkPacketListScreen(
             }
         )
     }
+
+    if (showBlacklistSheet) {
+        BlacklistBottomSheet(
+            blacklist = blacklist,
+            onDismiss = { showBlacklistSheet = false },
+            onAdd = { viewModel.toggleBlacklist(it) },
+            onRemove = { viewModel.toggleBlacklist(it) },
+            onRename = { old, new -> viewModel.renameBlacklist(old, new) },
+            sheetState = sheetState
+        )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
+@Composable
+fun BlacklistBottomSheet(
+    blacklist: List<String>,
+    onDismiss: () -> Unit,
+    onAdd: (String) -> Unit,
+    onRemove: (String) -> Unit,
+    onRename: (String, String) -> Unit,
+    sheetState: SheetState
+) {
+    var editingDomain by remember { mutableStateOf<String?>(null) }
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState,
+        dragHandle = { BottomSheetDefaults.DragHandle() },
+        containerColor = MaterialTheme.colorScheme.surface
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 24.dp)
+                .padding(bottom = 32.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    "过滤配置",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold
+                )
+                IconButton(onClick = onDismiss) {
+                    Icon(Icons.Rounded.Close, contentDescription = "关闭")
+                }
+            }
+            
+            Text(
+                "包含以下关键词的域名将被排除在列表之外 (点击可编辑)",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.outline,
+                modifier = Modifier.padding(bottom = 16.dp)
+            )
+
+            var newDomain by remember { mutableStateOf("") }
+            
+            OutlinedTextField(
+                value = newDomain,
+                onValueChange = { newDomain = it },
+                modifier = Modifier.fillMaxWidth(),
+                placeholder = { Text("输入域名关键词 (如 alipay.com)") },
+                trailingIcon = {
+                    IconButton(
+                        onClick = {
+                            if (newDomain.isNotBlank()) {
+                                onAdd(newDomain.trim())
+                                newDomain = ""
+                            }
+                        },
+                        enabled = newDomain.isNotBlank()
+                    ) {
+                        Icon(Icons.Rounded.Add, contentDescription = "添加")
+                    }
+                },
+                singleLine = true,
+                shape = MaterialTheme.shapes.medium
+            )
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            if (blacklist.isEmpty()) {
+                Box(
+                    modifier = Modifier.fillMaxWidth().height(100.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text("暂无黑名单", color = MaterialTheme.colorScheme.outline)
+                }
+            } else {
+                FlowRow(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    blacklist.forEach { domain ->
+                        InputChip(
+                            selected = false,
+                            onClick = { editingDomain = domain },
+                            label = { Text(domain) },
+                            trailingIcon = {
+                                Icon(
+                                    Icons.Rounded.Close,
+                                    contentDescription = "删除",
+                                    modifier = Modifier.size(16.dp).clickable { onRemove(domain) }
+                                )
+                            },
+                            colors = InputChipDefaults.inputChipColors(
+                                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                            )
+                        )
+                    }
+                }
+            }
+
+            if (editingDomain != null) {
+                var text by remember { mutableStateOf(editingDomain!!) }
+                AlertDialog(
+                    onDismissRequest = { editingDomain = null },
+                    title = { Text("编辑过滤关键词") },
+                    text = {
+                        OutlinedTextField(
+                            value = text,
+                            onValueChange = { text = it },
+                            modifier = Modifier.fillMaxWidth(),
+                            singleLine = true
+                        )
+                    },
+                    confirmButton = {
+                        TextButton(
+                            onClick = {
+                                if (text.isNotBlank()) {
+                                    onRename(editingDomain!!, text.trim())
+                                }
+                                editingDomain = null
+                            }
+                        ) { Text("保存") }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { editingDomain = null }) { Text("取消") }
+                    }
+                )
+            }
+
+            Spacer(modifier = Modifier.height(24.dp))
+            
+            Text("推荐过滤", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
+            Spacer(modifier = Modifier.height(8.dp))
+            
+            val presets = listOf("log.alipay.com", "mdap.alipay.com", "diagnose.alipay.com", "mobilegw.alipay.com")
+            FlowRow(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                presets.filter { !blacklist.contains(it) }.forEach { preset ->
+                    AssistChip(
+                        onClick = { onAdd(preset) },
+                        label = { Text(preset) },
+                        leadingIcon = { Icon(Icons.Rounded.Add, contentDescription = null, modifier = Modifier.size(16.dp)) }
+                    )
+                }
+            }
+        }
+    }
 }
 
 @Composable
@@ -222,12 +520,23 @@ fun StatCard(label: String, value: String, icon: ImageVector, color: Color, modi
 }
 
 @Composable
-fun ModernPacketItem(packet: CapturePacket, onClick: () -> Unit) {
+fun ModernPacketItem(
+    packet: CapturePacket,
+    onClick: () -> Unit,
+    onLongClick: () -> Unit = {}
+) {
     val statusColor = SesameColors.getStatusColor(packet.responseCode)
 
     Card(
         onClick = onClick,
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .pointerInput(Unit) {
+                detectTapGestures(
+                    onTap = { onClick() },
+                    onLongPress = { onLongClick() }
+                )
+            },
         shape = RoundedCornerShape(12.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
