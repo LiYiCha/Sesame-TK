@@ -44,8 +44,9 @@ fun NetworkResendScreen(
     var showMenu by remember { mutableStateOf(false) }
     var rawImportText by remember { mutableStateOf("") }
 
-    val mintBg = Color(0xFFE9F5E9)
-    val deepGreen = Color(0xFF2D5A27)
+    val appBarBg = MaterialTheme.colorScheme.primaryContainer
+    val appBarContent = MaterialTheme.colorScheme.onPrimaryContainer
+    val primaryColor = MaterialTheme.colorScheme.primary
 
     @Composable
     fun AppBarIconWithText(
@@ -67,7 +68,7 @@ fun NetworkResendScreen(
             Text(
                 text = label,
                 style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
-                color = deepGreen.copy(alpha = 0.7f)
+                color = appBarContent.copy(alpha = 0.7f)
             )
         }
     }
@@ -76,7 +77,7 @@ fun NetworkResendScreen(
         // ... (AlertDialog 代码保持不变)
         AlertDialog(
             onDismissRequest = { showImportDialog = false },
-            title = { Text("导入原始请求", color = deepGreen, fontWeight = FontWeight.Bold) },
+            title = { Text("导入原始请求", color = primaryColor, fontWeight = FontWeight.Bold) },
             text = {
                 Column {
                     Text("请粘贴原始 HTTP 请求文本 (包括请求行和 Header)", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
@@ -97,7 +98,7 @@ fun NetworkResendScreen(
                     showImportDialog = false
                     rawImportText = ""
                 }) {
-                    Text("解析并填充", color = deepGreen, fontWeight = FontWeight.Bold)
+                    Text("解析并填充", color = primaryColor, fontWeight = FontWeight.Bold)
                 }
             },
             dismissButton = {
@@ -105,44 +106,44 @@ fun NetworkResendScreen(
                     Text("取消")
                 }
             },
-            containerColor = Color.White
+            containerColor = MaterialTheme.colorScheme.surface
         )
     }
 
     Scaffold(
-        containerColor = SesameColors.Background,
+        containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             TopAppBar(
-                title = { Text("请求编辑器", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = deepGreen) },
+                title = { Text("请求编辑器", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = appBarContent) },
                 navigationIcon = {
                     AppBarIconWithText(
-                        icon = { Icon(Icons.AutoMirrored.Rounded.ArrowBack, null, tint = deepGreen, modifier = Modifier.size(20.dp)) },
+                        icon = { Icon(Icons.AutoMirrored.Rounded.ArrowBack, null, tint = appBarContent, modifier = Modifier.size(20.dp)) },
                         label = "返回",
                         onClick = onBack
                     )
                 },
                 actions = {
                     if (isSending) {
-                        CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp, color = deepGreen)
+                        CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp, color = appBarContent)
                         Spacer(modifier = Modifier.width(16.dp))
                     } else {
                         Button(
                             onClick = { viewModel.sendRequest() },
                             shape = RoundedCornerShape(8.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = deepGreen),
+                            colors = ButtonDefaults.buttonColors(containerColor = appBarContent),
                             contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp),
                             modifier = Modifier.height(32.dp)
                         ) {
-                            Icon(Icons.Rounded.Send, null, modifier = Modifier.size(14.dp))
+                            Icon(Icons.Rounded.Send, null, modifier = Modifier.size(14.dp), tint = appBarBg)
                             Spacer(modifier = Modifier.width(4.dp))
-                            Text("发送", fontSize = 12.sp)
+                            Text("发送", fontSize = 12.sp, color = appBarBg)
                         }
                         
                         Spacer(modifier = Modifier.width(4.dp))
                         
                         Box {
                             AppBarIconWithText(
-                                icon = { Icon(Icons.Rounded.MoreVert, null, tint = deepGreen, modifier = Modifier.size(20.dp)) },
+                                icon = { Icon(Icons.Rounded.MoreVert, null, tint = appBarContent, modifier = Modifier.size(20.dp)) },
                                 label = "更多",
                                 onClick = { showMenu = true }
                             )
@@ -150,19 +151,19 @@ fun NetworkResendScreen(
                             DropdownMenu(
                                 expanded = showMenu,
                                 onDismissRequest = { showMenu = false },
-                                containerColor = Color.White
+                                containerColor = MaterialTheme.colorScheme.surface
                             ) {
                                 DropdownMenuItem(
-                                    text = { Text("导入解析", color = Color.DarkGray) },
-                                    leadingIcon = { Icon(Icons.Rounded.Input, null, tint = deepGreen) },
+                                    text = { Text("导入解析") },
+                                    leadingIcon = { Icon(Icons.Rounded.Input, null, tint = appBarContent) },
                                     onClick = { 
                                         showMenu = false
                                         showImportDialog = true 
                                     }
                                 )
                                 DropdownMenuItem(
-                                    text = { Text("清空全部", color = Color.Red) },
-                                    leadingIcon = { Icon(Icons.Rounded.DeleteOutline, null, tint = Color.Red) },
+                                    text = { Text("清空全部", color = MaterialTheme.colorScheme.error) },
+                                    leadingIcon = { Icon(Icons.Rounded.DeleteOutline, null, tint = MaterialTheme.colorScheme.error) },
                                     onClick = { 
                                         showMenu = false
                                         // 可以添加清空逻辑
@@ -173,7 +174,7 @@ fun NetworkResendScreen(
                         Spacer(modifier = Modifier.width(8.dp))
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = mintBg)
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = appBarBg)
             )
         }
     ) { padding ->
@@ -325,7 +326,7 @@ private fun SectionCard(
             action?.invoke()
         }
         Surface(
-            color = Color.White,
+            color = MaterialTheme.colorScheme.surface,
             shape = RoundedCornerShape(12.dp),
             shadowElevation = 1.dp
         ) {
@@ -363,7 +364,7 @@ fun MethodDropdown(selected: String, onSelected: (String) -> Unit) {
         DropdownMenu(
             expanded = expanded,
             onDismissRequest = { expanded = false },
-            containerColor = Color.White
+            containerColor = MaterialTheme.colorScheme.surface
         ) {
             methods.forEach { m ->
                 DropdownMenuItem(

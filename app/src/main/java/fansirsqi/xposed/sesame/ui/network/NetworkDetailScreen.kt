@@ -77,13 +77,13 @@ fun NetworkDetailScreen(
         return
     }
 
-    val mintBg = Color(0xFFE9F5E9) // 柔和薄荷绿
-    val deepGreen = Color(0xFF2D5A27) // 深森林绿
+    val appBarBg = MaterialTheme.colorScheme.primaryContainer
+    val appBarContent = MaterialTheme.colorScheme.onPrimaryContainer
 
     Scaffold(
-        containerColor = SesameColors.Background,
+        containerColor = MaterialTheme.colorScheme.background,
         topBar = {
-            Column(modifier = Modifier.background(mintBg).statusBarsPadding()) {
+            Column(modifier = Modifier.background(appBarBg).statusBarsPadding()) {
                 TopAppBar(
                     title = {
                         Column {
@@ -91,14 +91,14 @@ fun NetworkDetailScreen(
                                 text = packet.host ?: "数据包详情",
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Bold,
-                                color = deepGreen,
+                                color = appBarContent,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
                             )
                             Text(
                                 text = packet.url ?: "",
                                 style = MaterialTheme.typography.labelSmall,
-                                color = deepGreen.copy(alpha = 0.6f),
+                                color = appBarContent.copy(alpha = 0.6f),
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
                             )
@@ -106,20 +106,20 @@ fun NetworkDetailScreen(
                     },
                     navigationIcon = {
                         IconButton(onClick = onBack) { 
-                            Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "返回", tint = deepGreen) 
+                            Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "返回", tint = appBarContent) 
                         }
                     },
                     actions = {
                         if (!isResendMode) {
-                            ActionItem(Icons.Rounded.Link, "复制 URL", deepGreen) {
+                            ActionItem(Icons.Rounded.Link, "复制 URL", appBarContent) {
                                 val clip = android.content.ClipData.newPlainText("Sesame URL", packet.url ?: "")
                                 clipboardManager.setPrimaryClip(clip)
                                 android.widget.Toast.makeText(context, "URL 已复制", android.widget.Toast.LENGTH_SHORT).show()
                             }
-                            ActionItem(Icons.Rounded.Terminal, "代码脚本", deepGreen) {
+                            ActionItem(Icons.Rounded.Terminal, "代码脚本", appBarContent) {
                                 showExportDialog = true
                             }
-                            ActionItem(Icons.Rounded.Replay, "重发/模拟", deepGreen) {
+                            ActionItem(Icons.Rounded.Replay, "重发/模拟", appBarContent) {
                                 // 直接从 ViewModel 获取最新值，避免界面延迟
                                 val currentBody = viewModel.requestBody.value ?: ""
                                 resendViewModel.initFromPacket(packet, currentBody)
@@ -150,7 +150,7 @@ fun NetworkDetailScreen(
                                     title, 
                                     style = MaterialTheme.typography.titleSmall,
                                     fontWeight = if(pagerState.currentPage == index) FontWeight.Bold else FontWeight.Normal,
-                                    color = if(pagerState.currentPage == index) deepGreen else deepGreen.copy(alpha = 0.5f)
+                                    color = if(pagerState.currentPage == index) appBarContent else appBarContent.copy(alpha = 0.5f)
                                 ) 
                             }
                         )
@@ -218,7 +218,7 @@ private fun CodeExportDialog(packet: CapturePacket, body: String?, onDismiss: ()
                 }
                 Spacer(modifier = Modifier.height(12.dp))
                 Surface(
-                    color = Color(0xFFF1F3F4),
+                    color = MaterialTheme.colorScheme.surfaceVariant,
                     shape = RoundedCornerShape(8.dp),
                     modifier = Modifier.fillMaxWidth().heightIn(max = 300.dp)
                 ) {
@@ -334,7 +334,7 @@ private fun CodeView(code: String) {
         }
     }
 
-    Surface(color = Color(0xFFF8F9FA), shape = RoundedCornerShape(8.dp), modifier = Modifier.fillMaxWidth()) {
+    Surface(color = MaterialTheme.colorScheme.surfaceVariant, shape = RoundedCornerShape(8.dp), modifier = Modifier.fillMaxWidth()) {
         SelectionContainer {
             Text(
                 text = annotatedString,
@@ -355,7 +355,7 @@ private fun DetailSection(title: String, icon: ImageVector, content: @Composable
             Text(title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
         }
         Spacer(Modifier.height(8.dp))
-        Surface(color = Color.White, shape = RoundedCornerShape(12.dp), border = BorderStroke(0.5.dp, SesameColors.TextDisabled)) {
+        Surface(color = MaterialTheme.colorScheme.surface, shape = RoundedCornerShape(12.dp), border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant)) {
             Column(modifier = Modifier.padding(12.dp)) { content() }
         }
     }

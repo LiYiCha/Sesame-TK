@@ -26,14 +26,22 @@ private val LightColorScheme = lightColorScheme(
     onError = Color.White
 )
 
-// Minimal Dark Mode support (can be expanded later)
 private val DarkColorScheme = darkColorScheme(
     primary = Color(0xFF90CAF9),
-    onPrimary = Color(0xFF1E272E),
-    background = Color(0xFF1E272E),
-    onBackground = Color(0xFFDFE6E9),
-    surface = Color(0xFF2F3640),
-    onSurface = Color(0xFFDFE6E9)
+    onPrimary = Color(0xFF0D47A1),
+    primaryContainer = Color(0xFF1B5E20), // Using dark green for container
+    onPrimaryContainer = Color(0xFFC8E6C9),
+    secondary = Color(0xFFB39DDB),
+    onSecondary = Color(0xFF311B92),
+    background = Color(0xFF121212),
+    onBackground = Color(0xFFE0E0E0),
+    surface = Color(0xFF1E1E1E),
+    onSurface = Color(0xFFE0E0E0),
+    surfaceVariant = Color(0xFF2C2C2C),
+    onSurfaceVariant = Color(0xFFBDBDBD),
+    outline = Color(0xFF757575),
+    error = Color(0xFFCF6679),
+    onError = Color(0xFF000000)
 )
 
 private val AppTypography = Typography(

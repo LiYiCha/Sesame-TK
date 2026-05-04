@@ -31,9 +31,9 @@
     </style>
 
     <style name="Widget.App.Button.Main" parent="Widget.Material3.Button.ElevatedButton">
-        <item name="android:textColor">@color/textColorPrimary</item>
-        <item name="backgroundTint">#F8F9FA</item>
-        <item name="rippleColor">#150984E3</item>
+        <item name="android:textColor">?attr/colorOnSurface</item>
+        <item name="backgroundTint">?attr/colorPrimaryContainer</item>
+        <item name="rippleColor">?attr/colorControlHighlight</item>
         <item name="iconTint">@null</item>
         <item name="iconSize">32dp</item>
         <item name="iconGravity">top</item>
@@ -53,16 +53,16 @@
     <style name="GlassInputStyle">
         <item name="android:background">@drawable/bg_glass_input</item>
         <item name="boxBackgroundColor">@android:color/transparent</item>
-        <item name="hintTextColor">@color/textColorPrimary</item>
-        <item name="android:textColorHint">#80000000</item>
-        <item name="counterTextColor">@color/textColorPrimary</item>
+        <item name="hintTextColor">?attr/colorOnSurface</item>
+        <item name="android:textColorHint">?attr/colorOutline</item>
+        <item name="counterTextColor">?attr/colorOnSurface</item>
     </style>
 
     <style name="GlassButtonStyle" parent="Widget.MaterialComponents.Button">
         <item name="android:textSize">18sp</item>
         <item name="backgroundTint">@android:color/transparent</item>
-        <item name="android:textColor">@color/textColorPrimary</item>
-        <item name="rippleColor">#20000000</item>
+        <item name="android:textColor">?attr/colorOnSurface</item>
+        <item name="rippleColor">?attr/colorControlHighlight</item>
         <item name="cornerRadius">24dp</item>
     </style>
 

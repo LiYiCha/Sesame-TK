@@ -146,7 +146,7 @@ class NetworkPacketViewModel : ViewModel() {
             _currentOffset = 0
             
             val firstPage = loadNextPage(PAGE_SIZE)
-            _allPackets.value = firstPage
+            _allPackets.value = firstPage.distinctBy { it.id }
             _hasMore.value = _currentOffset < _rawLines.size
             
             _isLoading.value = false
@@ -162,7 +162,7 @@ class NetworkPacketViewModel : ViewModel() {
             val nextPage = loadNextPage(PAGE_SIZE)
             if (nextPage.isNotEmpty()) {
                 withContext(Dispatchers.Main) {
-                    _allPackets.value = _allPackets.value + nextPage
+                    _allPackets.value = (_allPackets.value + nextPage).distinctBy { it.id }
                 }
             }
             _hasMore.value = _currentOffset < _rawLines.size
@@ -217,7 +217,7 @@ class NetworkPacketViewModel : ViewModel() {
                         val utf8Line = String(line.toByteArray(Charsets.ISO_8859_1), Charsets.UTF_8)
                         CaptureFileManager.parseLine(utf8Line)?.let { packet ->
                             withContext(Dispatchers.Main) {
-                                _allPackets.value = listOf(packet) + _allPackets.value
+                                _allPackets.value = (listOf(packet) + _allPackets.value).distinctBy { it.id }
                             }
                         }
                         line = raf?.readLine()

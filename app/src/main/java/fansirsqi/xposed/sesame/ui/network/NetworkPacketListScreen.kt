@@ -52,11 +52,11 @@ fun NetworkPacketListScreen(
 
     val sheetState = rememberModalBottomSheetState()
 
-    val mintBg = Color(0xFFE9F5E9)
-    val deepGreen = Color(0xFF2D5A27)
+    val appBarBg = MaterialTheme.colorScheme.primaryContainer
+    val appBarContent = MaterialTheme.colorScheme.onPrimaryContainer
 
     Scaffold(
-        containerColor = SesameColors.Background,
+        containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             @Composable
             fun AppBarIconWithText(
@@ -78,7 +78,7 @@ fun NetworkPacketListScreen(
                     Text(
                         text = label,
                         style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
-                        color = deepGreen.copy(alpha = 0.7f)
+                        color = appBarContent.copy(alpha = 0.7f)
                     )
                 }
             }
@@ -96,14 +96,14 @@ fun NetworkPacketListScreen(
                         )
                     } else {
                         Column {
-                            Text("流量抓包", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = deepGreen)
-                            Text("实时监控应用网络请求", style = MaterialTheme.typography.labelSmall, color = deepGreen.copy(alpha = 0.6f))
+                            Text("流量抓包", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = appBarContent)
+                            Text("实时监控应用网络请求", style = MaterialTheme.typography.labelSmall, color = appBarContent.copy(alpha = 0.6f))
                         }
                     }
                 },
                 navigationIcon = {
                     AppBarIconWithText(
-                        icon = { Icon(Icons.AutoMirrored.Rounded.ArrowBack, null, tint = deepGreen, modifier = Modifier.size(20.dp)) },
+                        icon = { Icon(Icons.AutoMirrored.Rounded.ArrowBack, null, tint = appBarContent, modifier = Modifier.size(20.dp)) },
                         label = "返回",
                         onClick = onBack
                     )
@@ -111,7 +111,7 @@ fun NetworkPacketListScreen(
                 actions = {
                     if (!isSearchActive) {
                         AppBarIconWithText(
-                            icon = { Icon(Icons.Rounded.Search, null, tint = deepGreen, modifier = Modifier.size(20.dp)) },
+                            icon = { Icon(Icons.Rounded.Search, null, tint = appBarContent, modifier = Modifier.size(20.dp)) },
                             label = "搜索",
                             onClick = { isSearchActive = true }
                         )
@@ -119,7 +119,7 @@ fun NetworkPacketListScreen(
                     
                     Box {
                         AppBarIconWithText(
-                            icon = { Icon(Icons.Rounded.MoreVert, null, tint = deepGreen, modifier = Modifier.size(20.dp)) },
+                            icon = { Icon(Icons.Rounded.MoreVert, null, tint = appBarContent, modifier = Modifier.size(20.dp)) },
                             label = "更多",
                             onClick = { showMenu = true }
                         )
@@ -129,8 +129,8 @@ fun NetworkPacketListScreen(
                             onDismissRequest = { showMenu = false }
                         ) {
                             DropdownMenuItem(
-                                text = { Text("新建模拟请求", fontWeight = FontWeight.Bold, color = deepGreen) },
-                                leadingIcon = { Icon(Icons.Rounded.Add, contentDescription = null, tint = deepGreen) },
+                                text = { Text("新建模拟请求", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary) },
+                                leadingIcon = { Icon(Icons.Rounded.Add, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
                                 onClick = {
                                     showMenu = false
                                     val emptyPacket = CapturePacket(
@@ -195,7 +195,7 @@ fun NetworkPacketListScreen(
                     }
                 }
             },
-            colors = TopAppBarDefaults.topAppBarColors(containerColor = mintBg)
+            colors = TopAppBarDefaults.topAppBarColors(containerColor = appBarBg)
         )
     }
 ) { padding ->

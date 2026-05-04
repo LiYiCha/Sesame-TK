@@ -1,27 +1,29 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- 夜间模式 -->
-    <color name="background">#1A1A1A</color>
-    <color name="base_color">#4D4D4D</color>
-    <!-- theme-color -->
-    <color name="colorPrimary">#4D4D4D</color>
-    <color name="textColorPrimary">#FFFFFF</color>
+    <!--  深色模式  -->
+    <color name="background">#121212</color>
+    <color name="base_color">#A5D6A7</color>
+    <color name="colorPrimary">#1B5E20</color>
+    <color name="textColorPrimary">#E0E0E0</color>
+    <color name="selection_color">#42A5F5</color>
+    <color name="main_button">#1E1E1E</color>
+    <color name="main_button_pressed">#2C2C2C</color>
+    <color name="orange">#FF7043</color>
+    <color name="not_active_text">#EF5350</color>
+    <color name="active_text">#E0E0E0</color>
+    <color name="load_active_text">#757575</color>
+    <color name="navigationBarColor">#CC000000</color>
+    <color name="toast_text_color">#F5F5F5</color>
+    <color name="switch_white">#B0B0B0</color>
+    <color name="switch_off">#333333</color>
+    <color name="button_pressed">#616161</color>
+    <color name="button">#388E3C</color>
 
-    <color name="selection_color">#F87640</color>
-
-    <color name="main_button">#3A3A3A</color>
-    <color name="main_button_pressed">#FFEBCD</color>
-
-    <color name="orange">#F87640</color>
-
-    <color name="not_active_text">#F4D022</color>
-    <color name="active_text">#DEDBDB</color>
-    <color name="load_active_text">#C8B9B9</color>
-
-    <color name="navigationBarColor">#AA000000</color>
-
-    <color name="toast_text_color">#FBFBFB</color>
-
-    <color name="switch_white">#FFFFFF</color>
-    <color name="switch_off">#DFDFDF</color>
+    <!--请求的-->
+    <color name="response_success">#1B5E20</color>
+    <color name="response_error">#C62828</color>
+    <color name="glassBackground">#20FFFFFF</color>
+    <color name="md_theme_light_background">#121212</color>
+    <color name="md_theme_light_outlineVariant">#44FFFFFF</color>
+    <color name="md_theme_light_onSurface">#E0E0E0</color>
 </resources>
