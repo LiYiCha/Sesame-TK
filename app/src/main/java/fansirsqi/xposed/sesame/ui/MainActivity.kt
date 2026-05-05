@@ -43,7 +43,7 @@ import fansirsqi.xposed.sesame.newui.WatermarkView
 import fansirsqi.xposed.sesame.ui.extension.ExtensionListActivity
 import fansirsqi.xposed.sesame.ui.extra.activity.HelpActivity
 import fansirsqi.xposed.sesame.ui.extra.activity.RpcDebugActivity
-import fansirsqi.xposed.sesame.ui.network.NetworkPacketListActivity
+import fansirsqi.xposed.sesame.ui.network.CaptureListActivity
 import fansirsqi.xposed.sesame.ui.update.UpdateConfig
 import fansirsqi.xposed.sesame.util.FansirsqiUtil
 import fansirsqi.xposed.sesame.util.Files
@@ -367,7 +367,7 @@ class MainActivity : BaseActivity() {
             }
             // 流量抓包查看
             9 -> {
-                startActivity(Intent(this, NetworkPacketListActivity::class.java))
+                startActivity(Intent(this, CaptureListActivity::class.java))
             }
             //清空配置
             10 -> AlertDialog.Builder(this).setTitle("⚠️ 警告").setMessage("🤔 确认清除所有模块配置？").setPositiveButton(R.string.ok) { _: DialogInterface?, _: Int ->

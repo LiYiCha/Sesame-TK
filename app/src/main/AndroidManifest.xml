@@ -115,11 +115,11 @@
             android:exported="true"
             android:resizeableActivity="true" />
         <activity
-            android:name="fansirsqi.xposed.sesame.ui.network.NetworkPacketListActivity"
+            android:name="fansirsqi.xposed.sesame.ui.network.CaptureListActivity"
             android:exported="true"
             android:resizeableActivity="true" />
         <activity
-            android:name="fansirsqi.xposed.sesame.ui.network.NetworkDetailActivity"
+            android:name="fansirsqi.xposed.sesame.ui.network.CaptureDetailActivity"
             android:exported="true"
             android:resizeableActivity="true" />
 
