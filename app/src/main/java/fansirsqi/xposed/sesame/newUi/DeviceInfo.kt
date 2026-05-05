@@ -45,21 +45,21 @@ class PreviewDeviceInfoProvider : PreviewParameterProvider<Map<String, String>> 
 
 @Composable
 fun DeviceInfoCard(info: Map<String, String>, oneWord: String? = null) {
-    val mintBg = Color(0xFFE9F5E9)
-    val deepGreen = Color(0xFF2D5A27)
+    val accentColor = MaterialTheme.colorScheme.primary
+    val containerColor = MaterialTheme.colorScheme.primaryContainer
 
     Card(
         modifier = Modifier
             .fillMaxWidth()
             .padding(12.dp),
         shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.White),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Surface(
-                    color = mintBg,
+                    color = containerColor,
                     shape = CircleShape,
                     modifier = Modifier.size(40.dp)
                 ) {
@@ -67,7 +67,7 @@ fun DeviceInfoCard(info: Map<String, String>, oneWord: String? = null) {
                         Icon(
                             Icons.Rounded.Smartphone,
                             contentDescription = null,
-                            tint = deepGreen,
+                            tint = accentColor,
                             modifier = Modifier.size(20.dp)
                         )
                     }
@@ -78,12 +78,12 @@ fun DeviceInfoCard(info: Map<String, String>, oneWord: String? = null) {
                         text = "设备状态",
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
-                        color = deepGreen
+                        color = accentColor
                     )
                     Text(
                         text = "当前环境及模块运行信息",
                         style = MaterialTheme.typography.labelSmall,
-                        color = deepGreen.copy(alpha = 0.6f)
+                        color = accentColor.copy(alpha = 0.6f)
                     )
                 }
             }
@@ -91,27 +91,29 @@ fun DeviceInfoCard(info: Map<String, String>, oneWord: String? = null) {
             Spacer(modifier = Modifier.height(20.dp))
             
             info.forEach { (label, value) ->
-                DeviceInfoRow(label, value, deepGreen, mintBg)
+                DeviceInfoRow(label, value, accentColor)
             }
 
             if (!oneWord.isNullOrBlank()) {
                 Spacer(modifier = Modifier.height(16.dp))
-                HorizontalDivider(color = mintBg)
+                HorizontalDivider(color = containerColor.copy(alpha = 0.5f))
                 Spacer(modifier = Modifier.height(16.dp))
-                Text(
-                    text = oneWord,
-                    style = MaterialTheme.typography.bodySmall.copy(fontFamily = androidx.compose.ui.text.font.FontFamily.Serif),
-                    color = deepGreen.copy(alpha = 0.7f),
-                    modifier = Modifier.fillMaxWidth(),
-                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
-                )
+                Box(modifier = Modifier.fillMaxWidth().heightIn(min = 40.dp), contentAlignment = Alignment.Center) {
+                    Text(
+                        text = oneWord,
+                        style = MaterialTheme.typography.bodySmall.copy(fontFamily = androidx.compose.ui.text.font.FontFamily.Serif),
+                        color = accentColor.copy(alpha = 0.7f),
+                        modifier = Modifier.fillMaxWidth(),
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                    )
+                }
             }
         }
     }
 }
 
 @Composable
-private fun DeviceInfoRow(label: String, value: String, accentColor: Color, dotColor: Color) {
+private fun DeviceInfoRow(label: String, value: String, accentColor: Color) {
     var showFull by remember { mutableStateOf(false) }
     
     val isSensitive = label == "Verify ID"

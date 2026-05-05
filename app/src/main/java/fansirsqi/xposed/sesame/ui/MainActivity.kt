@@ -62,7 +62,7 @@ class MainActivity : BaseActivity() {
     private val TAG = "MainActivity"
     private var userNameArray = arrayOf("默认")
     private var userEntityArray = arrayOf<UserEntity?>(null)
-    private val oneWordText = mutableStateOf("")
+    private val oneWordText = mutableStateOf("正在获取随机一言...")
     private var hasPermissions = false
     private var isClick = false
     private val viewHandler = Handler(Looper.getMainLooper())

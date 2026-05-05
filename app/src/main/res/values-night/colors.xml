@@ -3,7 +3,7 @@
     <!--  深色模式  -->
     <color name="background">#121212</color>
     <color name="base_color">#A5D6A7</color>
-    <color name="colorPrimary">#1B5E20</color>
+    <color name="colorPrimary">#1A1C1E</color>
     <color name="textColorPrimary">#E0E0E0</color>
     <color name="selection_color">#42A5F5</color>
     <color name="main_button">#1E1E1E</color>
@@ -18,6 +18,14 @@
     <color name="switch_off">#333333</color>
     <color name="button_pressed">#616161</color>
     <color name="button">#388E3C</color>
+
+    <!-- 主页 6 格子颜色 (深色模式) -->
+    <color name="grid_forest">#1B3320</color>
+    <color name="grid_farm">#33201B</color>
+    <color name="grid_other">#1B2633</color>
+    <color name="grid_extend">#2A1B33</color>
+    <color name="grid_github">#252525</color>
+    <color name="grid_settings">#1B3332</color>
 
     <!--请求的-->
     <color name="response_success">#1B5E20</color>
