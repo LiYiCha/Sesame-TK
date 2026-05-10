@@ -4,10 +4,10 @@ import androidx.compose.ui.graphics.Color
 
 object SesameColors {
     // Brand Colors
-    val Primary = Color(0xFF0984E3)
-    val PrimaryVariant = Color(0xFF0873C4)
-    val Secondary = Color(0xFF6C5CE7) // Swapped purple to secondary
-    val Accent = Color(0xFF00B894)
+    val Primary = Color(0xFF2D5A27) // Deep Forest Green
+    val PrimaryVariant = Color(0xFF1B3B18)
+    val Secondary = Color(0xFF435B71) // Slate Blue-Gray
+    val Accent = Color(0xFF558B2F)
     
     // Background & Surface
     val Background = Color(0xFFF8F9FA)
@@ -28,11 +28,11 @@ object SesameColors {
     val TextDisabled = Color(0xFFDFE6E9)
     
     // HTTP Method Colors
-    val MethodGet = Color(0xFF0984E3)
-    val MethodPost = Color(0xFF00B894)
-    val MethodPut = Color(0xFFFDCB6E)
-    val MethodDelete = Color(0xFFD63031)
-    val MethodOther = Color(0xFF6C5CE7)
+    val MethodGet = Color(0xFF2D5A27)
+    val MethodPost = Color(0xFF558B2F)
+    val MethodPut = Color(0xFFF9A825)
+    val MethodDelete = Color(0xFFC62828)
+    val MethodOther = Color(0xFF636E72)
     
     // Helper function for status colors
     fun getStatusColor(code: Int): Color = when {

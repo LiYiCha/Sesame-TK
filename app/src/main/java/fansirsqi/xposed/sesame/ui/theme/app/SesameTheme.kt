@@ -10,11 +10,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 
 private val LightColorScheme = lightColorScheme(
-    primary = SesameColors.Primary,
+    primary = Color(0xFF2D5A27), // Deep Forest Green (Original)
     onPrimary = Color.White,
-    primaryContainer = SesameColors.Primary.copy(alpha = 0.1f),
-    onPrimaryContainer = SesameColors.Primary,
-    secondary = SesameColors.Secondary,
+    primaryContainer = Color(0xFFE9F5E9), // Mint Green (Original)
+    onPrimaryContainer = Color(0xFF2D5A27),
+    secondary = Color(0xFF435B71), // Slate Blue-Gray (Not purple)
     onSecondary = Color.White,
     background = SesameColors.Background,
     onBackground = SesameColors.TextMain,
@@ -27,12 +27,12 @@ private val LightColorScheme = lightColorScheme(
 )
 
 private val DarkColorScheme = darkColorScheme(
-    primary = Color(0xFF90CAF9),
-    onPrimary = Color(0xFF0D47A1),
-    primaryContainer = Color(0xFF1B5E20), // Using dark green for container
+    primary = Color(0xFF81C784), // Soft Green (Instead of blue)
+    onPrimary = Color(0xFF1B5E20),
+    primaryContainer = Color(0xFF1B5E20),
     onPrimaryContainer = Color(0xFFC8E6C9),
-    secondary = Color(0xFFB39DDB),
-    onSecondary = Color(0xFF311B92),
+    secondary = Color(0xFF7CB342), // Light Olive Green (Not purple)
+    onSecondary = Color(0xFF1B5E20),
     background = Color(0xFF121212),
     onBackground = Color(0xFFE0E0E0),
     surface = Color(0xFF1E1E1E),

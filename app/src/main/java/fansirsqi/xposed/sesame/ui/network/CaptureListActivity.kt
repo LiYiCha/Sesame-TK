@@ -26,6 +26,14 @@ class CaptureListActivity : BaseActivity() {
                             putExtra("recordDate", viewModel.viewingDate.value)
                         }
                         startActivity(intent)
+                    },
+                    onNewRequest = {
+                        val intent = android.content.Intent(this, CaptureDetailActivity::class.java).apply {
+                            putExtra("recordId", "")
+                            putExtra("recordDate", "")
+                            putExtra("newRequest", true)
+                        }
+                        startActivity(intent)
                     }
                 )
             }

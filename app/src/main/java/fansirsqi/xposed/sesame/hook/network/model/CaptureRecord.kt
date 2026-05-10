@@ -64,4 +64,26 @@ data class CaptureRecord(
     val isTruncated: Boolean = false,
     /** 异常/错误信息 */
     val errorMessage: String? = null
-)
+) {
+    /** 缓存的 UI 友好标题 */
+    val displayTitle: String by lazy {
+        val opType = requestHeaders["Operation-Type"] ?: requestHeaders["operation-type"]
+        val opShort = opType?.substringAfterLast(".") ?: path.trimEnd('/').substringAfterLast("/")
+        if (opShort.isNotEmpty()) opShort else host
+    }
+
+    /** 格式化时间 (HH:mm:ss) - 用于列表展示 */
+    val formattedTime: String by lazy {
+        DateFormatter.timeFormat.format(java.util.Date(timestamp))
+    }
+
+    /** 格式化完整时间 - 用于详情展示 */
+    val formattedFullTime: String by lazy {
+        DateFormatter.fullFormat.format(java.util.Date(timestamp))
+    }
+
+    private object DateFormatter {
+        val timeFormat = java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.getDefault())
+        val fullFormat = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", java.util.Locale.getDefault())
+    }
+}

@@ -2,6 +2,7 @@ package fansirsqi.xposed.sesame.ui.network
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import fansirsqi.xposed.sesame.hook.network.CaptureClassifier
 import fansirsqi.xposed.sesame.hook.network.CaptureSearchEngine
 import fansirsqi.xposed.sesame.hook.network.CaptureStorage
 import fansirsqi.xposed.sesame.hook.network.model.CaptureRecord
@@ -61,10 +62,11 @@ class CaptureListViewModel : ViewModel() {
     private val _autoScroll = MutableStateFlow(true)
     val autoScroll: StateFlow<Boolean> = _autoScroll
 
-    /** 当前日期加载的所有行 (用于分页) */
-    private var rawLines: List<String> = emptyList()
+    /** 当前日期加载的完整列表缓存（用于分页，避免重复读磁盘） */
+    private var cachedFullList: List<CaptureRecord> = emptyList()
     private var pageOffset = 0
     private val PAGE_SIZE = 50
+    private val MAX_MEMORY_RECORDS = 500 // 内存中保留的最大记录数
 
     /** 全局搜索结果 */
     private val _globalSearchResults = MutableStateFlow<List<CaptureRecord>>(emptyList())
@@ -88,6 +90,7 @@ class CaptureListViewModel : ViewModel() {
             if (query.isNotBlank()) {
                 val q = query.lowercase()
                 filtered = filtered.filter { record ->
+                    record.displayTitle.lowercase().contains(q) ||
                     record.url.lowercase().contains(q) ||
                     record.host.lowercase().contains(q) ||
                     record.method.lowercase().contains(q) ||
@@ -140,48 +143,48 @@ class CaptureListViewModel : ViewModel() {
 
             _viewingDate.value = finalDate
             pageOffset = 0
+            cachedFullList = CaptureStorage.loadByDate(finalDate)
 
-            val all = CaptureStorage.loadByDate(finalDate)
-            _allRecords.value = all.take(PAGE_SIZE)
-            _hasMore.value = all.size > PAGE_SIZE
-            // 缓存全部行用于分页
-            rawLines = all.map { it.id } // 简化：用 ID 列表做分页标记
+            _allRecords.value = cachedFullList.take(PAGE_SIZE)
+            _hasMore.value = cachedFullList.size > PAGE_SIZE
             pageOffset = PAGE_SIZE
 
             if (finalDate == today) startWatching() else stopWatching()
-
             _isLoading.value = false
         }
     }
 
     fun loadMore() {
         if (!_hasMore.value || _isLoading.value) return
-        viewModelScope.launch(Dispatchers.IO) {
-            _isLoading.value = true
-            val date = _viewingDate.value
-            val all = CaptureStorage.loadByDate(date)
-            val next = all.drop(pageOffset).take(PAGE_SIZE)
+        viewModelScope.launch(Dispatchers.Main) {
+            val next = cachedFullList.drop(pageOffset).take(PAGE_SIZE)
             if (next.isNotEmpty()) {
                 pageOffset += next.size
                 _allRecords.value = _allRecords.value + next
             }
-            _hasMore.value = pageOffset < all.size
-            _isLoading.value = false
+            _hasMore.value = pageOffset < cachedFullList.size
         }
     }
 
     // ── 全局搜索 ───────────────────────────
 
     fun searchAllDates(query: String) {
-        if (query.isBlank()) {
-            _globalSearchResults.value = emptyList()
-            return
-        }
         viewModelScope.launch(Dispatchers.IO) {
             _isLoading.value = true
-            val files = CaptureStorage.listAllFiles()
-            val results = CaptureSearchEngine.search(query, files)
-            _globalSearchResults.value = results
+            if (query.isBlank()) {
+                // 空查询：加载所有日期的全部记录
+                val allDates = CaptureStorage.listDates()
+                val all = mutableListOf<CaptureRecord>()
+                for (date in allDates) {
+                    if (all.size >= 200) break
+                    all.addAll(CaptureStorage.loadByDate(date).take(200 - all.size))
+                }
+                _globalSearchResults.value = all.sortedByDescending { it.timestamp }
+            } else {
+                val files = CaptureStorage.listAllFiles()
+                val results = CaptureSearchEngine.search(query, files)
+                _globalSearchResults.value = results
+            }
             _isLoading.value = false
         }
     }
@@ -220,7 +223,8 @@ class CaptureListViewModel : ViewModel() {
                                 )
                                 if (record != null) {
                                     withContext(Dispatchers.Main) {
-                                        _allRecords.value = listOf(record) + _allRecords.value
+                                        val newList = (listOf(record) + _allRecords.value).take(MAX_MEMORY_RECORDS)
+                                        _allRecords.value = newList
                                     }
                                 }
                             }
@@ -254,7 +258,7 @@ class CaptureListViewModel : ViewModel() {
         viewModelScope.launch(Dispatchers.IO) {
             CaptureStorage.clear(_viewingDate.value)
             _allRecords.value = emptyList()
-            rawLines = emptyList()
+            cachedFullList = emptyList()
             pageOffset = 0
             _hasMore.value = false
         }
@@ -264,7 +268,7 @@ class CaptureListViewModel : ViewModel() {
         viewModelScope.launch(Dispatchers.IO) {
             CaptureStorage.clearAll()
             _allRecords.value = emptyList()
-            rawLines = emptyList()
+            cachedFullList = emptyList()
             pageOffset = 0
             _hasMore.value = false
         }
@@ -272,12 +276,82 @@ class CaptureListViewModel : ViewModel() {
 
     fun getDates(): List<String> = CaptureStorage.listDates()
 
+    fun getAllCategories(): List<String> = CaptureClassifier.getCategoryNames()
+
     /**
-     * 所有可能出现的分类列表。
+     * 重新加载分类规则（用户编辑 rules.json 后调用）。
      */
-    fun getAllCategories(): List<String> = listOf(
-        "任务", "打卡", "奖励", "森林", "庄园", "蚂蚁", "会员", "登录", "查询", "提交", "其他"
-    )
+    fun reloadClassifier() {
+        CaptureClassifier.loadRules()
+    }
+
+    /**
+     * 生成模拟测试数据并切换到当天视图。
+     */
+    fun addTestData() {
+        viewModelScope.launch(Dispatchers.IO) {
+            val today = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
+            val mockRecords = listOf(
+                CaptureRecord(
+                    id = UUID.randomUUID().toString(),
+                    url = "https://api.example.com/v1/userMission/list?userId=12345",
+                    method = "POST", host = "api.example.com", path = "/v1/userMission/list",
+                    queryParams = mapOf("userId" to "12345"),
+                    requestHeaders = mapOf("Content-Type" to "application/json", "Cookie" to "session=mock1"),
+                    requestBody = """{"action":"getMissionList","page":1,"size":20}""",
+                    requestBodySize = 44,
+                    statusCode = 200, contentType = "application/json",
+                    responseHeaders = mapOf("Content-Type" to "application/json"),
+                    responseBody = """{"success":true,"data":[{"missionId":"m001","name":"签到任务"},{"missionId":"m002","name":"浇水任务"}]}""",
+                    responseBodySize = 102, timestamp = System.currentTimeMillis(), duration = 156,
+                    category = CaptureClassifier.classify("https://api.example.com/v1/userMission/list?userId=12345")
+                ),
+                CaptureRecord(
+                    id = UUID.randomUUID().toString(),
+                    url = "https://api.example.com/v1/checkin/doDailySign?activityId=act001",
+                    method = "POST", host = "api.example.com", path = "/v1/checkin/doDailySign",
+                    queryParams = mapOf("activityId" to "act001"),
+                    requestHeaders = mapOf("Content-Type" to "application/x-www-form-urlencoded"),
+                    requestBody = "userId=12345&timestamp=${System.currentTimeMillis()}",
+                    requestBodySize = 45,
+                    statusCode = 200, contentType = "application/json",
+                    responseHeaders = mapOf("Content-Type" to "application/json"),
+                    responseBody = """{"success":true,"data":{"signInCount":7,"reward":{"type":"coupon","value":5}}}""",
+                    responseBodySize = 85, timestamp = System.currentTimeMillis() - 2000, duration = 89,
+                    category = CaptureClassifier.classify("https://api.example.com/v1/checkin/doDailySign?activityId=act001")
+                ),
+                CaptureRecord(
+                    id = UUID.randomUUID().toString(),
+                    url = "https://api.example.com/v1/reward/receive?rewardId=rw001",
+                    method = "GET", host = "api.example.com", path = "/v1/reward/receive",
+                    queryParams = mapOf("rewardId" to "rw001"),
+                    requestHeaders = mapOf("User-Agent" to "Sesame-TK/0.3.0"),
+                    statusCode = 200, contentType = "application/json",
+                    responseHeaders = mapOf("Content-Type" to "application/json"),
+                    responseBody = """{"success":true,"data":{"rewardType":"greenEnergy","amount":30}}""",
+                    responseBodySize = 70, timestamp = System.currentTimeMillis() - 4000, duration = 45,
+                    category = CaptureClassifier.classify("https://api.example.com/v1/reward/receive?rewardId=rw001")
+                ),
+                CaptureRecord(
+                    id = UUID.randomUUID().toString(),
+                    url = "https://api.example.com/v1/antforest/queryFriendEnergy",
+                    method = "POST", host = "api.example.com", path = "/v1/antforest/queryFriendEnergy",
+                    requestHeaders = mapOf("Content-Type" to "application/json"),
+                    requestBody = """{"friendIds":["userA","userB","userC"]}""",
+                    requestBodySize = 40,
+                    statusCode = 500, contentType = "application/json",
+                    responseHeaders = mapOf("Content-Type" to "application/json"),
+                    responseBody = """{"error":"internal server error","code":500}""",
+                    responseBodySize = 48, timestamp = System.currentTimeMillis() - 6000, duration = 1200,
+                    category = CaptureClassifier.classify("https://api.example.com/v1/antforest/queryFriendEnergy")
+                ),
+            )
+            for (rec in mockRecords) {
+                CaptureStorage.save(rec)
+            }
+            withContext(Dispatchers.Main) { loadData(today) }
+        }
+    }
 
     override fun onCleared() {
         super.onCleared()

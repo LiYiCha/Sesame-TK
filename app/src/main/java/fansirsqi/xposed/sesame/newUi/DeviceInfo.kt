@@ -45,7 +45,8 @@ class PreviewDeviceInfoProvider : PreviewParameterProvider<Map<String, String>> 
 
 @Composable
 fun DeviceInfoCard(info: Map<String, String>, oneWord: String? = null) {
-    val accentColor = MaterialTheme.colorScheme.primary
+    val accentColor = MaterialTheme.colorScheme.onSurface
+    val brandColor = MaterialTheme.colorScheme.primary // Now green
     val containerColor = MaterialTheme.colorScheme.primaryContainer
 
     Card(
@@ -67,7 +68,7 @@ fun DeviceInfoCard(info: Map<String, String>, oneWord: String? = null) {
                         Icon(
                             Icons.Rounded.Smartphone,
                             contentDescription = null,
-                            tint = accentColor,
+                            tint = brandColor,
                             modifier = Modifier.size(20.dp)
                         )
                     }
@@ -145,7 +146,7 @@ private fun DeviceInfoRow(label: String, value: String, accentColor: Color) {
         Text(
             text = displayValue,
             style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
-            color = accentColor,
+            color = accentColor.copy(alpha = 0.9f),
             modifier = Modifier.weight(1f)
         )
         

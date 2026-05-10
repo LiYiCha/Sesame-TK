@@ -98,9 +98,6 @@ public class BaseModel extends Model {
     /**
      * 是否开启网络抓包 (HTTP/HTTPS)
      */
-    /**
-     * 是否开启网络抓包 (HTTP/HTTPS)
-     */
     @Getter
     public static final BooleanModelField enableHttpCapture = new BooleanModelField("enableHttpCapture", "开启网络抓包(HTTP/HTTPS)", false);
 

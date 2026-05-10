@@ -13,16 +13,22 @@ class CaptureDetailActivity : BaseActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        val recordId = intent.getStringExtra("recordId") ?: return finish()
-        val recordDate = intent.getStringExtra("recordDate") ?: return finish()
+        val isNewRequest = intent.getBooleanExtra("newRequest", false)
 
-        viewModel.loadRecord(recordId, recordDate)
+        if (isNewRequest) {
+            viewModel.loadRecord("", "")
+        } else {
+            val recordId = intent.getStringExtra("recordId") ?: return finish()
+            val recordDate = intent.getStringExtra("recordDate") ?: return finish()
+            viewModel.loadRecord(recordId, recordDate)
+        }
 
         setContent {
             SesameTheme {
                 CaptureDetailScreen(
                     viewModel = viewModel,
-                    onBack = { finish() }
+                    onBack = { finish() },
+                    isNewRequest = isNewRequest
                 )
             }
         }

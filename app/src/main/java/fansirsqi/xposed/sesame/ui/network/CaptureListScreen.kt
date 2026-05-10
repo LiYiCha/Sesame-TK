@@ -4,7 +4,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -16,11 +15,13 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import android.widget.Toast
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import fansirsqi.xposed.sesame.hook.network.model.CaptureRecord
@@ -33,7 +34,8 @@ import java.util.*
 fun CaptureListScreen(
     viewModel: CaptureListViewModel,
     onBack: () -> Unit,
-    onRecordClick: (CaptureRecord) -> Unit
+    onRecordClick: (CaptureRecord) -> Unit,
+    onNewRequest: () -> Unit = {}
 ) {
     val records by viewModel.displayRecords.collectAsState()
     val hasMore by viewModel.hasMore.collectAsState()
@@ -48,6 +50,7 @@ fun CaptureListScreen(
     var isSearchActive by remember { mutableStateOf(false) }
     var showHistory by remember { mutableStateOf(false) }
     var showBlacklist by remember { mutableStateOf(false) }
+    var showClassifierDialog by remember { mutableStateOf(false) }
     var showMenu by remember { mutableStateOf(false) }
 
     // 统计数据
@@ -87,30 +90,40 @@ fun CaptureListScreen(
                     }
                 },
                 navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Rounded.ArrowBack, "返回", tint = appBarContent)
-                    }
+                    AppBarIconWithText(
+                        icon = { Icon(Icons.AutoMirrored.Rounded.ArrowBack, "返回", tint = appBarContent, modifier = Modifier.size(20.dp)) },
+                        label = "返回",
+                        onClick = onBack
+                    )
                 },
                 actions = {
                     if (!isSearchActive) {
-                        IconButton(onClick = { isSearchActive = true }) {
-                            Icon(Icons.Rounded.Search, "搜索", tint = appBarContent)
-                        }
-                        IconButton(onClick = {
-                            viewModel.isGlobalSearch.value = !isGlobal
-                            if (!isGlobal) viewModel.searchAllDates(searchQuery.ifEmpty { "*" })
-                        }) {
-                            Icon(
-                                if (isGlobal) Icons.Rounded.Public else Icons.Rounded.Today,
-                                if (isGlobal) "全局" else "当天",
-                                tint = if (isGlobal) SesameColors.Primary else appBarContent
-                            )
-                        }
-                        Box {
-                            IconButton(onClick = { showMenu = true }) {
-                                Icon(Icons.Rounded.MoreVert, "更多", tint = appBarContent)
+                        AppBarIconWithText(
+                            icon = { Icon(Icons.Rounded.Search, "搜索", tint = appBarContent, modifier = Modifier.size(20.dp)) },
+                            label = "搜索",
+                            onClick = { isSearchActive = true }
+                        )
+                        AppBarIconWithText(
+                            icon = { Icon(if (isGlobal) Icons.Rounded.Public else Icons.Rounded.Today, "范围", tint = if (isGlobal) MaterialTheme.colorScheme.primary else appBarContent, modifier = Modifier.size(20.dp)) },
+                            label = if (isGlobal) "全日期" else "当天",
+                            onClick = {
+                                viewModel.isGlobalSearch.value = !isGlobal
+                                viewModel.searchAllDates(searchQuery)
                             }
+                        )
+                        Box {
+                            AppBarIconWithText(
+                                icon = { Icon(Icons.Rounded.MoreVert, "更多", tint = appBarContent, modifier = Modifier.size(20.dp)) },
+                                label = "更多",
+                                onClick = { showMenu = true }
+                            )
                             DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
+                                DropdownMenuItem(
+                                    text = { Text("新建请求", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary) },
+                                    leadingIcon = { Icon(Icons.Rounded.Add, null, tint = MaterialTheme.colorScheme.primary) },
+                                    onClick = { showMenu = false; onNewRequest() }
+                                )
+                                Divider()
                                 DropdownMenuItem(
                                     text = { Text("历史记录") },
                                     leadingIcon = { Icon(Icons.Rounded.History, null) },
@@ -120,6 +133,16 @@ fun CaptureListScreen(
                                     text = { Text("过滤配置") },
                                     leadingIcon = { Icon(Icons.Rounded.FilterAlt, null) },
                                     onClick = { showMenu = false; showBlacklist = true }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("编辑分类") },
+                                    leadingIcon = { Icon(Icons.Rounded.Label, null) },
+                                    onClick = { showMenu = false; showClassifierDialog = true }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("生成测试数据") },
+                                    leadingIcon = { Icon(Icons.Rounded.BugReport, null, tint = MaterialTheme.colorScheme.tertiary) },
+                                    onClick = { viewModel.addTestData(); showMenu = false }
                                 )
                                 DropdownMenuItem(
                                     text = { Text("自动滚动 (${if (autoScroll) "开" else "关"})") },
@@ -148,13 +171,6 @@ fun CaptureListScreen(
         Column(modifier = Modifier.padding(padding).fillMaxSize()) {
             // 统计仪表盘
             DashboardHeader(total, success, error)
-
-            // 分类筛选
-            CategoryFilterBar(
-                categories = viewModel.getAllCategories(),
-                selected = categoryFilter,
-                onSelect = { viewModel.setCategoryFilter(it) }
-            )
 
             // 列表
             Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
@@ -243,6 +259,14 @@ fun CaptureListScreen(
             onRemove = { viewModel.toggleBlacklist(it) }
         )
     }
+
+    // 编辑分类规则
+    if (showClassifierDialog) {
+        ClassifierEditDialog(
+            onDismiss = { showClassifierDialog = false },
+            onSave = { viewModel.reloadClassifier() }
+        )
+    }
 }
 
 // ── Dashboard ─────────────────────────────────
@@ -271,31 +295,6 @@ private fun StatCard(label: String, value: String, icon: androidx.compose.ui.gra
     }
 }
 
-// ── Category Filter ──────────────────────────
-
-@Composable
-private fun CategoryFilterBar(categories: List<String>, selected: String?, onSelect: (String?) -> Unit) {
-    LazyRow(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        item {
-            FilterChip(
-                selected = selected == null,
-                onClick = { onSelect(null) },
-                label = { Text("全部", fontSize = 11.sp) }
-            )
-        }
-        items(categories) { cat ->
-            FilterChip(
-                selected = selected == cat,
-                onClick = { onSelect(if (selected == cat) null else cat) },
-                label = { Text(cat, fontSize = 11.sp) }
-            )
-        }
-    }
-}
-
 // ── Record Item ──────────────────────────────
 
 @Composable
@@ -307,9 +306,6 @@ private fun RecordItem(
 ) {
     var showMenu by remember { mutableStateOf(false) }
     val statusColor = SesameColors.getStatusColor(record.statusCode)
-    val timeStr = remember(record.timestamp) {
-        SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date(record.timestamp))
-    }
 
     Card(
         onClick = onClick,
@@ -319,39 +315,11 @@ private fun RecordItem(
     ) {
         Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                // Method badge
                 MethodBadge(record.method)
                 Spacer(Modifier.width(8.dp))
-                // Category badge
-                if (record.category.isNotEmpty() && record.category != "其他") {
-                    Surface(
-                        color = SesameColors.Primary.copy(alpha = 0.1f),
-                        shape = RoundedCornerShape(4.dp)
-                    ) {
-                        Text(
-                            record.category,
-                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                            fontSize = 9.sp,
-                            color = SesameColors.Primary,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
-                    Spacer(Modifier.width(8.dp))
-                }
-                // Host
-                Text(
-                    text = record.host,
-                    style = MaterialTheme.typography.titleSmall,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f)
-                )
-                // Duration
-                Text(
-                    "${record.duration}ms",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.outline
-                )
+                // 摘要标题
+                Text(text = record.displayTitle, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                Text("${record.duration}ms", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
                 // Context menu
                 Box {
                     IconButton(onClick = { showMenu = true }, modifier = Modifier.size(20.dp)) {
@@ -372,9 +340,9 @@ private fun RecordItem(
                 }
             }
             Spacer(Modifier.height(4.dp))
-            // URL preview
+            // URL + host 信息行
             Text(
-                text = record.url,
+                text = if (record.displayTitle != record.host) record.host else record.url,
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.outline.copy(alpha = 0.7f),
                 maxLines = 1,
@@ -408,7 +376,7 @@ private fun RecordItem(
                     Icon(Icons.Rounded.ErrorOutline, null, modifier = Modifier.size(12.dp), tint = SesameColors.Error)
                 }
                 Spacer(Modifier.weight(1f))
-                Text(text = timeStr, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f), fontSize = 9.sp)
+                Text(text = record.formattedTime, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f), fontSize = 9.sp)
             }
         }
     }
@@ -502,6 +470,84 @@ private fun BlacklistSheet(
                 }
             }
         }
+    }
+}
+
+// ── Classifier Edit Dialog ───────────────────
+
+@Composable
+private fun ClassifierEditDialog(onDismiss: () -> Unit, onSave: () -> Unit) {
+    val context = LocalContext.current
+    var jsonText by remember {
+        mutableStateOf(
+            try {
+                val file = java.io.File(fansirsqi.xposed.sesame.hook.network.CaptureStorage.getDir(), "classifier_rules.json")
+                if (file.exists()) file.readText() else {
+                    val defaults = fansirsqi.xposed.sesame.hook.network.CaptureClassifier.loadRules()
+                    fansirsqi.xposed.sesame.util.JsonUtil.formatJson(defaults)
+                }
+            } catch (_: Exception) { "[]" }
+        )
+    }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("编辑分类规则", fontWeight = FontWeight.Bold) },
+        text = {
+            Column {
+                Text("JSON 格式: [{\"category\":\"标签\",\"keywords\":[\"kw1\",\"kw2\"]}]",
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline)
+                Spacer(Modifier.height(8.dp))
+                OutlinedTextField(
+                    value = jsonText,
+                    onValueChange = { jsonText = it },
+                    modifier = Modifier.fillMaxWidth().heightIn(max = 350.dp),
+                    textStyle = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace)
+                )
+            }
+        },
+        confirmButton = {
+            Button(onClick = {
+                try {
+                    val file = java.io.File(fansirsqi.xposed.sesame.hook.network.CaptureStorage.getDir(), "classifier_rules.json")
+                    file.writeText(jsonText)
+                    fansirsqi.xposed.sesame.hook.network.CaptureClassifier.loadRules()
+                    onSave()
+                    Toast.makeText(context, "规则已保存", Toast.LENGTH_SHORT).show()
+                } catch (e: Exception) {
+                    Toast.makeText(context, "保存失败: ${e.message}", Toast.LENGTH_SHORT).show()
+                }
+                onDismiss()
+            }) { Text("保存") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } }
+    )
+}
+
+// ── AppBar Icon With Text ──────────────────
+
+@Composable
+private fun AppBarIconWithText(
+    icon: @Composable () -> Unit,
+    label: String,
+    onClick: () -> Unit
+) {
+    val interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier.clickable(
+            interactionSource = interactionSource,
+            indication = null,
+            onClick = onClick
+        ).padding(horizontal = 8.dp)
+    ) {
+        Box(modifier = Modifier.size(24.dp), contentAlignment = Alignment.Center) {
+            icon()
+        }
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
+            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+        )
     }
 }
 

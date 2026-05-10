@@ -86,7 +86,7 @@ class MainActivity : BaseActivity() {
 
         setContentView(R.layout.activity_main)
         val deviceInfo: ComposeView = findViewById(R.id.device_info)
-        val v = WatermarkView.install(this)
+        //val v = WatermarkView.install(this)
         deviceInfo.setContent {
             SesameTheme {
                 DeviceInfoCard(

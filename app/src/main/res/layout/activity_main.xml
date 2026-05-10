@@ -15,13 +15,103 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent" />
 
-    <!-- 滚动容器 -->
+    <!-- 磁贴化功能区 (固定在底部) -->
+    <com.google.android.material.card.MaterialCardView
+        android:id="@+id/grid_card"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_margin="12dp"
+        app:cardCornerRadius="20dp"
+        app:cardElevation="4dp"
+        app:strokeWidth="0dp"
+        app:cardBackgroundColor="?attr/colorSurface"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:padding="12dp">
+
+            <!-- 第一行：监控日志类 -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal">
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btn_forest_log"
+                    style="@style/Widget.App.Button.Main"
+                    android:layout_margin="6dp"
+                    android:backgroundTint="@color/grid_forest"
+                    android:onClick="onClick"
+                    android:text="@string/forest_log"
+                    app:icon="@drawable/ic_forest" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btn_farm_log"
+                    style="@style/Widget.App.Button.Main"
+                    android:layout_margin="6dp"
+                    android:backgroundTint="@color/grid_farm"
+                    android:onClick="onClick"
+                    android:text="@string/farm_log"
+                    app:icon="@drawable/ic_farm" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btn_other_log"
+                    style="@style/Widget.App.Button.Main"
+                    android:layout_margin="6dp"
+                    android:backgroundTint="@color/grid_other"
+                    android:onClick="onClick"
+                    android:text="@string/other_log"
+                    app:icon="@drawable/ic_all_log" />
+            </LinearLayout>
+
+            <!-- 第二行：系统工具类 -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal">
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btn_extend_function"
+                    style="@style/Widget.App.Button.Main"
+                    android:layout_margin="6dp"
+                    android:backgroundTint="@color/grid_extend"
+                    android:onClick="onClick"
+                    android:text="@string/extend_function"
+                    app:icon="@drawable/ic_extension" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btn_github"
+                    style="@style/Widget.App.Button.Main"
+                    android:layout_margin="6dp"
+                    android:backgroundTint="@color/grid_github"
+                    android:onClick="onClick"
+                    android:text="@string/visit_github"
+                    app:icon="@drawable/ic_github" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btn_settings"
+                    style="@style/Widget.App.Button.Main"
+                    android:layout_margin="6dp"
+                    android:backgroundTint="@color/grid_settings"
+                    android:onClick="onClick"
+                    android:text="@string/settings"
+                    app:icon="@drawable/ic_setting" />
+            </LinearLayout>
+        </LinearLayout>
+    </com.google.android.material.card.MaterialCardView>
+
+    <!-- 滚动容器 (填充剩余空间) -->
     <androidx.core.widget.NestedScrollView
         android:layout_width="0dp"
         android:layout_height="0dp"
         android:fillViewport="true"
         app:layout_constraintTop_toBottomOf="@id/base_title_layout"
-        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintBottom_toTopOf="@id/grid_card"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent">
 
@@ -36,93 +126,6 @@
                 android:id="@+id/device_info"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content" />
-
-            <!-- 磁贴化功能区 (色彩区分增强) -->
-            <com.google.android.material.card.MaterialCardView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="12dp"
-                android:layout_marginBottom="32dp"
-                app:cardCornerRadius="20dp"
-                app:cardElevation="2dp"
-                app:strokeWidth="0dp"
-                app:cardBackgroundColor="?attr/colorSurface">
-
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="vertical"
-                    android:padding="12dp">
-
-                    <!-- 第一行：监控日志类 (淡蓝色系) -->
-                    <LinearLayout
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:orientation="horizontal">
-
-                        <com.google.android.material.button.MaterialButton
-                            android:id="@+id/btn_forest_log"
-                            style="@style/Widget.App.Button.Main"
-                            android:layout_margin="6dp"
-                            android:backgroundTint="@color/grid_forest"
-                            android:onClick="onClick"
-                            android:text="@string/forest_log"
-                            app:icon="@drawable/ic_forest" />
-
-                        <com.google.android.material.button.MaterialButton
-                            android:id="@+id/btn_farm_log"
-                            style="@style/Widget.App.Button.Main"
-                            android:layout_margin="6dp"
-                            android:backgroundTint="@color/grid_farm"
-                            android:onClick="onClick"
-                            android:text="@string/farm_log"
-                            app:icon="@drawable/ic_farm" />
-
-                        <com.google.android.material.button.MaterialButton
-                            android:id="@+id/btn_other_log"
-                            style="@style/Widget.App.Button.Main"
-                            android:layout_margin="6dp"
-                            android:backgroundTint="@color/grid_other"
-                            android:onClick="onClick"
-                            android:text="@string/other_log"
-                            app:icon="@drawable/ic_all_log" />
-                    </LinearLayout>
-
-                    <!-- 第二行：系统工具类 (淡灰色/浅绿色系) -->
-                    <LinearLayout
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:orientation="horizontal">
-
-                        <com.google.android.material.button.MaterialButton
-                            android:id="@+id/btn_extend_function"
-                            style="@style/Widget.App.Button.Main"
-                            android:layout_margin="6dp"
-                            android:backgroundTint="@color/grid_extend"
-                            android:onClick="onClick"
-                            android:text="@string/extend_function"
-                            app:icon="@drawable/ic_extension" />
-
-                        <com.google.android.material.button.MaterialButton
-                            android:id="@+id/btn_github"
-                            style="@style/Widget.App.Button.Main"
-                            android:layout_margin="6dp"
-                            android:backgroundTint="@color/grid_github"
-                            android:onClick="onClick"
-                            android:text="@string/visit_github"
-                            app:icon="@drawable/ic_github" />
-
-                        <com.google.android.material.button.MaterialButton
-                            android:id="@+id/btn_settings"
-                            style="@style/Widget.App.Button.Main"
-                            android:layout_margin="6dp"
-                            android:backgroundTint="@color/grid_settings"
-                            android:onClick="onClick"
-                            android:text="@string/settings"
-                            app:icon="@drawable/ic_setting" />
-                    </LinearLayout>
-                </LinearLayout>
-            </com.google.android.material.card.MaterialCardView>
 
         </LinearLayout>
     </androidx.core.widget.NestedScrollView>
