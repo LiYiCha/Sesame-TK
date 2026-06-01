@@ -328,9 +328,8 @@ abstract class ModelTask : Model() {
         taskScope?.cancel()
         taskScope = null
 
-        // 异步清理子任务映射
-        // 使用 GlobalScope 确保清理逻辑能够完成，即使父作用域已被取消
-        kotlinx.coroutines.GlobalScope.launch(Dispatchers.Default) {
+        // 使用 ModuleScope 确保清理逻辑能够完成，即使父作用域已被取消
+        fansirsqi.xposed.sesame.hook.core.ModuleScope.launch(Dispatchers.Default) {
             try {
                 childTaskMap.values.forEach { childTask ->
                     try {

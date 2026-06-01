@@ -386,10 +386,6 @@ class PrivilegeEX : BaseFlashSaleTask(), YouthPrivilegeSupport {
     @SuppressLint("NewApi")
     override fun sendExchangeRequestAsync(params: JSONArray, item: ExchangeItem): Boolean {
         return try {
-            if (params == null) {
-                Log.error(TAG, "⚠️ 无法发送空参数请求，兑换项：${item.code}")
-                return false
-            }
             val method = if (privilegeSmall?.value == true) {
                 "alipay.membertangram.biz.rpc.student.smallCashExchangeTrigger"
             } else {

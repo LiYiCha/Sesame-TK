@@ -84,7 +84,30 @@ object ForegroundHelper {
                 .setPriority(NotificationCompat.PRIORITY_LOW)
                 .build()
 
-            service.startForeground(KEEP_ALIVE_NOTIFICATION_ID, notification)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                var type = 0
+                try {
+                    val pm = context.packageManager
+                    val componentName = android.content.ComponentName(context, service.javaClass)
+                    val info = pm.getServiceInfo(componentName, 0)
+                    type = info.foregroundServiceType
+                } catch (e: Throwable) {
+                    Log.error(TAG, "获取服务信息失败: ${e.message}")
+                }
+
+                if (type != 0) {
+                    try {
+                        service.startForeground(KEEP_ALIVE_NOTIFICATION_ID, notification, type)
+                    } catch (e: Throwable) {
+                        Log.error(TAG, "使用获取的 type ($type) 启动前台服务失败: ${e.message}")
+                        tryStartFgsFallback(service, notification)
+                    }
+                } else {
+                    tryStartFgsFallback(service, notification)
+                }
+            } else {
+                service.startForeground(KEEP_ALIVE_NOTIFICATION_ID, notification)
+            }
             isActive.set(true)
             Log.other("$TAG ✅ 前台保活已启动: $taskName → $timeStr")
         } catch (e: Exception) {
@@ -114,6 +137,30 @@ object ForegroundHelper {
         } catch (e: Exception) {
             Log.error(TAG, "停止前台保活失败: ${e.message}")
             Log.printStackTrace(TAG, e)
+        }
+    }
+
+    private fun tryStartFgsFallback(service: Service, notification: android.app.Notification) {
+        if (Build.VERSION.SDK_INT >= 34) {
+            try {
+                service.startForeground(KEEP_ALIVE_NOTIFICATION_ID, notification, 1) // DATA_SYNC
+            } catch (e1: Throwable) {
+                try {
+                    service.startForeground(KEEP_ALIVE_NOTIFICATION_ID, notification, 0x40000000) // SPECIAL_USE
+                } catch (e2: Throwable) {
+                    try {
+                        service.startForeground(KEEP_ALIVE_NOTIFICATION_ID, notification, 0x00000100) // SHORT_SERVICE
+                    } catch (e3: Throwable) {
+                        try {
+                            service.startForeground(KEEP_ALIVE_NOTIFICATION_ID, notification)
+                        } catch (e4: Throwable) {
+                            Log.error(TAG, "所有前台服务启动方式均失败: ${e4.message}")
+                        }
+                    }
+                }
+            }
+        } else {
+            service.startForeground(KEEP_ALIVE_NOTIFICATION_ID, notification)
         }
     }
 

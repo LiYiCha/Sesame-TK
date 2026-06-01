@@ -38,8 +38,6 @@ data class CaptureRecord(
     // ── 响应 ───────────────────────────────
     /** HTTP 状态码 */
     val statusCode: Int = 0,
-    /** 响应头 key-value */
-    val responseHeaders: Map<String, String> = emptyMap(),
     /** 响应 Content-Type, 从头中提取 */
     val contentType: String? = null,
     /** 响应体 (UTF-8 解码后的文本) */
@@ -48,6 +46,8 @@ data class CaptureRecord(
     val responseBodyBase64: String? = null,
     /** 响应体原始字节数 */
     val responseBodySize: Int = 0,
+    /** 响应头 key-value */
+    val responseHeaders: Map<String, String> = emptyMap(),
 
     // ── 时间 ───────────────────────────────
     /** 请求发起时间戳 (ms) */
@@ -63,13 +63,22 @@ data class CaptureRecord(
     /** body 是否因超过阈值被截断 */
     val isTruncated: Boolean = false,
     /** 异常/错误信息 */
-    val errorMessage: String? = null
+    val errorMessage: String? = null,
+    /** 是否为 PENDING 状态 */
+    val isPending: Boolean = false
 ) {
     /** 缓存的 UI 友好标题 */
     val displayTitle: String by lazy {
         val opType = requestHeaders["Operation-Type"] ?: requestHeaders["operation-type"]
-        val opShort = opType?.substringAfterLast(".") ?: path.trimEnd('/').substringAfterLast("/")
-        if (opShort.isNotEmpty()) opShort else host
+        if (!opType.isNullOrBlank()) {
+            opType
+        } else {
+            val opShort = path.trimEnd('/').substringAfterLast("/")
+            if (opShort.isNotEmpty() && opShort != "/") opShort 
+            else if (host.isNotEmpty()) host
+            else if (url.isNotEmpty()) url
+            else "Unknown Request"
+        }
     }
 
     /** 格式化时间 (HH:mm:ss) - 用于列表展示 */

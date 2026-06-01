@@ -7,6 +7,7 @@ import fansirsqi.xposed.sesame.hook.network.CaptureSearchEngine
 import fansirsqi.xposed.sesame.hook.network.CaptureStorage
 import fansirsqi.xposed.sesame.hook.network.model.CaptureRecord
 import fansirsqi.xposed.sesame.model.BaseModel
+import fansirsqi.xposed.sesame.util.JsonUtil
 import fansirsqi.xposed.sesame.util.Log
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -50,6 +51,18 @@ class CaptureListViewModel : ViewModel() {
     private val _blacklist = MutableStateFlow<List<String>>(emptyList())
     val blacklist: StateFlow<List<String>> = _blacklist
 
+    /** 状态筛选 (null: 全部, 1: 成功, 2: 错误) */
+    private val _statusFilter = MutableStateFlow<Int?>(null)
+    val statusFilter: StateFlow<Int?> = _statusFilter
+
+    /** 是否多选模式 */
+    private val _isSelectionMode = MutableStateFlow(false)
+    val isSelectionMode: StateFlow<Boolean> = _isSelectionMode
+
+    /** 已选择的 ID */
+    private val _selectedIds = MutableStateFlow<Set<String>>(emptySet())
+    val selectedIds: StateFlow<Set<String>> = _selectedIds
+
     /** 加载状态 */
     private val _isLoading = MutableStateFlow(false)
     val isLoading: StateFlow<Boolean> = _isLoading
@@ -78,8 +91,27 @@ class CaptureListViewModel : ViewModel() {
 
     /** 展示用的过滤后列表 */
     val displayRecords: StateFlow<List<CaptureRecord>> =
-        combine(_allRecords, _searchQuery, _categoryFilter, _blacklist) { records, query, cat, bl ->
-            var filtered = records
+        combine(_allRecords, _globalSearchResults, isGlobalSearch, _searchQuery, _categoryFilter, _statusFilter, _blacklist) { args ->
+            val records = args[0] as List<CaptureRecord>
+            val globals = args[1] as List<CaptureRecord>
+            val isGlobal = args[2] as Boolean
+            val query = args[3] as String
+            val cat = args[4] as String?
+            val stat = args[5] as Int?
+            val bl = args[6] as List<String>
+            
+            var filtered = if (isGlobal) globals else {
+                if (query.isNotBlank()) cachedFullList else records
+            }
+
+            // 状态码筛选
+            if (stat != null) {
+                filtered = if (stat == 1) {
+                    filtered.filter { it.statusCode in 200..299 }
+                } else {
+                    filtered.filter { it.statusCode < 200 || it.statusCode >= 300 }
+                }
+            }
 
             // 分类筛选
             if (cat != null) {
@@ -95,8 +127,12 @@ class CaptureListViewModel : ViewModel() {
                     record.host.lowercase().contains(q) ||
                     record.method.lowercase().contains(q) ||
                     record.category.lowercase().contains(q) ||
+                    record.statusCode.toString().contains(q) ||
                     record.requestBody?.lowercase()?.contains(q) == true ||
-                    record.responseBody?.lowercase()?.contains(q) == true
+                    record.responseBody?.lowercase()?.contains(q) == true ||
+                    record.queryParams.any { (k, v) -> k.lowercase().contains(q) || v.lowercase().contains(q) } ||
+                    record.requestHeaders.any { (k, v) -> k.lowercase().contains(q) || v.lowercase().contains(q) } ||
+                    record.responseHeaders.any { (k, v) -> k.lowercase().contains(q) || v.lowercase().contains(q) }
                 }
             }
 
@@ -149,7 +185,6 @@ class CaptureListViewModel : ViewModel() {
             _hasMore.value = cachedFullList.size > PAGE_SIZE
             pageOffset = PAGE_SIZE
 
-            if (finalDate == today) startWatching() else stopWatching()
             _isLoading.value = false
         }
     }
@@ -163,6 +198,46 @@ class CaptureListViewModel : ViewModel() {
                 _allRecords.value = _allRecords.value + next
             }
             _hasMore.value = pageOffset < cachedFullList.size
+        }
+    }
+
+    /** 处理实时广播回来的记录 */
+    fun addRecordFromJson(json: String) {
+        viewModelScope.launch(Dispatchers.Default) {
+            try {
+                val record = fansirsqi.xposed.sesame.util.JsonUtil.parseObject(json, CaptureRecord::class.java)
+                if (record != null) {
+                    val today = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
+                    // 仅处理当天的实时数据
+                    if (_viewingDate.value == today) {
+                        withContext(Dispatchers.Main) {
+                            val cachedMutable = cachedFullList.toMutableList()
+                            val cachedIdx = cachedMutable.indexOfFirst { it.id == record.id }
+                            if (cachedIdx != -1) {
+                                cachedMutable[cachedIdx] = record
+                            } else {
+                                cachedMutable.add(0, record)
+                            }
+                            cachedFullList = cachedMutable
+
+                            val current = _allRecords.value.toMutableList()
+                            val existingIdx = current.indexOfFirst { it.id == record.id }
+                            
+                            if (existingIdx != -1) {
+                                // 💡 优化：如果 ID 已存在（如：从 PENDING 转为完成状态），则替换该条目
+                                current[existingIdx] = record
+                                _allRecords.value = current
+                            } else {
+                                // 💡 新增：新请求发起，插到最前面
+                                val newList = (listOf(record) + current).take(MAX_MEMORY_RECORDS)
+                                _allRecords.value = newList
+                            }
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                Log.capture(TAG, "解析实时广播数据失败: ${e.message}")
+            }
         }
     }
 
@@ -190,61 +265,8 @@ class CaptureListViewModel : ViewModel() {
     }
 
     // ── 实时监听 ────────────────────────────
-
-    private var watchJob: Job? = null
-    private var raf: RandomAccessFile? = null
-
-    // ── 实时监听 ────────────────────────────
-
-    private var isWatching = false
-
-    private fun startWatching() {
-        stopWatching()
-        isWatching = true
-        val date = _viewingDate.value
-        val file = File(CaptureStorage.getDir(), "$date.jsonl")
-
-        viewModelScope.launch(Dispatchers.IO) {
-            if (!file.exists()) return@launch
-            try {
-                raf = RandomAccessFile(file, "r").apply { seek(file.length()) }
-
-                while (isActive && isWatching) {
-                    try {
-                        val currentLen = file.length()
-                        val pointer = raf?.filePointer ?: 0L
-
-                        if (currentLen < pointer) raf?.seek(0)
-                        if (currentLen > pointer) {
-                            val line = raf?.readLine()
-                            if (line != null) {
-                                val record = fansirsqi.xposed.sesame.util.JsonUtil.parseObject(
-                                    line.trim(), CaptureRecord::class.java
-                                )
-                                if (record != null) {
-                                    withContext(Dispatchers.Main) {
-                                        val newList = (listOf(record) + _allRecords.value).take(MAX_MEMORY_RECORDS)
-                                        _allRecords.value = newList
-                                    }
-                                }
-                            }
-                        }
-                    } catch (_: Exception) {}
-                    delay(500L)
-                }
-            } catch (e: Exception) {
-                Log.error(TAG, "实时监听失败: ${e.message}")
-            }
-        }
-    }
-
-    private fun stopWatching() {
-        isWatching = false
-        try { raf?.close() } catch (_: Exception) {}
-        raf = null
-        watchJob?.cancel()
-        watchJob = null
-    }
+    // 💡 已移除旧版文件轮询逻辑，现已全面切换至 BroadcastReceiver 实时广播分发中心。
+    // 这极大地降低了磁盘 I/O 消耗，并解决了在高频抓包下的数据同步延迟问题。
 
     // ── 操作 ───────────────────────────────
 
@@ -252,25 +274,69 @@ class CaptureListViewModel : ViewModel() {
 
     fun setCategoryFilter(cat: String?) { _categoryFilter.value = cat }
 
+    fun setStatusFilter(stat: Int?) { _statusFilter.value = stat }
+
+    fun toggleSelection(id: String) {
+        val current = _selectedIds.value.toMutableSet()
+        if (current.contains(id)) current.remove(id) else current.add(id)
+        _selectedIds.value = current
+        _isSelectionMode.value = current.isNotEmpty()
+    }
+
+    fun clearSelection() {
+        _selectedIds.value = emptySet()
+        _isSelectionMode.value = false
+    }
+
+    fun deleteSelected() {
+        viewModelScope.launch(Dispatchers.IO) {
+            val ids = _selectedIds.value
+            cachedFullList = cachedFullList.filter { it.id !in ids }
+            _allRecords.value = _allRecords.value.filter { it.id !in ids }
+            // 💡 物理删除由底层存储管理或下次加载时生效，这里仅从内存清除
+            clearSelection()
+        }
+    }
+
+    fun exportSelected(): String {
+        val ids = _selectedIds.value
+        val records = if (isGlobalSearch.value) _globalSearchResults.value else _allRecords.value
+        val selected = records.filter { it.id in ids }
+        return JsonUtil.formatJson(selected)
+    }
+
     fun toggleAutoScroll() { _autoScroll.value = !_autoScroll.value }
 
     fun clearCurrentDate() {
         viewModelScope.launch(Dispatchers.IO) {
             CaptureStorage.clear(_viewingDate.value)
-            _allRecords.value = emptyList()
-            cachedFullList = emptyList()
-            pageOffset = 0
-            _hasMore.value = false
+            
+            // 同步清空内存状态
+            withContext(Dispatchers.Main) {
+                _allRecords.value = emptyList()
+                _globalSearchResults.value = emptyList()
+                cachedFullList = emptyList()
+                pageOffset = 0
+                _hasMore.value = false
+                
+                // 如果是全局模式，清除后尝试重新扫描（以防还有其他日期的记录）
+                if (isGlobalSearch.value) {
+                    searchAllDates(searchQuery.value)
+                }
+            }
         }
     }
 
     fun clearAll() {
         viewModelScope.launch(Dispatchers.IO) {
             CaptureStorage.clearAll()
-            _allRecords.value = emptyList()
-            cachedFullList = emptyList()
-            pageOffset = 0
-            _hasMore.value = false
+            withContext(Dispatchers.Main) {
+                _allRecords.value = emptyList()
+                _globalSearchResults.value = emptyList()
+                cachedFullList = emptyList()
+                pageOffset = 0
+                _hasMore.value = false
+            }
         }
     }
 
@@ -355,6 +421,5 @@ class CaptureListViewModel : ViewModel() {
 
     override fun onCleared() {
         super.onCleared()
-        stopWatching()
     }
 }

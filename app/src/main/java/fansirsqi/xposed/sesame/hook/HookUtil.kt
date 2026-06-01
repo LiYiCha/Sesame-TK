@@ -6,7 +6,6 @@ import de.robv.android.xposed.XposedBridge
 import de.robv.android.xposed.XposedHelpers
 import fansirsqi.xposed.sesame.data.General
 import fansirsqi.xposed.sesame.entity.UserEntity
-import fansirsqi.xposed.sesame.hook.network.HttpCaptureHook.setup
 import fansirsqi.xposed.sesame.model.BaseModel
 import fansirsqi.xposed.sesame.util.Log
 import fansirsqi.xposed.sesame.util.maps.UserMap
@@ -14,6 +13,9 @@ import io.github.libxposed.api.XposedModuleInterface
 import org.json.JSONObject
 import java.util.concurrent.ConcurrentHashMap
 
+/**
+ * 已废弃
+ */
 
 object HookUtil {
     private const val TAG = "HookUtil"
@@ -116,9 +118,6 @@ object HookUtil {
                                             HookSender.sendHookData(res, debugUrl)
                                         }
 
-                                        // 注册抓包 Hook
-                                        setup(lpparam.classLoader)
-                                        Log.capture(prettyRecord)
                                     }
                                 } catch (e: Exception) {
                                     Log.runtime(TAG, "JSON 构建失败: ${e.message}")

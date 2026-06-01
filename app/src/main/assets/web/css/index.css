@@ -88,8 +88,90 @@ video {
   vertical-align: baseline;
 }
 
+:root {
+  --main-color: #E64000;
+  --bg-color: #f6f6f6;
+  --card-bg-color: #ffffff;
+  --text-color: #000000;
+  --active-color: #E64000;
+}
+
 [v-cloak] {
   display: none;
+}
+
+/* Vant Overrides */
+.van-cell {
+  background-color: var(--card-bg-color) !important;
+  color: var(--text-color) !important;
+}
+
+.van-switch--on {
+  background-color: var(--main-color) !important;
+}
+
+.van-checkbox__icon--checked .van-icon,
+.van-radio__icon--checked .van-icon {
+  background-color: var(--main-color) !important;
+  border-color: var(--main-color) !important;
+}
+
+.van-checkbox__label,
+.van-radio__label {
+  color: var(--text-color) !important;
+}
+
+.van-dialog {
+  background-color: var(--card-bg-color) !important;
+  color: var(--text-color) !important;
+}
+
+.van-dialog__header,
+.van-dialog__message {
+  color: var(--text-color) !important;
+}
+
+.van-dialog__confirm {
+  color: var(--main-color) !important;
+}
+
+.van-tabs__nav {
+  background-color: var(--card-bg-color) !important;
+}
+
+.van-tab {
+  color: var(--text-color) !important;
+  opacity: 0.8;
+}
+
+.van-tab--active {
+  color: var(--main-color) !important;
+  font-weight: bold;
+  opacity: 1;
+}
+
+.van-field__control {
+  color: var(--text-color) !important;
+}
+
+/* Holiday Banner Styles */
+.holiday-banner {
+  margin: 10px;
+  padding: 15px;
+  border-radius: 8px;
+  background: linear-gradient(135deg, var(--main-color), var(--active-color));
+  color: #ffffff;
+  box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+}
+.holiday-title {
+  font-size: 18px !important;
+  font-weight: bold !important;
+  margin-bottom: 5px;
+}
+.holiday-story {
+  font-size: 13px !important;
+  line-height: 1.4 !important;
+  opacity: 0.9;
 }
 
 .van-dialog__header {
@@ -160,7 +242,7 @@ video {
 }
 
 .van-collapse-item__content {
-  background-color: #f6f6f6 !important;
+  background-color: var(--bg-color) !important;
 }
 
 .mt5 {
@@ -202,17 +284,17 @@ video {
 }
 
 .main-color {
-  color: #E64000 !important;
+  color: var(--main-color) !important;
 }
 
 .title {
   max-width: calc(100vw - 180px);
   white-space: warp;
-  color: #000000;
+  color: var(--text-color);
 }
 
 .link {
-  color: #E64000;
+  color: var(--main-color);
   /* text-align: center; */
   height: 32px;
   /* width: 120px; */
@@ -252,7 +334,8 @@ video {
   overflow-y: auto;
   margin: 10px;
   padding: 10px;
-  background-color: #ffffff;
+  background-color: var(--card-bg-color);
+  color: var(--text-color);
 }
 
 .theme1 .title-box {
@@ -264,14 +347,14 @@ video {
 .theme1 .list-icon {
   width: 20px !important;
   height: 20px !important;
-  color: #E64000;
+  color: var(--main-color);
   display: block;
   margin-right: 10px;
 }
 
 .theme1,
 .theme2 {
-  background-color: #f6f6f6;
+  background-color: var(--bg-color);
 }
 
 .theme2 .van-tabs__wrap::before {
@@ -290,7 +373,8 @@ video {
   overflow-y: auto;
   margin: 10px;
   padding: 10px;
-  background-color: #ffffff;
+  background-color: var(--card-bg-color);
+  color: var(--text-color);
 }
 
 .theme2 .title-box {
@@ -303,7 +387,7 @@ video {
 .theme2 .list-icon {
   width: 16px !important;
   height: 16px !important;
-  color: #E64000;
+  color: var(--main-color);
   display: block;
   /* margin-top: 5px; */
   transform: translateY(5px) !important;
@@ -314,7 +398,7 @@ video {
 }
 
 .light-label {
-  color: #E64000;
+  color: var(--main-color);
 }
 
 .dialog-footer-btn {
@@ -333,7 +417,7 @@ video {
 }
 
 .dialog-list .checked-label {
-  color: #E64000 !important;
+  color: var(--main-color) !important;
 }
 
 .dialog-list .list-label {

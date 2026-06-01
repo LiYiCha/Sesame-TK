@@ -61,6 +61,7 @@ public class OtherTask2 extends ModelTask {
     private BooleanModelField sesameAlchemyMy = new BooleanModelField("sesameAlchemyMy","芝麻炼金",false);
     private BooleanModelField playConsultFacade = new BooleanModelField("playConsultFacade","会员|转盘",false);
     private IntegerModelField playConsultFacadeNum = new IntegerModelField("playConsultFacadeNum","会员|转盘-次数",10);
+    private BooleanModelField topUpGoldTask = new BooleanModelField("topUpGoldTask", "充值金任务", false);
     @Override
     public ModelFields getFields() {
         ModelFields modelFields = new ModelFields();
@@ -87,6 +88,7 @@ public class OtherTask2 extends ModelTask {
         modelFields.addField(sesameAlchemyMy);
         modelFields.addField(playConsultFacade);
         modelFields.addField(playConsultFacadeNum);
+        modelFields.addField(topUpGoldTask);
         //modelFields.addField(monthlyPhoneBill);
         return modelFields;
     }
@@ -228,6 +230,12 @@ public class OtherTask2 extends ModelTask {
                                 if (!Status.hasFlagToday("rceduService_handle")) {
                                     new RceduService().handle();
                                 }
+                            }
+                        }),
+
+                        new TaskWrapper("充值金任务", () -> {
+                            if (topUpGoldTask.getValue()) {
+                                new TopUpGold().handle();
                             }
                         })
                 )));

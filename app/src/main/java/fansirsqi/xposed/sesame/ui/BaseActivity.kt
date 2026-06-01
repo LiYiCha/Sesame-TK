@@ -15,6 +15,8 @@ import fansirsqi.xposed.sesame.R
 import fansirsqi.xposed.sesame.data.RunType.*
 import fansirsqi.xposed.sesame.data.ViewAppInfo
 import fansirsqi.xposed.sesame.util.PermissionUtil
+import fansirsqi.xposed.sesame.ui.theme.app.HolidayTheme
+import androidx.compose.ui.graphics.toArgb
 
 open class BaseActivity : AppCompatActivity() {
     companion object {
@@ -84,13 +86,36 @@ open class BaseActivity : AppCompatActivity() {
         toolbar?.let { tb ->
             setSupportActionBar(tb)
 
-            when (ViewAppInfo.getRunType()) {
-                DISABLE -> setBaseTitleTextColor(
-                    ContextCompat.getColor(this, R.color.not_active_text)
-                )
-                ACTIVE, LOADED -> setBaseTitleTextColor(Color.WHITE)
-                else -> setBaseTitleTextColor(Color.WHITE)
+            val holidayColors = HolidayTheme.getHolidayColors()
+            val isLight = if (holidayColors != null) {
+                val argbColor = holidayColors.mainColor.toArgb()
+                tb.setBackgroundColor(argbColor)
+                
+                val r = android.graphics.Color.red(argbColor) / 255f
+                val g = android.graphics.Color.green(argbColor) / 255f
+                val b = android.graphics.Color.blue(argbColor) / 255f
+                val luminance = 0.2126f * r + 0.7152f * g + 0.0722f * b
+                val light = luminance > 0.6f
+                
+                if (ViewAppInfo.getRunType() == DISABLE) {
+                    setBaseTitleTextColor(ContextCompat.getColor(this, R.color.not_active_text))
+                } else {
+                    val textColor = if (light) android.graphics.Color.parseColor("#1A1A1A") else android.graphics.Color.WHITE
+                    tb.setTitleTextColor(textColor)
+                    tb.setSubtitleTextColor(textColor)
+                }
+                light
+            } else {
+                when (ViewAppInfo.getRunType()) {
+                    DISABLE -> setBaseTitleTextColor(
+                        ContextCompat.getColor(this, R.color.not_active_text)
+                    )
+                    ACTIVE, LOADED -> setBaseTitleTextColor(Color.WHITE)
+                    else -> setBaseTitleTextColor(Color.WHITE)
+                }
+                false
             }
+            WindowInsetsControllerCompat(window, window.decorView).isAppearanceLightStatusBars = isLight
             // 文字居中显示，MaterialToolbar 会自动处理状态栏高度
             tb.setContentInsetsAbsolute(0, 0)
             tb.title = baseTitle

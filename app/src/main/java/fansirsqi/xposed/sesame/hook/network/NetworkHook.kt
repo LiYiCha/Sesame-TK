@@ -24,15 +24,6 @@ object NetworkHook {
         if (isHooked) return
         isHooked = true
 
-        Log.capture(TAG, "正在初始化网络拦截模块...")
-
-        // 确保配置已加载 (支付宝进程同步)
-        try {
-            fansirsqi.xposed.sesame.util.DataStore.init(fansirsqi.xposed.sesame.util.Files.CONFIG_DIR)
-        } catch (e: Exception) {
-            Log.capture(TAG, "NetworkHook 数据存储初始化失败: ${e.message}")
-        }
-        
         // 1. 拦截标准 HTTP/HTTPS 请求 (HttpURLConnection)
         hookHttpURLConnection()
 
@@ -64,7 +55,6 @@ object NetworkHook {
                 }
             })
         } catch (t: Throwable) {
-            Log.capture(TAG, "Hook HttpURLConnection 失败: ${t.message}")
         }
     }
 
@@ -122,7 +112,6 @@ object NetworkHook {
                 }
             })
         } catch (t: Throwable) {
-            Log.capture(TAG, "Hook RPC 失败: ${t.message}")
         }
     }
 }

@@ -749,11 +749,11 @@ class AntForest : ModelTask(), EnergyCollectCallback {
         description: String?
     ): FixedOrRangeIntervalLimit {
         // 记录原始输入值
-        Log.record(TAG, description + "原始设置值: [" + intervalStr + "]")
+        //Log.record(TAG, description + "原始设置值: [" + intervalStr + "]")
 
         // 使用自定义区间限制类，处理所有边界情况
         val limit = FixedOrRangeIntervalLimit(intervalStr, defaultMin, defaultMax)
-        Log.record(TAG, description + "成功创建区间限制")
+        //Log.record(TAG, description + "成功创建区间限制")
         return limit
     }
 
@@ -3217,7 +3217,7 @@ class AntForest : ModelTask(), EnergyCollectCallback {
                                 // 获取错误码并尝试自动加入黑名单
                                 val errorCode = joFinishTask.optString("code", "")
                                 val errorDesc = joFinishTask.optString("desc", "未知错误")
-                                TaskBlacklist.autoAddToBlacklist(taskType, taskTitle, errorCode)
+                                TaskBlacklist.autoAddToBlacklist(taskType, taskTitle, errorCode, errorDesc)
                                 // 如果重试次数超过1次，手动加入黑名单
                                 if (count > 1) {
                                     TaskBlacklist.addToBlacklist(taskType, taskTitle)
@@ -3226,6 +3226,7 @@ class AntForest : ModelTask(), EnergyCollectCallback {
                                 Log.forest("森林任务🧾️[$taskTitle]")
                                 doubleCheck = true // 标记需要重新检查任务
                             }
+                            GlobalThreadPools.sleepCompat(RandomUtil.nextInt(3000, 4001).toLong())
                         }
 
                         // 如果是游戏任务类型，查询并处理游戏任务
@@ -3245,13 +3246,15 @@ class AntForest : ModelTask(), EnergyCollectCallback {
                             ) // 完成任务请求
 
                             val error = joFinishTask.optString("code", "")
+                            val errorMsg = joFinishTask.optString("desc", joFinishTask.optString("errorMessage", ""))
                             if (ResChecker.checkRes(TAG + "完成游戏任务失败:", joFinishTask)) {
                                 Log.forest("游戏任务完成 🎮️[" + taskTitle + "]# " + awardCount + "活力值")
                                 sumawardCount += awardCount
                                 doubleCheck = true // 标记需要重新检查任务
                             } else {
-                                TaskBlacklist.autoAddToBlacklist(taskType, taskTitle, error)
+                                TaskBlacklist.autoAddToBlacklist(taskType, taskTitle, error, errorMsg)
                             }
+                            GlobalThreadPools.sleepCompat(RandomUtil.nextInt(3000, 4001).toLong())
                         }
                     }
                 }

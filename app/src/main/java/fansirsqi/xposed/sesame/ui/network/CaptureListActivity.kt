@@ -9,11 +9,30 @@ import fansirsqi.xposed.sesame.ui.theme.app.SesameTheme
 class CaptureListActivity : BaseActivity() {
 
     private val viewModel: CaptureListViewModel by viewModels()
+    private var captureReceiver: android.content.BroadcastReceiver? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val initialDate = intent.getStringExtra("date")
         viewModel.loadData(initialDate)
+
+        // 注册实时抓包广播
+        val receiver = object : android.content.BroadcastReceiver() {
+            override fun onReceive(context: android.content.Context, intent: android.content.Intent) {
+                if (intent.action == "fansirsqi.xposed.sesame.NEW_CAPTURE") {
+                    intent.getStringExtra("record_json")?.let { json ->
+                        viewModel.addRecordFromJson(json)
+                    }
+                }
+            }
+        }
+        captureReceiver = receiver
+        val filter = android.content.IntentFilter("fansirsqi.xposed.sesame.NEW_CAPTURE")
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+            registerReceiver(receiver, filter, android.content.Context.RECEIVER_EXPORTED)
+        } else {
+            registerReceiver(receiver, filter)
+        }
 
         setContent {
             SesameTheme {
@@ -38,5 +57,14 @@ class CaptureListActivity : BaseActivity() {
                 )
             }
         }
+    }
+    override fun onDestroy() {
+        super.onDestroy()
+        captureReceiver?.let {
+            try {
+                unregisterReceiver(it)
+            } catch (_: Exception) {}
+        }
+        captureReceiver = null
     }
 }

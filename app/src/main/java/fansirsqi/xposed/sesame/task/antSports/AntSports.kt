@@ -615,7 +615,7 @@ class AntSports : ModelTask() {
                     )
                     val errorCode = result.optString("errorCode", "")
                     if (errorCode.isNotEmpty()) {
-                        TaskBlacklist.autoAddToBlacklist(taskId, taskName, errorCode)
+                        TaskBlacklist.autoAddToBlacklist(taskId, taskName, errorCode, errorMsg)
                     }
                     break
                 }

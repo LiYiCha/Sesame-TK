@@ -111,35 +111,39 @@ object TaskBlacklist {
      * @param taskId 任务ID，用于标识具体任务
      * @param taskTitle 任务标题（可选），用于显示和模糊匹配
      * @param errorCode 错误码，用于判断是否需要自动加入黑名单
+     * @param errorMsg 错误详情描述，用于模糊分析
      */
-    fun autoAddToBlacklist(taskId: String, taskTitle: String = "", errorCode: String) {
+    fun autoAddToBlacklist(taskId: String, taskTitle: String = "", errorCode: String, errorMsg: String = "") {
         // 参数校验：如果任务ID为空，直接返回
         if (taskId.isBlank()) return
+        
+        // 分析错误码及错误详情
+        val isUnsupportedRpc = errorCode == "400000040" || errorMsg.contains("不支持rpc调用") || errorMsg.contains("不支持")
+        val isInvalidArgument = errorCode == "ILLEGAL_ARGUMENT" || errorMsg.contains("不是有效入参") || errorMsg.contains("不是有效的入参")
+        
         // 第一步：判断当前错误码是否需要自动加入黑名单
-        // 只有特定的、无法通过重试解决的错误才会自动加入黑名单
-        val shouldAutoAdd = when (errorCode) {
-            // 农场任务特有的错误：后端不支持RPC调用
-            "400000040" -> true
-            "CAMP_TRIGGER_ERROR", // 以下错误码都会导致任务自动加入黑名单：
+        val shouldAutoAdd = isUnsupportedRpc || isInvalidArgument || when (errorCode) {
+            "CAMP_TRIGGER_ERROR",
             "104",
-            "OP_REPEAT_CHECK",               // 操作频率过高，被系统限制
-            "ILLEGAL_ARGUMENT",              // 参数不合法或格式错误
-            "PROMISE_HAS_PROCESSING_TEMPLATE" -> true // 存在进行中的生活记录
-            else -> false                    // 其他错误码不自动加入黑名单
+            "OP_REPEAT_CHECK",
+            "PROMISE_HAS_PROCESSING_TEMPLATE" -> true
+            "TASK_ID_INVALID" -> true
+            else -> false
         }
 
         // 第二步：如果确定需要自动加入黑名单
         if (shouldAutoAdd) {
             // 调用添加方法，将任务ID和标题组合后加入黑名单（支持模糊匹配）
             addToBlacklist(taskId, taskTitle)
-            // 第三步：根据错误码生成用户友好的错误说明
-            val reason = when (errorCode) {
-                "400000040" -> "不支持rpc调用"
-                "CAMP_TRIGGER_ERROR" -> "海豚活动触发错误"
-                "OP_REPEAT_CHECK" -> "操作太频繁"
-                "ILLEGAL_ARGUMENT" -> "参数错误"
-                "104", "PROMISE_HAS_PROCESSING_TEMPLATE" -> "存在进行中的生活记录"
-                else -> "未知错误"  // 理论上不会执行到此处
+            // 第三步：根据错误码及详情生成用户友好的错误说明
+            val reason = when {
+                isUnsupportedRpc -> "不支持rpc调用"
+                isInvalidArgument -> "不是有效入参"
+                errorCode == "CAMP_TRIGGER_ERROR" -> "海豚活动触发错误"
+                errorCode == "OP_REPEAT_CHECK" -> "操作太频繁"
+                errorCode == "104" || errorCode == "PROMISE_HAS_PROCESSING_TEMPLATE" -> "存在进行中的生活记录"
+                errorCode == "TASK_ID_INVALID" -> "海豚任务ID非法"
+                else -> "未知错误"
             }
 
             // 第四步：生成日志信息并记录

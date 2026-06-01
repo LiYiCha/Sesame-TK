@@ -46,6 +46,12 @@ object DataStore {
     }
 
     private var isInitialized = false
+    private var hasLoadedFromDisk = false
+
+    /**
+     * 判断是否已经从磁盘加载过数据
+     */
+    fun isLoaded(): Boolean = hasLoadedFromDisk
 
     /**
      * 初始化 DataStore
@@ -124,8 +130,12 @@ object DataStore {
             }
         }
 
-        // 2. 内存没有，创建默认值
+        // 2. 内存没有，如果还没从磁盘加载过，说明太早了，返回默认值但不存入内存，也不保存
         val default: T = createDefault(typeRef)
+        if (!hasLoadedFromDisk) {
+            return default
+        }
+
         data[key] = default
 
         // 3. 只有当确实是新数据时才保存，避免频繁 IO
@@ -181,6 +191,7 @@ object DataStore {
                 val loaded: Map<String, Any> = mapper.readValue(storageFile)
                 data.clear()
                 data.putAll(loaded)
+                hasLoadedFromDisk = true
 
                 lastLoadedTime.set(currentModTime)
 

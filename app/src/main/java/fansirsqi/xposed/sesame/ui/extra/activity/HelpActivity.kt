@@ -14,8 +14,6 @@ import androidx.appcompat.app.AlertDialog
 import androidx.lifecycle.lifecycleScope
 import fansirsqi.xposed.sesame.R
 import fansirsqi.xposed.sesame.ui.BaseActivity
-import fansirsqi.xposed.sesame.ui.update.UpdateConfig
-import fansirsqi.xposed.sesame.ui.update.UpdateManager
 import fansirsqi.xposed.sesame.util.Files
 import fansirsqi.xposed.sesame.util.Log
 import fansirsqi.xposed.sesame.util.PermissionUtil
@@ -24,23 +22,14 @@ import java.util.Calendar
 
 class HelpActivity : BaseActivity() {
 
-    private lateinit var updateManager: UpdateManager
+
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_help)
 
         try {
-            // 初始化更新管理器
-            updateManager = UpdateManager(
-                context = this,
-                config = UpdateConfig.DEFAULT,
-                coroutineScope = lifecycleScope
-            )
-
-            initializeViews()
             setupExpandableSections()
-            setupUpdateChecker()
         } catch (e: Exception) {
             Log.printStackTrace(e)
             Toast.makeText(this, "加载帮助信息失败: ${e.message}", Toast.LENGTH_LONG).show()
@@ -443,90 +432,5 @@ class HelpActivity : BaseActivity() {
         val failed: Int
     )
 
-    /**
-     * 设置更新检查功能
-     */
-    private fun setupUpdateChecker() {
-        // 在系统信息卡片后添加更新检查按钮
-        try {
-            val systemCard = findViewById<View>(R.id.system_header)?.parent?.parent as? androidx.cardview.widget.CardView
-            if (systemCard != null) {
-                val parentLayout = systemCard.parent as? LinearLayout
-                val index = parentLayout?.indexOfChild(systemCard) ?: -1
 
-                if (parentLayout != null && index >= 0) {
-                    // 创建更新检查卡片
-                    val updateCard = createUpdateCheckCard()
-                    parentLayout.addView(updateCard, index + 1)
-                }
-            }
-        } catch (e: Exception) {
-            Log.printStackTrace(e)
-            Toast.makeText(this, "添加更新检查功能失败: ${e.message}", Toast.LENGTH_SHORT).show()
-        }
-    }
-
-    /**
-     * 创建更新检查卡片
-     */
-    private fun createUpdateCheckCard(): View {
-        val cardView = androidx.cardview.widget.CardView(this).apply {
-            layoutParams = LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT
-            ).apply {
-                bottomMargin = 48
-            }
-            radius = 8f
-            cardElevation = 4f
-        }
-
-        val contentLayout = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(48, 48, 48, 48)
-        }
-
-        // 标题
-        val titleText = TextView(this).apply {
-            text = "检查更新"
-            textSize = 18f
-            setTypeface(null, android.graphics.Typeface.BOLD)
-            setTextColor(resources.getColor(R.color.colorPrimary, theme))
-        }
-
-        // 说明文本
-        val descText = TextView(this).apply {
-            text = "点击按钮检查应用更新"
-            textSize = 14f
-            setPadding(0, 24, 0, 48)
-        }
-
-        // 更新按钮
-        val updateButton = Button(this).apply {
-            text = "检查更新"
-            setOnClickListener {
-                checkForUpdates()
-            }
-        }
-
-        contentLayout.addView(titleText)
-        contentLayout.addView(descText)
-        contentLayout.addView(updateButton)
-        cardView.addView(contentLayout)
-
-        return cardView
-    }
-
-    /**
-     * 检查更新
-     */
-    private fun checkForUpdates() {
-        try {
-            Toast.makeText(this, "正在检查更新...", Toast.LENGTH_SHORT).show()
-            updateManager.checkForUpdates()
-        } catch (e: Exception) {
-            Log.printStackTrace(e)
-            Toast.makeText(this, "检查更新失败: ${e.message}", Toast.LENGTH_SHORT).show()
-        }
-    }
 }

@@ -290,7 +290,9 @@ public class AntFishpond extends BaseCommTask {
 
             // 检查任务是否在黑名单中
             if (this.notTaskIds.contains(taskId) || NC_GAME_PATTERN.matcher(taskId).matches()
-                    || NC_GAME_PATTERN2.matcher(taskId).matches() || remainingTimes == 0) {
+                    || NC_GAME_PATTERN2.matcher(taskId).matches() || remainingTimes == 0
+                    || fansirsqi.xposed.sesame.util.TaskBlacklist.isTaskInBlacklist(taskId)
+                    || fansirsqi.xposed.sesame.util.TaskBlacklist.isTaskInBlacklist(title)) {
                 return;
             }
             
@@ -348,6 +350,7 @@ public class AntFishpond extends BaseCommTask {
                         // 如果是不支持RPC调用的任务，加入失败缓存
                         if (errorMsg.contains("不支持rpc调用") || errorMsg.contains("不支持") || "200000006".equals(errorCode)) {
                             failedTaskCache.add(taskId);
+                            fansirsqi.xposed.sesame.util.TaskBlacklist.autoAddToBlacklist(taskId, title, errorCode, errorMsg);
                             //Log.record(this.displayName + "任务[" + title + "]加入失败缓存，避免重复尝试");
                         }
                     }
@@ -355,6 +358,7 @@ public class AntFishpond extends BaseCommTask {
                     // json为null的情况，也可能是失败
                     Log.error(this.TAG + "完成任务失败[" + title + "]:响应为空");
                     failedTaskCache.add(taskId);
+                    fansirsqi.xposed.sesame.util.TaskBlacklist.autoAddToBlacklist(taskId, title, "RESPONSE_NULL", "响应为空");
                     //Log.record(this.displayName + "任务[" + title + "]加入失败缓存，避免重复尝试");
                 }
             }
@@ -613,6 +617,22 @@ public class AntFishpond extends BaseCommTask {
             //提取其他参数
             JSONObject jSONObject2 = jSONObject.getJSONObject("angleResultInfo");
             JSONObject optJSONObject = jSONObject2.optJSONObject("angleAdInfo");
+            if (optJSONObject != null) {
+                String adBizNo = optJSONObject.optString("adBizNo");
+                String taskId = optJSONObject.optString("taskId");
+                if (!adBizNo.isEmpty() && !taskId.isEmpty()) {
+                    GlobalThreadPools.INSTANCE.execute(() -> {
+                        try {
+                            TimeUtil.sleep(RandomUtil.nextInt(2000, 3000));
+                            fishpondAdNotice(adBizNo);
+                            TimeUtil.sleep(RandomUtil.nextInt(2000, 3000));
+                            finishExtraTask(adBizNo, taskId);
+                        } catch (Exception e) {
+                            Log.error(this.TAG, "Extra reward task execution failed: " + e.getMessage());
+                        }
+                    });
+                }
+            }
             String string = jSONObject2.getString("fishWeight");
             String string2 = jSONObject2.getString("fishType");
             String string3 = jSONObject2.getString("bizNo");
@@ -719,13 +739,28 @@ public class AntFishpond extends BaseCommTask {
             Log.printStackTrace(this.TAG, th);
         }
     }
-    private void adXl(){
-        String methodq = "com.alipay.adtask.biz.mobilegw.service.applayer.query";
-        String dataq ="[{\"spaceCode\":\"adPosId%232024042924200095410%23%23taskType%2370000%23%23sceneCode%23null%23%23mediaScene%2342%23%23rewardNum%231%23%23spaceCode%23FISHING_SUCCESS_AD_DOUBLE_REWARD_NEW%23%23expCode%23AntFishingStyleV2\"}]";
-        RequestManager.requestString(methodq,dataq);
 
-        String methodad = "com.alipay.adexchange.ad.facade.xlightPlugin";
-        String data = "[{\"positionRequest\":{\"extMap\":{},\"referInfo\":{\"referToken\":\"1.0|PMXmuOimXUJus2bYhlaazwWgBKVxgNYFtUkHQO8knF2+j8hY6z8p/aiyVOQVilu3RxCZot9kZvECQb8QwHOjILq19S44bPChE9vfR1B6mnmDYinhkMGeTnWiaUpwETpuLv3er25v8IgVXw0D7K3ZkMabrtSqZOXxoVUoykwlHk9aXKk4rXeCSwNtdDCZCaKbT4G+Q8hgl5AUWxCi2Qjji8rbNLuEW5/vOQuH3LecH0ezgNqv0/ee4Qg6BX5YVZsYoF83ggV3dvKthzFOX5FnmE4YnIX+BSH2HUFxAMYGEY90afnJxyV1OR6mYbtKuA9dHF27lFsVRke68yXVGquW1DRJwYQMlhe4LZvyyO7vCVEl5AtzIzLjLTkp0lMtuf+BTALbwbY7lumU9A3gOdxQYM1TAhx8Q44pPGEmiiOs93Wgdhi1jymL1NJma4iZt5ni8EC/7K57Pw==\"},\"searchInfo\":{},\"spaceCode\":\"INCENTIVE_STYLE_FEEDS_DIVERSION\"},\"sdkPageInfo\":{\"adComponentType\":\"FEEDS\",\"adComponentVersion\":\"4.27.16\",\"enableFusion\":true,\"networkType\":\"WIFI\",\"pageFrom\":\"ch_url-https://render.alipay.com/p/yuyan/180020010001266592/index.html\",\"pageNo\":1,\"pageUrl\":\"https://render.alipay.com/p/yuyan/180020010001256918/fishing-landing.html?caprMode=sync\",\"session\":\"u_e0708_8c50b\",\"unionAppId\":\"2060090000304921\",\"xlightRuntimeSDKversion\":\"4.27.16\",\"xlightSDKType\":\"h5\",\"xlightSDKVersion\":\"4.27.16\"}}]";
-        RequestManager.requestString(methodad, data);
+    private void fishpondAdNotice(String adBizNo) {
+        try {
+            String params = "[{\"adBizNo\":\"" + adBizNo + "\",\"requestType\":\"NORMAL\",\"sceneCode\":\"GameCenter\",\"source\":\"ch_appcenter__chsub_9patch\",\"version\":\"20260211.01\"}]";
+            RequestManager.requestString("com.alipay.antfishpond.fishpondAdNotice", params);
+        } catch (Exception e) {
+            Log.error(this.TAG, "fishpondAdNotice Error: " + e.getMessage());
+        }
+    }
+
+    private void finishExtraTask(String adBizNo, String taskId) {
+        try {
+            String outBizNo = UserMap.getCurrentUid() + System.currentTimeMillis();
+            String params = "[{\"finishBusinessInfo\":{\"pwPreBizId\":\"" + adBizNo + "\"},\"outBizNo\":\"" + outBizNo + "\",\"requestType\":\"NORMAL\",\"sceneCode\":\"ANTFISHPOND_ANGLE_RESULT_AD\",\"source\":\"ch_appcenter__chsub_9patch\",\"taskType\":\"" + taskId + "\",\"version\":\"0.2.2406061508.39\"}]";
+            JSONObject response = new JSONObject(RequestManager.requestString("com.alipay.antiep.finishTask", params));
+            if (response.optBoolean("success")) {
+                Log.other(this.displayName + "额外奖励任务完成成功");
+            } else {
+                Log.error(this.displayName + "额外奖励任务完成失败: " + response.optString("desc"));
+            }
+        } catch (Exception e) {
+            Log.error(this.TAG, "finishExtraTask Error: " + e.getMessage());
+        }
     }
 }

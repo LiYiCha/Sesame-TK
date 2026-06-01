@@ -2193,12 +2193,10 @@ class AntMember : ModelTask() {
                     val reward = task.optInt("rewardAmount", 0)
                     Log.other("芝麻炼金⚗️[任务完成: " + title + "]#获得" + reward + "粒")
                 } else {
-                    val errorCode = finishJo.optString("resultCode", "")
-                    //  val errorMsg = finishJo.optString("resultView", finishRes)
-                    //  Log.error(TAG, "任务提交失败: $title - $errorMsg")
-                    // 自动添加到黑名单
-                    if (!errorCode.isEmpty()) {
-                        autoAddToBlacklist(title, title, errorCode)
+                    val errorCode = finishJo.optString("resultCode", finishJo.optString("errorCode", ""))
+                    val errorMsg = finishJo.optString("resultView", finishJo.optString("errorMsg", ""))
+                    if (!errorCode.isEmpty() || !errorMsg.isEmpty()) {
+                        autoAddToBlacklist(title, title, errorCode, errorMsg)
                     }
                 }
             }
@@ -2746,9 +2744,10 @@ class AntMember : ModelTask() {
                     if (!ResChecker.checkRes(TAG, responseObj)) {
                         Log.error(TAG, "芝麻信用💳[领取任务" + taskTitle + "失败]#" + s)
                         // 自动添加到黑名单
-                        val errorCode = responseObj.optString("errorCode", "")
-                        if (!errorCode.isEmpty()) {
-                            autoAddToBlacklist(taskTitle, taskTitle, errorCode)
+                        val errorCode = responseObj.optString("errorCode", responseObj.optString("resultCode", ""))
+                        val errorMsg = responseObj.optString("errorMsg", responseObj.optString("resultView", ""))
+                        if (!errorCode.isEmpty() || !errorMsg.isEmpty()) {
+                            autoAddToBlacklist(taskTitle, taskTitle, errorCode, errorMsg)
                         }
                         skippedCount++
                         continue
@@ -2775,10 +2774,11 @@ class AntMember : ModelTask() {
                         taskCompleted = true
                     } else {
                         Log.error(TAG, "芝麻信用💳[完成任务" + taskTitle + "失败]#" + s)
-                        // 自动添加到黑名单
-                        val errorCode = responseObj.optString("errorCode", "")
-                        if (!errorCode.isEmpty()) {
-                            autoAddToBlacklist(taskTitle, taskTitle, errorCode)
+                        // 自动添加到自动添加到黑名单
+                        val errorCode = responseObj.optString("errorCode", responseObj.optString("resultCode", ""))
+                        val errorMsg = responseObj.optString("errorMsg", responseObj.optString("resultView", ""))
+                        if (!errorCode.isEmpty() || !errorMsg.isEmpty()) {
+                            autoAddToBlacklist(taskTitle, taskTitle, errorCode, errorMsg)
                         }
                         break
                     }

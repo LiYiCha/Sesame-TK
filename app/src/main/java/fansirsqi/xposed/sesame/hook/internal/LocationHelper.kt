@@ -5,7 +5,7 @@ import fansirsqi.xposed.sesame.util.DataStore
 import fansirsqi.xposed.sesame.util.Log
 import kotlinx.coroutines.DelicateCoroutinesApi
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.GlobalScope
+import fansirsqi.xposed.sesame.hook.core.ModuleScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
@@ -75,9 +75,9 @@ object LocationHelper {
      */
     @OptIn(DelicateCoroutinesApi::class)
     fun requestLocation(callback: LocationCallback) {
-        // 使用 GlobalScope 启动协程替代 new Thread
-        // 注意：在 ApplicationHook 中最好使用受控的 Scope，这里作为单例工具类暂时用 GlobalScope
-        GlobalScope.launch(Dispatchers.Main) {
+        // 使用 ModuleScope 启动协程替代 GlobalScope
+        // 注意：在 ApplicationHook 中最好使用受控的 Scope
+        ModuleScope.launch(Dispatchers.Main) {
             val result = requestLocationSuspend()
             callback.onLocationResult(result)
         }

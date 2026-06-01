@@ -73,15 +73,24 @@ object CaptureClassifier {
      * 根据 URL + 可选的操作类型判断请求分类。
      * 对于 RPC 请求（URL 都是 gw.htm），主要靠 [operationType] 匹配。
      */
-    fun classify(url: String, operationType: String? = null): String {
+    fun classify(url: String, operationType: String? = null, body: String? = null): String {
         val combined = buildString {
             if (!url.isBlank()) {
                 append(url.lowercase())
                 append(" ")
             }
-            operationType?.let { append(it.lowercase()) }
+            operationType?.let { 
+                append(it.lowercase()) 
+                append(" ")
+            }
+            body?.let { 
+                // 仅取前 500 个字符进行匹配，平衡性能与准确度
+                append(it.take(500).lowercase()) 
+            }
         }
+        
         if (combined.isBlank()) return DEFAULT_CATEGORY
+        
         for (rule in getRules()) {
             if (rule.keywords.any { combined.contains(it) }) {
                 return rule.category
@@ -146,17 +155,20 @@ object CaptureClassifier {
 
     private val DEFAULT_RULES = listOf(
         // ── RPC Operation-Type 匹配（优先） ──
-        Rule("任务", listOf("userMission", "task", "mission", "quest", "acceptmission")),
-        Rule("打卡", listOf("checkin", "signIn", "punch", "clock", "doDailySign")),
-        Rule("奖励", listOf("reward", "prize", "award", "bubble", "receive", "point")),
-        Rule("森林", listOf("antforest", "forest", "tree", "energy", "friend")),
-        Rule("庄园", listOf("farm", "chicken", "feed", "animal")),
-        Rule("蚂蚁", listOf("ocean", "antHome", "live", "answerPop")),
-        Rule("会员", listOf("member", "vip", "grade", "level", "benefit")),
-        Rule("登录", listOf("login", "auth", "session", "token", "verify")),
-        Rule("配置", listOf("switch", "config", "getDynamicBundle", "getUnionResource", "setting")),
-        Rule("查询", listOf("query", "search", "list", "get", "detail", "info", "homePage")),
-        Rule("提交", listOf("submit", "create", "update", "deduction", "donate", "exchange")),
+        Rule("任务", listOf("userMission", "task", "mission", "quest", "acceptmission", "doTask", "finishTask")),
+        Rule("打卡", listOf("checkin", "signIn", "punch", "clock", "doDailySign", "continuousSign")),
+        Rule("奖励", listOf("reward", "prize", "award", "bubble", "receive", "point", "exchange", "redeem")),
+        Rule("森林", listOf("antforest", "forest", "tree", "energy", "friend", "prop", "fertilizer")),
+        Rule("庄园", listOf("farm", "chicken", "feed", "animal", "prop", "collect")),
+        Rule("果园", listOf("orchard", "fruit", "water", "tree", "antorchard")),
+        Rule("蚂蚁", listOf("ocean", "antHome", "live", "answerPop", "greenway", "sports")),
+        Rule("会员", listOf("member", "vip", "grade", "level", "benefit", "rights", "privilege")),
+        Rule("登录", listOf("login", "auth", "session", "token", "verify", "authtoken")),
+        Rule("配置", listOf("switch", "config", "getDynamicBundle", "getUnionResource", "setting", "init")),
+        Rule("查询", listOf("query", "search", "list", "get", "detail", "info", "homePage", "index")),
+        Rule("提交", listOf("submit", "create", "update", "deduction", "donate", "save", "sync")),
+        Rule("小程序", listOf("nebula", "h5", "jsapi", "tinyapp", "miniapp", "appx")),
+        Rule("游戏", listOf("game", "unity", "cocos", "canvas", "gametask")),
     )
 
     // ── 数据结构 ────────────────────────────

@@ -608,7 +608,7 @@ object ThemeManager {
             // 获取内存缓存 Map (字段名: g)
             val gField = scInnerManagerClass.getDeclaredField("g")
             gField.isAccessible = true
-            val cacheMap = gField.get(instance) as? MutableMap<String, Any>
+            val cacheMap = gField.get(instance) as? MutableMap<*, *>
 
             if (cacheMap != null) {
                 // 清除 theme 缓存

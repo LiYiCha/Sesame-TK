@@ -257,10 +257,8 @@ dependencies {
     implementation(libs.dexkit)
     implementation(libs.jackson.kotlin)
     
-    // Gson 和 Retrofit2 依赖
-    implementation("com.google.code.gson:gson:2.10.1")
+    // Retrofit2 依赖
     implementation("com.squareup.retrofit2:retrofit:2.9.0")
-    implementation("com.squareup.retrofit2:converter-gson:2.9.0")
     implementation("com.tencent:mmkv:2.2.2")
     implementation("net.lingala.zip4j:zip4j:2.11.5")
 

@@ -388,6 +388,33 @@ public class WebSettingsActivity extends BaseActivity {
         public void Log(String log) {
             Log.record(TAG, "设置：" + log);
         }
+
+        @JavascriptInterface
+        public String getThemeConfig() {
+            try {
+                String mode = fansirsqi.xposed.sesame.ui.theme.app.HolidayTheme.INSTANCE.getThemeMode();
+                String color = fansirsqi.xposed.sesame.ui.theme.app.HolidayTheme.INSTANCE.getCustomColor();
+                org.json.JSONObject obj = new org.json.JSONObject();
+                obj.put("mode", mode);
+                obj.put("customColor", color);
+                return obj.toString();
+            } catch (Exception e) {
+                Log.printStackTrace(e);
+                return "{\"mode\":\"auto\",\"customColor\":\"#E64000\"}";
+            }
+        }
+
+        @JavascriptInterface
+        public void setThemeConfig(String mode, String color) {
+            try {
+                fansirsqi.xposed.sesame.ui.theme.app.HolidayTheme.INSTANCE.saveThemeConfig(mode, color);
+                runOnUiThread(() -> {
+                    onContentChanged();
+                });
+            } catch (Exception e) {
+                Log.printStackTrace(e);
+            }
+        }
     }
 
     @Override

@@ -26,7 +26,7 @@ class CaptureDetailActivity : BaseActivity() {
         setContent {
             SesameTheme {
                 CaptureDetailScreen(
-                    viewModel = viewModel,
+                    detailViewModel = viewModel,
                     onBack = { finish() },
                     isNewRequest = isNewRequest
                 )

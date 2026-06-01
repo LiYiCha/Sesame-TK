@@ -535,8 +535,9 @@ class AntOrchard : ModelTask() {
                             Log.farm("农场广告任务📺[$title] 第${rightsTimes + cnt + 1}次")
                         } else {
                             val errorCode = finishResponse.optString("code", "")
+                            val errorDesc = finishResponse.optString("desc", "")
                             if (!errorCode.isEmpty()) {
-                                TaskBlacklist.autoAddToBlacklist(groupId, title, errorCode)
+                                TaskBlacklist.autoAddToBlacklist(groupId, title, errorCode, errorDesc)
                             }
                             break
                         }

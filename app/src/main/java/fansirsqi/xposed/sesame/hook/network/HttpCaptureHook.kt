@@ -6,9 +6,14 @@ import de.robv.android.xposed.XposedBridge
 import de.robv.android.xposed.XposedHelpers
 import fansirsqi.xposed.sesame.hook.network.model.CaptureRecord
 import fansirsqi.xposed.sesame.model.BaseModel
+import fansirsqi.xposed.sesame.util.DataStore
+import fansirsqi.xposed.sesame.util.Files
 import fansirsqi.xposed.sesame.util.Log
 import fansirsqi.xposed.sesame.util.NetworkUtils
+import java.lang.reflect.Field
 import java.util.UUID
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.Executors
 
 /**
  * HTTP/HTTPS 抓包 Hook 核心类
@@ -18,81 +23,270 @@ object HttpCaptureHook {
     private const val CLASS_HTTP_WORKER = "com.alipay.mobile.common.transport.http.HttpWorker"
     private const val CLASS_HTTP_URL_REQUEST = "com.alipay.mobile.common.transport.http.HttpUrlRequest"
     private const val CLASS_HTTP_URL_RESPONSE = "com.alipay.mobile.common.transport.http.HttpUrlResponse"
+    private const val CLASS_H5_HTTP_WORKER = "com.alipay.mobile.common.transport.h5.H5HttpWorker"
+    private const val CLASS_H5_HTTP_PLUGIN = "com.alipay.mobile.nebulacore.plugin.H5HttpPlugin"
+    private const val CLASS_H2_CONNECTION = "com.alipay.mobile.common.transport.http.inner.AndroidH2UrlConnection"
     private const val CLASS_TRANSPORT_SERVICE_IMPL = "com.alipay.mobile.nebulax.integration.mpaas.proxy.impl.TransportServiceImpl"
+    private const val CLASS_DTN_HTTP_CLIENT = "com.alipay.mobile.dtnadapter.api.DtnHttpClient"
 
-    /** 提取阶段的最大字节限制 (10MB)，防止超过该大小导致 OOM */
     private const val MAX_EXTRACT_SIZE = 10 * 1024 * 1024
-    /** 内联存储最大限制，配合提取限制 */
-    private const val MAX_INLINE_SIZE = MAX_EXTRACT_SIZE
+
+    private var isInstalled = false
+    private val fieldCache = ConcurrentHashMap<String, Field>()
+    private val missingFields = ConcurrentHashMap.newKeySet<String>()
+    private val methodCache = ConcurrentHashMap<String, String>()
+    private val hookedClasses = ConcurrentHashMap.newKeySet<String>()
+
+    private val dispatchExecutor = Executors.newSingleThreadExecutor { runnable ->
+        Thread(runnable, "CaptureDispatcher")
+    }
+
+    private fun getCachedField(clazz: Class<*>, fieldName: String): Field? {
+        val key = "${clazz.name}#$fieldName"
+        if (missingFields.contains(key)) return null
+        var field = fieldCache[key]
+        if (field == null) {
+            field = XposedHelpers.findFieldIfExists(clazz, fieldName)
+            if (field != null) {
+                field.isAccessible = true
+                fieldCache[key] = field
+            } else {
+                missingFields.add(key)
+            }
+        }
+        return field
+    }
 
     @JvmStatic
     fun setup(classLoader: ClassLoader) {
-        try {
-            fansirsqi.xposed.sesame.util.DataStore.init(fansirsqi.xposed.sesame.util.Files.CONFIG_DIR)
-        } catch (e: Throwable) {
-            Log.capture(TAG, "初始化 DataStore 失败: ${e.message}")
-        }
-        hookAlipayHttpWorker(classLoader)
+        if (!BaseModel.enableHttpCapture.value) return
+        if (isInstalled) return
+        isInstalled = true
+
+        hookAlipayTraffic(classLoader)
+        hookH5Plugin(classLoader)
         hookStandardHttpConnection()
         hookOkHttpTraffic(classLoader)
         hookARiverTraffic(classLoader)
+        bypassBifrostAndForceProxy(classLoader)
+        hookDtnTraffic(classLoader)
     }
 
-    private fun hookAlipayHttpWorker(classLoader: ClassLoader) {
+    private fun bypassBifrostAndForceProxy(classLoader: ClassLoader) {
+        // 1. 禁用 TCP 直连 (强制降级为标准 HTTP/HTTPS 协议)
+        val workerClasses = listOf(
+            "com.alipay.mobile.common.transport.http.HttpWorker",
+            "com.alipay.mobile.common.transport.rpc.RpcHttpWorker",
+            "com.alipay.mobile.common.transport.h5.H5HttpWorker"
+        )
+        workerClasses.forEach { className ->
+            try {
+                val clazz = XposedHelpers.findClass(className, classLoader)
+                XposedHelpers.findAndHookMethod(
+                    clazz,
+                    "isCanUseExtTransport",
+                    "com.alipay.mobile.common.transport.context.TransportContext",
+                    object : XC_MethodHook() {
+                        override fun beforeHookedMethod(param: MethodHookParam) {
+                            param.result = false
+                        }
+                    }
+                )
+            } catch (e: Throwable) {
+                Log.error(TAG, "Hook $className.isCanUseExtTransport 失败: ${e.message}")
+            }
+        }
+
+        // 2. 强制开启系统代理 (绕过 NO_PROXY 屏蔽)
         try {
-            val handleResponseMethod = XposedHelpers.findMethodExact(
-                CLASS_HTTP_WORKER, classLoader, "handleResponse",
-                CLASS_HTTP_URL_REQUEST, "org.apache.http.HttpResponse", "int", "java.lang.String"
-            )
-
-            XposedBridge.hookMethod(handleResponseMethod, object : XC_MethodHook() {
-                override fun beforeHookedMethod(param: MethodHookParam) {
-                    XposedHelpers.setAdditionalInstanceField(param, "capture_start_time", System.currentTimeMillis())
-                }
-
-                override fun afterHookedMethod(param: MethodHookParam) {
-                    if (!BaseModel.enableHttpCapture.value) return
-                    try {
-                        val request = param.args[0] ?: return
-                        val response = param.result ?: return
-                        if (response.javaClass.name != CLASS_HTTP_URL_RESPONSE) return
-
-                        val startTime = XposedHelpers.getAdditionalInstanceField(param, "capture_start_time") as? Long
-                            ?: System.currentTimeMillis()
-                        captureAlipayTraffic(request, response, startTime)
-                    } catch (e: Throwable) {
-                        Log.capture(TAG, "HttpWorker Hook 执行异常: ${e.message}")
+            val requestClass = XposedHelpers.findClass("com.alipay.mobile.common.transport.http.HttpUrlRequest", classLoader)
+            XposedHelpers.findAndHookMethod(
+                requestClass,
+                "isCapture",
+                object : XC_MethodHook() {
+                    override fun beforeHookedMethod(param: MethodHookParam) {
+                        param.result = true
                     }
                 }
-            })
+            )
         } catch (e: Throwable) {
-            Log.capture(TAG, "注册 HttpWorker Hook 失败: ${e.message}")
+            Log.error(TAG, "Hook HttpUrlRequest.isCapture 失败: ${e.message}")
         }
+
+        // 3. 强制开启 UC 内核的代理委托 (使其网络请求委托给 Java 层发送)
+        try {
+            val ucSettingsClass = XposedHelpers.findClass("com.uc.webview.export.extension.UCSettings", classLoader)
+            try {
+                XposedHelpers.findAndHookMethod(
+                    ucSettingsClass,
+                    "setEnableUCProxy",
+                    Boolean::class.javaPrimitiveType,
+                    object : XC_MethodHook() {
+                        override fun beforeHookedMethod(param: MethodHookParam) {
+                            param.args[0] = true
+                        }
+                    }
+                )
+                Log.runtime(TAG, "Hook UCSettings.setEnableUCProxy 成功")
+            } catch (e: Throwable) {
+                Log.error(TAG, "Hook UCSettings.setEnableUCProxy 失败: ${e.message}")
+            }
+            try {
+                XposedHelpers.findAndHookMethod(
+                    ucSettingsClass,
+                    "setForceUCProxy",
+                    Boolean::class.javaPrimitiveType,
+                    object : XC_MethodHook() {
+                        override fun beforeHookedMethod(param: MethodHookParam) {
+                            param.args[0] = true
+                        }
+                    }
+                )
+                Log.runtime(TAG, "Hook UCSettings.setForceUCProxy 成功")
+            } catch (e: Throwable) {
+                Log.error(TAG, "Hook UCSettings.setForceUCProxy 失败: ${e.message}")
+            }
+        } catch (e: Throwable) {
+            Log.error(TAG, "寻找 UCSettings 类失败: ${e.message}")
+        }
+    }
+
+    private fun hookAlipayTraffic(classLoader: ClassLoader) {
+        val workerClasses = listOf(CLASS_HTTP_WORKER, CLASS_H5_HTTP_WORKER)
+        workerClasses.forEach { className ->
+            try {
+                val clazz = XposedHelpers.findClass(className, classLoader)
+                XposedHelpers.findAndHookMethod(clazz, "call", object : XC_MethodHook() {
+                    override fun beforeHookedMethod(param: MethodHookParam) {
+                        try {
+                            val request = getRequestFromWorker(param.thisObject)
+                            if (request != null) {
+                                val id = UUID.randomUUID().toString()
+                                XposedHelpers.setAdditionalInstanceField(param.thisObject, "worker_capture_id", id)
+                                val startTime = System.currentTimeMillis()
+                                XposedHelpers.setAdditionalInstanceField(request, "capture_id", id)
+                                XposedHelpers.setAdditionalInstanceField(request, "capture_start_time", startTime)
+                                val url = XposedHelpers.callMethod(request, "getUrl")?.toString() ?: ""
+                                val record = CaptureRecord(id = id, url = url, method = XposedHelpers.callMethod(request, "getRequestMethod")?.toString() ?: "GET", timestamp = startTime, statusCode = 0, isPending = true, category = CaptureClassifier.classify(url, null))
+                                dispatchRecord(record, skipSave = true)
+                            }
+                        } catch (_: Throwable) {}
+                    }
+                })
+
+                XposedHelpers.findAndHookMethod(clazz, "handleResponse", CLASS_HTTP_URL_REQUEST, "org.apache.http.HttpResponse", Int::class.javaPrimitiveType, String::class.java, object : XC_MethodHook() {
+                    override fun afterHookedMethod(param: MethodHookParam) {
+                        try {
+                            val request = param.args[0] ?: return
+                            val response = param.result ?: return
+                            
+                            val id = XposedHelpers.getAdditionalInstanceField(param.thisObject, "worker_capture_id") as? String 
+                                ?: XposedHelpers.getAdditionalInstanceField(request, "capture_id") as? String 
+                                ?: return
+                            val startTime = XposedHelpers.getAdditionalInstanceField(request, "capture_start_time") as? Long ?: System.currentTimeMillis()
+                            
+                            val resHeader = try { XposedHelpers.callMethod(response, "getHeader") } catch (_: Throwable) { null }
+                            val code = try { XposedHelpers.callMethod(response, "getCode") as? Int ?: 0 } catch (_: Throwable) { 0 }
+
+                            val hasMInputStream = try { XposedHelpers.findField(response.javaClass, "mInputStream") != null } catch (_: Throwable) { false }
+                            if (hasMInputStream) {
+                                val originalStream = try { XposedHelpers.getObjectField(response, "mInputStream") as? java.io.InputStream } catch (_: Throwable) { null }
+                                if (originalStream != null) {
+                                    if (originalStream !is CaptureInputStream) {
+                                        val captureStream = CaptureInputStream(originalStream) { data ->
+                                            captureFinalTraffic(request, resHeader, code, "", data, startTime, id)
+                                        }
+                                        XposedHelpers.setObjectField(response, "mInputStream", captureStream)
+                                    }
+                                } else {
+                                    // 304, 204 or failed H5 requests fallback capture
+                                    captureFinalTraffic(request, resHeader, code, "", null, startTime, id)
+                                }
+                            } else {
+                                var resData = try { XposedHelpers.callMethod(response, "getResData") as? ByteArray } catch (_: Throwable) { null }
+                                if (resData == null) {
+                                    resData = try { XposedHelpers.getObjectField(response, "mResData") as? ByteArray } catch (_: Throwable) { null }
+                                }
+                                captureFinalTraffic(request, resHeader, code, "", resData, startTime, id)
+                            }
+                        } catch (_: Throwable) {}
+                    }
+                })
+            } catch (_: Throwable) {}
+        }
+    }
+
+    private fun getRequestFromWorker(worker: Any): Any? {
+        val clazz = worker.javaClass
+        listOf("mOriginRequest", "mRequest", "request").forEach { fieldName ->
+            try {
+                val field = getCachedField(clazz, fieldName)
+                if (field != null) return field.get(worker)
+            } catch (_: Throwable) {}
+        }
+        return null
+    }
+
+    private fun hookH5Plugin(classLoader: ClassLoader) {
+        try {
+            val pluginClass = XposedHelpers.findClass(CLASS_H5_HTTP_PLUGIN, classLoader)
+            XposedHelpers.findAndHookMethod(pluginClass, "httpRequest", "com.alipay.mobile.h5container.api.H5Event", "com.alipay.mobile.h5container.api.H5BridgeContext", object : XC_MethodHook() {
+                override fun beforeHookedMethod(param: MethodHookParam) {
+                    try {
+                        val event = param.args[0] ?: return
+                        val params = XposedHelpers.callMethod(event, "getParam") as? org.json.JSONObject ?: return
+                        val url = params.optString("url")
+                    } catch (_: Throwable) {}
+                }
+            })
+        } catch (_: Throwable) {}
     }
 
     private fun hookStandardHttpConnection() {
         try {
-            // Hook 标准 Java 网络库，捕捉 GameTask, Credit2101 等请求
-            val connClass = XposedHelpers.findClass("com.android.okhttp.internal.huc.HttpURLConnectionImpl", null)
-            XposedHelpers.findAndHookMethod(connClass, "execute", object : XC_MethodHook() {
-                override fun beforeHookedMethod(param: MethodHookParam) {
-                    XposedHelpers.setAdditionalInstanceField(param.thisObject, "capture_start_time", System.currentTimeMillis())
-                }
+            XposedHelpers.findAndHookMethod(java.net.URL::class.java, "openConnection", object : XC_MethodHook() {
                 override fun afterHookedMethod(param: MethodHookParam) {
-                    // 仅标记开始时间，实际抓取移至流关闭或 disconnect
+                    val conn = param.result as? java.net.HttpURLConnection ?: return
+                    val className = conn.javaClass.name
+                    ensurePendingBroadcast(conn)
+                    if (className.contains("okhttp") && !hookedClasses.contains(className)) {
+                        synchronized(hookedClasses) {
+                            if (!hookedClasses.contains(className)) {
+                                hookSpecificHttpImpl(conn.javaClass)
+                                hookedClasses.add(className)
+                            }
+                        }
+                    }
                 }
             })
+            listOf("com.android.okhttp.internal.huc.HttpURLConnectionImpl", "com.android.okhttp.internal.huc.HttpsURLConnectionImpl").forEach { className ->
+                try {
+                    val connClass = XposedHelpers.findClass(className, null)
+                    hookSpecificHttpImpl(connClass)
+                    hookedClasses.add(className)
+                } catch (_: Throwable) {}
+            }
+        } catch (_: Throwable) {}
+    }
 
-            XposedHelpers.findAndHookMethod(connClass, "disconnect", object : XC_MethodHook() {
+    private fun hookSpecificHttpImpl(connClass: Class<*>) {
+        try {
+            val hookStream = object : XC_MethodHook() {
                 override fun afterHookedMethod(param: MethodHookParam) {
-                    if (!BaseModel.enableHttpCapture.value) return
-                    triggerStandardCapture(param.thisObject as java.net.HttpURLConnection)
+                    val is_ = param.result as? java.io.InputStream ?: return
+                    if (is_ is CaptureInputStream) return
+                    val captureStream = CaptureInputStream(is_) { data ->
+                        XposedHelpers.setAdditionalInstanceField(param.thisObject, "captured_response_body", data)
+                        triggerStandardCapture(param.thisObject as java.net.HttpURLConnection)
+                    }
+                    XposedHelpers.setAdditionalInstanceField(param.thisObject, "capture_stream_obj", captureStream)
+                    param.result = captureStream
                 }
-            })
-
+            }
+            XposedHelpers.findAndHookMethod(connClass, "connect", object : XC_MethodHook() { override fun beforeHookedMethod(param: MethodHookParam) { ensurePendingBroadcast(param.thisObject as java.net.HttpURLConnection) } })
+            XposedHelpers.findAndHookMethod(connClass, "disconnect", object : XC_MethodHook() { override fun afterHookedMethod(param: MethodHookParam) { triggerStandardCapture(param.thisObject as java.net.HttpURLConnection) } })
             XposedHelpers.findAndHookMethod(connClass, "getOutputStream", object : XC_MethodHook() {
                 override fun afterHookedMethod(param: MethodHookParam) {
-                    if (!BaseModel.enableHttpCapture.value) return
                     val os = param.result as? java.io.OutputStream ?: return
                     val buffer = java.io.ByteArrayOutputStream()
                     param.result = object : java.io.OutputStream() {
@@ -100,580 +294,379 @@ object HttpCaptureHook {
                         override fun write(b: ByteArray) { os.write(b); buffer.write(b) }
                         override fun write(b: ByteArray, off: Int, len: Int) { os.write(b, off, len); buffer.write(b, off, len) }
                         override fun flush() { os.flush() }
-                        override fun close() { 
-                            os.close()
-                            XposedHelpers.setAdditionalInstanceField(param.thisObject, "captured_request_body", buffer.toByteArray())
-                        }
+                        override fun close() { os.close(); XposedHelpers.setAdditionalInstanceField(param.thisObject, "captured_request_body", buffer.toByteArray()) }
                     }
                 }
             })
-
-            // 💡 修复：拦截 getInputStream / getErrorStream，不直接读取，而是返回代理流
-            val hookStream = object : XC_MethodHook() {
-                override fun afterHookedMethod(param: MethodHookParam) {
-                    if (!BaseModel.enableHttpCapture.value) return
-                    val `is` = param.result as? java.io.InputStream ?: return
-                    val buffer = java.io.ByteArrayOutputStream()
-                    param.result = object : java.io.FilterInputStream(`is`) {
-                        override fun read(): Int {
-                            val b = super.read()
-                            if (b != -1 && buffer.size() < MAX_EXTRACT_SIZE) buffer.write(b)
-                            return b
-                        }
-                        override fun read(b: ByteArray, off: Int, len: Int): Int {
-                            val r = super.read(b, off, len)
-                            if (r != -1 && buffer.size() < MAX_EXTRACT_SIZE) buffer.write(b, off, r)
-                            return r
-                        }
-                        override fun close() {
-                            super.close()
-                            XposedHelpers.setAdditionalInstanceField(param.thisObject, "captured_response_body", buffer.toByteArray())
-                            // 在流关闭时触发完整记录保存
-                            triggerStandardCapture(param.thisObject as java.net.HttpURLConnection)
-                        }
-                    }
-                }
-            }
             XposedHelpers.findAndHookMethod(connClass, "getInputStream", hookStream)
-            XposedHelpers.findAndHookMethod(connClass, "getErrorStream", hookStream)
-        } catch (e: Throwable) {
-            // Log.capture(TAG, "注册标准 HTTP Hook 失败: ${e.message}")
-        }
-    }
-
-    private fun hookOkHttpTraffic(classLoader: ClassLoader) {
-        try {
-            val realCallClass = XposedHelpers.findClass("okhttp3.RealCall", classLoader)
-            XposedHelpers.findAndHookMethod(realCallClass, "execute", object : XC_MethodHook() {
-                override fun beforeHookedMethod(param: MethodHookParam) {
-                    XposedHelpers.setAdditionalInstanceField(param.thisObject, "capture_start_time", System.currentTimeMillis())
-                }
-                override fun afterHookedMethod(param: MethodHookParam) {
-                    if (!BaseModel.enableHttpCapture.value) return
-                    try {
-                        val response = param.result ?: return
-                        val request = XposedHelpers.callMethod(param.thisObject, "request") ?: return
-                        val startTime = XposedHelpers.getAdditionalInstanceField(param.thisObject, "capture_start_time") as? Long 
-                            ?: System.currentTimeMillis()
-                        
-                        captureOkHttpTraffic(request, response, startTime)
-                    } catch (e: Throwable) {
-                        Log.capture(TAG, "OkHttp Hook 执行异常: ${e.message}")
-                    }
-                }
-            })
+            try { XposedHelpers.findAndHookMethod(connClass, "getErrorStream", hookStream) } catch (_: Throwable) {}
         } catch (_: Throwable) {}
     }
 
-    private fun captureOkHttpTraffic(request: Any, response: Any, startTime: Long) {
+    private fun hookOkHttpTraffic(classLoader: ClassLoader) {
+        val okHttpPrefixes = listOf("okhttp3", "com.alipay.mobile.common.transport.okhttp")
+        okHttpPrefixes.forEach { prefix ->
+            try {
+                val realCallClass = XposedHelpers.findClass("$prefix.RealCall", classLoader)
+                val callbackClass = XposedHelpers.findClass("$prefix.Callback", classLoader)
+                
+                // Hook execute (同步)
+                XposedHelpers.findAndHookMethod(realCallClass, "execute", object : XC_MethodHook() {
+                    override fun beforeHookedMethod(param: MethodHookParam) {
+                        val startTime = System.currentTimeMillis()
+                        XposedHelpers.setAdditionalInstanceField(param.thisObject, "capture_start_time", startTime)
+                        try {
+                            val request = XposedHelpers.callMethod(param.thisObject, "request") ?: return
+                            val id = UUID.randomUUID().toString()
+                            XposedHelpers.setAdditionalInstanceField(param.thisObject, "capture_id", id)
+                            val url = XposedHelpers.callMethod(request, "url").toString()
+                            val method = XposedHelpers.callMethod(request, "method").toString()
+                            dispatchRecord(CaptureRecord(id = id, url = url, method = method, timestamp = startTime, statusCode = 0, isPending = true), true)
+                        } catch (_: Exception) {}
+                    }
+                    override fun afterHookedMethod(param: MethodHookParam) {
+                        try {
+                            val response = param.result ?: return
+                            val request = XposedHelpers.callMethod(param.thisObject, "request") ?: return
+                            val startTime = XposedHelpers.getAdditionalInstanceField(param.thisObject, "capture_start_time") as? Long ?: System.currentTimeMillis()
+                            val id = XposedHelpers.getAdditionalInstanceField(param.thisObject, "capture_id") as? String ?: UUID.randomUUID().toString()
+                            captureOkHttpTraffic(request, response, startTime, id)
+                        } catch (_: Throwable) {}
+                    }
+                })
+
+                // Hook enqueue (异步)
+                XposedHelpers.findAndHookMethod(realCallClass, "enqueue", callbackClass, object : XC_MethodHook() {
+                    override fun beforeHookedMethod(param: MethodHookParam) {
+                        val originalCallback = param.args[0] ?: return
+                        val startTime = System.currentTimeMillis()
+                        val request = XposedHelpers.callMethod(param.thisObject, "request") ?: return
+                        val id = UUID.randomUUID().toString()
+                        XposedHelpers.setAdditionalInstanceField(param.thisObject, "capture_id", id)
+                        XposedHelpers.setAdditionalInstanceField(param.thisObject, "capture_start_time", startTime)
+                        
+                        param.args[0] = java.lang.reflect.Proxy.newProxyInstance(classLoader, arrayOf(callbackClass)) { _, method, args ->
+                            if (method.name == "onResponse" && args != null && args.size >= 2) {
+                                captureOkHttpTraffic(request, args[1]!!, startTime, id)
+                            }
+                            method.invoke(originalCallback, *(args ?: emptyArray()))
+                        }
+                    }
+                })
+            } catch (_: Throwable) {}
+        }
+    }
+
+    private fun captureOkHttpTraffic(request: Any, response: Any, startTime: Long, id: String) {
         try {
             val url = XposedHelpers.callMethod(request, "url").toString()
             val method = XposedHelpers.callMethod(request, "method").toString()
-            
-            // 提取 Request Headers
             val reqHeadersObj = XposedHelpers.callMethod(request, "headers")
             val reqHeadersMap = mutableMapOf<String, String>()
             val size = XposedHelpers.callMethod(reqHeadersObj, "size") as Int
-            for (i in 0 until size) {
-                val name = XposedHelpers.callMethod(reqHeadersObj, "name", i) as String
-                val value = XposedHelpers.callMethod(reqHeadersObj, "value", i) as String
-                reqHeadersMap[name] = value
-            }
-
-            // 提取 Request Body
-            val reqBodyObj = XposedHelpers.callMethod(request, "body")
+            for (i in 0 until size) { reqHeadersMap[XposedHelpers.callMethod(reqHeadersObj, "name", i) as String] = XposedHelpers.callMethod(reqHeadersObj, "value", i) as String }
             var reqBody: String? = null
-            var reqBase64: String? = null
+            var reqBodyBase64: String? = null
+            var reqBodySize = 0
+            val reqBodyObj = XposedHelpers.callMethod(request, "body")
             if (reqBodyObj != null) {
                 try {
                     val bufferClass = XposedHelpers.findClass("okio.Buffer", reqBodyObj.javaClass.classLoader)
                     val buffer = XposedHelpers.newInstance(bufferClass)
                     XposedHelpers.callMethod(reqBodyObj, "writeTo", buffer)
                     val bytes = XposedHelpers.callMethod(buffer, "readByteArray") as ByteArray
-                    val (b, s) = processBody(bytes)
-                    reqBody = b; reqBase64 = s
+                    reqBodySize = bytes.size
+                    val (b, s) = processBody(bytes, reqHeadersMap["Content-Encoding"] ?: reqHeadersMap["content-encoding"])
+                    reqBody = b; reqBodyBase64 = s
                 } catch (_: Exception) {}
             }
-
-            // 提取 Response
             val code = XposedHelpers.callMethod(response, "code") as Int
             val resHeadersObj = XposedHelpers.callMethod(response, "headers")
             val resHeadersMap = mutableMapOf<String, String>()
             val resSize = XposedHelpers.callMethod(resHeadersObj, "size") as Int
-            for (i in 0 until resSize) {
-                val name = XposedHelpers.callMethod(resHeadersObj, "name", i) as String
-                val value = XposedHelpers.callMethod(resHeadersObj, "value", i) as String
-                resHeadersMap[name] = value
-            }
-
-            // 提取 Response Body (克隆流，防止影响业务)
-            var resBody: String? = null
-            var resBodyBase64: String? = null
-            try {
-                val resBodyObj = XposedHelpers.callMethod(response, "body")
-                if (resBodyObj != null) {
-                    val contentLength = XposedHelpers.callMethod(resBodyObj, "contentLength") as Long
-                    if (contentLength > MAX_EXTRACT_SIZE) {
-                        resBody = "[响应体过大: $contentLength bytes]"
-                    } else {
-                        val contentType = XposedHelpers.callMethod(resBodyObj, "contentType")
-                        val bytes = XposedHelpers.callMethod(resBodyObj, "bytes") as ByteArray
-                        val newBody = XposedHelpers.callStaticMethod(XposedHelpers.findClass("okhttp3.ResponseBody", response.javaClass.classLoader), "create", contentType, bytes)
-                        XposedHelpers.setObjectField(response, "body", newBody)
-                        
-                        val (b, s) = processBody(bytes)
-                        resBody = b; resBodyBase64 = s
-                    }
-                }
-            } catch (_: Exception) {}
-
-            val record = CaptureRecord(
-                id = UUID.randomUUID().toString(),
-                timestamp = startTime,
-                url = url,
-                method = method,
-                requestHeaders = reqHeadersMap,
-                requestBody = reqBody,
-                requestBodyBase64 = reqBase64,
-                statusCode = code,
-                responseHeaders = resHeadersMap,
-                responseBody = resBody,
-                responseBodyBase64 = resBodyBase64,
-                duration = System.currentTimeMillis() - startTime
-            )
-            dispatchRecord(record)
-        } catch (e: Exception) {
-            Log.capture(TAG, "captureOkHttpTraffic 异常: ${e.message}")
-        }
-    }
-    
-
-    private fun triggerStandardCapture(connection: java.net.HttpURLConnection) {
-        val startTime = XposedHelpers.getAdditionalInstanceField(connection, "capture_start_time") as? Long 
-            ?: System.currentTimeMillis()
-            
-        val url = connection.url.toString()
-        val method = connection.requestMethod
-        
-        // 提取 Headers
-        val headers = connection.requestProperties.mapValues { it.value.joinToString(", ") }
-        
-        // 提取状态码和响应头
-        val code = try { connection.responseCode } catch (_: Exception) { -1 }
-        val resHeaders = connection.headerFields.filterKeys { it != null }.mapValues { it.value.joinToString(", ") }
-        
-        // 💡 从缓存中提取响应体
-        val resData = XposedHelpers.getAdditionalInstanceField(connection, "captured_response_body") as? ByteArray
-        val (resBody, resBase64) = processBody(resData)
-        
-        // 提取请求体
-        val reqData = XposedHelpers.getAdditionalInstanceField(connection, "captured_request_body") as? ByteArray
-        val (reqBody, reqBase64) = processBody(reqData)
-
-        // ── 分发保存 ──
-        val record = CaptureRecord(
-            id = UUID.randomUUID().toString(),
-            timestamp = startTime,
-            url = url,
-            method = method,
-            requestHeaders = headers,
-            requestBody = reqBody,
-            requestBodyBase64 = reqBase64,
-            statusCode = code,
-            responseHeaders = resHeaders,
-            responseBody = resBody,
-            responseBodyBase64 = resBase64,
-            duration = System.currentTimeMillis() - startTime
-        )
-        dispatchRecord(record)
-    }
-
-    private fun captureAlipayTraffic(request: Any, response: Any, startTime: Long) {
-        try {
-            // ── 提取 URL / Method ──
-            val url = XposedHelpers.callMethod(request, "getUrl")?.toString() ?: "unknown"
-            val method = XposedHelpers.callMethod(request, "getRequestMethod")?.toString() ?: "UNKNOWN"
-
-            // ── 解析 URL ──
-            val parsed = CaptureClassifier.parse(url)
-            val host = parsed.host.ifEmpty { "unknown" }
-
-            // ── 辅助函数：安全解码 ──
-            fun safeDecode(value: String?): String {
-                if (value == null) return ""
-                if (!value.contains("%")) return value // 无编码直接返回
-                return try {
-                    java.net.URLDecoder.decode(value, "UTF-8")
-                } catch (_: Throwable) { value }
-            }
-
-            // ── 提取请求头 ──
-            val reqHeaders = mutableMapOf<String, String>()
-            val reqHeadersList = XposedHelpers.callMethod(request, "getHeaders") as? List<*>
-            reqHeadersList?.forEach { header ->
-                if (header != null) {
-                    val name = XposedHelpers.callMethod(header, "getName")?.toString()
-                    val value = XposedHelpers.callMethod(header, "getValue")?.toString()
-                    if (name != null) reqHeaders[name] = safeDecode(value)
-                }
-            }
-            val operationType = reqHeaders["Operation-Type"] ?: reqHeaders["operation-type"]
-
-            // ── 黑名单过滤 ──
-            val filterKeywords = BaseModel.httpCaptureFilter.value
-            if (!filterKeywords.isNullOrBlank()) {
-                val keywords = filterKeywords.split(",").map { it.trim() }.filter { it.isNotEmpty() }
-                if (keywords.any { host.contains(it, ignoreCase = true) }) return
-            }
-
-            // ── 分类 ──
-            val category = CaptureClassifier.classify(url, operationType)
-
-            // ── 提取请求体 ──
-            var errorMsg: String? = null
-            // 尝试多种方式获取请求体
-            val reqDataRaw = (XposedHelpers.callMethod(request, "getReqData") as? ByteArray)
-                ?: (XposedHelpers.getObjectField(request, "mReqData") as? ByteArray)
-            
-            var reqBody: String? = null
-            var reqBodyBase64: String? = null
-            var reqBodySize = 0
-            var isTruncated = false
-
-            if (reqDataRaw != null) {
-                if (reqDataRaw.size > MAX_EXTRACT_SIZE) {
-                    errorMsg = "请求体过大 (${reqDataRaw.size} bytes)，跳过"
-                } else {
-                    reqBodySize = reqDataRaw.size
-                    val processed = processBody(reqDataRaw)
-                    reqBody = processed.first
-                    reqBodyBase64 = processed.second
-                }
-            }
-
-            // ── 提取响应 ──
-            val statusCode = XposedHelpers.callMethod(response, "getCode") as? Int ?: 0
-            val endTime = System.currentTimeMillis()
-            val duration = endTime - startTime
-
-            // 提取响应头
-            val resHeaders = mutableMapOf<String, String>()
-            val httpUrlHeader = XposedHelpers.callMethod(response, "getHeader")
-            if (httpUrlHeader != null) {
-                try {
-                    val headersMapRaw = XposedHelpers.getObjectField(httpUrlHeader, "mHeaders") as? Map<*, *>
-                    headersMapRaw?.forEach { (k, v) ->
-                        if (k != null) {
-                            resHeaders[k.toString()] = safeDecode(v?.toString())
-                        }
-                    }
-                } catch (e: Throwable) {
-                    Log.error(TAG, "响应头提取失败: ${e.message}")
-                }
-            }
-            val contentType = resHeaders["Content-Type"] ?: resHeaders["content-type"]
-
-            // 提取响应体
-            val resDataRaw = try {
-                XposedHelpers.getObjectField(response, "mResData") as? ByteArray
-            } catch (_: Throwable) { null }
-
+            for (i in 0 until resSize) { resHeadersMap[XposedHelpers.callMethod(resHeadersObj, "name", i) as String] = XposedHelpers.callMethod(resHeadersObj, "value", i) as String }
             var resBody: String? = null
             var resBodyBase64: String? = null
             var resBodySize = 0
-
-            if (resDataRaw != null) {
-                if (resDataRaw.size > MAX_EXTRACT_SIZE) {
-                    val msg = "响应体过大 (${resDataRaw.size} bytes)，跳过"
-                    errorMsg = if (errorMsg == null) msg else "$errorMsg\n$msg"
-                } else {
-                    resBodySize = resDataRaw.size
-                    val processed = processBody(resDataRaw)
-                    resBody = processed.first
-                    resBodyBase64 = processed.second
-                    // 不再此处截断，交给 CaptureStorage 自动处理外置
-                }
-            }
-
-            // ── 构建记录 ──
-            val record = CaptureRecord(
-                id = UUID.randomUUID().toString(),
-                url = url,
-                method = method,
-                host = host,
-                path = parsed.path,
-                queryParams = parsed.queryParams,
-                requestHeaders = reqHeaders,
-                requestBody = reqBody,
-                requestBodyBase64 = reqBodyBase64,
-                requestBodySize = reqBodySize,
-                statusCode = statusCode,
-                responseHeaders = resHeaders,
-                contentType = contentType,
-                responseBody = resBody,
-                responseBodyBase64 = resBodyBase64,
-                responseBodySize = resBodySize,
-                timestamp = startTime,
-                duration = duration,
-                category = category,
-                isTruncated = isTruncated,
-                errorMessage = errorMsg
-            )
-
-            // ── 持久化（异步执行，避免阻塞宿主应用线程） ──
-            Thread {
+            val resBodyObj = XposedHelpers.callMethod(response, "body")
+            if (resBodyObj != null) {
                 try {
-                    CaptureStorage.save(record)
-                } catch (e: Throwable) {
-                    Log.error(TAG, "异步保存失败: ${e.message}")
-                }
-            }.start()
-
-        } catch (e: Exception) {
-            Log.error(TAG, "捕获异常: ${e.message}")
-        }
-    }
-
-    /**
-     * 处理 body ByteArray：
-     * - 尝试 GZIP 解压
-     * - 尝试 UTF-8 解码为文本 → 返回 (text, null)
-     * - 无法解码 → 返回 (null, base64)
-     */
-    private fun processBody(data: ByteArray?): Pair<String?, String?> {
-        if (data == null || data.isEmpty()) return Pair(null, null)
-
-        // 1. GZIP 解压
-        val decompressed = NetworkUtils.decompressGzip(data) ?: data
-
-        // 2. 尝试 UTF-8 解码
-        return try {
-            val text = String(decompressed, Charsets.UTF_8)
-            // 检查是否为可打印文本
-            if (isPrintableText(text)) {
-                val decoded = if (text.contains("%") && text.contains("=")) {
-                    try { java.net.URLDecoder.decode(text, "UTF-8") } catch (_: Throwable) { text }
-                } else text
-                Pair(decoded, null)
-            } else {
-                Pair(null, Base64.encodeToString(decompressed, Base64.NO_WRAP))
+                    val contentType = XposedHelpers.callMethod(resBodyObj, "contentType")
+                    val bytes = XposedHelpers.callMethod(resBodyObj, "bytes") as ByteArray
+                    resBodySize = bytes.size
+                    val newBody = XposedHelpers.callStaticMethod(XposedHelpers.findClass("okhttp3.ResponseBody", response.javaClass.classLoader), "create", contentType, bytes)
+                    XposedHelpers.setObjectField(response, "body", newBody)
+                    val (b, s) = processBody(bytes, resHeadersMap["Content-Encoding"] ?: resHeadersMap["content-encoding"])
+                    resBody = b; resBodyBase64 = s
+                } catch (_: Exception) {}
             }
-        } catch (_: Exception) {
-            Pair(null, Base64.encodeToString(decompressed, Base64.NO_WRAP))
-        }
+            val parsed = CaptureClassifier.parse(url)
+            dispatchRecord(CaptureRecord(id = id, timestamp = startTime, url = url, method = method, host = parsed.host, path = parsed.path, queryParams = parsed.queryParams, requestHeaders = reqHeadersMap, requestBody = reqBody, requestBodyBase64 = reqBodyBase64, requestBodySize = reqBodySize, statusCode = code, responseBody = resBody, responseBodyBase64 = resBodyBase64, responseBodySize = resBodySize, responseHeaders = resHeadersMap, duration = System.currentTimeMillis() - startTime, category = CaptureClassifier.classify(url, reqHeadersMap["Operation-Type"] ?: reqHeadersMap["operation-type"], reqBody)))
+        } catch (_: Exception) {}
     }
 
-    /**
-     * 判断字符串是否为可打印文本（排除二进制数据被误判为 UTF-8）。
-     * 如果包含过多控制字符（换行/tab 除外），视为二进制。
-     */
+    private fun ensurePendingBroadcast(connection: java.net.HttpURLConnection) {
+        if (XposedHelpers.getAdditionalInstanceField(connection, "capture_id") != null) return
+        val id = UUID.randomUUID().toString()
+        val startTime = System.currentTimeMillis()
+        XposedHelpers.setAdditionalInstanceField(connection, "capture_id", id)
+        XposedHelpers.setAdditionalInstanceField(connection, "capture_start_time", startTime)
+        try {
+            val url = try { connection.url.toString() } catch (_: Throwable) { "unknown" }
+            val method = try { connection.requestMethod } catch (_: Throwable) { "GET" }
+            dispatchRecord(CaptureRecord(id = id, url = url, method = method, timestamp = startTime, statusCode = 0, isPending = true), true)
+        } catch (_: Throwable) {}
+    }
+
+    private fun triggerStandardCapture(connection: java.net.HttpURLConnection) {
+        try {
+            val id = XposedHelpers.getAdditionalInstanceField(connection, "capture_id") as? String ?: UUID.randomUUID().toString().also { XposedHelpers.setAdditionalInstanceField(connection, "capture_id", it) }
+            val startTime = XposedHelpers.getAdditionalInstanceField(connection, "capture_start_time") as? Long ?: System.currentTimeMillis()
+            val url = try { connection.url.toString() } catch (_: Throwable) { "unknown" }
+            val method = try { connection.requestMethod } catch (_: Throwable) { "GET" }
+            val stream = XposedHelpers.getAdditionalInstanceField(connection, "capture_stream_obj") as? CaptureInputStream
+            val resData = XposedHelpers.getAdditionalInstanceField(connection, "captured_response_body") as? ByteArray ?: stream?.getCapturedData()
+            val headers = try { connection.requestProperties.mapValues { it.value.joinToString(", ") } } catch (_: Exception) { emptyMap() }
+            var code = try { connection.responseCode } catch (_: Exception) { 0 }
+            if (code <= 0) {
+                // 尝试从 Header 状态行解析 (HTTP/1.1 200 OK)
+                try {
+                    val statusLine = connection.getHeaderField(null)
+                    if (statusLine != null && statusLine.contains(" ")) {
+                        val parts = statusLine.split(" ")
+                        if (parts.size >= 2) code = parts[1].toInt()
+                    }
+                } catch (_: Exception) {}
+            }
+            
+            val resHeaders = try { connection.headerFields.filterKeys { it != null }.mapValues { it.value.joinToString(", ") } } catch (_: Exception) { emptyMap() }
+            val (resBody, resBodyBase64) = processBody(resData, resHeaders["Content-Encoding"] ?: resHeaders["content-encoding"])
+            val reqData = XposedHelpers.getAdditionalInstanceField(connection, "captured_request_body") as? ByteArray
+            val (reqBody, reqBodyBase64) = processBody(reqData)
+            val requestBodySize = reqData?.size ?: 0
+            val responseBodySize = resData?.size ?: 0
+            dispatchRecord(CaptureRecord(id = id, timestamp = startTime, url = url, method = method, requestHeaders = headers, requestBody = reqBody, requestBodyBase64 = reqBodyBase64, requestBodySize = requestBodySize, statusCode = code, responseBody = resBody, responseBodyBase64 = resBodyBase64, responseBodySize = responseBodySize, responseHeaders = resHeaders, duration = System.currentTimeMillis() - startTime, category = CaptureClassifier.classify(url, headers["Operation-Type"] ?: headers["operation-type"], reqBody)))
+        } catch (_: Throwable) {}
+    }
+
+    private fun captureFinalTraffic(request: Any, resHeader: Any?, code: Int, msg: String?, resData: ByteArray?, startTime: Long, id: String) {
+        try {
+            val urlMethod = methodCache["req_url"] ?: listOf("getUrl", "getUri", "url", "getURL").firstOrNull { name -> try { XposedHelpers.callMethod(request, name); true } catch (_: Throwable) { false } }?.also { methodCache["req_url"] = it }
+            val url = if (urlMethod != null) try { XposedHelpers.callMethod(request, urlMethod)?.toString() ?: "unknown" } catch (_: Throwable) { "unknown" } else "unknown"
+            val methodAttr = methodCache["req_method"] ?: listOf("getRequestMethod", "getMethod").firstOrNull { name -> try { XposedHelpers.callMethod(request, name); true } catch (_: Throwable) { false } }?.also { methodCache["req_method"] = it }
+            val method = if (methodAttr != null) try { XposedHelpers.callMethod(request, methodAttr) as? String ?: "UNKNOWN" } catch (_: Throwable) { "UNKNOWN" } else "UNKNOWN"
+            val parsed = CaptureClassifier.parse(url)
+            val reqHeaders = mutableMapOf<String, String>()
+            val reqHeadersListMethod = methodCache["req_headers_list"] ?: listOf("getHeaders", "getHeaderList", "headers").firstOrNull { name -> try { XposedHelpers.callMethod(request, name) as? List<*>; true } catch (_: Throwable) { false } }?.also { methodCache["req_headers_list"] = it }
+            val reqHeadersList = if (reqHeadersListMethod != null) try { XposedHelpers.callMethod(request, reqHeadersListMethod) as? List<*> } catch (_: Throwable) { null } else null
+            reqHeadersList?.forEach { header -> if (header != null) { val name = try { XposedHelpers.callMethod(header, "getName")?.toString() ?: XposedHelpers.callMethod(header, "getKey")?.toString() } catch (_: Throwable) { null }; val value = try { XposedHelpers.callMethod(header, "getValue")?.toString() } catch (_: Throwable) { null }; if (name != null) reqHeaders[name] = value ?: "" } }
+            val reqDataRaw = try { XposedHelpers.callMethod(request, "getReqData") as? ByteArray } catch (_: Throwable) { null }
+            val (reqBody, reqBodyBase64) = processBody(reqDataRaw, reqHeaders["Content-Encoding"] ?: reqHeaders["content-encoding"])
+            val requestBodySize = reqDataRaw?.size ?: 0
+            val responseHeaders = mutableMapOf<String, String>()
+            if (resHeader != null) {
+                if (resHeader is Array<*>) {
+                    resHeader.forEach { header ->
+                        if (header != null) {
+                            val name = try { XposedHelpers.callMethod(header, "getName")?.toString() } catch (_: Throwable) { null }
+                            val value = try { XposedHelpers.callMethod(header, "getValue")?.toString() } catch (_: Throwable) { null }
+                            if (name != null) responseHeaders[name] = value ?: ""
+                        }
+                    }
+                } else {
+                    try {
+                        val headersMap = XposedHelpers.callMethod(resHeader, "getHeaders") as? Map<*, *>
+                        headersMap?.forEach { (k, v) -> if (k != null) responseHeaders[k.toString()] = v?.toString() ?: "" }
+                    } catch (_: Throwable) {
+                        try {
+                            val headersField = getCachedField(resHeader.javaClass, "mHeaders")
+                            (headersField?.get(resHeader) as? Map<*, *>)?.forEach { (k, v) -> if (k != null) responseHeaders[k.toString()] = v?.toString() ?: "" }
+                        } catch (_: Throwable) {}
+                    }
+                }
+            }
+            val (resBody, resBodyBase64) = processBody(resData, responseHeaders["Content-Encoding"] ?: responseHeaders["content-encoding"])
+            val responseBodySize = resData?.size ?: 0
+            dispatchRecord(CaptureRecord(id = id, timestamp = startTime, url = url, method = method, host = parsed.host, path = parsed.path, queryParams = parsed.queryParams, requestHeaders = reqHeaders, requestBody = reqBody, requestBodyBase64 = reqBodyBase64, requestBodySize = requestBodySize, statusCode = code, responseBody = resBody, responseBodyBase64 = resBodyBase64, responseBodySize = responseBodySize, responseHeaders = responseHeaders, duration = System.currentTimeMillis() - startTime, category = CaptureClassifier.classify(url, reqHeaders["Operation-Type"] ?: reqHeaders["operation-type"], reqBody)))
+        } catch (_: Throwable) {}
+    }
+
+    private fun processBody(data: ByteArray?, contentEncoding: String? = null): Pair<String?, String?> {
+        if (data == null || data.isEmpty()) return Pair(null, null)
+        var decompressed = if (NetworkUtils.isGzip(data)) NetworkUtils.decompressGzip(data) ?: data else NetworkUtils.decompressDeflate(data) ?: data
+        if (contentEncoding?.contains("gzip", ignoreCase = true) == true) decompressed = NetworkUtils.decompressGzip(decompressed) ?: decompressed
+        else if (contentEncoding?.contains("deflate", ignoreCase = true) == true) decompressed = NetworkUtils.decompressDeflate(decompressed) ?: decompressed
+        for (charset in listOf(Charsets.UTF_8, Charsets.US_ASCII, Charsets.ISO_8859_1)) { try { val text = String(decompressed, charset); if (isPrintableText(text)) return Pair(if (text.contains("%") && text.contains("=") && text.length < 5000) try { java.net.URLDecoder.decode(text, "UTF-8") } catch (_: Throwable) { text } else text, null) } catch (_: Throwable) {} }
+        return Pair(null, Base64.encodeToString(decompressed, Base64.NO_WRAP))
+    }
+
     private fun isPrintableText(text: String): Boolean {
         if (text.isEmpty()) return true
         var nonPrintable = 0
         val maxCheck = minOf(text.length, 4096)
-        for (i in 0 until maxCheck) {
-            val c = text[i]
-            if (c < 0x20.toChar() && c != '\n' && c != '\r' && c != '\t') {
-                nonPrintable++
-            }
-        }
+        for (i in 0 until maxCheck) { val c = text[i]; if (c < 0x20.toChar() && c != '\n' && c != '\r' && c != '\t') nonPrintable++ }
         return nonPrintable.toFloat() / maxCheck < 0.05f
     }
+
     private fun hookARiverTraffic(classLoader: ClassLoader) {
         try {
-            val serviceImpl = XposedHelpers.findClass("com.alipay.mobile.nebulax.integration.mpaas.proxy.impl.TransportServiceImpl", classLoader)
+            val serviceImpl = XposedHelpers.findClass(CLASS_TRANSPORT_SERVICE_IMPL, classLoader)
             XposedHelpers.findAndHookMethod(serviceImpl, "httpRequest", "com.alibaba.ariver.kernel.common.network.http.RVHttpRequest", object : XC_MethodHook() {
                 override fun beforeHookedMethod(param: MethodHookParam) {
-                    XposedHelpers.setAdditionalInstanceField(param.thisObject, "capture_start_time", System.currentTimeMillis())
+                    val startTime = System.currentTimeMillis()
+                    XposedHelpers.setAdditionalInstanceField(param.thisObject, "capture_start_time", startTime)
+                    try {
+                        val request = param.args[0] ?: return
+                        val id = UUID.randomUUID().toString()
+                        XposedHelpers.setAdditionalInstanceField(param.thisObject, "capture_id", id)
+                        val url = XposedHelpers.callMethod(request, "getUrl") as String
+                        val method = XposedHelpers.callMethod(request, "getMethod") as String
+                        dispatchRecord(CaptureRecord(id = id, url = url, method = method, timestamp = startTime, statusCode = 0, isPending = true), true)
+                    } catch (_: Throwable) {}
                 }
-
                 override fun afterHookedMethod(param: MethodHookParam) {
-                    if (!BaseModel.enableHttpCapture.value) return
                     try {
                         val request = param.args[0] ?: return
                         val response = param.result ?: return
-                        
-                        val startTime = XposedHelpers.getAdditionalInstanceField(param.thisObject, "capture_start_time") as? Long 
-                            ?: System.currentTimeMillis()
-                            
+                        val startTime = XposedHelpers.getAdditionalInstanceField(param.thisObject, "capture_start_time") as? Long ?: System.currentTimeMillis()
                         val url = XposedHelpers.callMethod(request, "getUrl") as String
                         val method = XposedHelpers.callMethod(request, "getMethod") as String
                         val reqHeaders = XposedHelpers.callMethod(request, "getHeaders") as? Map<String, String> ?: emptyMap()
                         val reqData = XposedHelpers.callMethod(request, "getRequestData") as? ByteArray
-                        
                         val code = XposedHelpers.callMethod(response, "getStatusCode") as Int
                         val resHeaders = XposedHelpers.callMethod(response, "getHeaders") as? Map<String, List<String>> ?: emptyMap()
                         val flatResHeaders = resHeaders.mapValues { it.value.joinToString(", ") }
-                        
                         val originalStream = XposedHelpers.callMethod(response, "getResStream") as? java.io.InputStream
-                        if (originalStream != null && originalStream !is CaptureInputStream) {
-                            val id = UUID.randomUUID().toString()
-                            val captureStream = CaptureInputStream(originalStream) { data: ByteArray ->
-                                val (reqBody, reqBase64) = processBody(reqData)
-                                val (resBody, resBase64) = processBody(data)
-                                
-                                val record = CaptureRecord(
-                                    id = id,
-                                    timestamp = startTime,
-                                    url = url,
-                                    method = method,
-                                    requestHeaders = reqHeaders,
-                                    requestBody = reqBody,
-                                    requestBodyBase64 = reqBase64,
-                                    statusCode = code,
-                                    responseHeaders = flatResHeaders,
-                                    responseBody = resBody,
-                                    responseBodyBase64 = resBase64,
-                                    duration = System.currentTimeMillis() - startTime
-                                )
-                                dispatchRecord(record)
+                        val id = XposedHelpers.getAdditionalInstanceField(param.thisObject, "capture_id") as? String ?: UUID.randomUUID().toString()
+                        if (originalStream != null) {
+                            if (originalStream !is CaptureInputStream) {
+                                XposedHelpers.callMethod(response, "setResStream", CaptureInputStream(originalStream) { data ->
+                                    val (reqB, reqB64) = processBody(reqData, reqHeaders["Content-Encoding"] ?: reqHeaders["content-encoding"])
+                                    val (resB, resB64) = processBody(data, flatResHeaders["Content-Encoding"] ?: flatResHeaders["content-encoding"])
+                                    val parsed = CaptureClassifier.parse(url)
+                                    val requestBodySize = reqData?.size ?: 0
+                                    val responseBodySize = data.size
+                                    dispatchRecord(CaptureRecord(id = id, url = url, method = method, host = parsed.host, path = parsed.path, queryParams = parsed.queryParams, requestHeaders = reqHeaders, requestBody = reqB, requestBodyBase64 = reqB64, requestBodySize = requestBodySize, statusCode = code, responseBody = resB, responseBodyBase64 = resB64, responseBodySize = responseBodySize, responseHeaders = flatResHeaders, timestamp = startTime, duration = System.currentTimeMillis() - startTime, category = CaptureClassifier.classify(url, reqHeaders["Operation-Type"] ?: reqHeaders["operation-type"], reqB)))
+                                })
                             }
-                            XposedHelpers.callMethod(response, "setResStream", captureStream)
+                        } else {
+                            // 保底：若无输入流（304 或 异常），立即上报结果
+                            val (reqB, reqB64) = processBody(reqData, reqHeaders["Content-Encoding"] ?: reqHeaders["content-encoding"])
+                            val parsed = CaptureClassifier.parse(url)
+                            val requestBodySize = reqData?.size ?: 0
+                            dispatchRecord(CaptureRecord(id = id, url = url, method = method, host = parsed.host, path = parsed.path, queryParams = parsed.queryParams, requestHeaders = reqHeaders, requestBody = reqB, requestBodyBase64 = reqB64, requestBodySize = requestBodySize, statusCode = code, responseBody = null, responseBodyBase64 = null, responseBodySize = 0, responseHeaders = flatResHeaders, timestamp = startTime, duration = System.currentTimeMillis() - startTime, category = CaptureClassifier.classify(url, reqHeaders["Operation-Type"] ?: reqHeaders["operation-type"], reqB)))
                         }
-                    } catch (e: Throwable) {
-                        Log.capture(TAG, "ARiver Hook 异常: ${e.message}")
-                    }
+                    } catch (_: Throwable) {}
                 }
             })
+        } catch (_: Throwable) {}
+    }
 
-            // ── Hook 下载请求 ──
-            XposedHelpers.findAndHookMethod(CLASS_TRANSPORT_SERVICE_IMPL, classLoader, "addDownload",
-                "com.alibaba.ariver.kernel.common.network.download.RVDownloadRequest",
-                "com.alibaba.ariver.kernel.common.network.download.RVDownloadCallback",
+    private fun dispatchRecord(record: CaptureRecord, skipSave: Boolean = false) {
+        dispatchExecutor.execute {
+            try {
+                val processed = if (skipSave) record else CaptureStorage.save(record)
+                val context = fansirsqi.xposed.sesame.hook.context.AppContext.getAppContext()
+                if (context != null) {
+                    val intent = android.content.Intent("fansirsqi.xposed.sesame.NEW_CAPTURE")
+                    val metadataOnly = processed.copy(requestBody = if (processed.requestBody != null && processed.requestBody!!.length > 1000) "[Large Body...]" else processed.requestBody, requestBodyBase64 = null, responseBody = if (processed.responseBody != null && processed.responseBody!!.length > 1000) "[Large Body...]" else processed.responseBody, responseBodyBase64 = null)
+                    intent.putExtra("record_json", fansirsqi.xposed.sesame.util.JsonUtil.formatJson(metadataOnly, false))
+                    intent.putExtra("is_update", processed.statusCode != 0)
+                    context.sendBroadcast(intent)
+                }
+            } catch (_: Throwable) {}
+        }
+    }
+
+    private fun hookDtnTraffic(classLoader: ClassLoader) {
+        try {
+            val dtnClientClass = XposedHelpers.findClass(CLASS_DTN_HTTP_CLIENT, classLoader)
+            XposedHelpers.findAndHookMethod(
+                dtnClientClass,
+                "executeHttpRequest",
+                "com.alipay.mobile.common.transport.http.HttpUrlRequest",
+                "com.alipay.mobile.common.transport.context.TransportContext",
                 object : XC_MethodHook() {
                     override fun beforeHookedMethod(param: MethodHookParam) {
                         try {
                             val request = param.args[0] ?: return
-                            val url = XposedHelpers.callMethod(request, "getDownloadUrl") as? String ?: return
-                            val fileName = XposedHelpers.callMethod(request, "getDownloadFileName") as? String ?: "unknown"
+                            val id = UUID.randomUUID().toString()
+                            XposedHelpers.setAdditionalInstanceField(param.thisObject, "dtn_capture_id", id)
+                            XposedHelpers.setAdditionalInstanceField(request, "capture_id", id)
+                            val startTime = System.currentTimeMillis()
+                            XposedHelpers.setAdditionalInstanceField(request, "capture_start_time", startTime)
                             
+                            val url = XposedHelpers.callMethod(request, "getUrl")?.toString() ?: ""
                             val record = CaptureRecord(
-                                id = UUID.randomUUID().toString(),
+                                id = id,
                                 url = url,
-                                method = "GET",
-                                requestHeaders = mapOf("X-Download-File" to fileName),
-                                statusCode = 200,
-                                responseHeaders = mapOf("Content-Type" to "application/octet-stream"),
-                                responseBody = "[Download Initiated: $fileName]",
-                                category = "Download",
-                                timestamp = System.currentTimeMillis()
+                                method = XposedHelpers.callMethod(request, "getRequestMethod")?.toString() ?: "GET",
+                                timestamp = startTime,
+                                statusCode = 0,
+                                isPending = true,
+                                category = CaptureClassifier.classify(url, null)
                             )
-                            dispatchRecord(record)
-                        } catch (e: Throwable) {
-                            Log.error(TAG, "Download Hook 异常: ${e.message}")
-                        }
+                            dispatchRecord(record, skipSave = true)
+                        } catch (_: Throwable) {}
+                    }
+
+                    override fun afterHookedMethod(param: MethodHookParam) {
+                        try {
+                            val request = param.args[0] ?: return
+                            val response = param.result ?: return
+                            
+                            val id = XposedHelpers.getAdditionalInstanceField(param.thisObject, "dtn_capture_id") as? String 
+                                ?: XposedHelpers.getAdditionalInstanceField(request, "capture_id") as? String 
+                                ?: return
+                            val startTime = XposedHelpers.getAdditionalInstanceField(request, "capture_start_time") as? Long ?: System.currentTimeMillis()
+                            
+                            val statusLine = XposedHelpers.callMethod(response, "getStatusLine")
+                            val code = if (statusLine != null) XposedHelpers.callMethod(statusLine, "getStatusCode") as? Int ?: 0 else 0
+                            val resHeader = try { XposedHelpers.callMethod(response, "getAllHeaders") } catch (_: Throwable) { null }
+                            
+                            val entity = try { XposedHelpers.callMethod(response, "getEntity") } catch (_: Throwable) { null }
+                            if (entity != null) {
+                                val originalStream = try { XposedHelpers.callMethod(entity, "getContent") as? java.io.InputStream } catch (_: Throwable) { null }
+                                if (originalStream != null) {
+                                    if (originalStream !is CaptureInputStream) {
+                                        val captureStream = CaptureInputStream(originalStream) { data ->
+                                            captureFinalTraffic(request, resHeader, code, "", data, startTime, id)
+                                        }
+                                        try {
+                                            XposedHelpers.callMethod(entity, "setContent", captureStream)
+                                        } catch (_: Throwable) {
+                                            try {
+                                                XposedHelpers.setObjectField(entity, "content", captureStream)
+                                            } catch (_: Throwable) {}
+                                        }
+                                    }
+                                } else {
+                                    captureFinalTraffic(request, resHeader, code, "", null, startTime, id)
+                                }
+                            } else {
+                                captureFinalTraffic(request, resHeader, code, "", null, startTime, id)
+                            }
+                        } catch (_: Throwable) {}
                     }
                 }
             )
+            Log.runtime(TAG, "Hook DtnHttpClient 成功")
         } catch (e: Throwable) {
-            Log.error(TAG, "未找到 ARiver 传输类: ${e.message}")
+            Log.error(TAG, "Hook DtnHttpClient 失败: ${e.message}")
         }
     }
 
-    /**
-     * 记录分发中心：统一处理记录的异步保存与全局过滤
-     */
-    private fun dispatchRecord(record: CaptureRecord) {
-        Thread {
-            try {
-                CaptureStorage.save(record)
-            } catch (e: Throwable) {
-                Log.error(TAG, "记录分发保存失败 [ID: ${record.id}]: ${e.message}")
-            }
-        }.start()
-    }
-
-    /**
-     * 辅助类：拦截输入流数据
-     * 采用双重缓冲：小数据留内存，大数据溢出到临时文件，彻底解决 OOM
-     */
-    private class CaptureInputStream(
-        inputStream: java.io.InputStream,
-        private val onClose: (ByteArray) -> Unit
-    ) : java.io.FilterInputStream(inputStream) {
+    private class CaptureInputStream(inputStream: java.io.InputStream, private val onClose: (ByteArray) -> Unit) : java.io.FilterInputStream(inputStream) {
         private val memBuffer = java.io.ByteArrayOutputStream()
         private var fileBuffer: java.io.File? = null
         private var fileOut: java.io.FileOutputStream? = null
         private var totalSize = 0L
         private var isClosed = false
-        
-        private val MAX_MEM_SIZE = 1 * 1024 * 1024 // 1MB 内存门槛
-        private val MAX_TOTAL_SIZE = 10 * 1024 * 1024 // 10MB 总上限
-
-        private fun writeData(b: Int) {
-            if (totalSize >= MAX_TOTAL_SIZE) return
-            totalSize++
-            try {
-                if (fileOut != null) {
-                    fileOut?.write(b)
-                } else if (memBuffer.size() < MAX_MEM_SIZE.toLong()) {
-                    memBuffer.write(b)
-                } else {
-                    switchToDisk()
-                    fileOut?.write(b)
-                }
-            } catch (_: Exception) {}
-        }
-
-        private fun writeData(b: ByteArray, off: Int, len: Int) {
-            val toWrite = Math.min(len.toLong(), MAX_TOTAL_SIZE - totalSize).toInt()
-            if (toWrite <= 0) return
-            totalSize += toWrite
-            try {
-                if (fileOut != null) {
-                    fileOut?.write(b, off, toWrite)
-                } else if (memBuffer.size() + toWrite < MAX_MEM_SIZE) {
-                    memBuffer.write(b, off, toWrite)
-                } else {
-                    switchToDisk()
-                    fileOut?.write(b, off, toWrite)
-                }
-            } catch (_: Exception) {}
-        }
-
-        private fun switchToDisk() {
-            try {
-                val temp = java.io.File.createTempFile("sesame_cap_", ".tmp")
-                val out = java.io.FileOutputStream(temp)
-                out.write(memBuffer.toByteArray())
-                memBuffer.reset()
-                fileBuffer = temp
-                fileOut = out
-            } catch (e: Exception) {
-                Log.error("HttpCaptureHook", "切换磁盘缓冲失败: ${e.message}")
-            }
-        }
-
-        override fun read(): Int {
-            val b = super.read()
-            if (b != -1) writeData(b)
-            return b
-        }
-
-        override fun read(b: ByteArray, off: Int, len: Int): Int {
-            val r = super.read(b, off, len)
-            if (r != -1) writeData(b, off, r)
-            return r
-        }
-
-        override fun close() {
-            super.close()
-            if (!isClosed) {
-                isClosed = true
-                try {
-                    fileOut?.close()
-                    val finalData = if (fileBuffer != null) {
-                        val bytes = fileBuffer!!.readBytes()
-                        fileBuffer!!.delete()
-                        bytes
-                    } else {
-                        memBuffer.toByteArray()
-                    }
-                    onClose(finalData)
-                } catch (e: Exception) {
-                    Log.error("HttpCaptureHook", "流关闭回调异常: ${e.message}")
-                }
-            }
-        }
+        fun getCapturedData(): ByteArray { synchronized(this) { if (fileBuffer != null) return try { fileBuffer!!.readBytes() } catch (_: Throwable) { memBuffer.toByteArray() } ; return memBuffer.toByteArray() } }
+        override fun read(): Int { val b = super.read(); if (b != -1) updateBuffer(byteArrayOf(b.toByte()), 0, 1) else checkComplete(); return b }
+        override fun read(b: ByteArray, off: Int, len: Int): Int { val n = super.read(b, off, len); if (n > 0) updateBuffer(b, off, n) else if (n == -1) checkComplete(); return n }
+        private fun updateBuffer(b: ByteArray, off: Int, len: Int) { synchronized(this) { if (totalSize > MAX_EXTRACT_SIZE) return; totalSize += len; if (fileOut != null) try { fileOut?.write(b, off, len) } catch (_: Throwable) {} else if (memBuffer.size() + len > 1024 * 1024) { try { val temp = java.io.File.createTempFile("cap_", ".tmp", fansirsqi.xposed.sesame.hook.context.AppContext.getAppContext()?.cacheDir); fileBuffer = temp; val fos = java.io.FileOutputStream(temp); fos.write(memBuffer.toByteArray()); fos.write(b, off, len); fileOut = fos; memBuffer.reset() } catch (_: Throwable) { memBuffer.write(b, off, len) } } else memBuffer.write(b, off, len) } }
+        private fun checkComplete() { synchronized(this) { if (isClosed) return; isClosed = true; try { fileOut?.close() } catch (_: Throwable) {}; onClose(getCapturedData()); try { fileBuffer?.delete() } catch (_: Throwable) {} } }
+        override fun close() { super.close(); checkComplete() }
     }
 }

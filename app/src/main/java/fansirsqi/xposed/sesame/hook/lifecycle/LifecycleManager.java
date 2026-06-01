@@ -189,6 +189,12 @@ public class LifecycleManager {
                 if (BaseModel.getNewRpc().getValue() && BaseModel.getDebugMode().getValue()) {
                     setupRpcDebugHooks();
                 }
+                
+                // 全面网络捕获与拦截 (HttpCaptureHook & NetworkHook)
+                if (BaseModel.enableHttpCapture.getValue()) {
+                    fansirsqi.xposed.sesame.hook.network.HttpCaptureHook.setup(AppContext.getClassLoader());
+                    fansirsqi.xposed.sesame.hook.network.NetworkHook.setupHooks(AppContext.getClassLoader());
+                }
                 // 启动所有模型
                 Model.bootAllModel(AppContext.getClassLoader());
                 Status.load(userId);

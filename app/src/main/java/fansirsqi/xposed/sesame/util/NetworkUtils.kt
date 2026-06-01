@@ -39,6 +39,26 @@ object NetworkUtils {
             null
         }
     }
+
+    /**
+     * 解压 Deflate 数据
+     */
+    fun decompressDeflate(data: ByteArray): ByteArray? {
+        return try {
+            val inflater = java.util.zip.Inflater(true) // true for nowrap (headerless)
+            inflater.setInput(data)
+            val baos = ByteArrayOutputStream()
+            val buffer = ByteArray(1024)
+            while (!inflater.finished()) {
+                val count = inflater.inflate(buffer)
+                if (count == 0) break
+                baos.write(buffer, 0, count)
+            }
+            baos.toByteArray()
+        } catch (e: Exception) {
+            null
+        }
+    }
     
     /**
      * 尝试将字节数组转为字符串，自动处理 GZIP

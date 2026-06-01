@@ -799,6 +799,16 @@ public class AntFarmRpcCall {
         return RequestManager.requestString("com.alipay.antfarm.OpenPrivatePolicy", params);
     }
 
+    public static String enterCompetitionAwardPage() {
+        return RequestManager.requestString("com.alipay.antfarm.enterCompetitionAwardPage",
+                "[{\"requestType\":\"NORMAL\",\"sceneCode\":\"ANTFARM\",\"source\":\"H5\",\"version\":\"" + VERSION + "\"}]");
+    }
+
+    public static String receiveDonationLevelReward(String rightsId) {
+        return RequestManager.requestString("com.alipay.antfarm.receiveDonationLevelReward",
+                "[{\"requestType\":\"NORMAL\",\"rightsId\":\"" + rightsId + "\",\"sceneCode\":\"ANTFARM\",\"source\":\"H5\",\"version\":\"" + VERSION + "\"}]");
+    }
+
     public static String deliverContentExpand(
             String ariverRpcTraceId,
             String eventId,

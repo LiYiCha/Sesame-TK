@@ -252,6 +252,8 @@ class AntFarm : ModelTask() {
 
     private var visitAnimal: BooleanModelField? = null
     private var useSmartSchedulerManager: BooleanModelField? = null
+    private var antFarmRankAward: BooleanModelField? = null
+    private var antFarmRankAwardTime: StringModelField? = null
     private var hasFence: Boolean = false       // 是否正在使用篱笆
     private var fenceCountDown: Int = 0
     // 雇佣NPC
@@ -659,6 +661,18 @@ class AntFarm : ModelTask() {
                 "抽抽乐捐赠任务(禁止开启)",
                 false
             ).also { doChouChouLeDonationTask = it })
+        modelFields.addField(
+            BooleanModelField(
+                "antFarmRankAward",
+                "领取排位奖励",
+                false
+            ).also { antFarmRankAward = it })
+        modelFields.addField(
+            StringModelField(
+                "antFarmRankAwardTime",
+                "排位奖励领取时间 | 默认晚上20:10",
+                "2010"
+            ).also { antFarmRankAwardTime = it })
         return modelFields
     }
 
@@ -843,10 +857,19 @@ class AntFarm : ModelTask() {
                 receiveFarmAwards()
             }
 
+            // 领取排位奖励
+            if (antFarmRankAward?.value == true) {
+                if (!Status.hasFlagToday("farm::rankAwardFinished")) {
+                    if (TaskTimeChecker.isTimeReached(antFarmRankAwardTime?.value, "2010")) {
+                        AntFarmRankAward().run()
+                        tc.countDebug("领取排位奖励")
+                        Status.setFlagToday("farm::rankAwardFinished")
+                    }
+                }
+            }
+
             tc.stop()
         } catch (e: CancellationException) {
-            // 协程取消是正常现象，不记录为错误
-            Log.record(TAG, "AntFarm 协程被取消")
             throw e  // 必须重新抛出以保证取消机制正常工作
         } catch (t: Throwable) {
             Log.printStackTrace(TAG, "AntFarm.start.run err:",t)
@@ -2198,7 +2221,7 @@ class AntFarm : ModelTask() {
                 if ("ANSWER" == bizKey && !Status.hasFlagToday(CACHED_FLAG)) {
                     answerQuestion("100")
                 }
-                delay(2000) // 任务间间隔，防止频率过快
+                delay(RandomUtil.nextInt(3000, 4001).toLong()) // 任务间间隔，防止频率过快
             }
         } catch (e: CancellationException) {
             throw e
@@ -2245,8 +2268,14 @@ class AntFarm : ModelTask() {
                 Status.setFlagToday("farm::task::limit::$bizKey")
                 Log.record(TAG, "庄园任务[$title]已达上限")
             } else {
-                Log.error("庄园任务失败：$title code:$resultCode")
-                TaskBlacklist.autoAddToBlacklist(bizKey, title, resultCode)
+                val errorMsg = when {
+                    jo.has("memo") -> jo.optString("memo")
+                    jo.has("resultDesc") -> jo.optString("resultDesc")
+                    jo.has("desc") -> jo.optString("desc")
+                    else -> ""
+                }
+                Log.error("庄园任务失败：$title code:$resultCode msg:$errorMsg")
+                TaskBlacklist.autoAddToBlacklist(bizKey, title, resultCode, errorMsg)
             }
         }
     }

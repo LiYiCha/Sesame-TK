@@ -83,8 +83,8 @@ object CaptureSearchEngine {
         }
 
         // response headers
-        if (record.responseHeaders.any { (k, v) ->
-                k.lowercase().contains(lowerQuery) || v.lowercase().contains(lowerQuery)
+        if (record.responseHeaders.any { entry ->
+                entry.key.lowercase().contains(lowerQuery) || entry.value.lowercase().contains(lowerQuery)
             }) return true
 
         // response body

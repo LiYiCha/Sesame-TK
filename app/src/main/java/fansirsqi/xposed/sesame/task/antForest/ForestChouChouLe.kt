@@ -2,6 +2,8 @@
 package fansirsqi.xposed.sesame.task.antForest
 
 import fansirsqi.xposed.sesame.data.Status
+import fansirsqi.xposed.sesame.util.RandomUtil
+import fansirsqi.xposed.sesame.util.TaskBlacklist
 import fansirsqi.xposed.sesame.task.TaskStatus
 import fansirsqi.xposed.sesame.util.GlobalThreadPools.sleepCompat
 import fansirsqi.xposed.sesame.util.Log
@@ -103,7 +105,7 @@ class ForestChouChouLe {
             Log.record("开始处理森林寻宝, 共 ${scenes.size} 个场景")
             scenes.forEach {
                 processScene(it)
-                sleepCompat(100L)
+                sleepCompat(RandomUtil.nextInt(1000, 2001).toLong())
             }
         }.onFailure { Log.printStackTrace(TAG, "执行异常", it) }
     }
@@ -165,7 +167,7 @@ class ForestChouChouLe {
                 Log.record("${s.name} 本轮无任务状态变更, 结束任务循环")
                 return
             }
-            if (loop < 2) sleepCompat(100L)
+            if (loop < 2) sleepCompat(RandomUtil.nextInt(2000, 3001).toLong())
         }
     }
 
@@ -201,7 +203,7 @@ class ForestChouChouLe {
                 Log.forest("${s.name} 🎁 [获得: $name * $num] 剩余次数: $balance")
             }
 
-            if (balance > 0) sleepCompat(100L)
+            if (balance > 0) sleepCompat(RandomUtil.nextInt(2000, 3001).toLong())
         }
     }
 
@@ -249,12 +251,11 @@ class ForestChouChouLe {
         }
     }
 
-    /**
-     * 判断任务是否在屏蔽列表中
-     */
     private fun isBlockedTask(taskType: String, taskName: String): Boolean {
         return BLOCKED_TYPES.any { taskType.contains(it) } ||
-                BLOCKED_NAMES.any { taskName.contains(it) }
+                BLOCKED_NAMES.any { taskName.contains(it) } ||
+                TaskBlacklist.isTaskInBlacklist(taskType) ||
+                TaskBlacklist.isTaskInBlacklist(taskName)
     }
 
     /**
@@ -294,7 +295,7 @@ class ForestChouChouLe {
         } else if (type.startsWith("FOREST_NORMAL_DRAW") || type.startsWith("FOREST_ACTIVITY_DRAW")) {
             // 普通任务
             Log.record("${s.name} 执行任务(模拟耗时): $name")
-            sleepCompat(100L) //
+            sleepCompat(RandomUtil.nextInt(3000, 4001).toLong())
 
             val result = if (type.contains("XLIGHT")) {
                 AntForestRpcCall.finishTask4Chouchoule(type, code)
@@ -309,6 +310,13 @@ class ForestChouChouLe {
             } else {
                 val count = taskTryCount.computeIfAbsent(type) { AtomicInteger(0) }.incrementAndGet()
                 Log.error(TAG, "${s.name} 任务失败($count): $name")
+                if (resJson != null) {
+                    val errorCode = resJson.optString("code", "")
+                    val errorMsg = resJson.optString("desc", "")
+                    if (errorCode.isNotEmpty() || errorMsg.isNotEmpty()) {
+                        TaskBlacklist.autoAddToBlacklist(type, name, errorCode, errorMsg)
+                    }
+                }
                 false
             }
         } else {
@@ -318,7 +326,7 @@ class ForestChouChouLe {
 
     private fun handleFinishedTask(s: Scene, name: String, code: String, type: String): Boolean {
         Log.record("${s.name} 领取奖励: $name")
-        sleepCompat(100L)
+        sleepCompat(RandomUtil.nextInt(3000, 4001).toLong())
         val res = AntForestRpcCall.receiveTaskAwardopengreen(SOURCE, code, type).toJson()
         return if (res != null && res.check()) {
             Log.forest("${s.name} 🧾 $name 奖励领取成功")

@@ -1,11 +1,15 @@
 package fansirsqi.xposed.sesame.ui.network
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.selection.SelectionContainer
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.*
@@ -115,12 +119,24 @@ fun CaptureResendScreen(viewModel: CaptureResendViewModel, onBack: () -> Unit) {
                         }
                         headers.forEachIndexed { i, (k, v) ->
                             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                                OutlinedTextField(value = k, onValueChange = { viewModel.updateHeader(i, it, v) }, modifier = Modifier.weight(1f), placeholder = { Text("Key", fontSize = 10.sp) }, singleLine = true, textStyle = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp))
-                                Text(":", Modifier.padding(horizontal = 3.dp), color = MaterialTheme.colorScheme.outline, fontSize = 10.sp)
-                                OutlinedTextField(value = v, onValueChange = { viewModel.updateHeader(i, k, it) }, modifier = Modifier.weight(1.5f), placeholder = { Text("Value", fontSize = 10.sp) }, singleLine = true, textStyle = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp))
-                                IconButton(onClick = { viewModel.removeHeader(i) }, modifier = Modifier.size(20.dp)) { Icon(Icons.Rounded.RemoveCircleOutline, null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(14.dp)) }
+                                BasicTextField(
+                                    value = k,
+                                    onValueChange = { viewModel.updateHeader(i, it, v) },
+                                    modifier = Modifier.weight(1f).background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f), RoundedCornerShape(4.dp)).padding(horizontal = 6.dp, vertical = 2.dp),
+                                    textStyle = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp, color = onSurface),
+                                    singleLine = true
+                                )
+                                Text(":", Modifier.padding(horizontal = 4.dp), color = MaterialTheme.colorScheme.outline, fontSize = 11.sp)
+                                BasicTextField(
+                                    value = v,
+                                    onValueChange = { viewModel.updateHeader(i, k, it) },
+                                    modifier = Modifier.weight(1.8f).background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f), RoundedCornerShape(4.dp)).padding(horizontal = 6.dp, vertical = 2.dp),
+                                    textStyle = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp, color = onSurface),
+                                    singleLine = true
+                                )
+                                IconButton(onClick = { viewModel.removeHeader(i) }, modifier = Modifier.size(24.dp).padding(start = 4.dp)) { Icon(Icons.Rounded.RemoveCircleOutline, null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(16.dp)) }
                             }
-                            Spacer(Modifier.height(3.dp))
+                            Spacer(Modifier.height(4.dp))
                         }
                         if (headers.isEmpty()) Text("无自定义 Header", fontSize = 10.sp, color = MaterialTheme.colorScheme.outline)
                     }
@@ -159,7 +175,7 @@ fun CaptureResendScreen(viewModel: CaptureResendViewModel, onBack: () -> Unit) {
                                 SelectionContainer {
                                     Text(
                                         res.body.ifEmpty { "(无内容)" },
-                                        modifier = Modifier.padding(8.dp).heightIn(max = 400.dp),
+                                        modifier = Modifier.padding(8.dp).fillMaxWidth().heightIn(max = 400.dp).verticalScroll(rememberScrollState()),
                                         fontFamily = FontFamily.Monospace,
                                         fontSize = 10.sp,
                                         color = onSurface

@@ -88,7 +88,8 @@ fun SesameTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
     content: @Composable () -> Unit
 ) {
-    val colorScheme = if (darkTheme) DarkColorScheme else LightColorScheme
+    val holidayScheme = HolidayTheme.getHolidayColorScheme(darkTheme)
+    val colorScheme = holidayScheme ?: (if (darkTheme) DarkColorScheme else LightColorScheme)
     
     MaterialTheme(
         colorScheme = colorScheme,

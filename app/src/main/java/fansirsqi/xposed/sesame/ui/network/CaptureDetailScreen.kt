@@ -1,8 +1,10 @@
 package fansirsqi.xposed.sesame.ui.network
 
+import androidx.lifecycle.viewmodel.compose.viewModel
 import android.content.ClipData
 import android.content.Context
 import android.graphics.Bitmap
+import fansirsqi.xposed.sesame.util.JsonUtil
 import android.widget.Toast
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -10,7 +12,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
@@ -23,41 +24,42 @@ import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.*
 import androidx.compose.material3.*
 import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
-import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.foundation.ScrollState
+import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.runtime.*
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.foundation.ScrollState
-import androidx.lifecycle.viewmodel.compose.viewModel
-import fansirsqi.xposed.sesame.hook.network.model.CaptureRecord
+import androidx.compose.ui.text.withStyle
+import androidx.activity.compose.BackHandler
 import kotlinx.coroutines.launch
-import java.text.SimpleDateFormat
-import java.util.*
+import fansirsqi.xposed.sesame.hook.network.model.CaptureRecord
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CaptureDetailScreen(
-    viewModel: CaptureDetailViewModel,
+    detailViewModel: CaptureDetailViewModel,
     onBack: () -> Unit,
     isNewRequest: Boolean = false
 ) {
-    val record by viewModel.record.collectAsState()
-    val reqLines by viewModel.requestLines.collectAsState()
-    val resLines by viewModel.responseLines.collectAsState()
-    val reqBodyRaw by viewModel.requestBodyRaw.collectAsState()
-    val resImage by viewModel.responseImage.collectAsState()
-    val loadError by viewModel.loadError.collectAsState()
+    val record by detailViewModel.record.collectAsState()
+    val reqLines by detailViewModel.requestLines.collectAsState()
+    val resLines by detailViewModel.responseLines.collectAsState()
+    val reqBodyRaw by detailViewModel.requestBodyRaw.collectAsState()
+    val resImage by detailViewModel.responseImage.collectAsState()
+    val loadError by detailViewModel.loadError.collectAsState()
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val resendViewModel: CaptureResendViewModel = viewModel()
@@ -71,12 +73,16 @@ fun CaptureDetailScreen(
     val appBarContent = MaterialTheme.colorScheme.onPrimaryContainer
     val indicatorColor = remember { Color(0xFF4CAF50) }
 
-    if (isResendMode && record == null && isNewRequest) {
+    // 情况 1: 新建请求模式 -> 返回键直接回列表首页
+    if (isResendMode && isNewRequest) {
+        BackHandler { onBack() }
         CaptureResendScreen(viewModel = resendViewModel.apply { initFromRecord(CaptureRecord(id = "", url = "https://", method = "GET"), "") }, onBack = onBack)
         return
     }
 
+    // 情况 2: 修改记录重发模式 -> 返回键回到详情预览
     if (isResendMode && record != null) {
+        BackHandler { isResendMode = false }
         val body = reqBodyRaw ?: ""
         CaptureResendScreen(viewModel = resendViewModel.apply { initFromRecord(record!!, body) }, onBack = { isResendMode = false })
         return
@@ -211,7 +217,6 @@ private fun OverviewTab(rec: CaptureRecord) {
         } }
         item(key = "headers_summary") { Section("头部统计") {
             DetailLine("请求头数量", "${rec.requestHeaders.size}")
-            DetailLine("响应头数量", "${rec.responseHeaders.size}${if (rec.responseHeaders.isEmpty()) " (protobuf/RPC 响应头不可用)" else ""}")
             DetailLine("查询参数", "${rec.queryParams.size}")
         } }
         item(key = "size") { Section("数据大小", Icons.Rounded.SaveAlt) {
@@ -256,7 +261,7 @@ private fun RequestTab(rec: CaptureRecord, lines: List<String>, rawBody: String,
             Text("请求体 (${rec.requestBodySize} B)${if (rec.requestBody != null || rec.requestBodyBase64 != null) "" else " · 无内容"}",
                 fontWeight = FontWeight.Bold, fontSize = 13.sp, modifier = Modifier.padding(top = 4.dp))
             val isBinary = rec.requestBody == null && rec.requestBodyBase64 != null
-            CodeBlock(lines, if (isBinary) rec.requestBodyBase64 else null)
+            CodeBlock(lines, if (isBinary) rec.requestBodyBase64 else null, isRpc = rec.requestHeaders["Operation-Type"] != null)
         }
         // 修改并重发
         item(key = "rbtn") {
@@ -271,6 +276,7 @@ private fun RequestTab(rec: CaptureRecord, lines: List<String>, rawBody: String,
 
 @Composable
 private fun ResponseTab(rec: CaptureRecord, lines: List<String>, image: Bitmap?) {
+    val isRpc = rec.requestHeaders["Operation-Type"] != null || rec.requestHeaders["operation-type"] != null
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         // 响应体 (精简后的唯一区块)
         item(key = "sbody") {
@@ -280,7 +286,7 @@ private fun ResponseTab(rec: CaptureRecord, lines: List<String>, image: Bitmap?)
                 Image(bitmap = image.asImageBitmap(), contentDescription = null, modifier = Modifier.fillMaxWidth().heightIn(max = 400.dp), contentScale = ContentScale.Fit)
             } else {
                 val isBinary = rec.responseBody == null && rec.responseBodyBase64 != null
-                CodeBlock(lines, if (isBinary) rec.responseBodyBase64 else null)
+                CodeBlock(lines, if (isBinary) rec.responseBodyBase64 else null, isRpc = isRpc)
             }
         }
     }
@@ -289,8 +295,23 @@ private fun ResponseTab(rec: CaptureRecord, lines: List<String>, image: Bitmap?)
 // ── Code Block — 全量 LazyColumn 虚拟化，永不卡顿 ──
 
 @Composable
-private fun CodeBlock(lines: List<String>, base64Data: String? = null) {
+private fun CodeBlock(lines: List<String>, base64Data: String? = null, isRpc: Boolean = false) {
     var viewMode by remember { mutableIntStateOf(if (base64Data != null) 1 else 0) } // 0: Text, 1: Hex
+    var searchText by remember { mutableStateOf("") }
+    var searchActive by remember { mutableStateOf(false) }
+    val listState = rememberLazyListState()
+    val scope = rememberCoroutineScope()
+
+    // 如果是 RPC，尝试对 Body 进行 Pretty Print 格式化
+    val displayLines = remember(lines, isRpc, viewMode) {
+        if (isRpc && viewMode == 0 && lines.size == 1) {
+            try {
+                val json = JsonUtil.formatJson(lines[0])
+                json.split("\n")
+            } catch (_: Exception) { lines }
+        } else lines
+    }
+
     if (lines.size <= 1 && lines.firstOrNull().orEmpty().isBlank()) {
         Surface(color = MaterialTheme.colorScheme.surfaceVariant, shape = RoundedCornerShape(8.dp), modifier = Modifier.fillMaxWidth()) {
             Text("(无内容)", modifier = Modifier.padding(12.dp), color = MaterialTheme.colorScheme.outline, fontSize = 12.sp)
@@ -298,52 +319,138 @@ private fun CodeBlock(lines: List<String>, base64Data: String? = null) {
         return
     }
 
-    val listState = rememberLazyListState()
-    // 预计算总字符数用于脚注
-    val totalChars = remember(lines) { if (lines.size > 200) lines.sumOf { it.length + 1 } else 0 }
+    // 搜索匹配逻辑
+    val matches = remember(displayLines, searchText) {
+        if (searchText.isBlank()) emptyList<Pair<Int, Int>>()
+        else {
+            val result = mutableListOf<Pair<Int, Int>>()
+            displayLines.forEachIndexed { lineIdx, line ->
+                var start = 0
+                while (true) {
+                    val index = line.indexOf(searchText, start, ignoreCase = true)
+                    if (index == -1) break
+                    result.add(lineIdx to index)
+                    start = index + searchText.length
+                }
+            }
+            result
+        }
+    }
+    var currentMatchIdx by remember { mutableIntStateOf(0) }
 
     Surface(color = MaterialTheme.colorScheme.surfaceVariant, shape = RoundedCornerShape(8.dp), modifier = Modifier.fillMaxWidth()) {
         Column {
-            if (base64Data != null) {
-                TabRow(selectedTabIndex = viewMode, containerColor = Color.Transparent, modifier = Modifier.height(32.dp), divider = {}) {
-                    Tab(selected = viewMode == 0, onClick = { viewMode = 0 }) { Text("文本", fontSize = 10.sp) }
-                    Tab(selected = viewMode == 1, onClick = { viewMode = 1 }) { Text("Hex", fontSize = 10.sp) }
+            Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)) {
+                if (base64Data != null) {
+                    TabRow(selectedTabIndex = viewMode, containerColor = Color.Transparent, modifier = Modifier.width(120.dp).height(32.dp), divider = {}) {
+                        Tab(selected = viewMode == 0, onClick = { viewMode = 0 }) { Text("文本", fontSize = 10.sp) }
+                        Tab(selected = viewMode == 1, onClick = { viewMode = 1 }) { Text("Hex", fontSize = 10.sp) }
+                    }
+                } else {
+                    Text("文本视图", fontSize = 10.sp, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(start = 4.dp))
+                }
+                
+                Spacer(Modifier.weight(1f))
+                
+                if (searchActive) {
+                    androidx.compose.foundation.text.BasicTextField(
+                        value = searchText,
+                        onValueChange = { searchText = it; currentMatchIdx = 0 },
+                        modifier = Modifier.weight(1f).padding(horizontal = 8.dp).background(MaterialTheme.colorScheme.surface, RoundedCornerShape(4.dp)).padding(horizontal = 8.dp, vertical = 4.dp),
+                        textStyle = androidx.compose.ui.text.TextStyle(fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurface),
+                        singleLine = true,
+                        cursorBrush = androidx.compose.ui.graphics.SolidColor(MaterialTheme.colorScheme.primary)
+                    )
+                    if (matches.isNotEmpty()) {
+                        Text("${currentMatchIdx + 1}/${matches.size}", fontSize = 10.sp, color = MaterialTheme.colorScheme.outline)
+                        IconButton(onClick = {
+                            currentMatchIdx = (currentMatchIdx - 1 + matches.size) % matches.size
+                            val match = matches[currentMatchIdx]
+                            scope.launch { listState.animateScrollToItem(match.first) }
+                        }, modifier = Modifier.size(24.dp)) {
+                            Icon(Icons.Rounded.KeyboardArrowUp, null, modifier = Modifier.size(16.dp))
+                        }
+                        IconButton(onClick = {
+                            currentMatchIdx = (currentMatchIdx + 1) % matches.size
+                            val match = matches[currentMatchIdx]
+                            scope.launch { listState.animateScrollToItem(match.first) }
+                        }, modifier = Modifier.size(24.dp)) {
+                            Icon(Icons.Rounded.KeyboardArrowDown, null, modifier = Modifier.size(16.dp))
+                        }
+                    }
+                    IconButton(onClick = { searchActive = false; searchText = "" }, modifier = Modifier.size(24.dp)) {
+                        Icon(Icons.Rounded.Close, null, modifier = Modifier.size(16.dp))
+                    }
+                } else {
+                    IconButton(onClick = { searchActive = true }, modifier = Modifier.size(24.dp)) {
+                        Icon(Icons.Rounded.Search, null, modifier = Modifier.size(16.dp))
+                    }
                 }
             }
             
-            Box(Modifier.heightIn(max = 480.dp)) {
-                val displayLines = if (viewMode == 1 && base64Data != null) {
+            Box(Modifier.heightIn(max = 600.dp)) {
+                val finalLines = if (viewMode == 1 && base64Data != null) {
                     remember(base64Data) { formatHex(base64Data) }
-                } else lines
+                } else displayLines
 
-                LazyColumn(state = listState, modifier = Modifier.padding(8.dp)) {
-                    items(displayLines.size, key = { it }) { idx ->
+                LazyColumn(state = listState, modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp).fillMaxWidth()) {
+                    items(finalLines.size, key = { it }) { idx ->
+                        val line = finalLines[idx]
                         SelectionContainer {
+                            if (searchText.isNotBlank() && line.contains(searchText, ignoreCase = true)) {
+                                val annotatedString = androidx.compose.ui.text.buildAnnotatedString {
+                                    var start = 0
+                                    while (true) {
+                                        val index = line.indexOf(searchText, start, ignoreCase = true)
+                                        if (index == -1) {
+                                            append(line.substring(start))
+                                            break
+                                        }
+                                        append(line.substring(start, index))
+                                        val isCurrent = matches.getOrNull(currentMatchIdx) == (idx to index)
+                                        withStyle(androidx.compose.ui.text.SpanStyle(
+                                            background = if (isCurrent) Color(0xFFFF9800).copy(alpha = 0.8f) else Color.Yellow.copy(alpha = 0.5f),
+                                            color = Color.Black
+                                        )) {
+                                            append(line.substring(index, index + searchText.length))
+                                        }
+                                        start = index + searchText.length
+                                    }
+                                }
+                                Text(
+                                    text = annotatedString,
+                                    fontFamily = FontFamily.Monospace,
+                                    fontSize = 11.sp,
+                                    lineHeight = 14.sp
+                                )
+                            } else {
+                                Text(
+                                    text = line.ifEmpty { " " },
+                                    fontFamily = FontFamily.Monospace,
+                                    fontSize = 11.sp,
+                                    lineHeight = 14.sp,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                            }
+                        }
+                    }
+                    if (finalLines.size > 200) {
+                        item {
+                            val totalChars = remember(finalLines) { finalLines.sumOf { it.length + 1 } }
                             Text(
-                                text = displayLines[idx].ifEmpty { " " },
-                                fontFamily = FontFamily.Monospace,
-                                fontSize = 11.sp,
-                                lineHeight = 14.sp,
-                                color = MaterialTheme.colorScheme.onSurface
+                                "— ${finalLines.size} 行 · ${"%,d".format(totalChars)} 字符 —",
+                                modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
+                                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                                fontSize = 9.sp,
+                                color = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)
                             )
                         }
                     }
-                if (totalChars > 0) {
-                    item {
-                        Text(
-                            "— ${lines.size} 行 · ${"%,d".format(totalChars)} 字符 —",
-                            modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
-                            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-                            fontSize = 9.sp,
-                            color = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)
-                        )
-                    }
                 }
+                Scrollbar(listState, MaterialTheme.colorScheme.primary.copy(alpha = 0.5f))
             }
-            Scrollbar(listState, MaterialTheme.colorScheme.outline.copy(alpha = 0.3f))
         }
     }
-}
 }
 
 /** 格式化 Hex 视图 */
@@ -365,15 +472,18 @@ private fun formatHex(base64: String): List<String> {
 /** LazyListState 滚动条 */
 @Composable
 private fun BoxScope.Scrollbar(
-    listState: androidx.compose.foundation.lazy.LazyListState,
+    listState: LazyListState,
     color: Color
 ) {
     if (listState.layoutInfo.totalItemsCount == 0) return
+    
+    // 增加交互热区
     Box(
         Modifier
             .align(Alignment.CenterEnd)
             .fillMaxHeight()
-            .width(4.dp)
+            .width(20.dp) // 增大触摸宽度
+            .background(Color.Transparent)
             .padding(vertical = 2.dp)
             .drawBehind {
                 val totalCount = listState.layoutInfo.totalItemsCount
@@ -382,8 +492,13 @@ private fun BoxScope.Scrollbar(
                 val firstIdx = visibleItems.first().index
                 val viewportHeight = size.height
                 val thumbTop = if (totalCount > 1) viewportHeight * firstIdx / totalCount else 0f
-                val thumbHeight = (viewportHeight * visibleItems.size / totalCount).coerceAtLeast(20f)
-                drawRoundRect(color, topLeft = Offset(0f, thumbTop), size = Size(size.width, thumbHeight), cornerRadius = androidx.compose.ui.geometry.CornerRadius(2f, 2f))
+                val thumbHeight = (viewportHeight * visibleItems.size / totalCount).coerceAtLeast(30f)
+                
+                // 绘制背景槽
+                drawRoundRect(color.copy(alpha = 0.05f), topLeft = androidx.compose.ui.geometry.Offset(size.width - 4.dp.toPx(), 0f), size = androidx.compose.ui.geometry.Size(4.dp.toPx(), viewportHeight), cornerRadius = androidx.compose.ui.geometry.CornerRadius(2.dp.toPx(), 2.dp.toPx()))
+                
+                // 绘制滑块
+                drawRoundRect(color, topLeft = androidx.compose.ui.geometry.Offset(size.width - 4.dp.toPx(), thumbTop), size = androidx.compose.ui.geometry.Size(4.dp.toPx(), thumbHeight), cornerRadius = androidx.compose.ui.geometry.CornerRadius(2.dp.toPx(), 2.dp.toPx()))
             }
     )
 }
@@ -406,7 +521,7 @@ private fun BoxScope.Scrollbar(
                 val viewportRatio = scrollState.viewportSize.toFloat() / (scrollState.maxValue + scrollState.viewportSize)
                 val thumbHeight = (size.height * viewportRatio).coerceAtLeast(20f)
                 val thumbTop = (size.height - thumbHeight) * ratio
-                drawRoundRect(color, topLeft = Offset(0f, thumbTop), size = Size(size.width, thumbHeight), cornerRadius = androidx.compose.ui.geometry.CornerRadius(2f, 2f))
+                drawRoundRect(color, topLeft = Offset(0f, thumbTop), size = Size(size.width, thumbHeight), cornerRadius = CornerRadius(2f, 2f))
             }
     )
 }

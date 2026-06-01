@@ -1,9 +1,0 @@
-{
-  "permissions": {
-    "allow": [
-      "Bash(Get-ChildItem:*)",
-      "Bash(Select-Object:*)",
-      "Bash(Format-List)"
-    ]
-  }
-}

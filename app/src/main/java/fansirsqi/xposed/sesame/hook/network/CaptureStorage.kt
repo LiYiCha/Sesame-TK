@@ -13,10 +13,10 @@ import java.util.*
  * JSON Lines 格式存储。
  *
  * 目录结构：
- *   captures/
- *     2026-05-05.jsonl        ← 当天活跃文件
- *     2026-05-05.1.jsonl      ← 自动轮转（超过 50MB 后编号）
- *     2026-05-04.jsonl
+ *   capture/
+ *     2026-05-11.jsonl        ← 当天活跃文件
+ *     2026-05-11.1.jsonl      ← 自动轮转（超过 50MB 后编号）
+ *     2026-05-10.jsonl
  *     ...
  *
  * 每行一条完整的 [CaptureRecord] JSON (compact)。
@@ -24,7 +24,7 @@ import java.util.*
 object CaptureStorage {
 
     private const val TAG = "CaptureStorage"
-    private const val DIR_NAME = "captures"
+    private const val DIR_NAME = "capture"
 
     /** 单个文件最大大小 (50MB) */
     private const val MAX_FILE_SIZE = 50L * 1024 * 1024
@@ -58,9 +58,10 @@ object CaptureStorage {
     /**
      * 保存一条完整的抓包记录（线程安全）。
      * 序列化为单行 JSON，追加写入当天的 .jsonl 文件。
+     * @return 返回处理后的记录（如：大文件已被外置化）
      */
     @JvmStatic
-    fun save(record: CaptureRecord) {
+    fun save(record: CaptureRecord): CaptureRecord {
         synchronized(writeLock) {
             try {
                 // 💡 攻克 OOM：大文件外置化
@@ -78,8 +79,10 @@ object CaptureStorage {
                 } finally {
                     writer.close()
                 }
+                return processedRecord
             } catch (e: Exception) {
                 Log.error(TAG, "保存记录失败: ${e.message}")
+                return record
             }
         }
     }
@@ -157,11 +160,11 @@ object CaptureStorage {
      */
     @JvmStatic
     fun loadByDate(dateStr: String): List<CaptureRecord> {
-        val records = mutableListOf<CaptureRecord>()
+        val recordMap = LinkedHashMap<String, CaptureRecord>()
         val dir = getDir()
         val files = dir.listFiles { f ->
             f.name.startsWith("$dateStr") && (f.name == "$dateStr.jsonl" || f.name.matches(Regex("$dateStr\\.\\d+\\.jsonl")))
-        } ?: return records
+        } ?: return emptyList()
 
         for (file in files.sortedBy { it.name }) {
             try {
@@ -169,14 +172,14 @@ object CaptureStorage {
                     val trimmed = line.trim()
                     if (trimmed.isNotEmpty()) {
                         val record = JsonUtil.parseObject(trimmed, CaptureRecord::class.java)
-                        if (record != null) records.add(record)
+                        if (record != null) recordMap[record.id] = record
                     }
                 }
             } catch (e: Exception) {
                 Log.error(TAG, "读取文件失败: ${file.name}, ${e.message}")
             }
         }
-        return records.sortedByDescending { it.timestamp }
+        return recordMap.values.sortedByDescending { it.timestamp }
     }
 
     /**
@@ -189,11 +192,11 @@ object CaptureStorage {
             f.name.startsWith("$dateStr") && f.name.endsWith(".jsonl")
         } ?: return null
 
-        for (file in files.sortedBy { it.name }) {
+        for (file in files.sortedByDescending { it.name }) {
             try {
-                // 使用 useLines 避免 readLines() 加载整个文件到内存
+                // 寻找最新的一条记录（可能在文件末尾）
                 val found = file.useLines { lines ->
-                    lines.find { line -> line.contains("\"id\":\"$id\"") }
+                    lines.filter { line -> line.contains("\"id\":\"$id\"") }.lastOrNull()
                 }
                 if (found != null) {
                     val record = JsonUtil.parseObject(found.trim(), CaptureRecord::class.java) ?: return null

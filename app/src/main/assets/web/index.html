@@ -54,13 +54,18 @@
         <script src="./js/vant.js"></script>
         <div id="app" v-cloak>
             <div class="content">
+                <!-- 节日主题 Banner -->
+                <div class="holiday-banner" v-if="holidayInfo && holidayInfo.title">
+                    <div class="holiday-title">{{ holidayInfo.title }}</div>
+                    <div class="holiday-story">{{ holidayInfo.story }}</div>
+                </div>
                 <div class="theme1" v-if="theme==='theme1'">
                     <van-collapse v-model="currentTab" accordion @change="changeCollapse">
                         <van-collapse-item :name="tabs_index" :key="tabs_item.modelCode" :id="`collapse-item_${tabs_index}`" v-for="(tabs_item,tabs_index) in tabs">
                             <template #title>
                                 <div class="title-box">
                                     <div>
-                                        <van-image width="20" height="20" fit="contain" class="list-icon" :error-icon="'./images/icon/model/' + (currentTab === tabs_index ? 'selected/' : '') + 'Default.png'" :src="'./images/icon/model/' + (currentTab === tabs_index ? 'selected/' : '') + tabs_item.modelIcon" />
+                                        <van-image width="20" height="20" fit="contain" class="list-icon" :error-icon="getDefaultModelIcon(tabs_item, currentTab === tabs_index)" :src="getModelIcon(tabs_item, currentTab === tabs_index)" />
                                     </div>
                                     <div>{{tabs_item.modelName}}</div>
                                 </div>
@@ -129,24 +134,27 @@
                                 </div>
                             </template>
                             <div class="content-box">
-                                <div class="title">主题设置</div>
+                                <div class="title">界面风格</div>
                                 <div class="flex-space-between">
                                     <van-radio-group v-model="theme" direction="horizontal">
                                         <van-radio icon-size="16px" name="theme1">折叠主题</van-radio>
                                         <van-radio icon-size="16px" name="theme2">顶部导航主题</van-radio>
                                     </van-radio-group>
                                 </div>
+                                <div class="mt15" style="border-top: 1px solid #f0efef; padding-top: 10px;">
+                                    <van-cell title="主题色彩选择" is-link :value="currentThemeDesc" @click="openThemePopup" style="padding: 10px 0; background: transparent; color: var(--text-color);" />
+                                </div>
                             </div>
                         </van-collapse-item>
                     </van-collapse>
                 </div>
                 <div class="theme2" v-else>
-                    <van-tabs v-model:active="currentTab" swipeable sticky offset-top="1" title-active-color="#E64000">
+                    <van-tabs v-model:active="currentTab" swipeable sticky offset-top="1" title-active-color="var(--main-color)">
                         <van-tab :name="tabs_index" :key="tabs_item.modelCode" v-for="(tabs_item,tabs_index) in tabs">
                             <template #title>
                                 <div class="title-box">
                                     <div>
-                                        <van-image width="20" height="20" fit="contain" class="list-icon" :error-icon="'./images/icon/model/' + (currentTab === tabs_index ? 'selected/' : '') + 'Default.png'" :src="'./images/icon/model/' + (currentTab === tabs_index ? 'selected/' : '') + tabs_item.modelIcon" />
+                                        <van-image width="20" height="20" fit="contain" class="list-icon" :error-icon="getDefaultModelIcon(tabs_item, currentTab === tabs_index)" :src="getModelIcon(tabs_item, currentTab === tabs_index)" />
                                     </div>
                                     <div class="list-label">{{tabs_item.modelName}}</div>
                                 </div>
@@ -210,12 +218,15 @@
                                 </div>
                             </template>
                             <div class="content-box">
-                                <div class="title">主题设置</div>
+                                <div class="title">界面风格</div>
                                 <div class="flex-space-between">
                                     <van-radio-group v-model="theme" direction="horizontal">
                                         <van-radio icon-size="16px" name="theme1">折叠主题</van-radio>
                                         <van-radio icon-size="16px" name="theme2">顶部导航主题</van-radio>
                                     </van-radio-group>
+                                </div>
+                                <div class="mt15" style="border-top: 1px solid #f0efef; padding-top: 10px;">
+                                    <van-cell title="主题色彩选择" is-link :value="currentThemeDesc" @click="openThemePopup" style="padding: 10px 0; background: transparent; color: var(--text-color);" />
                                 </div>
                             </div>
                         </van-tab>
@@ -272,29 +283,293 @@
                     </div>
                 </div>
             </van-dialog>
+
+            <!-- 主题选择弹出层 -->
+            <van-popup v-model:show="showThemePopup" position="bottom" round style="height: 75%; background-color: var(--bg-color); color: var(--text-color); overflow-y: auto;">
+                <div style="padding: 16px 20px;">
+                    <div style="font-size: 18px; font-weight: bold; text-align: center; margin-bottom: 20px;">主题样式与色彩配置</div>
+                    
+                    <!-- 跟随今日 / 自动 -->
+                    <div style="margin-bottom: 20px;">
+                        <div style="font-size: 14px; font-weight: bold; margin-bottom: 8px;">1. 自动跟随模式</div>
+                        <van-button block :type="tempThemeMode === 'auto' ? 'primary' : 'default'" @click="setTempThemeMode('auto')" style="border-radius: 8px; border: 1px solid var(--main-color);">
+                            跟随今日判定 (当前检测到: {{ todayHolidayName }})
+                        </van-button>
+                    </div>
+
+                    <!-- 节日主题选择 -->
+                    <div style="margin-bottom: 20px;">
+                        <div style="font-size: 14px; font-weight: bold; margin-bottom: 8px;">2. 固定节日配色主题</div>
+                        <van-grid :column-num="3" gutter="8" :border="false">
+                            <van-grid-item v-for="(name, code) in holidayList" :key="code" @click="setTempThemeMode(code)">
+                                <div :style="getGridItemStyle(code)" style="display: flex; flex-direction: column; width: 100%; height: 50px; border-radius: 8px; justify-content: center; align-items: center; cursor: pointer; transition: all 0.2s; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
+                                    <span style="font-size: 13px; font-weight: bold;">{{ name }}</span>
+                                    <div style="display: flex; gap: 4px; margin-top: 4px;">
+                                        <div :style="{background: HOLIDAY_THEMES[code].mainColor, width: '10px', height: '10px', borderRadius: '50%'}"></div>
+                                        <div :style="{background: HOLIDAY_THEMES[code].bgColor, width: '10px', height: '10px', borderRadius: '50%', border: '1px solid #ddd'}"></div>
+                                    </div>
+                                </div>
+                            </van-grid-item>
+                        </van-grid>
+                    </div>
+
+                    <!-- 自定义主色 -->
+                    <div style="margin-bottom: 25px;">
+                        <div style="font-size: 14px; font-weight: bold; margin-bottom: 8px;">3. 自定义色彩主题</div>
+                        <div style="display: flex; flex-direction: column; gap: 12px; background: var(--card-bg-color); padding: 12px; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
+                            <div style="display: flex; align-items: center; justify-content: space-between;">
+                                <van-button size="small" :type="tempThemeMode === 'custom' ? 'primary' : 'default'" @click="setTempThemeMode('custom')" style="border-radius: 6px;">启用自定义色彩</van-button>
+                                <div style="display: flex; align-items: center; gap: 8px;">
+                                    <span style="font-size: 13px;">选择主色：</span>
+                                    <div style="position: relative; width: 32px; height: 32px; border-radius: 50%; overflow: hidden; border: 2px solid var(--main-color); box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+                                        <input type="color" v-model="tempCustomColor" @input="tempThemeMode = 'custom'; applyTempThemeColors()" style="position: absolute; top: -5px; left: -5px; width: 42px; height: 42px; padding: 0; border: none; cursor: pointer;" />
+                                    </div>
+                                    <span style="font-size: 13px; font-family: monospace;">{{ tempCustomColor }}</span>
+                                </div>
+                            </div>
+                            <!-- 预设经典色块 -->
+                            <div style="display: flex; justify-content: space-around; margin-top: 8px;">
+                                <div v-for="c in presetColors" :key="c.hex" @click="selectPresetColor(c.hex)" :style="{background: c.hex, border: tempCustomColor.toLowerCase() === c.hex.toLowerCase() && tempThemeMode === 'custom' ? '3px solid #333' : '1px solid #ccc'}" style="width: 24px; height: 24px; border-radius: 4px; cursor: pointer; transition: transform 0.1s;"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 底部控制按钮 -->
+                    <div style="display: flex; gap: 12px;">
+                        <van-button block @click="cancelThemeSettings" style="border-radius: 8px; flex: 1;">取消</van-button>
+                        <van-button block type="primary" @click="saveThemeSettings" style="border-radius: 8px; flex: 1;">保存生效</van-button>
+                    </div>
+                </div>
+            </van-popup>
         </div>
 
         <script>
+            // 10+ Premium Custom Themes Config
+            const HOLIDAY_THEMES = {
+              "default": {
+                "mainColor": "#E64000", "bgColor": "#f6f6f6", "cardBgColor": "#ffffff", "textColor": "#000000", "activeColor": "#E64000",
+                "title": "", "story": ""
+              },
+              "new_year": { // 元旦 (1月1日)
+                "mainColor": "#0077B6", "bgColor": "#F0F8FF", "cardBgColor": "#ffffff", "textColor": "#0A2540", "activeColor": "#00B4D8",
+                "title": "✨ 元旦快乐 · 岁律更新",
+                "story": "“新元肇启，华章日新。” 告别旧岁，迎接崭新的旅程。Sesame-TK 伴您开启新的一年。"
+              },
+              "valentine": { // 情人节 (2月14日)
+                "mainColor": "#E91E63", "bgColor": "#FCE4EC", "cardBgColor": "#ffffff", "textColor": "#4A0E17", "activeColor": "#F06292",
+                "title": "💖 浪漫相约 · 爱意满怀",
+                "story": "“执子之手，与子偕老。” 在温暖甜蜜的日子里，祝福每一份真挚的相伴。"
+              },
+              "labor_day": { // 劳动节 (5月1日)
+                "mainColor": "#F77F00", "bgColor": "#FFF8F0", "cardBgColor": "#ffffff", "textColor": "#212529", "activeColor": "#FCBF49",
+                "title": "🛠️ 致敬劳动 · 礼赞平凡",
+                "story": "“民生在勤，勤则不匮。” 每一份汗水，都是对生活的热爱。今天，给自己放个松。"
+              },
+              "mothers_day": { // 母亲节 (5月第二个星期日)
+                "mainColor": "#FF758F", "bgColor": "#FFF0F3", "cardBgColor": "#ffffff", "textColor": "#3F0C1F", "activeColor": "#FF85A1",
+                "title": "🌸 感恩母爱 · 温馨港湾",
+                "story": "“谁言寸草心，报得三春晖。” 母爱无私，温润如水。别忘了向妈妈道声辛苦。"
+              },
+              "fathers_day": { // 父亲节 (6月第三个星期日)
+                "mainColor": "#1D3557", "bgColor": "#F1FAEE", "cardBgColor": "#ffffff", "textColor": "#1D3557", "activeColor": "#457B9D",
+                "title": "👔 父爱如山 · 巍峨深沉",
+                "story": "“父爱无言，重如青山。” 他用宽阔的肩膀，为我们撑起了一片风雨无阻的天空。"
+              },
+              "childrens_day": { // 儿童节 (6月1日)
+                "mainColor": "#FF6B8B", "bgColor": "#FFF0F2", "cardBgColor": "#ffffff", "textColor": "#2B2B2B", "activeColor": "#FF8A9F",
+                "title": "🎈 六一相伴 · 童心未泯",
+                "story": "“愿你历尽沧桑，归来仍是少年。” 保持好奇，留住天真，祝童心不老的你节日快乐！"
+              },
+              "national_day": { // 国庆节 (10月1日)
+                "mainColor": "#D62828", "bgColor": "#FFF5F5", "cardBgColor": "#ffffff", "textColor": "#1A1A1A", "activeColor": "#F77F00",
+                "title": "🇨🇳 盛世华诞 · 锦绣中华",
+                "story": "“神州万里江山秀，红旗招展展宏图。” 祝伟大的祖国繁荣昌盛，国泰民安！"
+              },
+              "spring_festival": { // 春节 (农历正月初一到初七)
+                "mainColor": "#D00000", "bgColor": "#FFF3E0", "cardBgColor": "#ffffff", "textColor": "#3E2723", "activeColor": "#FFB300",
+                "title": "🧧 新春大吉 · 万事如意",
+                "story": "“千门万户曈曈日，总把新桃换旧符。” 新春新气象，祝您阖家幸福，万事顺遂！"
+              },
+              "new_years_eve": { // 除夕 (农历戏月三十/廿九)
+                "mainColor": "#D32F2F", "bgColor": "#FFF3E3", "cardBgColor": "#ffffff", "textColor": "#4E1A1A", "activeColor": "#FF9100",
+                "title": "🏮 除夕守岁 · 阖家团圆",
+                "story": "“一夜连双岁，五更分二年。” 辞旧迎新除夕夜，团团圆圆守岁时，祝岁岁常安！"
+              },
+              "dragon_boat": { // 端午节 (农历五月初五)
+                "mainColor": "#2C6E49", "bgColor": "#E8F5E9", "cardBgColor": "#ffffff", "textColor": "#1C3A27", "activeColor": "#4F9D69",
+                "title": "🌿 端午安康 · 粽香四溢",
+                "story": "“轻汗微微透碧纨，明朝端午浴芳兰。” 挂艾草，吃香粽，享安康。"
+              },
+              "qixi": { // 七夕节 (农历七月初七)
+                "mainColor": "#EC4899", "bgColor": "#FDF2F8", "cardBgColor": "#ffffff", "textColor": "#47182F", "activeColor": "#F472B6",
+                "title": "🌌 七夕鹊桥 · 银河相会",
+                "story": "“两情若是久长时，又岂在朝朝暮暮。” 星汉灿烂，鹊桥飞架，愿深情不被辜负。"
+              },
+              "mid_autumn": { // 中秋节 (农历八月十五)
+                "mainColor": "#FBC02D", "bgColor": "#E0E1DD", "cardBgColor": "#1B263B", "textColor": "#FFFFFF", "activeColor": "#F1C40F",
+                "title": "🌕 中秋团圆 · 月满人间",
+                "story": "“但愿人长久，千里共婵娟。” 桂花飘香，圆月高悬。无论身处何方，共赏此轮明月。"
+              },
+              "double_ninth": { // 重阳节 (农历九月初九)
+                "mainColor": "#E65100", "bgColor": "#FFF3E0", "cardBgColor": "#ffffff", "textColor": "#3E2723", "activeColor": "#FB8C00",
+                "title": "🍂 重阳登高 · 岁月敬老",
+                "story": "“遥知兄弟登高处，遍插茱萸少一人。” 岁岁重阳，今又重阳。祝老人们安康长寿。"
+              }
+            };
+
+            // 2026-2030年农历节日的公历日期精确映射表
+            const LUNAR_HOLIDAYS_MAP = {
+              2026: {
+                "new_years_eve": "02-16",
+                "spring_festival_start": "02-17", "spring_festival_end": "02-23",
+                "dragon_boat": "06-19",
+                "qixi": "08-19",
+                "mid_autumn": "09-25",
+                "double_ninth": "10-18"
+              },
+              2027: {
+                "new_years_eve": "02-05",
+                "spring_festival_start": "02-06", "spring_festival_end": "02-12",
+                "dragon_boat": "06-09",
+                "qixi": "08-08",
+                "mid_autumn": "09-15",
+                "double_ninth": "10-08"
+              },
+              2028: {
+                "new_years_eve": "01-25",
+                "spring_festival_start": "01-26", "spring_festival_end": "02-01",
+                "dragon_boat": "05-28",
+                "qixi": "08-26",
+                "mid_autumn": "10-03",
+                "double_ninth": "10-26"
+              },
+              2029: {
+                "new_years_eve": "02-12",
+                "spring_festival_start": "02-13", "spring_festival_end": "02-19",
+                "dragon_boat": "06-16",
+                "qixi": "08-16",
+                "mid_autumn": "09-22",
+                "double_ninth": "10-16"
+              },
+              2030: {
+                "new_years_eve": "02-02",
+                "spring_festival_start": "02-03", "spring_festival_end": "02-09",
+                "dragon_boat": "06-05",
+                "qixi": "08-05",
+                "mid_autumn": "09-12",
+                "double_ninth": "10-05"
+              }
+            };
+
+            // 动态检测今日节日的精准算法
+function checkTodayHoliday() {
+              const today = new Date();
+              const year = today.getFullYear();
+              const month = today.getMonth(); // 0-11
+              const date = today.getDate();
+              const mm = String(month + 1).padStart(2, '0');
+              const dd = String(date).padStart(2, '0');
+              const todayStr = `${mm}-${dd}`;
+
+              // A. 固定公历节日
+              if (todayStr === "01-01") return "new_year";
+              if (todayStr === "02-14") return "valentine";
+              if (todayStr === "05-01") return "labor_day";
+              if (todayStr === "06-01") return "childrens_day";
+              if (todayStr >= "10-01" && todayStr <= "10-07") return "national_day";
+
+              // B. 相对公历节日 (母亲节/父亲节)
+              if (month === 4) { // 五月
+                let sunCount = 0;
+                for (let d = 1; d <= date; d++) {
+                  if (new Date(year, 4, d).getDay() === 0) sunCount++;
+                }
+                // 检测是否是第二个星期日
+                if (new Date(year, 4, date).getDay() === 0 && sunCount === 2) return "mothers_day";
+              }
+              if (month === 5) { // 六月
+                let sunCount = 0;
+                for (let d = 1; d <= date; d++) {
+                  if (new Date(year, 5, d).getDay() === 0) sunCount++;
+                }
+                // 检测是否是第三个星期日
+                if (new Date(year, 5, date).getDay() === 0 && sunCount === 3) return "fathers_day";
+              }
+
+              // C. 农历节日精准查表匹配
+              const lunarMap = LUNAR_HOLIDAYS_MAP[year];
+              if (lunarMap) {
+                if (todayStr === lunarMap.new_years_eve) return "new_years_eve";
+                if (todayStr >= lunarMap.spring_festival_start && todayStr <= lunarMap.spring_festival_end) return "spring_festival";
+                if (todayStr === lunarMap.dragon_boat) return "dragon_boat";
+                if (todayStr === lunarMap.qixi) return "qixi";
+                if (todayStr === lunarMap.mid_autumn) return "mid_autumn";
+                if (todayStr === lunarMap.double_ninth) return "double_ninth";
+              }
+
+              return "default";
+            }
+
+            function createCustomThemeColors(hex) {
+              let r = parseInt(hex.slice(1, 3), 16);
+              let g = parseInt(hex.slice(3, 5), 16);
+              let b = parseInt(hex.slice(5, 7), 16);
+              
+              let bgR = Math.round(r * 0.08 + 255 * 0.92);
+              let bgG = Math.round(g * 0.08 + 255 * 0.92);
+              let bgB = Math.round(b * 0.08 + 255 * 0.92);
+              
+              let bgHex = "#" + ((1 << 24) + (bgR << 16) + (bgG << 8) + bgB).toString(16).slice(1);
+              
+              return {
+                mainColor: hex,
+                bgColor: bgHex,
+                cardBgColor: "#ffffff",
+                textColor: "#1a1a1a",
+                activeColor: hex,
+                title: "✨ 自定义色彩主题",
+                story: "“独一无二，自成一派。” 模块已应用您专属定制的色彩主题，展现独特个性格调。"
+              };
+            }
+
+            function initThemeStyle() {
+              let mode = "auto";
+              let customColor = "#E64000";
+              
+              if (typeof HOOK !== 'undefined' && HOOK.getThemeConfig) {
+                try {
+                  const config = JSON.parse(HOOK.getThemeConfig());
+                  mode = config.mode || "auto";
+                  customColor = config.customColor || "#E64000";
+                } catch (e) {
+                  console.error("Load theme config failed", e);
+                }
+              } else {
+                mode = localStorage.getItem("theme_mode") || "auto";
+                customColor = localStorage.getItem("theme_color") || "#E64000";
+              }
+              
+              let vars;
+              if (mode === "auto") {
+                const activeHoliday = checkTodayHoliday();
+                vars = HOLIDAY_THEMES[activeHoliday] || HOLIDAY_THEMES["default"];
+              } else if (mode === "custom") {
+                vars = createCustomThemeColors(customColor);
+              } else {
+                vars = HOLIDAY_THEMES[mode] || HOLIDAY_THEMES["default"];
+              }
+
+              const root = document.documentElement;
+              root.style.setProperty('--main-color', vars.mainColor);
+              root.style.setProperty('--bg-color', vars.bgColor);
+              root.style.setProperty('--card-bg-color', vars.cardBgColor);
+              root.style.setProperty('--text-color', vars.textColor);
+              root.style.setProperty('--active-color', vars.activeColor);
+
+              return { mode, customColor, vars };
+            }
+
             const { createApp, ref, computed, onMounted, watchEffect } = Vue;
-                  const { showToast } = vant;
-                  createApp({
-                    setup() {
-                      // 左侧导航菜单
-                      const tabs = ref(JSON.parse(window.HOOK.getTabs()));
-                      const currentTab = ref(
-                        localStorage.getItem("theme") === "theme1" ? null : 0
-                      );
-                      //设置默认值
-                      const setData = ref(
-                        tabs.value.map((item) => {
-                          return JSON.parse(window.HOOK.getModel(item.modelCode));
-                        })
-                      );
-                      // 更新报名请改这儿
-                      //const isVersion = ref(window.HOOK.getBuildInfo() === "fansirsqi.xposed.sesame:1.5.4.alpha")
-                      const isVersion = ref(true);
-            
-                      const theme = ref(localStorage.getItem("theme") || "theme1");
             
                       // 用户列表弹窗
                       const person_list = ref({
@@ -553,6 +828,55 @@
                       }
                       window.handleData = handleData;
                       window.isCanSave = true;
+
+                      const getModelIcon = (tabs_item, isSelected) => {
+                        const baseFolder = isSelected ? 'selected/' : '';
+                        if (activeHolidayVal.value !== "default") {
+                          return `./images/icon/model/${activeHolidayVal.value}/${baseFolder}${tabs_item.modelIcon}`;
+                        }
+                        return `./images/icon/model/${baseFolder}${tabs_item.modelIcon}`;
+                      };
+
+                      const getDefaultModelIcon = (tabs_item, isSelected) => {
+                        const baseFolder = isSelected ? 'selected/' : '';
+                        return `./images/icon/model/${baseFolder}${tabs_item.modelIcon}`;
+                      };
+
+                      const todayHolidayName = computed(() => {
+                        const h = activeHolidayVal.value;
+                        const holidayNames = {
+                          "default": "日常模式",
+                          "new_year": "元旦",
+                          "valentine": "情人节",
+                          "labor_day": "劳动节",
+                          "mothers_day": "母亲节",
+                          "fathers_day": "父亲节",
+                          "childrens_day": "儿童节",
+                          "national_day": "国庆节",
+                          "spring_festival": "春节",
+                          "new_years_eve": "除夕",
+                          "dragon_boat": "端午节",
+                          "qixi": "七夕节",
+                          "mid_autumn": "中秋节",
+                          "double_ninth": "重阳节"
+                        };
+                        return holidayNames[h] || h;
+                      });
+
+                      function previewHolidayTheme(holidayCode) {
+                        const vars = HOLIDAY_THEMES[holidayCode] || HOLIDAY_THEMES["default"];
+                        const root = document.documentElement;
+                        root.style.setProperty('--main-color', vars.mainColor);
+                        root.style.setProperty('--bg-color', vars.bgColor);
+                        root.style.setProperty('--card-bg-color', vars.cardBgColor);
+                        root.style.setProperty('--text-color', vars.textColor);
+                        root.style.setProperty('--active-color', vars.activeColor);
+                        
+                        activeHolidayVal.value = holidayCode;
+                        holidayInfoVal.value = vars;
+                        showToast(`已临时预览【${vars.title || '日常默认'}】主题`);
+                      }
+
                       return {
                         tabs,
                         currentTab,
@@ -568,6 +892,11 @@
                         changeCollapse,
                         theme,
                         addEvent,
+                        holidayInfo: holidayInfoVal,
+                        getModelIcon,
+                        getDefaultModelIcon,
+                        todayHolidayName,
+                        previewHolidayTheme
                       };
                     },
                   })

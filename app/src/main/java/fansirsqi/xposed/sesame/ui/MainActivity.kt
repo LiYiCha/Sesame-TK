@@ -30,7 +30,6 @@ import androidx.lifecycle.lifecycleScope
 import fansirsqi.xposed.sesame.BuildConfig
 import fansirsqi.xposed.sesame.R
 import fansirsqi.xposed.sesame.ui.logviewer.LogViewerComposeActivity
-import fansirsqi.xposed.sesame.ui.update.UpdateManager
 import fansirsqi.xposed.sesame.data.General
 import fansirsqi.xposed.sesame.data.RunType
 import fansirsqi.xposed.sesame.data.UIConfig
@@ -44,7 +43,6 @@ import fansirsqi.xposed.sesame.ui.extension.ExtensionListActivity
 import fansirsqi.xposed.sesame.ui.extra.activity.HelpActivity
 import fansirsqi.xposed.sesame.ui.extra.activity.RpcDebugActivity
 import fansirsqi.xposed.sesame.ui.network.CaptureListActivity
-import fansirsqi.xposed.sesame.ui.update.UpdateConfig
 import fansirsqi.xposed.sesame.util.FansirsqiUtil
 import fansirsqi.xposed.sesame.util.Files
 import fansirsqi.xposed.sesame.util.Log
@@ -69,8 +67,7 @@ class MainActivity : BaseActivity() {
     private lateinit var titleRunner: Runnable
     private var userNickName: String = ""
     
-    // 更新管理器
-    private lateinit var updateManager: UpdateManager
+
 
     @SuppressLint("SetTextI18n", "UnsafeDynamicallyLoadedCode")
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -141,17 +138,7 @@ class MainActivity : BaseActivity() {
             oneWordText.value = result
         }
         
-//        // 初始化更新管理器
-//        updateManager = UpdateManager(
-//            this,
-//            UpdateConfig.DEFAULT,
-//            lifecycleScope)
-//
-//        // 检查更新（异步非阻塞，延迟3秒执行，不影响启动体验）
-//        // 内部使用协程，下载在后台线程进行，不会阻塞主线程
-//        viewHandler.postDelayed({
-//            updateManager.checkForUpdates()
-//        }, 3000)
+
 
 //        // 验证通过
 //        lifecycleScope.launch {

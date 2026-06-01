@@ -323,7 +323,7 @@ public class HuaHuaKa extends BaseCommTask {
         try {
             String str = "CARD_HUA_HUA_CARD_23Y06";
             String str2 = "CARD_HUA_HUA_CARD";
-            if (!this.certId.isEmpty()) {
+            if (this.certId != null && !this.certId.isEmpty()) {
                 int i = 3;
                 do {
                     JSONObject requestString = requestString("com.alipay.pcreditbfweb.promo.hhk.index", buildIndexParams());
