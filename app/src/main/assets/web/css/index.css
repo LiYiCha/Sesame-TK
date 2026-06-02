@@ -499,3 +499,241 @@ video {
 .w100 {
   width: 100px;
 }
+
+/* 主题工坊 Option B 卡通扁平风格样式 */
+.theme-drawer-container {
+  padding: 8px 4px;
+}
+.drawer-title {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px !important;
+  font-weight: 900 !important;
+  color: #222222;
+  margin-bottom: 16px;
+}
+.title-decor-img {
+  width: 26px;
+  height: 26px;
+  margin-right: 8px;
+}
+.theme-live-preview {
+  position: relative;
+  background: var(--bg-color);
+  border: 3px solid #222222;
+  border-radius: 16px;
+  padding: 12px;
+  margin-bottom: 16px;
+  box-shadow: 4px 4px 0px #222222;
+  overflow: hidden;
+  transition: all 0.3s ease;
+}
+.mock-status-bar {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px !important;
+  font-weight: bold;
+  color: var(--text-color);
+  opacity: 0.6;
+  margin-bottom: 6px;
+}
+.mock-app-bar {
+  font-size: 15px !important;
+  font-weight: 900 !important;
+  color: var(--text-color);
+  margin-bottom: 8px;
+  border-bottom: 1px dashed rgba(0,0,0,0.1);
+  padding-bottom: 4px;
+}
+.mock-quote {
+  font-size: 12px !important;
+  color: var(--text-color);
+  line-height: 1.4;
+  margin-right: 48px;
+}
+.preview-cloud-decor {
+  position: absolute;
+  right: 12px;
+  bottom: 8px;
+  width: 44px;
+  height: auto;
+  opacity: 0.85;
+  animation: floatUpDown 3s ease-in-out infinite alternate;
+}
+@keyframes floatUpDown {
+  from { transform: translateY(0); }
+  to { transform: translateY(-5px); }
+}
+.theme-control-section {
+  border: 3px solid #222222;
+  border-radius: 16px;
+  overflow: hidden;
+  box-shadow: 4px 4px 0px #222222;
+  margin-bottom: 16px;
+}
+.theme-control-section .van-cell {
+  background: var(--card-bg-color) !important;
+  padding: 10px 16px !important;
+}
+.cell-leading-icon {
+  width: 22px;
+  height: 22px;
+  margin-right: 8px;
+}
+.theme-presets-section, .theme-custom-section {
+  margin-bottom: 16px;
+}
+.section-subtitle {
+  display: flex;
+  align-items: center;
+  font-size: 14px !important;
+  font-weight: bold !important;
+  color: #222222;
+  margin-bottom: 10px;
+}
+.subtitle-icon {
+  font-size: 16px !important;
+  margin-right: 6px;
+  color: var(--main-color);
+}
+.presets-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+}
+.preset-item-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: var(--card-bg-color);
+  border: 3px solid #222222;
+  border-radius: 14px;
+  padding: 10px 6px;
+  box-shadow: 3px 3px 0px #222222;
+  cursor: pointer;
+  transition: all 0.15s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+.preset-item-card:active {
+  transform: translate(2px, 2px);
+  box-shadow: 1px 1px 0px #222222;
+}
+.preset-item-card.active {
+  background: #FFF9C4 !important; /* 卡通亮黄底色 */
+  border-color: var(--main-color) !important;
+}
+.preset-icon-img {
+  width: 38px;
+  height: 38px;
+  margin-bottom: 6px;
+}
+.preset-name {
+  font-size: 11px !important;
+  font-weight: 900 !important;
+  color: #222222;
+}
+.theme-custom-section-body {
+  border: 3px solid #222222;
+  border-radius: 16px;
+  background: var(--card-bg-color);
+  padding: 12px;
+  box-shadow: 4px 4px 0px #222222;
+}
+.presets-colors {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.color-dot {
+  width: 24px;
+  height: 24px;
+  border: 3px solid #222222;
+  border-radius: 50%;
+  cursor: pointer;
+  box-shadow: 2px 2px 0px #222222;
+  transition: transform 0.1s;
+}
+.color-dot:active {
+  transform: scale(0.9);
+}
+.color-dot.active {
+  transform: scale(1.15);
+  box-shadow: 3px 3px 0px #222222;
+}
+.color-picker-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 3px solid #222222;
+  border-radius: 12px;
+  padding: 4px 8px;
+  background: #FFF;
+  box-shadow: 2px 2px 0px #222222;
+  cursor: pointer;
+}
+.native-color-picker-container {
+  position: relative;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  overflow: hidden;
+  border: 2px solid #222222;
+}
+.native-color-picker {
+  position: absolute;
+  top: -5px;
+  left: -5px;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: none;
+  cursor: pointer;
+}
+.picker-label {
+  font-size: 12px !important;
+  font-weight: bold;
+  color: #222222;
+}
+.drawer-footer {
+  display: flex;
+  gap: 12px;
+  margin-top: 24px;
+  padding-bottom: 12px;
+}
+.save-theme-btn {
+  flex: 1;
+  background: #FF5722;
+  border: 3px solid #222222;
+  border-radius: 16px;
+  color: white;
+  font-size: 15px !important;
+  font-weight: 900 !important;
+  padding: 10px 0;
+  box-shadow: 4px 4px 0px #222222;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.save-theme-btn:active {
+  transform: translate(2px, 2px);
+  box-shadow: 2px 2px 0px #222222;
+}
+.cancel-theme-btn {
+  flex: 1;
+  background: #ECEFF1;
+  border: 3px solid #222222;
+  border-radius: 16px;
+  color: #37474F;
+  font-size: 15px !important;
+  font-weight: 900 !important;
+  padding: 10px 0;
+  box-shadow: 4px 4px 0px #222222;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.cancel-theme-btn:active {
+  transform: translate(2px, 2px);
+  box-shadow: 2px 2px 0px #222222;
+}

@@ -142,14 +142,14 @@
                                     </van-radio-group>
                                 </div>
                                 <div class="mt15" style="border-top: 1px solid #f0efef; padding-top: 10px;">
-                                    <van-cell title="主题色彩选择" is-link :value="currentThemeDesc" @click="openThemePopup" style="padding: 10px 0; background: transparent; color: var(--text-color);" />
+                                    <van-cell title="主题色彩与个性化" is-link :value="currentThemeDesc" @click="openThemePopup" style="padding: 10px 0; background: transparent; color: var(--text-color);" />
                                 </div>
                             </div>
                         </van-collapse-item>
                     </van-collapse>
                 </div>
                 <div class="theme2" v-else>
-                    <van-tabs v-model:active="currentTab" swipeable sticky offset-top="1" title-active-color="var(--main-color)">
+                    <van-tabs v-model:active="currentTab" swipeable sticky offset-top="1" title-active-color="#E64000">
                         <van-tab :name="tabs_index" :key="tabs_item.modelCode" v-for="(tabs_item,tabs_index) in tabs">
                             <template #title>
                                 <div class="title-box">
@@ -226,7 +226,7 @@
                                     </van-radio-group>
                                 </div>
                                 <div class="mt15" style="border-top: 1px solid #f0efef; padding-top: 10px;">
-                                    <van-cell title="主题色彩选择" is-link :value="currentThemeDesc" @click="openThemePopup" style="padding: 10px 0; background: transparent; color: var(--text-color);" />
+                                    <van-cell title="主题色彩与个性化" is-link :value="currentThemeDesc" @click="openThemePopup" style="padding: 10px 0; background: transparent; color: var(--text-color);" />
                                 </div>
                             </div>
                         </van-tab>
@@ -284,60 +284,114 @@
                 </div>
             </van-dialog>
 
-            <!-- 主题选择弹出层 -->
-            <van-popup v-model:show="showThemePopup" position="bottom" round style="height: 75%; background-color: var(--bg-color); color: var(--text-color); overflow-y: auto;">
-                <div style="padding: 16px 20px;">
-                    <div style="font-size: 18px; font-weight: bold; text-align: center; margin-bottom: 20px;">主题样式与色彩配置</div>
-                    
-                    <!-- 跟随今日 / 自动 -->
-                    <div style="margin-bottom: 20px;">
-                        <div style="font-size: 14px; font-weight: bold; margin-bottom: 8px;">1. 自动跟随模式</div>
-                        <van-button block :type="tempThemeMode === 'auto' ? 'primary' : 'default'" @click="setTempThemeMode('auto')" style="border-radius: 8px; border: 1px solid var(--main-color);">
-                            跟随今日判定 (当前检测到: {{ todayHolidayName }})
-                        </van-button>
+            <!-- 主题选择弹出层 (Option B 卡通插画抽屉) -->
+            <van-popup v-model:show="showThemePopup" position="bottom" round style="height: 85%; background-color: var(--bg-color); color: var(--text-color); overflow-y: auto;">
+                <div class="theme-drawer-container">
+                    <!-- Title -->
+                    <div class="drawer-title">
+                        <img src="./images/icon/theme/theme_palette.svg" class="title-decor-img" />
+                        <span>个性化主题工坊</span>
                     </div>
 
-                    <!-- 节日主题选择 -->
-                    <div style="margin-bottom: 20px;">
-                        <div style="font-size: 14px; font-weight: bold; margin-bottom: 8px;">2. 固定节日配色主题</div>
-                        <van-grid :column-num="3" gutter="8" :border="false">
-                            <van-grid-item v-for="(name, code) in holidayList" :key="code" @click="setTempThemeMode(code)">
-                                <div :style="getGridItemStyle(code)" style="display: flex; flex-direction: column; width: 100%; height: 50px; border-radius: 8px; justify-content: center; align-items: center; cursor: pointer; transition: all 0.2s; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
-                                    <span style="font-size: 13px; font-weight: bold;">{{ name }}</span>
-                                    <div style="display: flex; gap: 4px; margin-top: 4px;">
-                                        <div :style="{background: HOLIDAY_THEMES[code].mainColor, width: '10px', height: '10px', borderRadius: '50%'}"></div>
-                                        <div :style="{background: HOLIDAY_THEMES[code].bgColor, width: '10px', height: '10px', borderRadius: '50%', border: '1px solid #ddd'}"></div>
-                                    </div>
-                                </div>
-                            </van-grid-item>
-                        </van-grid>
+                    <!-- Live Preview Card -->
+                    <div class="theme-live-preview">
+                        <div class="mock-status-bar">
+                            <span>19:53</span>
+                            <span>📶 🔋 100%</span>
+                        </div>
+                        <div class="mock-app-bar">Sesame-TK 效果预览</div>
+                        <div class="mock-quote">
+                            {{ previewVars.title || '✨ 默认主题风格' }}
+                            <br/>
+                            {{ previewVars.story || '“独一无二，自成一派。” 模块已应用您专属定制的色彩主题，展现独特个性格调。' }}
+                        </div>
+                        <img src="./images/icon/theme/theme_palette.svg" class="preview-cloud-decor" />
                     </div>
 
-                    <!-- 自定义主色 -->
-                    <div style="margin-bottom: 25px;">
-                        <div style="font-size: 14px; font-weight: bold; margin-bottom: 8px;">3. 自定义色彩主题</div>
-                        <div style="display: flex; flex-direction: column; gap: 12px; background: var(--card-bg-color); padding: 12px; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
-                            <div style="display: flex; align-items: center; justify-content: space-between;">
-                                <van-button size="small" :type="tempThemeMode === 'custom' ? 'primary' : 'default'" @click="setTempThemeMode('custom')" style="border-radius: 6px;">启用自定义色彩</van-button>
-                                <div style="display: flex; align-items: center; gap: 8px;">
-                                    <span style="font-size: 13px;">选择主色：</span>
-                                    <div style="position: relative; width: 32px; height: 32px; border-radius: 50%; overflow: hidden; border: 2px solid var(--main-color); box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
-                                        <input type="color" v-model="tempCustomColor" @input="tempThemeMode = 'custom'; applyTempThemeColors()" style="position: absolute; top: -5px; left: -5px; width: 42px; height: 42px; padding: 0; border: none; cursor: pointer;" />
-                                    </div>
-                                    <span style="font-size: 13px; font-family: monospace;">{{ tempCustomColor }}</span>
-                                </div>
+                    <!-- Feature Switches -->
+                    <div class="theme-control-section">
+                        <van-cell center title="启用节日限定图标" label="开启后在特定节日将展示节日限定的主题图标">
+                            <template #right-icon>
+                                <van-switch v-model="tempUseHolidayIcons" size="22px" active-color="var(--main-color)" />
+                            </template>
+                            <template #icon>
+                                <img src="./images/icon/theme/theme_limited_icons.svg" class="cell-leading-icon" />
+                            </template>
+                        </van-cell>
+                        <van-cell center title="启用萌宠主题图标" label="开启后所有卡片图标将替换为萌萌哒宠物卡片">
+                            <template #right-icon>
+                                <van-switch v-model="tempUseAnimalIcons" size="22px" active-color="var(--main-color)" />
+                            </template>
+                            <template #icon>
+                                <img src="./images/icon/model/animal/Default.png" class="cell-leading-icon" style="border-radius:4px;" />
+                            </template>
+                        </van-cell>
+                    </div>
+
+                    <!-- Presets Grid -->
+                    <div class="theme-presets-section">
+                        <div class="section-subtitle">
+                            <span class="subtitle-icon">🎨</span>
+                            <span>预设节日色彩</span>
+                        </div>
+                        <div class="presets-grid">
+                            <!-- Auto -->
+                            <div class="preset-item-card" :class="{ active: tempThemeMode === 'auto' }" @click="setTempThemeMode('auto')">
+                                <img src="./images/icon/theme/theme_auto_follow.svg" class="preset-icon-img" />
+                                <span class="preset-name">跟随今日</span>
                             </div>
-                            <!-- 预设经典色块 -->
-                            <div style="display: flex; justify-content: space-around; margin-top: 8px;">
-                                <div v-for="c in presetColors" :key="c.hex" @click="selectPresetColor(c.hex)" :style="{background: c.hex, border: tempCustomColor.toLowerCase() === c.hex.toLowerCase() && tempThemeMode === 'custom' ? '3px solid #333' : '1px solid #ccc'}" style="width: 24px; height: 24px; border-radius: 4px; cursor: pointer; transition: transform 0.1s;"></div>
+                            <!-- Fixed Holidays -->
+                            <div class="preset-item-card" :class="{ active: tempThemeMode === 'new_year' }" @click="setTempThemeMode('new_year')">
+                                <img src="./images/icon/theme/theme_new_year.svg" class="preset-icon-img" />
+                                <span class="preset-name">元旦快乐</span>
+                            </div>
+                            <div class="preset-item-card" :class="{ active: tempThemeMode === 'spring_festival' }" @click="setTempThemeMode('spring_festival')">
+                                <img src="./images/icon/theme/theme_spring_festival.svg" class="preset-icon-img" />
+                                <span class="preset-name">春节大吉</span>
+                            </div>
+                            <div class="preset-item-card" :class="{ active: tempThemeMode === 'dragon_boat' }" @click="setTempThemeMode('dragon_boat')">
+                                <img src="./images/icon/theme/theme_dragon_boat.svg" class="preset-icon-img" />
+                                <span class="preset-name">端午安康</span>
+                            </div>
+                            <div class="preset-item-card" :class="{ active: tempThemeMode === 'childrens_day' }" @click="setTempThemeMode('childrens_day')">
+                                <img src="./images/icon/theme/theme_childrens_day.svg" class="preset-icon-img" />
+                                <span class="preset-name">六一童心</span>
+                            </div>
+                            <div class="preset-item-card" :class="{ active: tempThemeMode === 'mid_autumn' }" @click="setTempThemeMode('mid_autumn')">
+                                <img src="./images/icon/theme/theme_mid_autumn.svg" class="preset-icon-img" />
+                                <span class="preset-name">中秋团圆</span>
+                            </div>
+                            <div class="preset-item-card" :class="{ active: tempThemeMode === 'national_day' }" @click="setTempThemeMode('national_day')">
+                                <img src="./images/icon/theme/theme_national_day.svg" class="preset-icon-img" />
+                                <span class="preset-name">国庆盛世</span>
                             </div>
                         </div>
                     </div>
 
-                    <!-- 底部控制按钮 -->
-                    <div style="display: flex; gap: 12px;">
-                        <van-button block @click="cancelThemeSettings" style="border-radius: 8px; flex: 1;">取消</van-button>
-                        <van-button block type="primary" @click="saveThemeSettings" style="border-radius: 8px; flex: 1;">保存生效</van-button>
+                    <!-- Custom Section -->
+                    <div class="theme-custom-section">
+                        <div class="section-subtitle">
+                            <span class="subtitle-icon">🛠️</span>
+                            <span>自定义主题色彩</span>
+                        </div>
+                        <div class="theme-custom-section-body">
+                            <div class="presets-colors">
+                                <div v-for="c in presetColors" :key="c.hex" @click="selectPresetColor(c.hex)" class="color-dot" :class="{ active: tempCustomColor.toLowerCase() === c.hex.toLowerCase() && tempThemeMode === 'custom' }" :style="{ background: c.hex }"></div>
+                                
+                                <div class="color-picker-wrapper" @click="setTempThemeMode('custom')">
+                                    <div class="native-color-picker-container">
+                                        <input type="color" v-model="tempCustomColor" @input="tempThemeMode = 'custom'" class="native-color-picker" />
+                                    </div>
+                                    <span class="picker-label">{{ tempCustomColor }}</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Drawer Footer -->
+                    <div class="drawer-footer">
+                        <button class="cancel-theme-btn" @click="cancelThemeSettings">取消</button>
+                        <button class="save-theme-btn" @click="saveThemeSettings">保存生效</button>
                     </div>
                 </div>
             </van-popup>
@@ -406,7 +460,7 @@
                 "story": "“两情若是久长时，又岂在朝朝暮暮。” 星汉灿烂，鹊桥飞架，愿深情不被辜负。"
               },
               "mid_autumn": { // 中秋节 (农历八月十五)
-                "mainColor": "#FBC02D", "bgColor": "#E0E1DD", "cardBgColor": "#1B263B", "textColor": "#FFFFFF", "activeColor": "#F1C40F",
+                "mainColor": "#FBC02D", "bgColor": "#FFFDE7", "cardBgColor": "#ffffff", "textColor": "#1E1B4B", "activeColor": "#F1C40F",
                 "title": "🌕 中秋团圆 · 月满人间",
                 "story": "“但愿人长久，千里共婵娟。” 桂花飘香，圆月高悬。无论身处何方，共赏此轮明月。"
               },
@@ -462,7 +516,7 @@
             };
 
             // 动态检测今日节日的精准算法
-function checkTodayHoliday() {
+            function checkTodayHoliday() {
               const today = new Date();
               const year = today.getFullYear();
               const month = today.getMonth(); // 0-11
@@ -535,18 +589,24 @@ function checkTodayHoliday() {
             function initThemeStyle() {
               let mode = "auto";
               let customColor = "#E64000";
+              let useHolidayIcons = true;
+              let useAnimalIcons = false;
               
               if (typeof HOOK !== 'undefined' && HOOK.getThemeConfig) {
                 try {
                   const config = JSON.parse(HOOK.getThemeConfig());
                   mode = config.mode || "auto";
                   customColor = config.customColor || "#E64000";
+                  useHolidayIcons = config.useHolidayIcons !== undefined ? config.useHolidayIcons : true;
+                  useAnimalIcons = config.useAnimalIcons !== undefined ? config.useAnimalIcons : false;
                 } catch (e) {
                   console.error("Load theme config failed", e);
                 }
               } else {
                 mode = localStorage.getItem("theme_mode") || "auto";
                 customColor = localStorage.getItem("theme_color") || "#E64000";
+                useHolidayIcons = localStorage.getItem("theme_use_holiday_icons") !== "false";
+                useAnimalIcons = localStorage.getItem("theme_use_animal_icons") === "true";
               }
               
               let vars;
@@ -566,343 +626,519 @@ function checkTodayHoliday() {
               root.style.setProperty('--text-color', vars.textColor);
               root.style.setProperty('--active-color', vars.activeColor);
 
-              return { mode, customColor, vars };
+              return { mode, customColor, useHolidayIcons, useAnimalIcons, vars };
             }
 
+            const themeInfo = initThemeStyle();
+
             const { createApp, ref, computed, onMounted, watchEffect } = Vue;
+            const { showToast } = vant;
             
-                      // 用户列表弹窗
-                      const person_list = ref({
-                        desc: "",
-                        visible: false,
-                        title: "",
-                        code: "",
-                        list: [],
-                        keys: "",
-                        type: "",
-                        isLoading: true,
-                        len: 0,
-                        modelName: "",
-                        check_all: false,
-                      });
-            
-                      const com_person_list_filter = computed(() => {
-                        return person_list.value.list.filter((item) =>
-                          item.name.includes(person_list.value.keys)
-                        );
-                      });
-            
-                      watchEffect(() => {
-                        localStorage.setItem("theme", theme.value);
-                      });
-            
-                      function loadList(modelName, code, name, type, desc) {
-                        person_list.value.isLoading = true;
-                        window.history.pushState({ list: 1 }, "", "");
-                        person_list.value.visible = true;
-                        person_list.value.list = [];
-                        let obj = JSON.parse(window.HOOK.getField(modelName, code));
-                        let configValue = JSON.parse(
-                          setData.value[currentTab.value].find((i) => i.code === code)
-                            .configValue
-                        );
-                        let array = obj.expandValue
-                          .map((item) => {
-                            return {
-                              ...item,
-                              isChecked:
-                                type === "SELECT"
-                                  ? configValue.includes(item.id)
-                                  : (configValue.key &&
-                                      configValue.key.includes(item.id)) ||
-                                    (type === "SELECT_AND_COUNT" && configValue[item.id]) ||
-                                    false,
-                              count:
-                                (type === "SELECT_AND_COUNT" && configValue[item.id]) || "",
-                            };
-                          })
-                          .sort((a, b) => a.name.localeCompare(b.name))
-                          .sort((a, b) => b.isChecked - a.isChecked || b.count - a.count);
-            
-                        let result = [];
-                        for (let i = 0; i < array.length; i += 30) {
-                          result.push(array.slice(i, i + 30));
-                        }
-            
-                        let _index = 0;
-                        person_list.value.len = array.length;
-                        const refreshFrameCount = () => {
-                          requestAnimationFrame(() => {
-                            if (_index === result.length - 1) {
-                              person_list.value.isLoading = false;
-                            }
-                            person_list.value.list.push(...result[_index]);
-                            _index++;
-            
-                            if (_index < result.length && person_list.value.visible) {
-                              refreshFrameCount();
-                            }
-                          });
-                        };
-            
-                        refreshFrameCount();
-                        // person_list.value.list = array.slice(0,60)
-                        person_list.value.desc = "";
-                        person_list.value.title = name;
-                        person_list.value.code = code;
-                        person_list.value.modelName = modelName;
-                        person_list.value.type = type;
-                        if (desc) {
-                          person_list.value.desc = desc;
-                        }
-                      }
-            
-                      function changeAll(bol) {
-                        let checkList = person_list.value.list.filter((item) =>
-                          item.name.includes(person_list.value.keys)
-                        );
-                        person_list.value.list = person_list.value.list.map((item) => {
-                          return {
-                            ...item,
-                            isChecked: checkList.find((_item) => _item.id === item.id)
-                              ? bol
-                              : item.isChecked,
-                          };
-                        });
-                      }
-            
-                      function handleSubmitBtn() {
-                        const refreshFrameCount = () => {
-                          requestAnimationFrame(() => {
-                            person_list.value.visible = false;
-                            if (person_list.value.type === "SELECT") {
-                              let params = [];
-                              person_list.value.list
-                                .filter((item) => item.isChecked)
-                                .forEach((item) => {
-                                  params.push(item.id);
-                                });
-                              setData.value[currentTab.value].find(
-                                (item) => item.code === person_list.value.code
-                              ).configValue = JSON.stringify(params);
-                            } else if (person_list.value.type === "SELECT_AND_COUNT") {
-                              let params = {};
-                              person_list.value.list
-                                .filter((item) => Number(item.count))
-                                .forEach((item) => {
-                                  params = {
-                                    ...params,
-                                    [item.id]: Number(item.count),
-                                  };
-                                });
-                              setData.value[currentTab.value].find(
-                                (item) => item.code === person_list.value.code
-                              ).configValue = JSON.stringify(params);
-                            }
-                            person_list.value.keys = "";
-                            person_list.value.code = "";
-                            person_list.value.type = "";
-                            person_list.value.modelName = "";
-                            person_list.value.check_all = false;
-                            window.history.go(-1);
-                            scrollTop();
-                          });
-                        };
-            
-                        refreshFrameCount();
-                      }
-            
-                      function handleCancelBtn() {
-                        person_list.value.visible = false;
-                        person_list.value.keys = "";
-                        window.history.go(-1);
-                        scrollTop();
-                      }
-            
-                      function clearValue(item) {
-                        item.configValue = "";
-                      }
-            
-                      function handleData() {
-                        // const now = new Date();
-                        // const targetTime = new Date('2024-7-31 23:59:59');
-                        // if (now.getTime() > targetTime.getTime()) {
-                        //   return
-                        // }
-                        if (!setData.value) return;
-                        tabs.value.forEach((item, index) => {
-                          let params = {};
-                          setData.value[index].forEach((item) => {
-                            params[item.code] = {
-                              configValue: item.configValue,
-                            };
-                            if (
-                              !isVersion.value &&
-                              (item.code === "collectEnergy" ||
-                                item.code === "batchRobEnergy")
-                            ) {
-                              params[item.code] = {
-                                configValue: false,
-                              };
-                            }
-                          });
-                          window.HOOK.setModel(item.modelCode, JSON.stringify(params));
-                        });
-                      }
-            
-                      function changeCollapse(index) {
-                        setTimeout(() => {
-                          let dom = document.querySelector(`#collapse-item_${index}`);
-                          if (dom) {
-                            if (!isInViewPort(dom)) {
-                              document
-                                .querySelector(`#collapse-item_${index}`)
-                                .scrollIntoView();
-                            }
-                          }
-                        }, 800);
-                      }
-            
-                      function isInViewPort(element) {
-                        const viewWidth =
-                          window.innerWidth ||
-                          document.documentElement.clientWidth ||
-                          document.body.clientWidth;
-                        const viewHeight =
-                          window.innerHeight ||
-                          document.documentElement.clientHeight ||
-                          document.body.clientHeight;
-            
-                        const { top, right, bottom, left } =
-                          element.getBoundingClientRect();
-                        return top >= 0 && left >= 0;
-                      }
-            
-                      function scrollTop() {
-                        const content = document.querySelector("#dialog-list-content");
-                        const thumb = document.querySelector("#thumb");
-                        content.scrollTop = 0;
-                        thumb.style.top = `0px`;
-                      }
-            
-                      function addEvent() {
-                        const content = document.querySelector("#dialog-list-content");
-                        const thumb = document.querySelector("#thumb");
-                        let isDragging = false;
-                        let startY, startScrollTop;
-                        thumb.addEventListener("touchstart", function (e) {
-                          isDragging = true;
-                          startY = e.touches[0].clientY - thumb.offsetTop;
-                          startScrollTop = content.scrollTop;
-                          thumb.style.background = "rgba(0, 0, 0, 0.7)";
-                        });
-            
-                        document.addEventListener("touchmove", function (e) {
-                          if (!isDragging) return;
-                          const deltaY = e.touches[0].clientY - startY;
-                          const scrollHeight = content.scrollHeight - content.clientHeight;
-                          const thumbHeight = thumb.clientHeight;
-                          const maxThumbTop = content.clientHeight - thumbHeight;
-                          const thumbTop = Math.min(
-                            Math.max(thumb.scrollTop + deltaY, 0),
-                            maxThumbTop
-                          );
-                          const scrollTop = (thumbTop / maxThumbTop) * scrollHeight;
-                          content.scrollTop = scrollTop;
-                          thumb.style.top = `${thumbTop}px`;
-                        });
-            
-                        document.addEventListener("touchend", function (e) {
-                          isDragging = false;
-                          thumb.style.background = "rgba(0, 0, 0, 0.5)";
-                        });
-            
-                        content.addEventListener("scroll", function (e) {
-                          if (isDragging) return;
-                          const scrollHeight = content.scrollHeight - content.clientHeight;
-                          const thumbHeight = thumb.clientHeight;
-                          const maxThumbTop = content.clientHeight - thumbHeight;
-                          const thumbTop = (content.scrollTop / scrollHeight) * maxThumbTop;
-                          thumb.style.top = `${thumbTop}px`;
-                        });
-                      }
-                      window.handleData = handleData;
-                      window.isCanSave = true;
+            createApp({
+              setup() {
+                const themeMode = ref(themeInfo.mode);
+                const customColor = ref(themeInfo.customColor);
+                const useHolidayIcons = ref(themeInfo.useHolidayIcons);
+                const useAnimalIcons = ref(themeInfo.useAnimalIcons);
+                
+                const showThemePopup = ref(false);
+                const tempThemeMode = ref(themeInfo.mode);
+                const tempCustomColor = ref(themeInfo.customColor);
+                const tempUseHolidayIcons = ref(themeInfo.useHolidayIcons);
+                const tempUseAnimalIcons = ref(themeInfo.useAnimalIcons);
 
-                      const getModelIcon = (tabs_item, isSelected) => {
-                        const baseFolder = isSelected ? 'selected/' : '';
-                        if (activeHolidayVal.value !== "default") {
-                          return `./images/icon/model/${activeHolidayVal.value}/${baseFolder}${tabs_item.modelIcon}`;
-                        }
-                        return `./images/icon/model/${baseFolder}${tabs_item.modelIcon}`;
-                      };
-
-                      const getDefaultModelIcon = (tabs_item, isSelected) => {
-                        const baseFolder = isSelected ? 'selected/' : '';
-                        return `./images/icon/model/${baseFolder}${tabs_item.modelIcon}`;
-                      };
-
-                      const todayHolidayName = computed(() => {
-                        const h = activeHolidayVal.value;
-                        const holidayNames = {
-                          "default": "日常模式",
-                          "new_year": "元旦",
-                          "valentine": "情人节",
-                          "labor_day": "劳动节",
-                          "mothers_day": "母亲节",
-                          "fathers_day": "父亲节",
-                          "childrens_day": "儿童节",
-                          "national_day": "国庆节",
-                          "spring_festival": "春节",
-                          "new_years_eve": "除夕",
-                          "dragon_boat": "端午节",
-                          "qixi": "七夕节",
-                          "mid_autumn": "中秋节",
-                          "double_ninth": "重阳节"
-                        };
-                        return holidayNames[h] || h;
-                      });
-
-                      function previewHolidayTheme(holidayCode) {
-                        const vars = HOLIDAY_THEMES[holidayCode] || HOLIDAY_THEMES["default"];
-                        const root = document.documentElement;
-                        root.style.setProperty('--main-color', vars.mainColor);
-                        root.style.setProperty('--bg-color', vars.bgColor);
-                        root.style.setProperty('--card-bg-color', vars.cardBgColor);
-                        root.style.setProperty('--text-color', vars.textColor);
-                        root.style.setProperty('--active-color', vars.activeColor);
-                        
-                        activeHolidayVal.value = holidayCode;
-                        holidayInfoVal.value = vars;
-                        showToast(`已临时预览【${vars.title || '日常默认'}】主题`);
-                      }
-
-                      return {
-                        tabs,
-                        currentTab,
-                        setData,
-                        isVersion,
-                        com_person_list_filter,
-                        person_list,
-                        loadList,
-                        changeAll,
-                        handleSubmitBtn,
-                        handleCancelBtn,
-                        clearValue,
-                        changeCollapse,
-                        theme,
-                        addEvent,
-                        holidayInfo: holidayInfoVal,
-                        getModelIcon,
-                        getDefaultModelIcon,
-                        todayHolidayName,
-                        previewHolidayTheme
-                      };
-                    },
+                // 左侧导航菜单
+                const tabs = ref(JSON.parse(window.HOOK.getTabs()));
+                const currentTab = ref(
+                  localStorage.getItem("theme") === "theme1" ? null : 0
+                );
+                //设置默认值
+                const setData = ref(
+                  tabs.value.map((item) => {
+                    return JSON.parse(window.HOOK.getModel(item.modelCode));
                   })
-                    .use(vant)
-                    .use(vant.Lazyload)
-                    .mount("#app");
-        </script>
+                );
+                // 更新报名请改这儿
+                const isVersion = ref(true);
+      
+                const theme = ref(localStorage.getItem("theme") || "theme1");
+      
+                // 用户列表弹窗
+                const person_list = ref({
+                  desc: "",
+                  visible: false,
+                  title: "",
+                  code: "",
+                  list: [],
+                  keys: "",
+                  type: "",
+                  isLoading: true,
+                  len: 0,
+                  modelName: "",
+                  check_all: false,
+                });
+      
+                const com_person_list_filter = computed(() => {
+                  return person_list.value.list.filter((item) =>
+                    item.name.includes(person_list.value.keys)
+                  );
+                });
+      
+                watchEffect(() => {
+                  localStorage.setItem("theme", theme.value);
+                });
+      
+                function loadList(modelName, code, name, type, desc) {
+                  person_list.value.isLoading = true;
+                  window.history.pushState({ list: 1 }, "", "");
+                  person_list.value.visible = true;
+                  person_list.value.list = [];
+                  let obj = JSON.parse(window.HOOK.getField(modelName, code));
+                  let configValue = JSON.parse(
+                    setData.value[currentTab.value].find((i) => i.code === code)
+                      .configValue
+                  );
+                  let array = obj.expandValue
+                    .map((item) => {
+                      return {
+                        ...item,
+                        isChecked:
+                          type === "SELECT"
+                            ? configValue.includes(item.id)
+                            : (configValue.key &&
+                                configValue.key.includes(item.id)) ||
+                              (type === "SELECT_AND_COUNT" && configValue[item.id]) ||
+                              false,
+                        count:
+                          (type === "SELECT_AND_COUNT" && configValue[item.id]) || "",
+                      };
+                    })
+                    .sort((a, b) => a.name.localeCompare(b.name))
+                    .sort((a, b) => b.isChecked - a.isChecked || b.count - a.count);
+      
+                  let result = [];
+                  for (let i = 0; i < array.length; i += 30) {
+                    result.push(array.slice(i, i + 30));
+                  }
+      
+                  let _index = 0;
+                  person_list.value.len = array.length;
+                  const refreshFrameCount = () => {
+                    requestAnimationFrame(() => {
+                      if (_index === result.length - 1) {
+                        person_list.value.isLoading = false;
+                      }
+                      person_list.value.list.push(...result[_index]);
+                      _index++;
+      
+                      if (_index < result.length && person_list.value.visible) {
+                        refreshFrameCount();
+                      }
+                    });
+                  };
+      
+                  refreshFrameCount();
+                  person_list.value.desc = "";
+                  person_list.value.title = name;
+                  person_list.value.code = code;
+                  person_list.value.modelName = modelName;
+                  person_list.value.type = type;
+                  if (desc) {
+                    person_list.value.desc = desc;
+                  }
+                }
+      
+                function changeAll(bol) {
+                  let checkList = person_list.value.list.filter((item) =>
+                    item.name.includes(person_list.value.keys)
+                  );
+                  person_list.value.list = person_list.value.list.map((item) => {
+                    return {
+                      ...item,
+                      isChecked: checkList.find((_item) => _item.id === item.id)
+                        ? bol
+                        : item.isChecked,
+                    };
+                  });
+                }
+      
+                function handleSubmitBtn() {
+                  const refreshFrameCount = () => {
+                    requestAnimationFrame(() => {
+                      person_list.value.visible = false;
+                      if (person_list.value.type === "SELECT") {
+                        let params = [];
+                        person_list.value.list
+                          .filter((item) => item.isChecked)
+                          .forEach((item) => {
+                            params.push(item.id);
+                          });
+                        setData.value[currentTab.value].find(
+                          (item) => item.code === person_list.value.code
+                        ).configValue = JSON.stringify(params);
+                      } else if (person_list.value.type === "SELECT_AND_COUNT") {
+                        let params = {};
+                        person_list.value.list
+                          .filter((item) => Number(item.count))
+                          .forEach((item) => {
+                            params = {
+                              ...params,
+                              [item.id]: Number(item.count),
+                            };
+                          });
+                        setData.value[currentTab.value].find(
+                          (item) => item.code === person_list.value.code
+                        ).configValue = JSON.stringify(params);
+                      }
+                      person_list.value.keys = "";
+                      person_list.value.code = "";
+                      person_list.value.type = "";
+                      person_list.value.modelName = "";
+                      person_list.value.check_all = false;
+                      window.history.go(-1);
+                      scrollTop();
+                    });
+                  };
+      
+                  refreshFrameCount();
+                }
+      
+                function handleCancelBtn() {
+                  person_list.value.visible = false;
+                  person_list.value.keys = "";
+                  window.history.go(-1);
+                  scrollTop();
+                }
+      
+                function clearValue(item) {
+                  item.configValue = "";
+                }
+      
+                function handleData() {
+                  if (!setData.value) return;
+                  tabs.value.forEach((item, index) => {
+                    let params = {};
+                    setData.value[index].forEach((item) => {
+                      params[item.code] = {
+                        configValue: item.configValue,
+                      };
+                      if (
+                        !isVersion.value &&
+                        (item.code === "collectEnergy" ||
+                          item.code === "batchRobEnergy")
+                      ) {
+                        params[item.code] = {
+                          configValue: false,
+                        };
+                      }
+                    });
+                    window.HOOK.setModel(item.modelCode, JSON.stringify(params));
+                  });
+                }
+      
+                function changeCollapse(index) {
+                  setTimeout(() => {
+                    let dom = document.querySelector(`#collapse-item_${index}`);
+                    if (dom) {
+                      if (!isInViewPort(dom)) {
+                        document
+                          .querySelector(`#collapse-item_${index}`)
+                          .scrollIntoView();
+                      }
+                    }
+                  }, 800);
+                }
+      
+                function isInViewPort(element) {
+                  const viewWidth =
+                    window.innerWidth ||
+                    document.documentElement.clientWidth ||
+                    document.body.clientWidth;
+                  const viewHeight =
+                    window.innerHeight ||
+                    document.documentElement.clientHeight ||
+                    document.body.clientHeight;
+      
+                  const { top, right, bottom, left } =
+                    element.getBoundingClientRect();
+                  return top >= 0 && left >= 0;
+                }
+      
+                function scrollTop() {
+                  const content = document.querySelector("#dialog-list-content");
+                  const thumb = document.querySelector("#thumb");
+                  content.scrollTop = 0;
+                  thumb.style.top = `0px`;
+                }
+      
+                function addEvent() {
+                  const content = document.querySelector("#dialog-list-content");
+                  const thumb = document.querySelector("#thumb");
+                  let isDragging = false;
+                  let startY, startScrollTop;
+                  thumb.addEventListener("touchstart", function (e) {
+                    isDragging = true;
+                    startY = e.touches[0].clientY - thumb.offsetTop;
+                    startScrollTop = content.scrollTop;
+                    thumb.style.background = "rgba(0, 0, 0, 0.7)";
+                  });
+      
+                  document.addEventListener("touchmove", function (e) {
+                    if (!isDragging) return;
+                    const deltaY = e.touches[0].clientY - startY;
+                    const scrollHeight = content.scrollHeight - content.clientHeight;
+                    const thumbHeight = thumb.clientHeight;
+                    const maxThumbTop = content.clientHeight - thumbHeight;
+                    const thumbTop = Math.min(
+                      Math.max(thumb.scrollTop + deltaY, 0),
+                      maxThumbTop
+                    );
+                    const scrollTop = (thumbTop / maxThumbTop) * scrollHeight;
+                    content.scrollTop = scrollTop;
+                    thumb.style.top = `${thumbTop}px`;
+                  });
+      
+                  document.addEventListener("touchend", function (e) {
+                    isDragging = false;
+                    thumb.style.background = "rgba(0, 0, 0, 0.5)";
+                  });
+      
+                  content.addEventListener("scroll", function (e) {
+                    if (isDragging) return;
+                    const scrollHeight = content.scrollHeight - content.clientHeight;
+                    const thumbHeight = thumb.clientHeight;
+                    const maxThumbTop = content.clientHeight - thumbHeight;
+                    const thumbTop = (content.scrollTop / scrollHeight) * maxThumbTop;
+                    thumb.style.top = `${thumbTop}px`;
+                  });
+                }
+
+                // Theme Drawer setup
+                const activeHolidayVal = computed(() => {
+                  if (themeMode.value === "auto") {
+                    return checkTodayHoliday();
+                  } else if (themeMode.value === "custom") {
+                    return "default";
+                  } else {
+                    return themeMode.value;
+                  }
+                });
+
+                const holidayInfoVal = computed(() => {
+                  let vars;
+                  if (themeMode.value === "auto") {
+                    const todayCode = checkTodayHoliday();
+                    vars = HOLIDAY_THEMES[todayCode] || HOLIDAY_THEMES["default"];
+                  } else if (themeMode.value === "custom") {
+                    vars = createCustomThemeColors(customColor.value);
+                  } else {
+                    vars = HOLIDAY_THEMES[themeMode.value] || HOLIDAY_THEMES["default"];
+                  }
+                  return vars;
+                });
+
+                const todayHolidayName = computed(() => {
+                  const h = checkTodayHoliday();
+                  const holidayNames = {
+                    "default": "日常日常",
+                    "new_year": "元旦",
+                    "valentine": "情人节",
+                    "labor_day": "劳动节",
+                    "mothers_day": "母亲节",
+                    "fathers_day": "父亲节",
+                    "childrens_day": "儿童节",
+                    "national_day": "国庆节",
+                    "spring_festival": "春节",
+                    "new_years_eve": "除夕",
+                    "dragon_boat": "端午节",
+                    "qixi": "七夕节",
+                    "mid_autumn": "中秋节",
+                    "double_ninth": "重阳节"
+                  };
+                  return holidayNames[h] || "日常日常";
+                });
+
+                const currentThemeDesc = computed(() => {
+                  if (themeMode.value === "auto") {
+                    return `自动跟随 (${todayHolidayName.value})`;
+                  } else if (themeMode.value === "custom") {
+                    return `自定义配色 (${customColor.value})`;
+                  } else {
+                    const holidayNames = {
+                      "new_year": "元旦",
+                      "valentine": "情人节",
+                      "labor_day": "劳动节",
+                      "childrens_day": "儿童节",
+                      "dragon_boat": "端午节",
+                      "mid_autumn": "中秋节",
+                      "spring_festival": "春节",
+                      "national_day": "国庆节"
+                    };
+                    return holidayNames[themeMode.value] || themeMode.value;
+                  }
+                });
+
+                const previewVars = computed(() => {
+                  let vars;
+                  if (tempThemeMode.value === "auto") {
+                    const todayCode = checkTodayHoliday();
+                    vars = HOLIDAY_THEMES[todayCode] || HOLIDAY_THEMES["default"];
+                  } else if (tempThemeMode.value === "custom") {
+                    vars = createCustomThemeColors(tempCustomColor.value);
+                  } else {
+                    vars = HOLIDAY_THEMES[tempThemeMode.value] || HOLIDAY_THEMES["default"];
+                  }
+                  return vars;
+                });
+
+                watchEffect(() => {
+                  let vars;
+                  if (showThemePopup.value) {
+                    vars = previewVars.value;
+                  } else {
+                    vars = holidayInfoVal.value;
+                  }
+                  const root = document.documentElement;
+                  root.style.setProperty('--main-color', vars.mainColor);
+                  root.style.setProperty('--bg-color', vars.bgColor);
+                  root.style.setProperty('--card-bg-color', vars.cardBgColor);
+                  root.style.setProperty('--text-color', vars.textColor);
+                  root.style.setProperty('--active-color', vars.activeColor);
+
+                  if (typeof HOOK !== 'undefined' && HOOK.updateNativeToolbarColor) {
+                    try {
+                      HOOK.updateNativeToolbarColor(vars.bgColor, vars.textColor);
+                    } catch (e) {
+                      console.error("Update native toolbar color failed", e);
+                    }
+                  }
+                });
+
+                function openThemePopup() {
+                  tempThemeMode.value = themeMode.value;
+                  tempCustomColor.value = customColor.value;
+                  tempUseHolidayIcons.value = useHolidayIcons.value;
+                  tempUseAnimalIcons.value = useAnimalIcons.value;
+                  showThemePopup.value = true;
+                }
+
+                function cancelThemeSettings() {
+                  showThemePopup.value = false;
+                }
+
+                function saveThemeSettings() {
+                  themeMode.value = tempThemeMode.value;
+                  customColor.value = tempCustomColor.value;
+                  useHolidayIcons.value = tempUseHolidayIcons.value;
+                  useAnimalIcons.value = tempUseAnimalIcons.value;
+
+                  const config = {
+                    mode: themeMode.value,
+                    customColor: customColor.value,
+                    useHolidayIcons: useHolidayIcons.value,
+                    useAnimalIcons: useAnimalIcons.value
+                  };
+
+                  if (typeof HOOK !== 'undefined' && HOOK.setThemeConfigJson) {
+                    try {
+                      HOOK.setThemeConfigJson(JSON.stringify(config));
+                    } catch (e) {
+                      console.error("Save config via HOOK failed", e);
+                    }
+                  } else {
+                    localStorage.setItem("theme_mode", themeMode.value);
+                    localStorage.setItem("theme_color", customColor.value);
+                    localStorage.setItem("theme_use_holiday_icons", useHolidayIcons.value);
+                    localStorage.setItem("theme_use_animal_icons", useAnimalIcons.value);
+                  }
+
+                  showThemePopup.value = false;
+                  showToast("主题配置保存成功");
+                }
+
+                function setTempThemeMode(mode) {
+                  tempThemeMode.value = mode;
+                }
+
+                function selectPresetColor(hex) {
+                  tempThemeMode.value = 'custom';
+                  tempCustomColor.value = hex;
+                }
+
+                const getModelIcon = (tabs_item, isSelected) => {
+                  if (useAnimalIcons.value) {
+                    const nameOnly = tabs_item.modelIcon.split('.')[0];
+                    const hasAnimal = ["AncientTree", "AntCooperate", "AntFarm", "AntForest", "AntMember", "AntOcean", "AntOrchard", "AntSports", "GreenFinance"].includes(nameOnly);
+                    if (hasAnimal) {
+                      return `./images/icon/model/animal/${nameOnly}.png`;
+                    }
+                    return `./images/icon/model/animal/Default.png`;
+                  }
+                  const baseFolder = isSelected ? 'selected/' : '';
+                  if (useHolidayIcons.value && activeHolidayVal.value !== "default") {
+                    // Note: If you want to support holiday icons, check if they exist. Here we default to default behavior.
+                  }
+                  return `./images/icon/model/${baseFolder}${tabs_item.modelIcon}`;
+                };
+
+                const getDefaultModelIcon = (tabs_item, isSelected) => {
+                  if (useAnimalIcons.value) {
+                    return `./images/icon/model/animal/Default.png`;
+                  }
+                  const baseFolder = isSelected ? 'selected/' : '';
+                  return `./images/icon/model/${baseFolder}Default.png`;
+                };
+
+                const presetColors = [
+                  { hex: "#E64000", name: "经典橙" },
+                  { hex: "#0077B6", name: "科技蓝" },
+                  { hex: "#2C6E49", name: "森林绿" },
+                  { hex: "#FF758F", name: "樱花粉" },
+                  { hex: "#E91E63", name: "玫瑰红" },
+                  { hex: "#E65100", name: "活力橙" }
+                ];
+
+                window.handleData = handleData;
+                window.isCanSave = true;
+
+                return {
+                  tabs,
+                  currentTab,
+                  setData,
+                  isVersion,
+                  com_person_list_filter,
+                  person_list,
+                  loadList,
+                  changeAll,
+                  handleSubmitBtn,
+                  handleCancelBtn,
+                  clearValue,
+                  changeCollapse,
+                  theme,
+                  addEvent,
+                  holidayInfo: holidayInfoVal,
+                  getModelIcon,
+                  getDefaultModelIcon,
+                  todayHolidayName,
+                  currentThemeDesc,
+                  showThemePopup,
+                  tempThemeMode,
+                  tempCustomColor,
+                  tempUseHolidayIcons,
+                  tempUseAnimalIcons,
+                  previewVars,
+                  presetColors,
+                  openThemePopup,
+                  cancelThemeSettings,
+                  saveThemeSettings,
+                  setTempThemeMode,
+                  selectPresetColor
+                };
+              },
+            })
+              .use(vant)
+              .use(vant.Lazyload)
+              .mount("#app");
+</script>
     </body>
 </html>

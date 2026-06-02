@@ -16,9 +16,13 @@ import androidx.compose.material.icons.rounded.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import fansirsqi.xposed.sesame.ui.theme.app.HolidayTheme
+import fansirsqi.xposed.sesame.ui.BaseActivity
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.border
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -49,10 +53,33 @@ class PreviewDeviceInfoProvider : PreviewParameterProvider<Map<String, String>> 
 
 @Composable
 fun DeviceInfoCard(info: Map<String, String>, oneWord: String? = null) {
-    var activeHolidayOverride by remember { mutableStateOf<String?>(null) }
+    var themeMode by remember { mutableStateOf(HolidayTheme.getThemeMode()) }
+    var customColor by remember { mutableStateOf(HolidayTheme.getCustomColor()) }
+    var useHolidayIcons by remember { mutableStateOf(HolidayTheme.getUseHolidayIcons()) }
+    var useAnimalIcons by remember { mutableStateOf(HolidayTheme.getUseAnimalIcons()) }
+    var showDialog by remember { mutableStateOf(false) }
     
-    val currentHoliday = activeHolidayOverride ?: HolidayTheme.checkTodayHoliday()
-    val holidayColors = HolidayTheme.HOLIDAY_THEMES[currentHoliday]
+    val context = LocalContext.current
+    LaunchedEffect(themeMode, customColor, useHolidayIcons, useAnimalIcons) {
+        val activity = context as? BaseActivity
+        activity?.updateToolbarTheme()
+    }
+    
+    val holidayColors = remember(themeMode, customColor) {
+        val mode = themeMode
+        when {
+            mode == "auto" -> {
+                val holiday = HolidayTheme.checkTodayHoliday()
+                if (holiday == "default") HolidayTheme.HOLIDAY_THEMES["default"] else HolidayTheme.HOLIDAY_THEMES[holiday]
+            }
+            mode == "custom" -> {
+                HolidayTheme.createCustomThemeColors(customColor)
+            }
+            else -> {
+                HolidayTheme.HOLIDAY_THEMES[mode]
+            }
+        }
+    }
     
     val darkTheme = isSystemInDarkTheme()
     val localColorScheme = if (holidayColors != null) {
@@ -175,40 +202,61 @@ fun DeviceInfoCard(info: Map<String, String>, oneWord: String? = null) {
 
                                 Spacer(modifier = Modifier.height(12.dp))
 
-                                Text(
-                                    text = "🎨 临时预览节日配色：",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = accentColor.copy(alpha = 0.6f)
-                                )
-                                Spacer(modifier = Modifier.height(4.dp))
                                 Row(
                                     modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    val previewList = listOf(
-                                        "default" to "还原",
-                                        "childrens_day" to "儿童",
-                                        "dragon_boat" to "端午",
-                                        "mid_autumn" to "中秋",
-                                        "spring_festival" to "春节"
-                                    )
-                                    previewList.forEach { (code, name) ->
-                                        val isCurrent = currentHoliday == code
-                                        Surface(
-                                            color = if (isCurrent) brandColor else containerColor.copy(alpha = 0.3f),
-                                            shape = RoundedCornerShape(8.dp),
-                                            modifier = Modifier
-                                                .clickable {
-                                                    activeHolidayOverride = if (code == "default") null else code
-                                                }
-                                        ) {
-                                            Text(
-                                                text = name,
-                                                style = MaterialTheme.typography.labelSmall,
-                                                color = if (isCurrent) Color.White else accentColor,
-                                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                    val modeDesc = when {
+                                        themeMode == "auto" -> {
+                                            val today = HolidayTheme.checkTodayHoliday()
+                                            val names = mapOf(
+                                                "default" to "日常模式", "new_year" to "元旦", "valentine" to "情人节",
+                                                "labor_day" to "劳动节", "mothers_day" to "母亲节", "fathers_day" to "父亲节",
+                                                "childrens_day" to "儿童节", "national_day" to "国庆节", "spring_festival" to "春节",
+                                                "new_years_eve" to "除夕", "dragon_boat" to "端午节", "qixi" to "七夕节",
+                                                "mid_autumn" to "中秋节", "double_ninth" to "重阳节"
                                             )
+                                            "自动跟随 (${names[today] ?: today})"
                                         }
+                                        themeMode == "custom" -> "自定义配色 ($customColor)"
+                                        else -> {
+                                            val names = mapOf(
+                                                "new_year" to "元旦", "valentine" to "情人节", "labor_day" to "劳动节",
+                                                "childrens_day" to "儿童节", "dragon_boat" to "端午节", "mid_autumn" to "中秋节",
+                                                "spring_festival" to "春节", "national_day" to "国庆节"
+                                            )
+                                            names[themeMode] ?: themeMode
+                                        }
+                                    }
+                                    
+                                    Column {
+                                        Text(
+                                            text = "当前主题配色：",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = accentColor.copy(alpha = 0.6f)
+                                        )
+                                        Text(
+                                            text = modeDesc,
+                                            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
+                                            color = brandColor
+                                        )
+                                    }
+                                    
+                                    Button(
+                                        onClick = { showDialog = true },
+                                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                                        shape = RoundedCornerShape(8.dp),
+                                        colors = ButtonDefaults.buttonColors(containerColor = brandColor)
+                                    ) {
+                                        Icon(
+                                            Icons.Rounded.Palette,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(16.dp),
+                                            tint = Color.White
+                                        )
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text("切换主题", fontSize = 12.sp, color = Color.White)
                                     }
                                 }
 
@@ -291,6 +339,232 @@ fun DeviceInfoCard(info: Map<String, String>, oneWord: String? = null) {
                     }
                 }
             }
+        }
+        
+        if (showDialog) {
+            AlertDialog(
+                onDismissRequest = { showDialog = false },
+                title = { Text("主题样式与色彩配置", fontWeight = FontWeight.Bold, fontSize = 18.sp) },
+                text = {
+                    Column(
+                        modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState()),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        // Switch Options
+                        Text("功能开关：", style = MaterialTheme.typography.labelSmall, color = Color.Gray)
+                        Column(
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(Color.LightGray.copy(alpha = 0.15f), RoundedCornerShape(10.dp))
+                                .padding(8.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        useHolidayIcons = !useHolidayIcons
+                                        HolidayTheme.saveThemeConfigEx(themeMode, customColor, useHolidayIcons, useAnimalIcons)
+                                    },
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Checkbox(
+                                    checked = useHolidayIcons,
+                                    onCheckedChange = {
+                                        useHolidayIcons = it ?: true
+                                        HolidayTheme.saveThemeConfigEx(themeMode, customColor, useHolidayIcons, useAnimalIcons)
+                                    }
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("启用节日限定任务图标", fontSize = 13.sp, fontWeight = FontWeight.Medium)
+                            }
+                            
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        useAnimalIcons = !useAnimalIcons
+                                        HolidayTheme.saveThemeConfigEx(themeMode, customColor, useHolidayIcons, useAnimalIcons)
+                                    },
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Checkbox(
+                                    checked = useAnimalIcons,
+                                    onCheckedChange = {
+                                        useAnimalIcons = it ?: false
+                                        HolidayTheme.saveThemeConfigEx(themeMode, customColor, useHolidayIcons, useAnimalIcons)
+                                    }
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("启用萌宠主题图标 (WebView)", fontSize = 13.sp, fontWeight = FontWeight.Medium)
+                            }
+                        }
+
+                        // Option 1: Follow Today
+                        Surface(
+                            color = if (themeMode == "auto") brandColor.copy(alpha = 0.15f) else Color.Transparent,
+                            border = androidx.compose.foundation.BorderStroke(
+                                1.dp, 
+                                if (themeMode == "auto") brandColor else Color.LightGray.copy(alpha = 0.5f)
+                            ),
+                            shape = RoundedCornerShape(10.dp),
+                            modifier = Modifier.fillMaxWidth().clickable {
+                                themeMode = "auto"
+                                HolidayTheme.saveThemeConfigEx("auto", customColor, useHolidayIcons, useAnimalIcons)
+                            }
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(12.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                RadioButton(selected = themeMode == "auto", onClick = {
+                                    themeMode = "auto"
+                                    HolidayTheme.saveThemeConfigEx("auto", customColor, useHolidayIcons, useAnimalIcons)
+                                })
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Column {
+                                    Text("自动跟随今日节日", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                                    val todayHoliday = HolidayTheme.checkTodayHoliday()
+                                    val names = mapOf(
+                                        "default" to "日常模式", "new_year" to "元旦", "valentine" to "情人节",
+                                        "labor_day" to "劳动节", "mothers_day" to "母亲节", "fathers_day" to "父亲节",
+                                        "childrens_day" to "儿童节", "national_day" to "国庆节", "spring_festival" to "春节",
+                                        "new_years_eve" to "除夕", "dragon_boat" to "端午节", "qixi" to "七夕节",
+                                        "mid_autumn" to "中秋节", "double_ninth" to "重阳节"
+                                    )
+                                    Text("当前检测到: ${names[todayHoliday] ?: todayHoliday}", fontSize = 11.sp, color = Color.Gray)
+                                }
+                            }
+                        }
+                        
+                        // Option 2: Fixed Holidays
+                        Text("固定节日主题配色：", style = MaterialTheme.typography.labelSmall, color = Color.Gray)
+                        val holidays = listOf(
+                            "new_year" to "元旦",
+                            "valentine" to "情人",
+                            "labor_day" to "劳动",
+                            "childrens_day" to "儿童",
+                            "dragon_boat" to "端午",
+                            "mid_autumn" to "中秋",
+                            "spring_festival" to "春节",
+                            "national_day" to "国庆"
+                        )
+                        
+                        val chunkedHolidays = holidays.chunked(3)
+                        chunkedHolidays.forEach { rowItems ->
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                rowItems.forEach { (code, name) ->
+                                    val isSelected = themeMode == code
+                                    Surface(
+                                        color = if (isSelected) brandColor.copy(alpha = 0.15f) else Color.Transparent,
+                                        border = androidx.compose.foundation.BorderStroke(
+                                            1.dp,
+                                            if (isSelected) brandColor else Color.LightGray.copy(alpha = 0.5f)
+                                        ),
+                                        shape = RoundedCornerShape(8.dp),
+                                        modifier = Modifier.weight(1f).clickable {
+                                            themeMode = code
+                                            HolidayTheme.saveThemeConfigEx(code, customColor, useHolidayIcons, useAnimalIcons)
+                                        }
+                                    ) {
+                                        Column(
+                                            modifier = Modifier.padding(8.dp),
+                                            horizontalAlignment = Alignment.CenterHorizontally
+                                        ) {
+                                            Text(name, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                                            Spacer(modifier = Modifier.height(4.dp))
+                                            val holidayColor = HolidayTheme.HOLIDAY_THEMES[code]
+                                            if (holidayColor != null) {
+                                                Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+                                                    Box(modifier = Modifier.size(8.dp).clip(CircleShape).background(holidayColor.mainColor))
+                                                    Box(modifier = Modifier.size(8.dp).clip(CircleShape).background(holidayColor.bgColor))
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                                if (rowItems.size < 3) {
+                                    repeat(3 - rowItems.size) {
+                                        Box(modifier = Modifier.weight(1f))
+                                    }
+                                }
+                            }
+                        }
+                        
+                        // Option 3: Custom Color
+                        Text("自定义色彩主题：", style = MaterialTheme.typography.labelSmall, color = Color.Gray)
+                        Surface(
+                            color = if (themeMode == "custom") brandColor.copy(alpha = 0.15f) else Color.Transparent,
+                            border = androidx.compose.foundation.BorderStroke(
+                                1.dp,
+                                if (themeMode == "custom") brandColor else Color.LightGray.copy(alpha = 0.5f)
+                            ),
+                            shape = RoundedCornerShape(10.dp),
+                            modifier = Modifier.fillMaxWidth().clickable {
+                                themeMode = "custom"
+                                HolidayTheme.saveThemeConfigEx("custom", customColor, useHolidayIcons, useAnimalIcons)
+                            }
+                        ) {
+                            Column(modifier = Modifier.padding(12.dp)) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    RadioButton(selected = themeMode == "custom", onClick = {
+                                        themeMode = "custom"
+                                        HolidayTheme.saveThemeConfigEx("custom", customColor, useHolidayIcons, useAnimalIcons)
+                                    })
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text("启用自定义色彩", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                                }
+                                
+                                Spacer(modifier = Modifier.height(8.dp))
+                                
+                                val presets = listOf(
+                                    "#E64000", "#0077B6", "#2C6E49", "#FF758F", 
+                                    "#E91E63", "#E65100", "#9C27B0", "#009688"
+                                )
+                                val chunkedPresets = presets.chunked(4)
+                                chunkedPresets.forEach { rowPresets ->
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        rowPresets.forEach { hex ->
+                                            val isCurrentColor = customColor.lowercase() == hex.lowercase()
+                                            Box(
+                                                modifier = Modifier
+                                                    .size(32.dp)
+                                                    .clip(RoundedCornerShape(6.dp))
+                                                    .background(Color(android.graphics.Color.parseColor(hex)))
+                                                    .clickable {
+                                                        themeMode = "custom"
+                                                        customColor = hex
+                                                        HolidayTheme.saveThemeConfigEx("custom", hex, useHolidayIcons, useAnimalIcons)
+                                                    }
+                                                    .let {
+                                                        if (isCurrentColor && themeMode == "custom") {
+                                                            it.border(2.dp, Color.Black, RoundedCornerShape(6.dp))
+                                                        } else {
+                                                            it
+                                                        }
+                                                    }
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                },
+                confirmButton = {
+                    Button(onClick = { showDialog = false }) {
+                        Text("完成")
+                    }
+                }
+            )
         }
     }
 }

@@ -150,6 +150,9 @@ class MainActivity : BaseActivity() {
 
     override fun onResume() {
         super.onResume()
+        val runTypeStr = if (ViewAppInfo.veriftag) RunType.LOADED.nickName else RunType.DISABLE.nickName
+        updateSubTitle(runTypeStr)
+        
         if (hasPermissions) {
             // 如果当前状态是禁用，3秒后更新为禁用状态
             if (!ViewAppInfo.veriftag) {
@@ -478,25 +481,6 @@ class MainActivity : BaseActivity() {
 
     fun updateSubTitle(runType: String) {
         baseTitle = ViewAppInfo.appTitle + "[" + runType + "]" + userNickName
-        //Log.runtime("updateSubTitle: $baseTitle")
-        when (runType) {
-            RunType.DISABLE.nickName -> setBaseTitleTextColor(
-                ContextCompat.getColor(
-                    this, R.color.not_active_text
-                )
-            )
-
-            RunType.ACTIVE.nickName -> setBaseTitleTextColor(
-                ContextCompat.getColor(
-                    this, R.color.active_text
-                )
-            )
-
-            RunType.LOADED.nickName -> setBaseTitleTextColor(
-                ContextCompat.getColor(
-                    this, R.color.textColorPrimary
-                )
-            )
-        }
+        updateToolbarTheme()
     }
 }

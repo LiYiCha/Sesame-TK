@@ -75,7 +75,7 @@ object HolidayTheme {
             story = "“两情若是久长时，又岂在朝朝暮暮。” 星汉灿烂，鹊桥飞架，愿深情不被辜负。"
         ),
         "mid_autumn" to ThemeColors(
-            mainColor = Color(0xFFFBC02D), bgColor = Color(0xFFE0E1DD), cardBgColor = Color(0xFF1B263B), textColor = Color.White, activeColor = Color(0xFFF1C40F),
+            mainColor = Color(0xFFFBC02D), bgColor = Color(0xFFFFFDE7), cardBgColor = Color.White, textColor = Color(0xFF1E1B4B), activeColor = Color(0xFFF1C40F),
             title = "🌕 中秋团圆 · 月满人间",
             story = "“但愿人长久，千里共婵娟。” 桂花飘香，圆月高悬。无论身处何方，共赏此轮明月。"
         ),
@@ -197,10 +197,37 @@ object HolidayTheme {
         }
     }
 
+    fun getUseHolidayIcons(): Boolean {
+        return try {
+            DataStore.get("custom_theme_use_holiday_icons", java.lang.Boolean::class.java) as? Boolean ?: true
+        } catch (e: Exception) {
+            true
+        }
+    }
+
+    fun getUseAnimalIcons(): Boolean {
+        return try {
+            DataStore.get("custom_theme_use_animal_icons", java.lang.Boolean::class.java) as? Boolean ?: false
+        } catch (e: Exception) {
+            false
+        }
+    }
+
     fun saveThemeConfig(mode: String, color: String) {
         try {
             DataStore.put("custom_theme_mode", mode)
             DataStore.put("custom_theme_color", color)
+        } catch (e: Exception) {
+            // ignore
+        }
+    }
+
+    fun saveThemeConfigEx(mode: String, color: String, useHoliday: Boolean, useAnimal: Boolean) {
+        try {
+            DataStore.put("custom_theme_mode", mode)
+            DataStore.put("custom_theme_color", color)
+            DataStore.put("custom_theme_use_holiday_icons", useHoliday)
+            DataStore.put("custom_theme_use_animal_icons", useAnimal)
         } catch (e: Exception) {
             // ignore
         }

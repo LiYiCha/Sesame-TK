@@ -394,13 +394,17 @@ public class WebSettingsActivity extends BaseActivity {
             try {
                 String mode = fansirsqi.xposed.sesame.ui.theme.app.HolidayTheme.INSTANCE.getThemeMode();
                 String color = fansirsqi.xposed.sesame.ui.theme.app.HolidayTheme.INSTANCE.getCustomColor();
+                boolean useHolidayIcons = fansirsqi.xposed.sesame.ui.theme.app.HolidayTheme.INSTANCE.getUseHolidayIcons();
+                boolean useAnimalIcons = fansirsqi.xposed.sesame.ui.theme.app.HolidayTheme.INSTANCE.getUseAnimalIcons();
                 org.json.JSONObject obj = new org.json.JSONObject();
                 obj.put("mode", mode);
                 obj.put("customColor", color);
+                obj.put("useHolidayIcons", useHolidayIcons);
+                obj.put("useAnimalIcons", useAnimalIcons);
                 return obj.toString();
             } catch (Exception e) {
                 Log.printStackTrace(e);
-                return "{\"mode\":\"auto\",\"customColor\":\"#E64000\"}";
+                return "{\"mode\":\"auto\",\"customColor\":\"#E64000\",\"useHolidayIcons\":true,\"useAnimalIcons\":false}";
             }
         }
 
@@ -410,6 +414,75 @@ public class WebSettingsActivity extends BaseActivity {
                 fansirsqi.xposed.sesame.ui.theme.app.HolidayTheme.INSTANCE.saveThemeConfig(mode, color);
                 runOnUiThread(() -> {
                     onContentChanged();
+                });
+            } catch (Exception e) {
+                Log.printStackTrace(e);
+            }
+        }
+
+        @JavascriptInterface
+        public void setThemeConfigJson(String json) {
+            try {
+                org.json.JSONObject obj = new org.json.JSONObject(json);
+                String mode = obj.optString("mode", "auto");
+                String color = obj.optString("customColor", "#E64000");
+                boolean useHoliday = obj.optBoolean("useHolidayIcons", true);
+                boolean useAnimal = obj.optBoolean("useAnimalIcons", false);
+                fansirsqi.xposed.sesame.ui.theme.app.HolidayTheme.INSTANCE.saveThemeConfigEx(mode, color, useHoliday, useAnimal);
+                runOnUiThread(() -> {
+                    onContentChanged();
+                });
+            } catch (Exception e) {
+                Log.printStackTrace(e);
+            }
+        }
+
+        @JavascriptInterface
+        public void updateNativeToolbarColor(String bgColorHex, String textColorHex) {
+            try {
+                runOnUiThread(() -> {
+                    try {
+                        int bgColor = android.graphics.Color.parseColor(bgColorHex);
+                        int textColor = android.graphics.Color.parseColor(textColorHex);
+                        
+                        com.google.android.material.appbar.MaterialToolbar tb = getToolbar();
+                        if (tb != null) {
+                            int startColor = bgColor;
+                            int endColor = android.graphics.Color.rgb(
+                                (int) (android.graphics.Color.red(startColor) * 0.2f + 255 * 0.8f),
+                                (int) (android.graphics.Color.green(startColor) * 0.2f + 255 * 0.8f),
+                                (int) (android.graphics.Color.blue(startColor) * 0.2f + 255 * 0.8f)
+                            );
+                            
+                            com.google.android.material.appbar.AppBarLayout appBar = 
+                                (com.google.android.material.appbar.AppBarLayout) tb.getParent();
+                            if (appBar != null) {
+                                android.graphics.drawable.GradientDrawable gradientDrawable = 
+                                    new android.graphics.drawable.GradientDrawable(
+                                        android.graphics.drawable.GradientDrawable.Orientation.TOP_BOTTOM,
+                                        new int[]{startColor, endColor}
+                                    );
+                                appBar.setBackground(gradientDrawable);
+                                tb.setBackgroundColor(android.graphics.Color.TRANSPARENT);
+                            } else {
+                                tb.setBackgroundColor(startColor);
+                            }
+                            
+                            tb.setTitleTextColor(textColor);
+                            tb.setSubtitleTextColor(textColor);
+                        }
+                        
+                        float r = android.graphics.Color.red(bgColor) / 255f;
+                        float g = android.graphics.Color.green(bgColor) / 255f;
+                        float b = android.graphics.Color.blue(bgColor) / 255f;
+                        float luminance = 0.2126f * r + 0.7152f * g + 0.0722f * b;
+                        boolean light = luminance > 0.6f;
+                        
+                        new androidx.core.view.WindowInsetsControllerCompat(getWindow(), getWindow().getDecorView())
+                            .setAppearanceLightStatusBars(light);
+                    } catch (Exception e) {
+                        Log.printStackTrace(e);
+                    }
                 });
             } catch (Exception e) {
                 Log.printStackTrace(e);

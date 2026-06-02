@@ -36,10 +36,10 @@ object DexKitHelper {
     /**
      * 异步通过特征搜索方法
      */
-    suspend fun findMethodByCode(pattern: String): Method? = withContext(Dispatchers.IO) {
-        // TODO: Implement code pattern search
-        null
-    }
+//    suspend fun findMethodByCode(pattern: String): Method? = withContext(Dispatchers.IO) {
+//        // TODO: Implement code pattern search
+//        null
+//    }
 
     /**
      * 异步搜索类
