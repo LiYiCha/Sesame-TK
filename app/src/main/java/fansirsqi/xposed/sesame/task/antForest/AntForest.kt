@@ -1038,16 +1038,12 @@ class AntForest : ModelTask(), EnergyCollectCallback {
     /**
      * 每日重置
      */
-    // 上次检查的日期（用于判断是否跨天）
-    private var lastCheckDate: String? = null
-
     private fun checkAndUpdateCounters() {
-        val today = TimeUtil.getDateStr() // 获取当前日期，如 "2025-10-07"
-        // 只在日期变化时重置计数器（跨天）
-        if (lastCheckDate != today) {
+        // 使用 Status 每日持久化标记，避免内存变量 lastCheckDate 丢失（如改动设置重载或进程重启）导致误重置
+        if (!Status.hasFlagToday("forest::countersReset")) {
             resetTaskCounters()
-            lastCheckDate = today
-            Log.record(TAG, "✅ 检测到新的一天[$today]，重置计数器")
+            Status.setFlagToday("forest::countersReset")
+            Log.record(TAG, "✅ 检测到新的一天，重置森林任务计数器与频率限制")
         }
     }
 

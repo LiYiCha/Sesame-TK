@@ -1368,4 +1368,33 @@ public class AntFarmRpcCall {
         }
     }
 
+    public static String queryOptionalPlay() {
+        String data = "[{" +
+                "\"bizType\":\"ANTFARM\"," +
+                "\"commonDegradeFilterRequest\":{" +
+                "\"deviceLevel\":\"high\"," +
+                "\"platform\":\"Android\"," +
+                "\"unityDeviceLevel\":\"high\"" +
+                "}," +
+                "\"playTypeList\":[\"TASK_TRIGGER\"]," +
+                "\"requestType\":\"NORMAL\"," +
+                "\"sceneCode\":\"ANTFARM_COMMON\"," +
+                "\"source\":\"H5\"," +
+                "\"version\":\"" + VERSION + "\"" +
+                "}]";
+        return RequestManager.requestString("com.alipay.charitygamecenter.queryOptionalPlay", data);
+    }
+
+    public static String receiveTaskAwardantfarm(String taskType, int awardCount) {
+        String data = "[{" +
+                "\"awardCountForReceive\":" + awardCount + "," +
+                "\"ignoreLimit\":true," +
+                "\"requestType\":\"RPC\"," +
+                "\"sceneCode\":\"ANTFARM_LEYUAN_DAILY_TASK\"," +
+                "\"source\":\"antfarm\"," +
+                "\"taskType\":\"" + taskType + "\"" +
+                "}]";
+        return RequestManager.requestString("com.alipay.antieptask.receiveTaskAwardantfarm", data);
+    }
+
 }

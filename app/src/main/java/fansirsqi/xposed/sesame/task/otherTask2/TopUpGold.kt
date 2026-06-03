@@ -5,6 +5,7 @@ import fansirsqi.xposed.sesame.hook.ApplicationHook
 import fansirsqi.xposed.sesame.hook.internal.AlipayMiniMarkHelper
 import fansirsqi.xposed.sesame.hook.internal.AuthCodeHelper
 import fansirsqi.xposed.sesame.util.Log
+import fansirsqi.xposed.sesame.util.RandomUtil
 import fansirsqi.xposed.sesame.util.TimeUtil
 import fansirsqi.xposed.sesame.util.maps.UserMap
 import okhttp3.MediaType.Companion.toMediaType
@@ -48,12 +49,11 @@ class TopUpGold {
                 if (executeSignIn(token, userId)) {
                     Status.setFlagToday("topUpGold_signed_in")
                 }
-                Thread.sleep((1500..3000).random().toLong())
+                Thread.sleep(RandomUtil.nextGaussianLong(1500, 3000))
             }
 
-            Log.other(TAG, "开始执行充值金任务...")
             var completedCount = 0
-            val maxTasks = 10
+            val maxTasks = 15
             var loopCount = 0
 
             while (loopCount < maxTasks) {
@@ -114,16 +114,13 @@ class TopUpGold {
 
                 // 每次完成一定量任务后要随机延迟多一点 (每完成3个，休息10-15秒；否则休息3-4.5秒)
                 if (completedCount > 0 && completedCount % 3 == 0) {
-                    val longSleep = (10000..15000).random().toLong()
+                    val longSleep = RandomUtil.nextGaussianLong(10000, 15000)
                     Log.other(TAG, "☕ 已完成 $completedCount 个任务，随机休眠 ${longSleep / 1000} 秒...")
                     Thread.sleep(longSleep)
                 } else {
-                    Thread.sleep((3000..4500).random().toLong())
+                    Thread.sleep(RandomUtil.nextGaussianLong(3000, 4500))
                 }
             }
-
-            Log.other(TAG, "任务执行结束，完成 $completedCount 个任务")
-            Status.setFlagToday("topUpGoldTask_completed")
 
         } catch (e: Exception) {
             Log.printStackTrace(e)

@@ -263,6 +263,11 @@ abstract class ModelTask : Model() {
                 } finally {
                     isRunning = false
                     updateNextExecText(-1)
+                    try {
+                        fansirsqi.xposed.sesame.data.Status.save(java.util.Calendar.getInstance(), true)
+                    } catch (t: Throwable) {
+                        Log.printStackTrace("保存状态异常", t)
+                    }
                 }
             }
         }

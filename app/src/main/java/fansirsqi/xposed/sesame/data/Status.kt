@@ -9,6 +9,7 @@ import fansirsqi.xposed.sesame.util.Log
 import fansirsqi.xposed.sesame.util.StringUtil
 import fansirsqi.xposed.sesame.util.TimeUtil
 import fansirsqi.xposed.sesame.util.maps.UserMap
+import kotlinx.coroutines.*
 import java.util.Calendar
 import java.util.Date
 
@@ -91,6 +92,8 @@ class Status {
 
     companion object {
         private val TAG = Status::class.java.simpleName
+        private val statusScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+        private var saveJob: Job? = null
 
         @JvmStatic
         val INSTANCE: Status = Status()
@@ -500,24 +503,43 @@ class Status {
 
         @Synchronized
         @JvmStatic
-        fun save(nowCalendar: Calendar = Calendar.getInstance()) {
+        @JvmOverloads
+        fun save(nowCalendar: Calendar = Calendar.getInstance(), immediate: Boolean = false) {
             val currentUid = UserMap.currentUid
             if (StringUtil.isEmpty(currentUid)) {
                 Log.record(TAG, "用户为空，状态保存失败")
                 throw RuntimeException("用户为空，状态保存失败")
             }
-            if (updateDay(nowCalendar)) {
-                Log.record(TAG, "重置 statistics.json")
-            } else {
-                Log.record(TAG, "保存 status.json")
-            }
             val lastSaveTime = INSTANCE.saveTime
+            INSTANCE.saveTime = System.currentTimeMillis()
+            val isDayChanged = updateDay(nowCalendar)
+            
+            if (isDayChanged || immediate) {
+                saveJob?.cancel()
+                saveJob = null
+                writeStatusToFile(currentUid, isDayChanged, lastSaveTime)
+            } else {
+                saveJob?.cancel()
+                saveJob = statusScope.launch {
+                    delay(2000)
+                    synchronized(Status::class.java) {
+                        writeStatusToFile(currentUid, false, lastSaveTime)
+                    }
+                }
+            }
+        }
+
+        private fun writeStatusToFile(currentUid: String, isDayChanged: Boolean, lastSaveTime: Long) {
             try {
-                INSTANCE.saveTime = System.currentTimeMillis()
+                if (isDayChanged) {
+                    Log.record(TAG, "重置 statistics.json")
+                } else {
+                    Log.record(TAG, "保存 status.json (防抖异步)")
+                }
                 Files.write2File(JsonUtil.formatJson(INSTANCE), Files.getStatusFile(currentUid)!!)
             } catch (e: Exception) {
                 INSTANCE.saveTime = lastSaveTime
-                throw e
+                Log.record(TAG, "保存 status.json 失败: ${e.message}")
             }
         }
 

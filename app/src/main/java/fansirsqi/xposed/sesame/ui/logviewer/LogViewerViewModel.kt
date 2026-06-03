@@ -51,6 +51,7 @@ class LogViewerViewModel : ViewModel() {
     data class UiState(
         val fullLogText: String = "",
         val displayedLines: List<String> = emptyList(),
+        val displayedLineIndices: List<Int> = emptyList(), // 保存过滤后每一行在原始文本中的索引
         val filterKeyword: String = "",
         val searchKeyword: String = "",
         val searchResults: List<SearchResult> = emptyList(),
@@ -359,15 +360,15 @@ class LogViewerViewModel : ViewModel() {
         _uiState.update { it.copy(fontSize = clamped) }
     }
 
-    /**
-     * 应用筛选和日志级别过滤
-     */
     private fun applyFilters() {
         viewModelScope.launch(Dispatchers.Default) {
             val state = _uiState.value
             val lines = state.fullLogText.split('\n')
 
-            val filteredLines = lines.filter { line ->
+            val filteredLines = mutableListOf<String>()
+            val filteredIndices = mutableListOf<Int>()
+
+            lines.forEachIndexed { index, line ->
                 // 应用关键字筛选
                 val matchesFilter = state.filterKeyword.isEmpty() ||
                                    line.contains(state.filterKeyword, ignoreCase = true)
@@ -381,12 +382,16 @@ class LogViewerViewModel : ViewModel() {
                     }
                 }
 
-                matchesFilter && matchesLevel
+                if (matchesFilter && matchesLevel) {
+                    filteredLines.add(line)
+                    filteredIndices.add(index)
+                }
             }
 
             _uiState.update {
                 it.copy(
                     displayedLines = filteredLines,
+                    displayedLineIndices = filteredIndices,
                     statusMessage = if (state.filterKeyword.isNotEmpty() ||
                                       state.enabledLogLevels.size < LogLevel.entries.size) {
                         "筛选结果: ${filteredLines.size}/${lines.size} 行"

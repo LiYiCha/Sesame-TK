@@ -149,7 +149,7 @@
                     </van-collapse>
                 </div>
                 <div class="theme2" v-else>
-                    <van-tabs v-model:active="currentTab" swipeable sticky offset-top="1" title-active-color="#E64000">
+                    <van-tabs v-model:active="currentTab" swipeable sticky offset-top="1" title-active-color="var(--main-color)">
                         <van-tab :name="tabs_index" :key="tabs_item.modelCode" v-for="(tabs_item,tabs_index) in tabs">
                             <template #title>
                                 <div class="title-box">

@@ -9,12 +9,48 @@ public class RandomUtil {
     private static final Random rnd = new Random();
 
     /**
-     * 生成一个随机延迟时间（100到300毫秒之间）。
+     * 生成一个随机延迟时间（100到300毫秒之间），符合高斯（正态）分布。
      *
      * @return 生成的随机延迟时间（毫秒）。
      */
     public static int delay() {
-        return nextInt(100, 300);
+        return nextGaussianInt(100, 300);
+    }
+
+    /**
+     * 根据高斯（正态）分布生成指定范围内的随机整数（均值为中值，标准差为宽度的 1/6，截断边界）。
+     *
+     * @param min 最小值。
+     * @param max 最大值。
+     * @return 随机整数。
+     */
+    public static int nextGaussianInt(int min, int max) {
+        if (min >= max) return min;
+        double mean = min + (max - min) / 2.0;
+        double stdDev = (max - min) / 6.0;
+        double gaussianValue = rnd.nextGaussian() * stdDev + mean;
+        int result = (int) Math.round(gaussianValue);
+        if (result < min) return min;
+        if (result > max) return max;
+        return result;
+    }
+
+    /**
+     * 根据高斯（正态）分布生成指定范围内的随机长整数（均值为中值，标准差为宽度的 1/6，截断边界）。
+     *
+     * @param min 最小值。
+     * @param max 最大值。
+     * @return 随机长整数。
+     */
+    public static long nextGaussianLong(long min, long max) {
+        if (min >= max) return min;
+        double mean = min + (max - min) / 2.0;
+        double stdDev = (max - min) / 6.0;
+        double gaussianValue = rnd.nextGaussian() * stdDev + mean;
+        long result = Math.round(gaussianValue);
+        if (result < min) return min;
+        if (result > max) return max;
+        return result;
     }
 
     /**

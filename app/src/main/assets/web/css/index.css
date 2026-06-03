@@ -705,7 +705,7 @@ video {
 }
 .save-theme-btn {
   flex: 1;
-  background: #FF5722;
+  background: linear-gradient(135deg, var(--main-color), var(--active-color)) !important;
   border: 3px solid #222222;
   border-radius: 16px;
   color: white;

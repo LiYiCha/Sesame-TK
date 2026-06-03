@@ -115,7 +115,11 @@ open class BaseActivity : AppCompatActivity() {
         val argbColor = if (holidayColors != null) {
             holidayColors.bgColor.toArgb() // 使用浅色背景 (淡色)
         } else {
-            ContextCompat.getColor(this, R.color.colorPrimary)
+            if (this is WebSettingsActivity) {
+                android.graphics.Color.parseColor("#F6F6F6")
+            } else {
+                ContextCompat.getColor(this, R.color.colorPrimary)
+            }
         }
         
         // 1. Calculate gradient colors: from argbColor to a lighter/softer version

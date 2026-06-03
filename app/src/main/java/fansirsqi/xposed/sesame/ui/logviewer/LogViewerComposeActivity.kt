@@ -201,38 +201,38 @@ fun LogViewerScreen(
     var showFilterPanel by remember { mutableStateOf(false) }
     var showLevelFilter by remember { mutableStateOf(false) }
 
-    val mintBg = Color(0xFFE9F5E9)
-    val deepGreen = Color(0xFF2D5A27)
+    val topBarBg = MaterialTheme.colorScheme.primaryContainer
+    val topBarContent = MaterialTheme.colorScheme.onPrimaryContainer
 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("日志查看器", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = deepGreen) },
+                title = { Text("日志查看器", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = topBarContent) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Rounded.ArrowBack, "返回", tint = deepGreen)
+                        Icon(Icons.AutoMirrored.Rounded.ArrowBack, "返回", tint = topBarContent)
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = mintBg,
-                    scrolledContainerColor = mintBg
+                    containerColor = topBarBg,
+                    scrolledContainerColor = topBarBg
                 ),
                 actions = {
                     // 搜索按钮
                     IconButton(onClick = { showSearchPanel = !showSearchPanel }) {
-                        Icon(Icons.Rounded.Search, "搜索", tint = deepGreen)
+                        Icon(Icons.Rounded.Search, "搜索", tint = topBarContent)
                     }
                     // 筛选按钮
                     IconButton(onClick = { showFilterPanel = !showFilterPanel }) {
-                        Icon(Icons.Rounded.FilterList, "筛选", tint = deepGreen)
+                        Icon(Icons.Rounded.FilterList, "筛选", tint = topBarContent)
                     }
                     // 日志级别过滤按钮
                     IconButton(onClick = { showLevelFilter = !showLevelFilter }) {
-                        Icon(Icons.Rounded.Settings, "日志级别", tint = deepGreen)
+                        Icon(Icons.Rounded.Settings, "日志级别", tint = topBarContent)
                     }
                     // 更多菜单
                     IconButton(onClick = { showMenu = true }) {
-                        Icon(Icons.Rounded.MoreVert, "更多", tint = deepGreen)
+                        Icon(Icons.Rounded.MoreVert, "更多", tint = topBarContent)
                     }
                     DropdownMenu(
                         expanded = showMenu,

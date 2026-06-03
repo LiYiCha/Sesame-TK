@@ -2133,6 +2133,12 @@ class AntMember : ModelTask() {
                         Log.other("芝麻炼金⚗️[广告任务完成: " + title + "]#获得" + reward + "粒")
                     } else {
                         Log.error(TAG, "芝麻炼金广告任务上报失败: $title - $adFinishRes")
+                        // 如果返回系统异常，说明该任务类型不支持（一般是玩游戏类的），加入黑名单
+                        val adErrMsg = adFinishJo.optString("errMsg", "")
+                        if (adErrMsg.contains("系统异常")) {
+                            val errCode = adFinishJo.optString("errCode", "")
+                            autoAddToBlacklist(title, title, errCode, adErrMsg)
+                        }
                     }
                 } catch (e: Throwable) {
                     Log.printStackTrace("$TAG.processAlchemyTasks.adTask", e)

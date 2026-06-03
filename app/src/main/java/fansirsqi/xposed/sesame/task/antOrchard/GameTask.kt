@@ -71,31 +71,62 @@ enum class GameTask(
     }
 
     /**
-     * 外部调用：执行上报任务
+     * 外部调用：执行上报任务（同步阻塞，保证主任务顺序不乱）
      */
     fun report(eggCount: Int) {
-        val totalNeeded = eggCount * (requestsPerEgg+1)//正常不需要加1，多1次确保网络请求不会错误
-        Thread {
-            cachedToken = login()
-            if (cachedToken.isNullOrEmpty()) {
-                Log.record(title, "⚠️ 无法获取有效的 Token，放弃上报任务")
-                return@Thread
-            }
+        val totalNeeded = eggCount * (requestsPerEgg + 1) // 正常不需要加1，多1次确保网络请求不会错误
+        Log.record(title, "🚀 开始执行上报任务：目标 $eggCount 个蛋，需请求 $totalNeeded 次")
+        
+        cachedToken = login()
+        if (cachedToken.isNullOrEmpty()) {
+            Log.record(title, "⚠️ 无法获取有效的 Token，放弃上报任务")
+            return
+        }
 
-            //Log.record(title, "🚀 开始执行任务：目标 $eggCount 个蛋，需请求 $totalNeeded 次")
-            for (i in 1..totalNeeded) {
-                // 执行单次上报
-                if (!executeSingleReport(i, totalNeeded)) {
-                    // 具体的错误原因已在 executeSingleReport 中详细输出
-                    break
-                }
-                if (i < totalNeeded) Thread.sleep((1000..3000).random().toLong())
+        var successCount = 0
+        for (i in 1..totalNeeded) {
+            // 执行单次上报，包含重试与Token失效重新登录逻辑
+            if (!executeSingleReportWithRetry(i, totalNeeded)) {
+                Log.record(title, "⚠️ 上报任务在第 $i 次执行时中断")
+                break
             }
-            //Log.record(title, "🏁 任务流程运行结束")
-        }.start()
+            successCount++
+            if (i < totalNeeded) {
+                // 协程安全延迟，增加防风控随机间隔（由3秒缩短至1-2秒）
+                CoroutineUtils.sleepCompat((1000..2000).random().toLong())
+            }
+        }
+        Log.record(title, "🏁 上报任务执行完毕，成功 $successCount/$totalNeeded 次")
     }
 
-    private fun executeSingleReport(current: Int, total: Int): Boolean {
+    private fun executeSingleReportWithRetry(current: Int, total: Int): Boolean {
+        var attempts = 0
+        val maxAttempts = 3
+        while (attempts < maxAttempts) {
+            attempts++
+            val result = executeSingleReportResult(current, total)
+            if (result.success) {
+                return true
+            }
+
+            if (result.isTokenInvalid) {
+                Log.record(title, "🔑 检测到 Token 失效，尝试重新登录... (尝试次: $attempts)")
+                cachedToken = login()
+                if (cachedToken.isNullOrEmpty()) {
+                    Log.record(title, "🔑 重新登录获取 Token 失败")
+                }
+            } else {
+                Log.record(title, "⚠️ 第 $current 次上报失败: ${result.errorMsg} (尝试次: $attempts/$maxAttempts)")
+            }
+
+            if (attempts < maxAttempts) {
+                CoroutineUtils.sleepCompat(1500)
+            }
+        }
+        return false
+    }
+
+    private fun executeSingleReportResult(current: Int, total: Int): ReportResult {
         return try {
             val mark = AlipayMiniMarkHelper.getAlipayMiniMark(appId, version)
             val body = JSONObject().apply {
@@ -116,23 +147,24 @@ enum class GameTask(
 
             OutputStreamWriter(conn.outputStream, StandardCharsets.UTF_8).use { it.write(body) }
 
-            // 💡 重点改进：读取响应码并捕获错误流
+            // 读取响应码并捕获错误流
             val respCode = conn.responseCode
             val stream = if (respCode in 200..299) conn.inputStream else conn.errorStream
             val responseText = stream?.bufferedReader()?.use { it.readText() } ?: "NULL_RESPONSE"
 
             val resJson = JSONObject(responseText)
-            if (resJson.optInt("code") == 1) {
+            val code = resJson.optInt("code")
+            val msg = resJson.optString("msg", "")
+
+            if (code == 1) {
                 if (current % requestsPerEgg == 0) Log.other(title, "📈 进度: $current/$total (已达成 ${current/requestsPerEgg} 个蛋)")
-                true
+                ReportResult(success = true)
             } else {
-                // 💡 修正：这里会直接打印出服务器返回的完整错误 JSON，比如 {"code":0,"msg":"token invalid"...}
-                //Log.error(title, "⚠️ 第 $current 次上报业务失败 (HTTP $respCode): $responseText")
-                false
+                val isTokenErr = msg.contains("token", ignoreCase = true) || msg.contains("auth", ignoreCase = true) || code == 401
+                ReportResult(success = false, isTokenInvalid = isTokenErr, errorMsg = responseText)
             }
         } catch (e: Exception) {
-            // Log.e(title, "🚨 第 $current 次请求发生网络崩溃:",e)
-            false
+            ReportResult(success = false, errorMsg = e.message ?: "Network error")
         }
     }
 
@@ -142,3 +174,9 @@ enum class GameTask(
         return "$systemUa NebulaSDK/1.8.100112 Nebula AliApp(AP/$alipayVer) AlipayClient/$alipayVer"
     }
 }
+
+private data class ReportResult(
+    val success: Boolean,
+    val isTokenInvalid: Boolean = false,
+    val errorMsg: String = ""
+)

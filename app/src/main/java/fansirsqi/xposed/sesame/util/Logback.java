@@ -19,6 +19,12 @@ public class Logback {
             "runtime", "system", "record", "debug", "forest",
             "farm", "other", "error", "capture");
     public static void configureLogbackDirectly() {
+        try {
+            checkAndTrimActiveLogs();
+        } catch (Exception e) {
+            android.util.Log.e("Logback", "Trimming active logs failed: " + e.getMessage());
+        }
+
         LoggerContext lc = (LoggerContext) LoggerFactory.getILoggerFactory();
         lc.stop();
         for (String logName : logNames) {
@@ -69,5 +75,30 @@ public class Logback {
 
         ch.qos.logback.classic.Logger root = (ch.qos.logback.classic.Logger) LoggerFactory.getLogger(logName);
         root.addAppender(rfa);
+    }
+
+    private static void checkAndTrimActiveLogs() {
+        File logDir = Files.LOG_DIR;
+        if (logDir == null || !logDir.exists() || !logDir.isDirectory()) {
+            return;
+        }
+        File[] files = logDir.listFiles();
+        if (files == null) {
+            return;
+        }
+        // 限制单个激活日志最大为 10MB
+        long maxActiveSize = 10 * 1024 * 1024L; 
+        for (File file : files) {
+            if (file.isFile() && file.getName().endsWith(".log")) {
+                if (file.length() > maxActiveSize) {
+                    try (java.io.RandomAccessFile raf = new java.io.RandomAccessFile(file, "rw")) {
+                        raf.setLength(0);
+                        android.util.Log.i("Logback", "日志文件 " + file.getName() + " 超过10MB，已被自动截断清空。");
+                    } catch (Exception e) {
+                        android.util.Log.e("Logback", "无法清空大日志文件 " + file.getName() + ": " + e.getMessage());
+                    }
+                }
+            }
+        }
     }
 }

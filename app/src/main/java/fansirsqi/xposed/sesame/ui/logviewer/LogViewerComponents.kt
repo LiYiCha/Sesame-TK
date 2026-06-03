@@ -11,6 +11,7 @@ import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.draggable
 import androidx.compose.foundation.gestures.rememberDraggableState
+import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
@@ -462,26 +463,10 @@ fun LogContent(
             val targetLineIndex = currentResult.lineIndex
 
             // 找到该行在显示列表中的索引
-            val fullLines = uiState.fullLogText.split('\n')
-            var displayIndex = 0
-            for (i in 0 until targetLineIndex) {
-                if (i < fullLines.size) {
-                    val line = fullLines[i]
-                    val matchesFilter = uiState.filterKeyword.isEmpty() ||
-                                       line.contains(uiState.filterKeyword, ignoreCase = true)
-                    val matchesLevel = if (uiState.enabledLogLevels.size == LogViewerViewModel.LogLevel.entries.size) {
-                        true
-                    } else {
-                        uiState.enabledLogLevels.any { level -> level.pattern.containsMatchIn(line) }
-                    }
-                    if (matchesFilter && matchesLevel) {
-                        displayIndex++
-                    }
-                }
-            }
+            val displayIndex = uiState.displayedLineIndices.indexOf(targetLineIndex)
 
             // 滚动到目标位置（居中显示）
-            if (displayIndex < uiState.displayedLines.size) {
+            if (displayIndex >= 0 && displayIndex < uiState.displayedLines.size) {
                 coroutineScope.launch {
                     listState.animateScrollToItem(
                         index = displayIndex,
@@ -505,53 +490,55 @@ fun LogContent(
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
-        // 使用 SelectionContainer 启用文本选择和复制功能
-        androidx.compose.foundation.text.selection.SelectionContainer {
-            LazyColumn(
-                state = listState,
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(MaterialTheme.colorScheme.background)
-                    .padding(start = 8.dp, end = 20.dp) // 右侧给滚动条留空间
-                    .pointerInput(Unit) {
-                        awaitEachGesture {
-                            awaitFirstDown(requireUnconsumed = false)
-                            var prevDistance = 0f
-                            do {
-                                val event = awaitPointerEvent(PointerEventPass.Initial)
-                                if (event.changes.size >= 2) {
-                                    val p1 = event.changes[0]
-                                    val p2 = event.changes[1]
-                                    val curDist = (p1.position - p2.position).getDistance()
-                                    if (prevDistance > 0f && curDist > 0f) {
-                                        val change = curDist / prevDistance
-                                        zoomScale = (zoomScale * change).coerceIn(0.5f, 4f)
-                                        event.changes.forEach {
-                                            if (it.positionChanged()) it.consume()
-                                        }
+        LazyColumn(
+            state = listState,
+            modifier = Modifier
+                .fillMaxSize()
+                .background(MaterialTheme.colorScheme.background)
+                .padding(start = 8.dp, end = 20.dp) // 右侧给滚动条留空间
+                .pointerInput(Unit) {
+                    awaitEachGesture {
+                        awaitFirstDown(requireUnconsumed = false)
+                        var prevDistance = 0f
+                        do {
+                            val event = awaitPointerEvent() // 使用默认的 Main 通道，避免干扰子控件的 Initial 通道手势
+                            if (event.changes.size >= 2) {
+                                val p1 = event.changes[0]
+                                val p2 = event.changes[1]
+                                val curDist = (p1.position - p2.position).getDistance()
+                                if (prevDistance > 0f && curDist > 0f) {
+                                    val change = curDist / prevDistance
+                                    zoomScale = (zoomScale * change).coerceIn(0.5f, 4f)
+                                    event.changes.forEach {
+                                        if (it.positionChanged()) it.consume()
                                     }
-                                    prevDistance = curDist
-                                } else {
-                                    prevDistance = 0f
                                 }
-                            } while (event.changes.any { it.pressed })
-                        }
-                    },
-                contentPadding = PaddingValues(vertical = 8.dp)
-            ) {
-                itemsIndexed(
-                    items = uiState.displayedLines,
-                    key = { index, _ -> index }
-                ) { index, line ->
-                    LogLine(
-                        line = line,
-                        lineIndex = index,
-                        searchResults = uiState.searchResults,
-                        currentSearchIndex = uiState.currentSearchIndex,
-                        searchKeyword = uiState.searchKeyword,
-                        fontSize = effectiveFontSize
-                    )
+                                prevDistance = curDist
+                            } else {
+                                prevDistance = 0f
+                            }
+                        } while (event.changes.any { it.pressed })
+                    }
+                },
+            contentPadding = PaddingValues(vertical = 8.dp)
+        ) {
+            itemsIndexed(
+                items = uiState.displayedLines,
+                key = { index, _ -> index }
+            ) { index, line ->
+                val originalIndex = if (index < uiState.displayedLineIndices.size) {
+                    uiState.displayedLineIndices[index]
+                } else {
+                    index
                 }
+                LogLine(
+                    line = line,
+                    lineIndex = originalIndex,
+                    searchResults = uiState.searchResults,
+                    currentSearchIndex = uiState.currentSearchIndex,
+                    searchKeyword = uiState.searchKeyword,
+                    fontSize = effectiveFontSize
+                )
             }
         }
 
@@ -737,15 +724,17 @@ fun LogLine(
         buildAnnotatedString { append(line) }
     }
 
-    Text(
-        text = annotatedText,
-        style = MaterialTheme.typography.bodySmall.copy(
-            fontFamily = FontFamily.Monospace,
-            fontSize = fontSize.sp,
-            lineHeight = (fontSize + 5).sp
-        ),
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 2.dp)
-    )
+    androidx.compose.foundation.text.selection.SelectionContainer {
+        Text(
+            text = annotatedText,
+            style = MaterialTheme.typography.bodySmall.copy(
+                fontFamily = FontFamily.Monospace,
+                fontSize = fontSize.sp,
+                lineHeight = (fontSize + 5).sp
+            ),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 2.dp)
+        )
+    }
 }

@@ -2180,7 +2180,7 @@ class AntFarm : ModelTask() {
                 val bizKeyInBlacklist = TaskBlacklist.isTaskInBlacklist(bizKey)
 
                 if (titleInBlacklist || bizKeyInBlacklist) {
-                    Log.record(TAG, "跳过黑名单任务: $title ($bizKey)")
+//                    Log.record(TAG, "跳过黑名单任务: $title ($bizKey)")
                     continue
                 }
 
@@ -4076,18 +4076,20 @@ class AntFarm : ModelTask() {
 
     private suspend fun drawGameCenterAward() {
         try {
-            val response = AntFarmRpcCall.queryGameList()
-            val jo = JSONObject(response)
+            var loopCount = 0
+            while (loopCount < 3) {
+                loopCount++
+                val response = AntFarmRpcCall.queryGameList()
+                val jo = JSONObject(response)
 
-            // 使用你的 ResChecker 工具类判断
-            if (!jo.optBoolean("success")) {
-                Log.record(TAG, "queryGameList 失败: $jo")
-                return
-            }
+                // 使用你的 ResChecker 工具类判断
+                if (!jo.optBoolean("success")) {
+                    Log.record(TAG, "queryGameList 失败: $jo")
+                    return
+                }
 
-            // 核心改动：从 gameCenterDrawRights 获取权限数据
-            val drawRights = jo.optJSONObject("gameCenterDrawRights")
-            if (drawRights != null) {
+                // 核心改动：从 gameCenterDrawRights 获取权限数据
+                val drawRights = jo.optJSONObject("gameCenterDrawRights") ?: break
 
                 // 1. 处理当前可开的宝箱 (对应你说的 canUse)
                 var quotaCanUse = drawRights.optInt("quotaCanUse") // 当前手头的机会
@@ -4097,7 +4099,6 @@ class AntFarm : ModelTask() {
                         val drawRes = JSONObject(AntFarmRpcCall.drawGameCenterAward(1))
                         if (drawRes.optBoolean("success")) {
                             // 领取成功后，更新剩余可领取的 quotaCanUse
-                            // 这里的返回 JSON 建议你再确认下，通常也是在 gameCenterDrawRights 里
                             val nextRights = drawRes.optJSONObject("gameCenterDrawRights")
                             quotaCanUse = nextRights?.optInt("quotaCanUse") ?: (quotaCanUse - 1)
 
@@ -4125,18 +4126,76 @@ class AntFarm : ModelTask() {
                 // 计算逻辑：如果 已获得 < 总上限，且当前没机会了，就去刷
                 val remainToTask = limit - used
                 if (remainToTask > 0 && quotaCanUse == 0) {
-                    // Log.record(TAG, "宝箱进度: $used/$limit，开始自动刷任务补齐...")
+                    Log.record(TAG, "宝箱进度: $used/$limit，开始自动刷任务补齐...")
                     // 根据游戏类型选择上报任务
                     GameTask.Farm_ddply.report(remainToTask)
-                } else if (remainToTask <= 0) {
-                    // Log.record(TAG, "今日 $limit 个金蛋任务已全部满额")
+                    delay(3000)
+                } else {
+                    if (remainToTask <= 0) {
+                        Log.record(TAG, "今日 $limit 个金蛋任务已全部满额")
+                    }
+                    break
                 }
             }
+
+            // 执行庄园乐园每日任务，包括签到和开宝箱达成后的奖励领取
+            handleLeyuanDailyTasks()
 
         } catch (e: CancellationException) {
             throw e
         } catch (t: Throwable) {
             Log.printStackTrace(TAG, "drawGameCenterAward 流程异常", t)
+        }
+    }
+
+    private suspend fun handleLeyuanDailyTasks() {
+        try {
+            val queryRes = AntFarmRpcCall.queryOptionalPlay()
+            val jo = JSONObject(queryRes)
+            if (!jo.optBoolean("success")) {
+                Log.record(TAG, "queryOptionalPlay 失败: $queryRes")
+                return
+            }
+            val taskTriggerPlayInfo = jo.optJSONObject("taskTriggerPlayInfo") ?: return
+            val taskList = taskTriggerPlayInfo.optJSONArray("taskList") ?: return
+            for (i in 0 until taskList.length()) {
+                val task = taskList.getJSONObject(i)
+                val taskType = task.optString("taskType")
+                var taskStatus = task.optString("taskStatus")
+                val title = task.optString("title")
+                val awardCount = task.optInt("awardCount", 0)
+
+                // 自动签到逻辑
+                if (taskStatus == "TODO" && taskType == "2026cc_lyqd") {
+                    val outBizNo = "${taskType}_${System.currentTimeMillis()}_${(100000..999999).random()}"
+                    Log.record(TAG, "正在尝试完成庄园乐园每日签到...")
+                    val finishRes = AntFarmRpcCall.finishTask(taskType, "ANTFARM_LEYUAN_DAILY_TASK", outBizNo)
+                    val finishJo = JSONObject(finishRes)
+                    if (finishJo.optBoolean("success")) {
+                        Log.record(TAG, "庄园乐园每日签到完成成功")
+                        taskStatus = "FINISHED"
+                    } else {
+                        Log.record(TAG, "庄园乐园每日签到完成失败: ${finishJo.optString("desc")}")
+                    }
+                    delay(2000)
+                }
+
+                if (taskStatus == "FINISHED") {
+                    Log.record(TAG, "发现可领取的乐园任务奖励: $title, 额度: $awardCount")
+                    val claimRes = AntFarmRpcCall.receiveTaskAwardantfarm(taskType, awardCount)
+                    val claimJo = JSONObject(claimRes)
+                    if (claimJo.optBoolean("success")) {
+                        Log.farm("庄园乐园🎁[领取任务奖励: $title 成功，获得 ${claimJo.optInt("incAwardCount", awardCount)} 乐园币]")
+                    } else {
+                        Log.record(TAG, "领取乐园任务奖励失败: ${claimJo.optString("desc")}")
+                    }
+                    delay(2000)
+                }
+            }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (t: Throwable) {
+            Log.printStackTrace(TAG, "handleLeyuanDailyTasks 流程异常", t)
         }
     }
 
