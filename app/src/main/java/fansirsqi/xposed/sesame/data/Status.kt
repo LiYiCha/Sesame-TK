@@ -680,5 +680,17 @@ class Status {
             val expiryTime = INSTANCE.temporaryStatusExpiryMap[flag]
             return expiryTime != null && System.currentTimeMillis() < expiryTime
         }
+
+        @JvmStatic
+        fun getTemporaryStatusExpiry(flag: String): Long? {
+            return INSTANCE.temporaryStatusExpiryMap[flag]
+        }
+
+        @JvmStatic
+        fun getTemporaryStatusRemainingMinutes(flag: String): Long {
+            val expiryTime = INSTANCE.temporaryStatusExpiryMap[flag] ?: return 0L
+            val remainingMillis = expiryTime - System.currentTimeMillis()
+            return if (remainingMillis > 0) remainingMillis / 1000 / 60 else 0L
+        }
     }
 }

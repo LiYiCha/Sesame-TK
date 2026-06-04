@@ -73,71 +73,115 @@ public class AntMemberRpcCall {
 
 
     public static String queryMemberSigninCalendar() {
-        return ApplicationHook.requestString("com.alipay.amic.biz.rpc.signin.h5.queryMemberSigninCalendar", "[{\"autoSignIn\":true,\"invitorUserId\":\"\",\"sceneCode\":\"QUERY\"}]");
+        return ApplicationHook.requestString("com.alipay.amic.biz.rpc.signin.h5.queryMemberSigninCalendar", 
+                "[{\"autoSignIn\":true,\"chInfo\":\"memberHomePage_myTab\",\"invitorUserId\":\"\",\"sceneCode\":\"QUERY\",\"sourcePassMap\":{\"innerSource\":\"\",\"source\":\"myTab\",\"unid\":\"\"}}]");
     }
 
     public static String signPageTaskList() {
         String session = UUID.randomUUID().toString();
-        // pageNo在2-3之间随机选择，因为pageNo=1时列表为空
-        int pageNo = RandomUtil.nextInt(2, 3);
         return ApplicationHook.requestString("com.alipay.amic.memtask.h5.MemTaskListQueryFacade.signPageTaskList",
-                "[{\"pageNo\":" + pageNo + ",\"pageSize\":8,\"session\":\"" + session + "\"," +
-                        "\"source\":\"antmember\",\"sourcePassMap\":{\"innerSource\":\"\",\"source\":\"\"," +
-                        "\"unid\":\"\"},\"spaceCode\":\"ant_member_xlight_task\",\"switchNormal\":true," +
-                        "\"taskTopConfigId\":\"\"}]");
+                "[{\"pageNo\":1,\"pageSize\":8,\"session\":\"" + session + "\",\"source\":\"antmember\",\"sourcePassMap\":{\"innerSource\":\"\",\"source\":\"myTab\",\"unid\":\"\"},\"spaceCode\":\"ant_member_xlight_task\",\"switchNormal\":true,\"taskTopConfigId\":\"\"}]");
     }
 
     public static String transcodeCheck() {
         return ApplicationHook.requestString("alipay.mrchservbase.mrchbusiness.sign.transcode.check", "[{}]");
     }
 
-    //初始化？
+    // 新增：批量查询配置
+    public static String batchQueryCommonDeliveryInfo() {
+        return ApplicationHook.requestString("com.alipay.alipaymember.biz.rpc.config.h5.batchQueryCommonDeliveryInfo",
+                "[{\"previewCopyDbId\":\"\",\"requestMap\":{\"MORE_POINTS_BUTTON\":{\"limit\":1,\"relatedChannel\":\"MORE_POINTS_BUTTON\",\"targetCode\":\"SIGN_GUIDE_CONFIG\"}},\"sourcePassMap\":{\"innerSource\":\"\",\"source\":\"myTab\",\"unid\":\"\"}}]");
+    }
+
+    // 新增：订阅信息查询
+    public static String querySubscribeInfo() {
+        return ApplicationHook.requestString("com.alipay.alipaymember.biz.rpc.member.h5.CommonSubscribeFacade.querySubscribeInfo",
+                "[{\"bizSubType\":\"MEMBER_SIGN_REMIND\",\"bizType\":\"MEMBER_SIGN\",\"source\":\"SIGN_IN_COMPLETE\",\"sourcePassMap\":{\"innerSource\":\"\",\"source\":\"myTab\",\"unid\":\"\"}}]");
+    }
+
+    // 新增：游戏入口查询
+    public static String queryGameEntranceInfo() {
+        return ApplicationHook.requestString("com.alipay.amic.biz.rpc.game.h5.GameCenterQueryFacade.queryGameEntranceInfo",
+                "[{\"sourcePassMap\":{\"innerSource\":\"\",\"source\":\"myTab\",\"unid\":\"\"}}]");
+    }
+
+    // 初始化？
     public static String queryVajraPositionCarouselMessage() {
         return ApplicationHook.requestString("com.alipay.alipaymember.biz.rpc.component.h5.queryVajraPositionCarouselMessage",
-                "[{\"relatedChannel\":\"MEMBER_POINT_ACTIVITY\",\"sceneCode\":\"\",\"sourcePassMap\":{\"innerSource\":\"\",\"source\":\"ch_appcenter__chsub_9patch\",\"unid\":\"\"}}]");
+                "[{\"relatedChannel\":\"MEMBER_POINT_ACTIVITY\",\"sceneCode\":\"\",\"sourcePassMap\":{\"innerSource\":\"\",\"source\":\"myTab\",\"unid\":\"\"}}]");
     }
 
     public static String queryVajraPositionCarouselMessageNew() {
         return ApplicationHook.requestString("com.alipay.alipaymember.biz.rpc.config.h5.queryHomeVajraInfo",
-                "[{\"extInfo\":{},\"sourcePassMap\":{\"innerSource\":\"\",\"source\":\"ch_appcenter__chsub_9patch\",\"unid\":\"\"}}]");
+                "[{\"extInfo\":{},\"sourcePassMap\":{\"innerSource\":\"\",\"source\":\"myTab\",\"unid\":\"\"}}]");
     }
 
-    //攒积分赚现金活动投放
+    // 攒积分赚现金活动投放
     public static String PlayConsultFacadeConsult() {
         return ApplicationHook.requestString("com.alipay.amic.biz.rpc.activity.h5.PlayConsultFacade.consult",
-                "[{\"operation\":\"consultSignInVersion\",\"playId\":\"PLAY202412061191152295\",\"source\":\"alipaymember\",\"sourcePassMap\":{\"innerSource\":\"\",\"source\":\"ch_appcenter__chsub_9patch\",\"unid\":\"\"}}]");
+                "[{\"operation\":\"consultSignInVersion\",\"playId\":\"PLAY202412061191152295\",\"source\":\"alipaymember\",\"sourcePassMap\":{\"innerSource\":\"\",\"passInfo\":\"{\\\"tc\\\":\\\"SIGN_POINT\\\"}\",\"source\":\"myTab\",\"unid\":\"\"}}]");
     }
 
     public static String commonTransFatigue() {
         return ApplicationHook.requestString("com.alipay.alipaymember.biz.rpc.component.h5.commonTrans.fatigue",
-                "[{\"sceneCode\":\"FAMY0I925T\",\"sourcePassMap\":{\"innerSource\":\"\",\"source\":\"ch_appcenter__chsub_9patch\",\"unid\":\"\"}}]");
+                "[{\"sceneCode\":\"FAMY0I925T\",\"sourcePassMap\":{\"innerSource\":\"\",\"source\":\"myTab\",\"unid\":\"\"}}]");
     }
 
     public static String queryReSignInCardInfo() {
         return ApplicationHook.requestString("com.alipay.amic.biz.rpc.signin.h5.queryReSignInCardInfo",
-                "[{}]");
+                "[{\"sourcePassMap\":{\"innerSource\":\"\",\"source\":\"myTab\",\"unid\":\"\"}}]");
     }
 
     public static String queryCommonDeliveryInfo() {
         return ApplicationHook.requestString("com.alipay.alipaymember.biz.rpc.config.h5.queryCommonDeliveryInfo",
-                "[{\"limit\":1,\"relatedChannel\":\"point-sign-in\",\"sourcePassMap\":{\"innerSource\":\"\",\"source\":\"ch_appcenter__chsub_9patch\",\"unid\":\"\"},\"targetCode\":\"H5_PAGE_CONFIG\"}]");
+                "[{\"limit\":1,\"relatedChannel\":\"point-sign-in\",\"sourcePassMap\":{\"innerSource\":\"\",\"source\":\"myTab\",\"unid\":\"\"},\"targetCode\":\"H5_PAGE_CONFIG\"}]");
     }
 
     public static String queryTaskList() {
         return ApplicationHook.requestString("com.alipay.amic.memtask.h5.MemTaskListQueryFacade.queryTaskList",
-                "[{\"source\":\"antmember_wish_pool\",\"sourcePassMap\":{\"innerSource\":\"\",\"source\":\"ch_appcenter__chsub_9patch\",\"unid\":\"\"}}]");
+                "[{\"source\":\"antmember_wish_pool\",\"sourcePassMap\":{\"innerSource\":\"\",\"source\":\"myTab\",\"unid\":\"\"}}]");
     }
 
     // querySimpleIndex
     public static String querySimpleIndex() {
         return ApplicationHook.requestString("com.alipay.alipaymember.biz.rpc.member.h5.querySimpleIndex",
-                "[{\"sourcePassMap\":{\"innerSource\":\"\",\"source\":\"\",\"unid\":\"\"}}]");
+                "[{\"sourcePassMap\":{\"innerSource\":\"\",\"source\":\"myTab\",\"unid\":\"\"}}]");
     }
 
-    //游戏任务
+    // 游戏任务
     public static String queryGameTaskList() {
         return ApplicationHook.requestString("com.alipay.amic.biz.rpc.activity.h5.PlayConsultFacade.consult",
-                "[{\"operation\":\"consultGameCenter\",\"params\":{\"deviceLevel\":\"high\",\"unityDeviceLevel\":\"high\"},\"playId\":\"PLAY202404281383002382\",\"sourcePassMap\":{\"innerSource\":\"\",\"source\":\"ch_appcenter__chsub_9patch\",\"unid\":\"\"}}]");
+                "[{\"operation\":\"consultGameCenter\",\"params\":{\"deviceLevel\":\"high\",\"unityDeviceLevel\":\"high\"},\"playId\":\"PLAY202404281383002382\",\"sourcePassMap\":{\"innerSource\":\"\",\"source\":\"myTab\",\"unid\":\"\"}}]");
+    }
+
+    // 新增：多活动投放咨询
+    public static String queryMultiActivityDelivery() {
+        return ApplicationHook.requestString("com.alipay.amic.biz.rpc.activity.h5.MultiActivityDeliveryFacade.consult",
+                "[{\"deliveryScene\":\"MEMBER_HOME\",\"sourcePassMap\":{\"innerSource\":\"\",\"source\":\"myTab\",\"unid\":\"\"}}]");
+    }
+
+    // 新增：积分旅行咨询
+    public static String queryPointsTravelActivity() {
+        return ApplicationHook.requestString("com.alipay.amic.biz.rpc.activity.h5.PointsTravelActivityFacade.consult",
+                "[{\"activityType\":\"TRAVEL_ACTIVITY\",\"sourceChannel\":\"MEMBER_HOME\",\"sourcePassMap\":{\"innerSource\":\"\",\"source\":\"myTab\",\"unid\":\"\"}}]");
+    }
+
+    // 新增：积分联运咨询
+    public static String queryPointsJointActivity() {
+        return ApplicationHook.requestString("com.alipay.amic.biz.rpc.activity.h5.PointsJointActivityFacade.consult",
+                "[{\"activityType\":\"FOOD_CARD_ACTIVITY\",\"sourceChannel\":\"MEMBER_HOME\",\"sourcePassMap\":{\"innerSource\":\"\",\"source\":\"myTab\",\"unid\":\"\"}}]");
+    }
+
+    // 新增：支付活动咨询 (SCHOOL_PAY_ACTIVITY)
+    public static String querySchoolPayActivity() {
+        return ApplicationHook.requestString("com.alipay.amic.biz.rpc.activity.h5.PayActivityFacade.consult",
+                "[{\"activitySceneType\":\"SCHOOL_PAY_ACTIVITY\",\"scene\":\"MEMBER_HOME\",\"sourcePassMap\":{\"innerSource\":\"\",\"source\":\"myTab\",\"unid\":\"\"}}]");
+    }
+
+    // 新增：支付活动咨询 (PAY_ACTIVITY)
+    public static String queryPayActivity() {
+        return ApplicationHook.requestString("com.alipay.amic.biz.rpc.activity.h5.PayActivityFacade.consult",
+                "[{\"activitySceneType\":\"PAY_ACTIVITY\",\"scene\":\"MEMBER_HOME\",\"sourcePassMap\":{\"innerSource\":\"\",\"source\":\"myTab\",\"unid\":\"\"}}]");
     }
 
     // 累积任务

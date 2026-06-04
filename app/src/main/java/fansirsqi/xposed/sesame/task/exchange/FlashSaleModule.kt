@@ -90,6 +90,7 @@ class FlashSaleModule : BaseFlashSaleTask() {
         neverLandEX.neverLandList = neverLandList
 
         // 青春特权大额
+        privilegeEX.isSmallExchange = false
         privilegeEX.privilege = enablePrivilege
         privilegeEX.privilegeSmall = enablePrivilegeSmall
         privilegeEX.wakeUpMinuteBefore = wakeUpMinuteBefore
@@ -97,6 +98,7 @@ class FlashSaleModule : BaseFlashSaleTask() {
         privilegeEX.youthPrivilegeList = youthPrivilegeList
 
         // 青春特权小额（共享配置字段，运行状态独立）
+        privilegeSmallEX.isSmallExchange = true
         privilegeSmallEX.privilege = enablePrivilege
         privilegeSmallEX.privilegeSmall = enablePrivilegeSmall
         privilegeSmallEX.wakeUpMinuteBefore = wakeUpMinuteBefore

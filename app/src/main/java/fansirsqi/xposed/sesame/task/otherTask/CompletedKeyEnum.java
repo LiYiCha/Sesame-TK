@@ -118,4 +118,5 @@ public enum CompletedKeyEnum {
     neverLandEX,
     privilegeEXNew,
     PayAwardProd, GameCenterTaskGameCenter, privilegeEXSmall, taskPointPrize,
+    GameCenterGoldTask,
 }

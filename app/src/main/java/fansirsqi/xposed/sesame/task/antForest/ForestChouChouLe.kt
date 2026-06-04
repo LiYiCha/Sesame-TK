@@ -149,7 +149,7 @@ class ForestChouChouLe {
      */
     private fun processTasksLoop(s: Scene) {
         repeat(3) { loop ->
-            Log.record("${s.name} 第 ${loop + 1} 轮任务检查")
+//            Log.record("${s.name} 第 ${loop + 1} 轮任务检查")
             val tasksResp = AntForestRpcCall.listTaskopengreen(s.taskCode, SOURCE).toJson() ?: return@repeat
             if (!tasksResp.check()) return@repeat
 

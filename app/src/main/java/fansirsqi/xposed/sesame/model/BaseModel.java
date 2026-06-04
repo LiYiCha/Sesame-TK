@@ -170,7 +170,7 @@ public class BaseModel extends Model {
     @Getter
     public static final BooleanModelField sendHookData = new BooleanModelField("sendHookData", "启用Hook数据转发", false);
     @Getter
-    static final StringModelField sendHookDataUrl = new StringModelField("sendHookDataUrl", "Hook数据转发地址", "http://127.0.0.1:9527/hook");
+    public static final StringModelField sendHookDataUrl = new StringModelField("sendHookDataUrl", "Hook数据转发地址", "http://127.0.0.1:9527/hook");
 
     @Override
     public String getName() {

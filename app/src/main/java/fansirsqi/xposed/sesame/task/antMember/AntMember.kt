@@ -270,7 +270,8 @@ class AntMember : ModelTask() {
                             // ===== 次日奖励：只有今天还没领过才执行 =====
                             if (!hasFlagToday(StatusFlags.FLAG_ZMXY_ALCHEMY_NEXT_DAY_AWARD)) {
                                 doSesameAlchemyNextDayAward()
-                            } else record(TAG, "✅ 芝麻粒次日奖励已领取，今天不再执行")
+                            }
+//                            else record(TAG, "✅ 芝麻粒次日奖励已领取，今天不再执行")
                         })
                     }
 
@@ -1951,7 +1952,7 @@ class AntMember : ModelTask() {
 
             // 1. 查询时段任务
             val queryRespStr = AntMemberRpcCall.Zmxy.Alchemy.alchemyQueryTimeLimitedTask()
-            record(TAG, "芝麻炼金⚗️[检查时段奖励]")
+//            record(TAG, "芝麻炼金⚗️[检查时段奖励]")
 
             val queryResp = JSONObject(queryRespStr)
             if (!ResChecker.checkRes(TAG + "查询时段任务失败:", queryResp) || !ResChecker.checkRes(
@@ -1976,10 +1977,9 @@ class AntMember : ModelTask() {
             val state = timeLimitedTaskVO.optInt("state", 0) // 1: 可领取, 2: 未到时间
             val tomorrow = timeLimitedTaskVO.optBoolean("tomorrow", false)
             val rewardAmount = timeLimitedTaskVO.optInt("rewardAmount", 0)
-
-            record(
-                TAG, "芝麻炼金⚗️[任务检查] 任务=$taskName 状态=$state 奖励=$rewardAmount 明天=$tomorrow"
-            )
+//            record(
+//                TAG, "芝麻炼金⚗️[任务检查] 任务=$taskName 状态=$state 奖励=$rewardAmount 明天=$tomorrow"
+//            )
 
             // 3. 如果是明天任务，跳过
             if (tomorrow) {

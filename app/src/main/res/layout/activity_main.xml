@@ -90,7 +90,7 @@
                     android:layout_margin="6dp"
                     android:backgroundTint="@color/grid_github"
                     android:onClick="onClick"
-                    android:text="@string/visit_github"
+                    android:text="@string/d_bug_log"
                     app:icon="@drawable/ic_github" />
 
                 <com.google.android.material.button.MaterialButton

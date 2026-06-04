@@ -228,6 +228,7 @@ class PrivilegeEX : BaseFlashSaleTask(), YouthPrivilegeSupport {
     }
 
     // 由外部注入的字段
+    var isSmallExchange: Boolean = false
     var privilege: BooleanModelField? = null // 青春特权大额
     var privilegeSmall: BooleanModelField? = null // 青春特权小额
     var enablePrivilegeList: BooleanModelField? = null // 列表模式
@@ -311,7 +312,7 @@ class PrivilegeEX : BaseFlashSaleTask(), YouthPrivilegeSupport {
      */
     private fun filterItemsByMode(availableItems: List<ExchangeItem>): List<ExchangeItem> {
         val filteredItems = mutableListOf<ExchangeItem>()
-        val isSmallMode = privilegeSmall?.value == true
+        val isSmallMode = isSmallExchange
 
         for (item in availableItems) {
             if (isSmallMode && item.code.startsWith("small_")) {
@@ -346,7 +347,7 @@ class PrivilegeEX : BaseFlashSaleTask(), YouthPrivilegeSupport {
     }
 
     override fun getTargetHour(): Long {
-        return if (privilegeSmall?.value == true) 0 else 10
+        return if (isSmallExchange) 0 else 10
     }
 
     override fun tryExchange(item: ExchangeItem): Boolean {
@@ -386,7 +387,7 @@ class PrivilegeEX : BaseFlashSaleTask(), YouthPrivilegeSupport {
     @SuppressLint("NewApi")
     override fun sendExchangeRequestAsync(params: JSONArray, item: ExchangeItem): Boolean {
         return try {
-            val method = if (privilegeSmall?.value == true) {
+            val method = if (isSmallExchange) {
                 "alipay.membertangram.biz.rpc.student.smallCashExchangeTrigger"
             } else {
                 "alipay.membertangram.biz.rpc.student.largeCashExchangeTrigger"
@@ -416,7 +417,7 @@ class PrivilegeEX : BaseFlashSaleTask(), YouthPrivilegeSupport {
                 Log.error(TAG, "⚠️ 无法发送空参数请求，兑换项：${item.code}")
                 return false
             }
-            val method = if (privilegeSmall?.value == true) {
+            val method = if (isSmallExchange) {
                 "alipay.membertangram.biz.rpc.student.smallCashExchangeTrigger"
             } else {
                 "alipay.membertangram.biz.rpc.student.largeCashExchangeTrigger"
@@ -543,7 +544,7 @@ class PrivilegeEX : BaseFlashSaleTask(), YouthPrivilegeSupport {
         get() = ExchangeMode.SINGLE
 
     override val completedKey: String
-        get() = if (privilegeSmall?.value == true) {
+        get() = if (isSmallExchange) {
             CompletedKeyEnum.privilegeEXSmall.name
         } else {
             CompletedKeyEnum.privilegeEXNew.name

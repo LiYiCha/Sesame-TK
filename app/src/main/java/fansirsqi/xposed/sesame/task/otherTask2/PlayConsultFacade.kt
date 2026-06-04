@@ -1,5 +1,6 @@
 package fansirsqi.xposed.sesame.task.otherTask2
 
+import fansirsqi.xposed.sesame.data.Status
 import fansirsqi.xposed.sesame.hook.RequestManager
 import fansirsqi.xposed.sesame.util.Log
 import kotlinx.coroutines.CoroutineScope
@@ -14,7 +15,7 @@ import org.json.JSONObject
 class PlayConsultFacade {
     private val TAG = "会员|转盘"
     private val PLAYID = "PLAY202509080150799963" //活动ID
-    private var strategyId: String? = "202509280472932026"  //抽奖ID？
+    private var strategyId: String? = "202602270515234629"  //抽奖ID？
     private val method = "com.alipay.amic.biz.rpc.activity.h5.PlayConsultFacade.consult" //方法名
     // 黑名单
     private var adIdBlackList: MutableList<String> = mutableListOf(
@@ -25,6 +26,9 @@ class PlayConsultFacade {
     private var CERTNUM: Int? = 0 // 抽奖次数，使用volatile保证可见性
     private val lotteryMutex = Mutex() // 抽奖互斥锁，确保线程安全
     private val taskMutex = Mutex() // 任务处理互斥锁，防止并发执行任务
+
+    @Volatile
+    private var hasError1009 = false
 
     /**
      * 使用协程进行处理，然后由java直接调用
@@ -43,23 +47,48 @@ class PlayConsultFacade {
         }
     }
 
+    /**
+     * 1009限流与风控检测
+     */
+    private fun check1009(response: JSONObject): Boolean {
+        val error = response.optInt("error", 0)
+        val errorMsg = response.optString("errorMessage", "")
+        if (error == 1009 || errorMsg.contains("人气太旺")) {
+            hasError1009 = true
+            Log.error(TAG, "触发1009限流/风控，暂停转盘任务")
+            Status.setTemporaryStatusWithExpiry("MemberLuckyWheel_Cooldown", 1 * 60 * 60 * 1000) // 1小时冷却
+            return true
+        }
+        return false
+    }
 
     /**
      * 协程处理
      */
     suspend fun handle(count: Int) {
+        hasError1009 = false
         if (!handleInfo(force = true)){
             return
         }
+        if (hasError1009) return
+
         //处理任务
         processMultipleRounds(count)
+        if (hasError1009) return
 
         delay(2000 + (0..1000).random().toLong() )
         //更新抽奖次数
         if (handleInfo(force = false)) {
+            if (hasError1009) return
             handleConsult()
         }
+
+        // 成功执行完毕且没有发生1009风控，则设置30分钟冷却
+        if (!hasError1009) {
+            Status.setTemporaryStatusWithExpiry("MemberLuckyWheel_Cooldown", 30 * 60 * 1000)
+        }
     }
+
     /**
      * 处理多轮任务
      */
@@ -85,6 +114,10 @@ class PlayConsultFacade {
 
                 // 执行任务
                 val taskResult = todoTask()
+                if (hasError1009) {
+                    break
+                }
+
                 if (taskResult) {
                     completedRounds++
                     Log.record(TAG, "第${round}轮任务处理完成")
@@ -108,16 +141,15 @@ class PlayConsultFacade {
         }
     }
 
-
-
-
-
     /**
      * 获取转盘信息
      */
     private suspend fun handleInfo(force: Boolean = false): Boolean {
         try {
             val consultCountInfo = queryConsultCountInfo()
+            if (check1009(consultCountInfo)) {
+                return false
+            }
             if(consultCountInfo.optBoolean("success")){
                 val resultData = consultCountInfo.optJSONObject("resultData")
                 val lotteryMachineInfo = resultData?.optJSONObject("lotteryMachineInfo")
@@ -143,8 +175,10 @@ class PlayConsultFacade {
 
     private suspend fun todoTask(): Boolean {
         try {
-            //Log.record(TAG, "开始查询任务列表")
             val queryConsult = queryConsult()
+            if (check1009(queryConsult)) {
+                return false
+            }
             if (queryConsult.optBoolean("success")){
                 val resultData = queryConsult.optJSONObject("resultData")
                 if (resultData != null){
@@ -161,6 +195,7 @@ class PlayConsultFacade {
                             val isAdTask = adTask.optBoolean("adTask")
                             val currentCount = adTask.optInt("currentCount")
                             val targetCount = adTask.optInt("targetCount")
+                            val status = adTask.optString("status")
 
                             val extInfo = adTask.optJSONObject("extInfo")
                             if (extInfo != null){
@@ -168,8 +203,11 @@ class PlayConsultFacade {
                                 val adID = extInfo.optString("AD_ID")
                                 newBlackList.add(adID)
 
-                                if (!isAdTask && currentCount >= targetCount){
-                                    Log.record(TAG, "任务已完成，跳过: ${adTask.optJSONObject("simpleTaskConfig")?.optString("title","")}")
+                                // 优化：安全判断任务是否已完成（防止重复做已完成的广告或普通任务）
+                                if ("COMPLETED" == status || "FINISHED" == status || 
+                                    (!isAdTask && currentCount >= targetCount) || 
+                                    (targetCount > 0 && currentCount >= targetCount)) {
+                                    Log.record(TAG, "任务已完成/跳过: ${adTask.optJSONObject("simpleTaskConfig")?.optString("title","")}")
                                     continue
                                 }
 
@@ -182,16 +220,21 @@ class PlayConsultFacade {
                                 val baseDelay = 10000L + (0..5000).random()
                                 delay(baseDelay)
 
-                                finishTask(adBizId)
+                                val finishResponse = finishTask(adBizId)
+                                if (check1009(finishResponse)) {
+                                    return false
+                                }
                                 delay(1000 + (0..1000).random().toLong() ) // 随机延迟查询结果
 
                                 val taskResult = queryTaskResult(adBizId)
+                                if (check1009(taskResult)) {
+                                    return false
+                                }
                                 if (taskResult.optBoolean("success")){
                                     Log.record(TAG, "完成[${title}]")
                                     completedTasks++
                                 } else {
                                     Log.error(TAG, "完成[${title}]失败:${taskResult}")
-                                    // 单个任务失败不中断整个流程，继续处理其他任务
                                     continue
                                 }
 
@@ -227,26 +270,6 @@ class PlayConsultFacade {
         return true
     }
 
-
-    /**
-     * 检查是否有新任务，如果有则处理并返回 true，否则返回 false
-     */
-    private suspend fun checkForNewTasks(): Boolean {
-        val queryConsult = queryConsult()
-        if (queryConsult.optBoolean("success")) {
-            val resultData = queryConsult.optJSONObject("resultData")
-            val adTaskList = resultData?.optJSONArray("adTaskList")
-
-            if (adTaskList != null && adTaskList.length() > 0) {
-                Log.record(TAG, "发现新任务，继续处理...")
-                todoTask()
-                return true  // 有新任务并已处理
-            }
-        }
-        return false  // 没有新任务
-    }
-
-
     /**
      * 抽奖 - 线程安全版本
      */
@@ -273,6 +296,9 @@ class PlayConsultFacade {
                     }
 
                     val result = consult()
+                    if (check1009(result)) {
+                        break
+                    }
                     if (result.optBoolean("success")) {
                         val resultData = result.optJSONObject("resultData")
                         val wangZhuanLotteryResultInfo =
@@ -298,6 +324,7 @@ class PlayConsultFacade {
             }
         }
     }
+
     // 查询任务列表
     private suspend fun queryConsult(blackList: List<String> = adIdBlackList): JSONObject {
         val actualBlackList = blackList.ifEmpty {
@@ -309,29 +336,36 @@ class PlayConsultFacade {
             }
         }
 
-        val blackListJson = actualBlackList.joinToString(",") { "\"$it\"" }
-        val params = "[{\"operation\":\"task_consult\",\"params\":{\"adIdBlackList\":[${blackListJson}]},\"playId\":\"$PLAYID\",\"source\":\"\",\"sourcePassMap\":{\"innerSource\":\"\",\"source\":\"\",\"unid\":\"\"}}]"
+        val paramsObj = if (actualBlackList.isEmpty()) {
+            "{}"
+        } else {
+            val blackListJson = actualBlackList.joinToString(",") { "\"$it\"" }
+            "{\"adIdBlackList\":[${blackListJson}]}"
+        }
+
+        val params = "[{\"operation\":\"task_consult\",\"params\":${paramsObj},\"playId\":\"$PLAYID\",\"source\":\"\",\"sourcePassMap\":{\"innerSource\":\"\",\"source\":\"\",\"unid\":\"\"}}]"
         return JSONObject(RequestManager.requestString(method, params))
     }
-
-
 
     //查询任务结果
     private suspend fun queryTaskResult(taskId: String): JSONObject {
         val params = "[{\"operation\":\"task_consult\",\"params\":{\"taskId\":\"$taskId\"},\"playId\":\"$PLAYID\",\"source\":\"\",\"sourcePassMap\":{\"innerSource\":\"\",\"source\":\"\",\"unid\":\"\"}}]"
         return JSONObject(RequestManager.requestString(method, params))
     }
+
     //查询转盘信息
     private suspend fun queryConsultCountInfo(): JSONObject {
         val params = "[{\"operation\":\"consult\",\"playId\":\"$PLAYID\",\"source\":\"\",\"sourcePassMap\":{\"innerSource\":\"\",\"source\":\"\",\"unid\":\"\"}}]"
         return JSONObject(RequestManager.requestString(method, params))
     }
+
     //完成任务
     private suspend fun finishTask(taskId: String): JSONObject {
         val method = "com.alipay.adtask.biz.mobilegw.service.task.finish"
         val params = "[{\"bizId\":\"${taskId}\",\"extendInfo\":{}}]"
         return JSONObject(RequestManager.requestString(method, params))
     }
+
     //抽奖
     private suspend fun consult(): JSONObject {
         val method = "com.alipay.amic.biz.rpc.activity.h5.PlayTriggerFacade.trigger"

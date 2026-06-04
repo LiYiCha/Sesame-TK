@@ -29,7 +29,7 @@ public class MemberNew extends BaseCommTask {
     private static final String SUCCESS = "success";
     private static final int MAX_RETRY_TIMES = 3;
     private static final int MAX_EXECUTE_ATTEMPTS = 3;
-    private static final long COOLDOWN_ERROR_MS = 2 * 60 * 60 * 1000; // 2小时冷却（任务为空或1009错误）
+    private static final long COOLDOWN_ERROR_MS = 1 * 60 * 60 * 1000; // 1小时冷却（任务为空或1009错误）
     private static final long COOLDOWN_SUCCESS_MS = 30 * 60 * 1000; // 30分钟冷却（有任务完成）
     private static final String MEMBER_EXECUTION_COOLDOWN_FLAG = "MemberNew_LastExecution";
     
@@ -48,12 +48,12 @@ public class MemberNew extends BaseCommTask {
     @SuppressLint("SimpleDateFormat")
     @Override
     protected void handle() {
-        // 检查冷却时间 - 2小时内只能执行一次
-//        if (Status.hasTemporaryStatusValid(MEMBER_EXECUTION_COOLDOWN_FLAG)) {
-//            long remainingTime = Status.getTemporaryStatusRemainingMinutes(MEMBER_EXECUTION_COOLDOWN_FLAG);
-//            Log.record(TAG, "距离上次执行间隔，还需等待" + remainingTime + "分钟，跳过本次调用");
-//            return;
-//        }
+        // 检查冷却时间
+        if (Status.hasTemporaryStatusValid(MEMBER_EXECUTION_COOLDOWN_FLAG)) {
+            long remainingTime = Status.getTemporaryStatusRemainingMinutes(MEMBER_EXECUTION_COOLDOWN_FLAG);
+            Log.record(TAG, "距离上次执行间隔，还需等待" + remainingTime + "分钟，跳过本次调用");
+            return;
+        }
 
         // 线程安全检查 - 防止并发执行
         if (!isRunning.compareAndSet(false, true)) {
@@ -109,12 +109,12 @@ public class MemberNew extends BaseCommTask {
                 cooldownReason = "无可执行任务";
             }
 
-//            Status.setTemporaryStatusWithExpiry(MEMBER_EXECUTION_COOLDOWN_FLAG, cooldownTime);
-//            Long nextAvailableTime = Status.getTemporaryStatusExpiry(MEMBER_EXECUTION_COOLDOWN_FLAG);
-//            if (nextAvailableTime != null) {
-//                Log.other(TAG, "会员积分任务执行完成（" + cooldownReason + "），下次可执行时间：" +
-//                          new SimpleDateFormat("HH:mm:ss").format(new java.util.Date(nextAvailableTime)));
-//            }
+            Status.setTemporaryStatusWithExpiry(MEMBER_EXECUTION_COOLDOWN_FLAG, cooldownTime);
+            Long nextAvailableTime = Status.getTemporaryStatusExpiry(MEMBER_EXECUTION_COOLDOWN_FLAG);
+            if (nextAvailableTime != null) {
+                Log.other(TAG, "会员积分任务执行完成（" + cooldownReason + "），下次可执行时间：" +
+                          new SimpleDateFormat("HH:mm:ss").format(new java.util.Date(nextAvailableTime)));
+            }
 
         } catch (Throwable th) {
             Log.error(TAG, "任务执行异常: " + th.getMessage());
@@ -135,20 +135,28 @@ public class MemberNew extends BaseCommTask {
         try {
             // 使用数组存储初始化方法，便于维护
             Runnable[] initTasks = {
-                () -> AntMemberRpcCall.queryVajraPositionCarouselMessage(),
-                () -> AntMemberRpcCall.queryVajraPositionCarouselMessageNew(),
-                () -> AntMemberRpcCall.PlayConsultFacadeConsult(),
-                () -> AntMemberRpcCall.commonTransFatigue(),
-                () -> AntMemberRpcCall.queryReSignInCardInfo(),
-                () -> AntMemberRpcCall.queryCommonDeliveryInfo(),
-                () -> AntMemberRpcCall.querySimpleIndex(),
-                () -> AntMemberRpcCall.queryGameTaskList()
+                () -> AntMemberRpcCall.PlayConsultFacadeConsult(), // 1. 签到页初始化
+                () -> AntMemberRpcCall.queryVajraPositionCarouselMessage(), // 2. 轮播消息
+                () -> AntMemberRpcCall.queryVajraPositionCarouselMessageNew(), // 3. 金刚位信息
+                () -> AntMemberRpcCall.commonTransFatigue(), // 4. 疲劳度查询
+                () -> AntMemberRpcCall.queryReSignInCardInfo(), // 5. 补签卡查询
+                () -> AntMemberRpcCall.queryCommonDeliveryInfo(), // 6. 投放配置查询
+                () -> AntMemberRpcCall.batchQueryCommonDeliveryInfo(), // 7. 批量投放配置查询
+                () -> AntMemberRpcCall.querySubscribeInfo(), // 8. 订阅状态查询
+                () -> AntMemberRpcCall.queryGameEntranceInfo(), // 9. 游戏入口查询
+                () -> AntMemberRpcCall.querySimpleIndex(), // 10. 大众会员积分查询
+                () -> AntMemberRpcCall.queryGameTaskList(), // 11. 游戏中心任务列表
+                () -> AntMemberRpcCall.queryMultiActivityDelivery(), // 12. 多活动投放咨询
+                () -> AntMemberRpcCall.queryPointsTravelActivity(), // 13. 积分旅行咨询
+                () -> AntMemberRpcCall.queryPointsJointActivity(), // 14. 积分联运咨询
+                () -> AntMemberRpcCall.querySchoolPayActivity(), // 15. 支付活动咨询
+                () -> AntMemberRpcCall.queryPayActivity() // 16. 支付活动咨询2
             };
             
             for (Runnable task : initTasks) {
                 try {
                     task.run();
-                    TimeUtil.sleep(1000);
+                    TimeUtil.sleep(RandomUtil.nextInt(1500, 3000)); // 随机延迟，模拟真实行为
                 } catch (Exception e) {
                     Log.error(TAG, "初始化步骤失败: " + e.getMessage());
                 }
@@ -283,7 +291,7 @@ public class MemberNew extends BaseCommTask {
 
                 // 提取任务信息
                 TaskInfo taskInfo = extractTaskInfoSafe(taskItem);
-                if (taskInfo == null || taskInfo.retryCount <= 0) break;
+                if (taskInfo == null || taskInfo.retryCount <= 0) continue;
                 
                 // 执行任务
                 for (int attempt = 0; attempt < Math.min(taskInfo.retryCount, MAX_EXECUTE_ATTEMPTS); attempt++) {
@@ -480,7 +488,7 @@ public class MemberNew extends BaseCommTask {
                 if (taskItem == null) continue;
 
                 OtherTaskInfo taskInfo = extractOtherTaskInfoSafe(taskItem);
-                if (taskInfo == null || taskInfo.needExecuteTimes <= 0) break;
+                if (taskInfo == null || taskInfo.needExecuteTimes <= 0) continue;
                 
                 // 只处理 uvChangeBusinessType 类型任务
                 if ("uvChangeBusinessType".equalsIgnoreCase(taskInfo.businessType)) {
@@ -810,6 +818,8 @@ public class MemberNew extends BaseCommTask {
         try {
             JSONObject response = new JSONObject(AntMemberRpcCall.queryAllStatusTaskListNew());
             if (response.optBoolean("success")) {
+                // 只有成功返回后，才设置今日已完成标记
+                Status.setFlagToday("queryAllStatusTaskList");
                 JSONObject resultData = response.optJSONObject("resultData");
                 if (resultData != null && resultData.has("availableTaskList")) {
                     JSONArray availableTaskList = resultData.getJSONArray("availableTaskList");
@@ -822,7 +832,7 @@ public class MemberNew extends BaseCommTask {
                 }
             } else {
                 Log.error(TAG, "查询全部状态任务列表失败: " + response);
-                Status.setFlagToday("queryAllStatusTaskList");
+                // 失败时不设置今日已完成标记，以便下次重新尝试
             }
             sleepRandomTime();
         } catch (Exception e) {
@@ -844,11 +854,13 @@ public class MemberNew extends BaseCommTask {
             JSONObject response = new JSONObject(RequestManager.requestString("com.alipay.amic.memtask.h5.MemTaskListQueryFacade.signPageTaskList", params));
             
             if (!response.optBoolean("success")) {
-                Status.setFlagToday("memTaskListQueryFacade");
                 Log.error(TAG, "会员任务列表请求失败: " + response);
                 GlobalThreadPools.sleep(RandomUtil.nextInt(1000, 2000));
                 return;
             }
+            
+            // 成功请求，设置今日已完成标记
+            Status.setFlagToday("memTaskListQueryFacade");
             
             JSONObject resultData = response.optJSONObject("resultData");
             if (resultData == null) {
@@ -883,7 +895,6 @@ public class MemberNew extends BaseCommTask {
                         sleepRandomTime();
                         
                         if ("3601".equals(taskResult.optString("errorScene"))) {
-                            Status.setFlagToday("memTaskListQueryFacade");
                             break;
                         }
                         
@@ -906,8 +917,6 @@ public class MemberNew extends BaseCommTask {
         } catch (Exception e) {
             Log.error(TAG, "会员任务列表查询异常: " + e.getMessage());
             GlobalThreadPools.sleep(RandomUtil.nextInt(2000, 3000));
-        } finally {
-            Status.setFlagToday("memTaskListQueryFacade");
         }
     }
 

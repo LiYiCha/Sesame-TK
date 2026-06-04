@@ -44,6 +44,7 @@ public class OtherTask2 extends ModelTask {
     private BooleanModelField expressTask = new BooleanModelField("expressTask", "快递积分", false);
     private BooleanModelField privilegeTask = new BooleanModelField("privilegeTask", "青春特权", true);
     private BooleanModelField gameCenter = new BooleanModelField("gameCenter", "游戏中心浏览任务", false);
+    private BooleanModelField gameCenterGold = new BooleanModelField("gameCenterGold", "游戏中心金币任务", false);
     private BooleanModelField monthTRA = new BooleanModelField("monthTRA", "月月赚转账红包", false);
     private BooleanModelField scholarship = new BooleanModelField("scholarship", "奖学金", false);
     private BooleanModelField touchPay = new BooleanModelField("touchpay", "碰一碰街区", false);
@@ -70,6 +71,7 @@ public class OtherTask2 extends ModelTask {
         modelFields.addField(expressTask );
         modelFields.addField(privilegeTask );
         modelFields.addField(gameCenter);
+        modelFields.addField(gameCenterGold);
         modelFields.addField(monthTRA);//月月赚
 //        modelFields.addField(payAwardProd);//支付赚红包
         modelFields.addField(scholarship);//奖学金
@@ -134,8 +136,10 @@ public class OtherTask2 extends ModelTask {
                         }),
                         new TaskWrapper("会员转盘", () -> {
                             if (playConsultFacade.getValue()) {
-                                int num = playConsultFacadeNum.getValue();
-                                new PlayConsultFacade().handleAsync(num);
+                                if (!Status.hasTemporaryStatusValid("MemberLuckyWheel_Cooldown")) {
+                                    int num = playConsultFacadeNum.getValue();
+                                    new PlayConsultFacade().handleAsync(num);
+                                }
                             }
                         }),
                     new TaskWrapper("青春特权任务", () -> {
@@ -192,6 +196,11 @@ public class OtherTask2 extends ModelTask {
                         new TaskWrapper("游戏中心", () -> {
                             if (gameCenter.getValue()) {
                                 new GameCenter().handle();
+                            }
+                        }),
+                        new TaskWrapper("游戏中心金币任务", () -> {
+                            if (gameCenterGold.getValue()) {
+                                new GameCenterGold().handle();
                             }
                         })
                 )));
