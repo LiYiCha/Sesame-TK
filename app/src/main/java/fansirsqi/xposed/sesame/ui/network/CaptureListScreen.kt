@@ -97,9 +97,10 @@ fun CaptureListScreen(
     val scope = rememberCoroutineScope()
 
     // 统计数据
-    val total = records.size
-    val success = records.count { it.statusCode in 200..299 }
-    val error = records.count { it.statusCode >= 400 || it.statusCode == 0 }
+    val stats by viewModel.stats.collectAsState()
+    val total = stats.total
+    val success = stats.success
+    val error = stats.error
 
     val appBarBg = MaterialTheme.colorScheme.primaryContainer
     val appBarContent = MaterialTheme.colorScheme.onPrimaryContainer

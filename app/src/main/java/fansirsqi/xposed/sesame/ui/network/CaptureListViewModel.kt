@@ -146,6 +146,30 @@ class CaptureListViewModel : ViewModel() {
             filtered
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    data class Stats(val total: Int = 0, val success: Int = 0, val error: Int = 0)
+
+    // ── 全量统计数据 ───────────────────────
+    val stats: StateFlow<Stats> =
+        combine(_allRecords, _globalSearchResults, isGlobalSearch, _categoryFilter, _blacklist) { _, globals, isGlobal, cat, bl ->
+            val sourceList = if (isGlobal) globals else cachedFullList
+            
+            var filtered = sourceList
+            if (cat != null) {
+                filtered = filtered.filter { it.category == cat }
+            }
+            if (bl.isNotEmpty()) {
+                filtered = filtered.filter { record ->
+                    bl.none { kw -> record.host.contains(kw, ignoreCase = true) }
+                }
+            }
+            
+            val total = filtered.size
+            val success = filtered.count { it.statusCode in 200..299 }
+            val error = filtered.count { it.statusCode >= 400 || it.statusCode == 0 }
+            
+            Stats(total, success, error)
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), Stats())
+
     // ── 黑名单管理 ──────────────────────────
 
     private fun refreshBlacklist() {

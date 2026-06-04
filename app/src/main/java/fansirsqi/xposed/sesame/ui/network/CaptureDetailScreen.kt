@@ -19,6 +19,12 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.positionChanged
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import kotlin.math.roundToInt
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.*
@@ -40,6 +46,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.text.withStyle
@@ -475,32 +482,119 @@ private fun BoxScope.Scrollbar(
     listState: LazyListState,
     color: Color
 ) {
-    if (listState.layoutInfo.totalItemsCount == 0) return
-    
-    // 增加交互热区
+    val layoutInfo = listState.layoutInfo
+    val totalItems = layoutInfo.totalItemsCount
+    if (totalItems == 0) return
+
+    val visibleItemsInfo = layoutInfo.visibleItemsInfo
+    if (visibleItemsInfo.isEmpty()) return
+
+    val scope = rememberCoroutineScope()
+    val density = LocalDensity.current
+
+    val visibleItemsCount = visibleItemsInfo.size
+    val firstVisibleItemIndex = listState.firstVisibleItemIndex
+    val visibleRatio = visibleItemsCount.toFloat() / totalItems
+    if (visibleRatio >= 0.99f) return
+
+    val maxScrollIndex = (totalItems - visibleItemsCount).coerceAtLeast(1)
+    val scrollFraction = (firstVisibleItemIndex.toFloat() / maxScrollIndex).coerceIn(0f, 1f)
+
+    var trackHeightPx by remember { mutableIntStateOf(0) }
+    val minThumbHeightPx = with(density) { 30.dp.toPx() }
+    val thumbHeightPx = (visibleRatio * trackHeightPx).coerceAtLeast(minThumbHeightPx)
+    val maxThumbOffset = (trackHeightPx - thumbHeightPx).coerceAtLeast(0f)
+
+    var isDragging by remember { mutableStateOf(false) }
+    var localDragOffset by remember { mutableFloatStateOf(0f) }
+
+    val thumbOffset = if (isDragging) {
+        localDragOffset.coerceIn(0f, maxThumbOffset)
+    } else {
+        scrollFraction * maxThumbOffset
+    }
+
+    LaunchedEffect(scrollFraction, maxThumbOffset, isDragging) {
+        if (!isDragging) {
+            localDragOffset = scrollFraction * maxThumbOffset
+        }
+    }
+
     Box(
-        Modifier
+        modifier = Modifier
             .align(Alignment.CenterEnd)
             .fillMaxHeight()
-            .width(20.dp) // 增大触摸宽度
-            .background(Color.Transparent)
-            .padding(vertical = 2.dp)
-            .drawBehind {
-                val totalCount = listState.layoutInfo.totalItemsCount
-                val visibleItems = listState.layoutInfo.visibleItemsInfo
-                if (visibleItems.isEmpty()) return@drawBehind
-                val firstIdx = visibleItems.first().index
-                val viewportHeight = size.height
-                val thumbTop = if (totalCount > 1) viewportHeight * firstIdx / totalCount else 0f
-                val thumbHeight = (viewportHeight * visibleItems.size / totalCount).coerceAtLeast(30f)
-                
-                // 绘制背景槽
-                drawRoundRect(color.copy(alpha = 0.05f), topLeft = androidx.compose.ui.geometry.Offset(size.width - 4.dp.toPx(), 0f), size = androidx.compose.ui.geometry.Size(4.dp.toPx(), viewportHeight), cornerRadius = androidx.compose.ui.geometry.CornerRadius(2.dp.toPx(), 2.dp.toPx()))
-                
-                // 绘制滑块
-                drawRoundRect(color, topLeft = androidx.compose.ui.geometry.Offset(size.width - 4.dp.toPx(), thumbTop), size = androidx.compose.ui.geometry.Size(4.dp.toPx(), thumbHeight), cornerRadius = androidx.compose.ui.geometry.CornerRadius(2.dp.toPx(), 2.dp.toPx()))
+            .width(24.dp) // 增大触摸区域
+            .onSizeChanged { trackHeightPx = it.height }
+            .pointerInput(maxThumbOffset, totalItems, maxScrollIndex) {
+                awaitEachGesture {
+                    val down = awaitFirstDown(requireUnconsumed = false)
+                    isDragging = true
+                    
+                    val initialY = down.position.y
+                    val halfThumb = thumbHeightPx / 2
+                    var currentY = (initialY - halfThumb).coerceIn(0f, maxThumbOffset)
+                    localDragOffset = currentY
+                    
+                    val initialFraction = if (maxThumbOffset > 0) currentY / maxThumbOffset else 0f
+                    val targetIndex = (initialFraction * maxScrollIndex).roundToInt().coerceIn(0, totalItems - 1)
+                    scope.launch {
+                        listState.scrollToItem(targetIndex)
+                    }
+
+                    var dragEvent = down
+                    do {
+                        val event = awaitPointerEvent()
+                        val dragChange = event.changes.firstOrNull { it.id == dragEvent.id }
+                        if (dragChange != null && dragChange.pressed) {
+                            if (dragChange.positionChanged()) {
+                                dragChange.consume()
+                                val diffY = dragChange.position.y - dragEvent.position.y
+                                currentY = (currentY + diffY).coerceIn(0f, maxThumbOffset)
+                                localDragOffset = currentY
+                                
+                                val fraction = if (maxThumbOffset > 0) currentY / maxThumbOffset else 0f
+                                val index = (fraction * maxScrollIndex).roundToInt().coerceIn(0, totalItems - 1)
+                                scope.launch {
+                                    listState.scrollToItem(index)
+                                }
+                            }
+                            dragEvent = dragChange
+                        }
+                    } while (event.changes.any { it.pressed })
+                    
+                    isDragging = false
+                }
             }
-    )
+    ) {
+        // 绘制背景槽
+        Box(
+            modifier = Modifier
+                .align(Alignment.CenterEnd)
+                .padding(end = 4.dp)
+                .width(4.dp)
+                .fillMaxHeight()
+                .background(color.copy(alpha = 0.05f), RoundedCornerShape(2.dp))
+        )
+
+        // 绘制滑块
+        val thumbWidthDp = if (isDragging) 6.dp else 4.dp
+        val thumbHeightDp = with(density) { thumbHeightPx.toDp() }
+        val thumbOffsetDp = with(density) { thumbOffset.toDp() }
+
+        Box(
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .padding(end = 4.dp)
+                .offset(y = thumbOffsetDp)
+                .width(thumbWidthDp)
+                .height(thumbHeightDp)
+                .background(
+                    color = if (isDragging) color.copy(alpha = 0.9f) else color,
+                    shape = RoundedCornerShape(2.dp)
+                )
+        )
+    }
 }
 
 /** ScrollState 滚动条 */

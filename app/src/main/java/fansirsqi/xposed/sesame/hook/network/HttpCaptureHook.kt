@@ -65,7 +65,7 @@ object HttpCaptureHook {
 
         hookAlipayTraffic(classLoader)
         hookH5Plugin(classLoader)
-        hookStandardHttpConnection()
+        hookStandardHttpConnection(classLoader)
         hookOkHttpTraffic(classLoader)
         hookARiverTraffic(classLoader)
         bypassBifrostAndForceProxy(classLoader)
@@ -242,14 +242,14 @@ object HttpCaptureHook {
         } catch (_: Throwable) {}
     }
 
-    private fun hookStandardHttpConnection() {
+    private fun hookStandardHttpConnection(classLoader: ClassLoader) {
         try {
             XposedHelpers.findAndHookMethod(java.net.URL::class.java, "openConnection", object : XC_MethodHook() {
                 override fun afterHookedMethod(param: MethodHookParam) {
                     val conn = param.result as? java.net.HttpURLConnection ?: return
                     val className = conn.javaClass.name
                     ensurePendingBroadcast(conn)
-                    if (className.contains("okhttp") && !hookedClasses.contains(className)) {
+                    if ((className.contains("okhttp") || className.contains("alipay")) && !hookedClasses.contains(className)) {
                         synchronized(hookedClasses) {
                             if (!hookedClasses.contains(className)) {
                                 hookSpecificHttpImpl(conn.javaClass)
@@ -266,12 +266,24 @@ object HttpCaptureHook {
                     hookedClasses.add(className)
                 } catch (_: Throwable) {}
             }
+            // Hook Alipay's custom AndroidH2UrlConnection
+            try {
+                val h2Class = XposedHelpers.findClass(CLASS_H2_CONNECTION, classLoader)
+                hookSpecificHttpImpl(h2Class)
+                hookedClasses.add(CLASS_H2_CONNECTION)
+                Log.runtime(TAG, "Hook AndroidH2UrlConnection 成功")
+            } catch (e: Throwable) {
+                Log.error(TAG, "Hook AndroidH2UrlConnection 失败: ${e.message}")
+            }
         } catch (_: Throwable) {}
     }
 
     private fun hookSpecificHttpImpl(connClass: Class<*>) {
         try {
             val hookStream = object : XC_MethodHook() {
+                override fun beforeHookedMethod(param: MethodHookParam) {
+                    ensurePendingBroadcast(param.thisObject as java.net.HttpURLConnection)
+                }
                 override fun afterHookedMethod(param: MethodHookParam) {
                     val is_ = param.result as? java.io.InputStream ?: return
                     if (is_ is CaptureInputStream) return
@@ -286,6 +298,9 @@ object HttpCaptureHook {
             XposedHelpers.findAndHookMethod(connClass, "connect", object : XC_MethodHook() { override fun beforeHookedMethod(param: MethodHookParam) { ensurePendingBroadcast(param.thisObject as java.net.HttpURLConnection) } })
             XposedHelpers.findAndHookMethod(connClass, "disconnect", object : XC_MethodHook() { override fun afterHookedMethod(param: MethodHookParam) { triggerStandardCapture(param.thisObject as java.net.HttpURLConnection) } })
             XposedHelpers.findAndHookMethod(connClass, "getOutputStream", object : XC_MethodHook() {
+                override fun beforeHookedMethod(param: MethodHookParam) {
+                    ensurePendingBroadcast(param.thisObject as java.net.HttpURLConnection)
+                }
                 override fun afterHookedMethod(param: MethodHookParam) {
                     val os = param.result as? java.io.OutputStream ?: return
                     val buffer = java.io.ByteArrayOutputStream()
@@ -300,6 +315,18 @@ object HttpCaptureHook {
             })
             XposedHelpers.findAndHookMethod(connClass, "getInputStream", hookStream)
             try { XposedHelpers.findAndHookMethod(connClass, "getErrorStream", hookStream) } catch (_: Throwable) {}
+            
+            // Hook getResponseCode to immediately capture response metadata once headers are received
+            try {
+                XposedHelpers.findAndHookMethod(connClass, "getResponseCode", object : XC_MethodHook() {
+                    override fun afterHookedMethod(param: MethodHookParam) {
+                        val code = param.result as? Int ?: return
+                        if (code > 0) {
+                            triggerStandardCapture(param.thisObject as java.net.HttpURLConnection)
+                        }
+                    }
+                })
+            } catch (_: Throwable) {}
         } catch (_: Throwable) {}
     }
 

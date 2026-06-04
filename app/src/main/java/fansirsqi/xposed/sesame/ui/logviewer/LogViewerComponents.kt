@@ -468,10 +468,12 @@ fun LogContent(
             // 滚动到目标位置（居中显示）
             if (displayIndex >= 0 && displayIndex < uiState.displayedLines.size) {
                 coroutineScope.launch {
-                    listState.animateScrollToItem(
-                        index = displayIndex,
-                        scrollOffset = -200 // 偏移量，使目标行显示在屏幕中间
-                    )
+                    val distance = kotlin.math.abs(listState.firstVisibleItemIndex - displayIndex)
+                    if (distance < 50) {
+                        listState.animateScrollToItem(index = displayIndex, scrollOffset = -200)
+                    } else {
+                        listState.scrollToItem(index = displayIndex, scrollOffset = -200)
+                    }
                 }
             }
         }
@@ -608,43 +610,69 @@ fun FastScrollbar(
     val minThumbHeightPx = with(density) { 40.dp.toPx() }
     val thumbHeightPx = (visibleRatio * trackHeightPx).coerceAtLeast(minThumbHeightPx)
     val maxThumbOffset = (trackHeightPx - thumbHeightPx).coerceAtLeast(0f)
-    val thumbOffset = scrollFraction * maxThumbOffset
 
-    val draggableState = rememberDraggableState { delta ->
-        if (maxThumbOffset > 0) {
-            val newOffset = (thumbOffset + delta).coerceIn(0f, maxThumbOffset)
-            val newFraction = newOffset / maxThumbOffset
-            val targetIndex = (newFraction * maxScrollIndex).roundToInt()
-                .coerceIn(0, (totalItems - 1).coerceAtLeast(0))
-            coroutineScope.launch {
-                listState.scrollToItem(targetIndex)
-            }
+    // 引入本地拖动变量，避免拖动与滚动状态在 recompose 时产生卡顿冲突
+    var localDragOffset by remember { mutableFloatStateOf(0f) }
+
+    val thumbOffset = if (isDragging) {
+        localDragOffset.coerceIn(0f, maxThumbOffset)
+    } else {
+        scrollFraction * maxThumbOffset
+    }
+
+    // 未拖动时同步滚动进度
+    LaunchedEffect(scrollFraction, maxThumbOffset, isDragging) {
+        if (!isDragging) {
+            localDragOffset = scrollFraction * maxThumbOffset
         }
     }
 
     Box(
         modifier = modifier
-            .width(16.dp)
+            .width(24.dp) // 增大触摸热区
             .onSizeChanged { trackHeightPx = it.height }
             .alpha(alpha)
-            .draggable(
-                orientation = Orientation.Vertical,
-                state = draggableState,
-                onDragStarted = { offset ->
+            .pointerInput(maxThumbOffset, totalItems, maxScrollIndex) {
+                awaitEachGesture {
+                    val down = awaitFirstDown(requireUnconsumed = false)
                     isDragging = true
                     showScrollbar = true
-                    // 点击轨道任意位置直接跳转
-                    if (trackHeightPx > 0) {
-                        val frac = (offset.y / trackHeightPx).coerceIn(0f, 1f)
-                        val target = (frac * (totalItems - 1)).roundToInt()
-                            .coerceIn(0, (totalItems - 1).coerceAtLeast(0))
-                        coroutineScope.launch {
-                            listState.scrollToItem(target)
-                        }
+
+                    val initialY = down.position.y
+                    val halfThumb = thumbHeightPx / 2
+                    var currentY = (initialY - halfThumb).coerceIn(0f, maxThumbOffset)
+                    localDragOffset = currentY
+
+                    val initialFraction = if (maxThumbOffset > 0) currentY / maxThumbOffset else 0f
+                    val targetIndex = (initialFraction * maxScrollIndex).roundToInt().coerceIn(0, totalItems - 1)
+                    coroutineScope.launch {
+                        listState.scrollToItem(targetIndex)
                     }
-                },
-                onDragStopped = { isDragging = false }
-            )
+
+                    var dragEvent = down
+                    do {
+                        val event = awaitPointerEvent()
+                        val dragChange = event.changes.firstOrNull { it.id == dragEvent.id }
+                        if (dragChange != null && dragChange.pressed) {
+                            if (dragChange.positionChanged()) {
+                                dragChange.consume()
+                                val diffY = dragChange.position.y - dragEvent.position.y
+                                currentY = (currentY + diffY).coerceIn(0f, maxThumbOffset)
+                                localDragOffset = currentY
+
+                                val fraction = if (maxThumbOffset > 0) currentY / maxThumbOffset else 0f
+                                val index = (fraction * maxScrollIndex).roundToInt().coerceIn(0, totalItems - 1)
+                                coroutineScope.launch {
+                                    listState.scrollToItem(index)
+                                }
+                            }
+                            dragEvent = dragChange
+                        }
+                    } while (event.changes.any { it.pressed })
+
+                    isDragging = false
+                }
+            }
     ) {
         // 轨道背景
         Box(
