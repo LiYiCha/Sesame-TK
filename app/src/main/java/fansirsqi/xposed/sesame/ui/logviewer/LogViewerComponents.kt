@@ -450,9 +450,7 @@ fun LogContent(
     // 自动滚动到底部
     LaunchedEffect(uiState.displayedLines.size, uiState.autoScroll) {
         if (uiState.autoScroll && uiState.displayedLines.isNotEmpty()) {
-            coroutineScope.launch {
-                listState.animateScrollToItem(uiState.displayedLines.size - 1)
-            }
+            listState.animateScrollToItem(uiState.displayedLines.size - 1)
         }
     }
 
@@ -467,13 +465,11 @@ fun LogContent(
 
             // 滚动到目标位置（居中显示）
             if (displayIndex >= 0 && displayIndex < uiState.displayedLines.size) {
-                coroutineScope.launch {
-                    val distance = kotlin.math.abs(listState.firstVisibleItemIndex - displayIndex)
-                    if (distance < 50) {
-                        listState.animateScrollToItem(index = displayIndex, scrollOffset = -200)
-                    } else {
-                        listState.scrollToItem(index = displayIndex, scrollOffset = -200)
-                    }
+                val distance = kotlin.math.abs(listState.firstVisibleItemIndex - displayIndex)
+                if (distance < 50) {
+                    listState.animateScrollToItem(index = displayIndex, scrollOffset = -200)
+                } else {
+                    listState.scrollToItem(index = displayIndex, scrollOffset = -200)
                 }
             }
         }
