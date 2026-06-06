@@ -686,7 +686,7 @@ class AntFarm : ModelTask() {
         try {
             val tc = TimeCounter(TAG)
             val userId = UserMap.currentUid
-            Log.record(TAG, "执行开始-蚂蚁$name")
+            Log.runtime(TAG, "执行开始-蚂蚁$name")
 
             if (enterFarm() == null) {
                 return
@@ -721,7 +721,7 @@ class AntFarm : ModelTask() {
                         tc.countDebug("饲料任务")
                         Status.setFlagToday("farm::farmTaskFinished")
                     } else {
-                        Log.record(TAG, "饲料任务未到执行时间，跳过")
+                        Log.runtime(TAG, "饲料任务未到执行时间，跳过")
                     }
                 }
             }
@@ -758,7 +758,7 @@ class AntFarm : ModelTask() {
             if (kitchen!!.value) {
                 // 检查小鸡是否在睡觉，如果在睡觉则跳过厨房功能
                 if (AnimalFeedStatus.SLEEPY.name == ownerAnimal.animalFeedStatus) {
-                    Log.record(TAG, "小鸡厨房🐔[小鸡正在睡觉中，跳过厨房功能]")
+                    Log.runtime(TAG, "小鸡厨房🐔[小鸡正在睡觉中，跳过厨房功能]")
                 } else {
                     collectDailyFoodMaterial()
                     collectDailyLimitedFoodMaterial()
@@ -773,7 +773,7 @@ class AntFarm : ModelTask() {
                 tc.countDebug("使用新蛋卡")
             }
             if (harvestProduce!!.value && benevolenceScore >= 1) {
-                Log.record(TAG, "有可收取的爱心鸡蛋")
+                Log.runtime(TAG, "有可收取的爱心鸡蛋")
                 harvestProduce(ownerFarmId)
                 tc.countDebug("收鸡蛋")
             }
@@ -791,7 +791,7 @@ class AntFarm : ModelTask() {
                     tc.countDebug("饲料任务")
                     Status.setFlagToday("farm::farmTaskFinished")
                 } else {
-                    Log.record(TAG, "饲料任务未到执行时间，跳过")
+                    Log.runtime(TAG, "饲料任务未到执行时间，跳过")
                 }
             }
 
@@ -853,7 +853,7 @@ class AntFarm : ModelTask() {
              */
             syncAnimalStatus(ownerFarmId)
             if (AnimalFeedStatus.SLEEPY.name == ownerAnimal.animalFeedStatus) {
-                Log.record(TAG, "小鸡正在睡觉，领取饲料")
+                Log.runtime(TAG, "小鸡正在睡觉，领取饲料")
                 receiveFarmAwards()
             }
 
@@ -874,7 +874,7 @@ class AntFarm : ModelTask() {
         } catch (t: Throwable) {
             Log.printStackTrace(TAG, "AntFarm.start.run err:",t)
         } finally {
-            Log.record(TAG, "执行结束-蚂蚁$name")
+            Log.runtime(TAG, "执行结束-蚂蚁$name")
         }
     }
 
@@ -896,19 +896,19 @@ class AntFarm : ModelTask() {
                     val manureCount = joRecallAnimal.getInt("manureCount")
                     Log.farm("召回小鸡📣[收获:肥料" + manureCount + "g]")
                 } else {
-                    Log.record(TAG, "DEBUG:$ownerAnimal")
+                    Log.runtime(TAG, "DEBUG:$ownerAnimal")
 
                     syncAnimalStatus(ownerFarmId)
                     var guest = false
                     when (SubAnimalType.valueOf(ownerAnimal.subAnimalType!!)) {
                         SubAnimalType.GUEST -> {
                             guest = true
-                            Log.record(TAG, "小鸡到好友家去做客了")
+                            Log.runtime(TAG, "小鸡到好友家去做客了")
                         }
 
-                        SubAnimalType.NORMAL -> Log.record(TAG, "小鸡太饿，离家出走了")
-                        SubAnimalType.PIRATE -> Log.record(TAG, "小鸡外出探险了")
-                        SubAnimalType.WORK -> Log.record(TAG, "小鸡出去工作啦")
+                        SubAnimalType.NORMAL -> Log.runtime(TAG, "小鸡太饿，离家出走了")
+                        SubAnimalType.PIRATE -> Log.runtime(TAG, "小鸡外出探险了")
+                        SubAnimalType.WORK -> Log.runtime(TAG, "小鸡出去工作啦")
                     }
                     var hungry = false
                     val userName =
@@ -916,15 +916,15 @@ class AntFarm : ModelTask() {
                     when (AnimalFeedStatus.valueOf(ownerAnimal.animalFeedStatus!!)) {
                         AnimalFeedStatus.HUNGRY -> {
                             hungry = true
-                            Log.record(TAG, "小鸡在[$userName]的庄园里挨饿")
+                            Log.runtime(TAG, "小鸡在[$userName]的庄园里挨饿")
                         }
 
-                        AnimalFeedStatus.EATING -> Log.record(
+                        AnimalFeedStatus.EATING -> Log.runtime(
                             TAG,
                             "小鸡在[$userName]的庄园里吃得津津有味"
                         )
-                        AnimalFeedStatus.SLEEPY -> Log.record(TAG, "小鸡在[$userName]的庄园里睡觉")
-                        AnimalFeedStatus.NONE -> Log.record(TAG, "小鸡在[$userName]的庄园里状态未知")
+                        AnimalFeedStatus.SLEEPY -> Log.runtime(TAG, "小鸡在[$userName]的庄园里睡觉")
+                        AnimalFeedStatus.NONE -> Log.runtime(TAG, "小鸡在[$userName]的庄园里状态未知")
                     }
                     val recall = when (recallAnimalType!!.value) {
                         RecallAnimalType.ALWAYS -> true
@@ -984,7 +984,7 @@ class AntFarm : ModelTask() {
                 .save(UserMap.currentUid)
         } catch (e: CancellationException) {
             // 协程取消异常必须重新抛出，不能吞掉
-            Log.record(TAG, "paradiseCoinExchangeBenefit 协程被取消")
+            Log.runtime(TAG, "paradiseCoinExchangeBenefit 协程被取消")
             throw e
         } catch (t: Throwable) {
             Log.printStackTrace(TAG, "paradiseCoinExchangeBenefit err:",t)
@@ -1037,7 +1037,7 @@ class AntFarm : ModelTask() {
                     || PropStatus.REACH_USER_HOLD_LIMIT.name == itemStatus
                     || PropStatus.NO_ENOUGH_POINT.name == itemStatus
                 ) {
-                    Log.record(
+                    Log.runtime(
                         TAG,
                         "乐园兑换💸[$spuName]停止:" + PropStatus.valueOf(itemStatus)
                             .nickName()
@@ -1058,24 +1058,24 @@ class AntFarm : ModelTask() {
         try {
             val sleepTimeStr = sleepTime!!.value
             if ("-1" == sleepTimeStr) {
-                Log.record(TAG, "当前已关闭小鸡睡觉")
+                Log.runtime(TAG, "当前已关闭小鸡睡觉")
                 return
             }
             val now = TimeUtil.getNow()
             val animalSleepTimeCalendar = TimeUtil.getTodayCalendarByTimeStr(sleepTimeStr)
             if (animalSleepTimeCalendar == null) {
-                Log.record(TAG, "小鸡睡觉时间格式错误，请重新设置")
+                Log.runtime(TAG, "小鸡睡觉时间格式错误，请重新设置")
                 return
             }
 
             val wakeUpTimeStr = wakeUpTime!!.value
             if ("-1" == wakeUpTimeStr) {
-                Log.record(TAG, "当前已关闭小鸡起床")
+                Log.runtime(TAG, "当前已关闭小鸡起床")
             }
 
             var animalWakeUpTimeCalendar = TimeUtil.getTodayCalendarByTimeStr(wakeUpTimeStr)
             if(animalWakeUpTimeCalendar == null) {
-                Log.record(TAG, "小鸡起床时间格式错误，请重新设置，否则默认关闭")
+                Log.runtime(TAG, "小鸡起床时间格式错误，请重新设置，否则默认关闭")
                 animalWakeUpTimeCalendar = TimeUtil.getTodayCalendarByTimeStr("0600")
             }
             val sixAmToday = TimeUtil.getTodayCalendarByTimeStr("0600")
@@ -1093,7 +1093,7 @@ class AntFarm : ModelTask() {
                 if (!Status.canAnimalSleep()) {
                     return
                 }
-                Log.record(TAG, "已错过小鸡今日睡觉时间")
+                Log.runtime(TAG, "已错过小鸡今日睡觉时间")
                 return
             }
             val sleepTaskId = "AS|$animalSleepTime"
@@ -1111,7 +1111,7 @@ class AntFarm : ModelTask() {
                         animalSleepTime
                     )
                 )
-                Log.record(
+                Log.runtime(
                     TAG,
                     "添加定时睡觉🛌[" + UserMap.getCurrentMaskName() + "]在[" + TimeUtil.getCommonDate(
                         animalSleepTime
@@ -1127,7 +1127,7 @@ class AntFarm : ModelTask() {
                         animalWakeUpTime
                     )
                 )
-                Log.record(
+                Log.runtime(
                     TAG,
                     "添加定时起床🛌[" + UserMap.getCurrentMaskName() + "]在[" + TimeUtil.getCommonDate(
                         animalWakeUpTime
@@ -1221,12 +1221,12 @@ class AntFarm : ModelTask() {
 //            val sleepCal = TimeUtil.getTodayCalendarByTimeStr(sleepTimeStr)
 //            // 如果当前时间在睡觉时间之前，且差距小于 30 分钟
 //            if (now.before(sleepCal) && (sleepCal.timeInMillis - now.timeInMillis) < 30 * 60 * 1000) {
-//                Log.record(TAG, "马上要睡觉了，暂不投喂，让它饿着吧")
+//                Log.runtime(TAG, "马上要睡觉了，暂不投喂，让它饿着吧")
 //                return
 //            }
 //            // 如果已经过了睡觉时间，理论上也不应该喂，但原逻辑会在后面 animalSleepAndWake 处理睡觉
 //            if (now.after(sleepCal)) {
-//                Log.record(TAG, "已过睡觉时间，暂不投喂")
+//                Log.runtime(TAG, "已过睡觉时间，暂不投喂")
 //                return
 //            }
 //        }
@@ -1236,20 +1236,20 @@ class AntFarm : ModelTask() {
         }
 
         if (AnimalFeedStatus.SLEEPY.name == ownerAnimal.animalFeedStatus) {
-            Log.record(TAG, "投喂小鸡🥣[小鸡正在睡觉中，暂停投喂]")
+            Log.runtime(TAG, "投喂小鸡🥣[小鸡正在睡觉中，暂停投喂]")
             return
         }
 
         // 1. 如果不够一次喂食180g时尝试领取奖励，首次运行时unreceiveTaskAward=0
         if (receiveFarmTaskAward!!.value && foodStock <180) {
-            Log.record(TAG, "饲料小于180g，尝试领取饲料奖励")
+            Log.runtime(TAG, "饲料小于180g，尝试领取饲料奖励")
             receiveFarmAwards() // 该步骤会自动计算饲料数量，不需要重复刷新状态
         }
 
         // 2. 判断是否需要喂食
         if (AnimalFeedStatus.HUNGRY.name == ownerAnimal.animalFeedStatus) {
             if (feedAnimal!!.value) {
-                Log.record("小鸡在挨饿~Tk 尝试为你自动喂食")
+                Log.runtime("小鸡在挨饿~Tk 尝试为你自动喂食")
                 if (feedAnimal(ownerFarmId)) {
                     // 刷新状态
                     syncAnimalStatus(ownerFarmId)
@@ -1261,7 +1261,7 @@ class AntFarm : ModelTask() {
         if (useBigEaterTool!!.value && AnimalFeedStatus.EATING.name == ownerAnimal.animalFeedStatus) {
             // 若服务端已标记今日使用过（或当前有效），本地直接跳过
             if (serverUseBigEaterTool) {
-                Log.record("服务端标记已使用加饭卡，跳过使用")
+                Log.runtime("服务端标记已使用加饭卡，跳过使用")
                 // 这里可选：尝试与本地计数对齐（仅在计数为0时+1，避免重复累加）
                 val today = LocalDate.now().toString()
                 val uid = UserMap.currentUid
@@ -1278,7 +1278,7 @@ class AntFarm : ModelTask() {
                 val usedCount = DataStore.get(usedKey, Int::class.java) ?: 0
 
                 if (usedCount >= 2) {
-                    Log.record("今日加饭卡已使用${usedCount}/2，跳过使用")
+                    Log.runtime("今日加饭卡已使用${usedCount}/2，跳过使用")
                 } else {
                     val result = useFarmTool(ownerFarmId, ToolType.BIG_EATER_TOOL)
                     if (result) {
@@ -1288,7 +1288,7 @@ class AntFarm : ModelTask() {
                         // 刷新状态
                         syncAnimalStatus(ownerFarmId)
                     } else {
-                        Log.record("⚠️使用道具🎭[加饭卡]失败，可能卡片不足或状态异常~")
+                        Log.runtime("⚠️使用道具🎭[加饭卡]失败，可能卡片不足或状态异常~")
                     }
                 }
             }
@@ -1297,7 +1297,7 @@ class AntFarm : ModelTask() {
         // 4. 判断是否需要使用加速道具（仅在正在吃饭时尝试）
         if (useAccelerateTool!!.value && AnimalFeedStatus.EATING.name == ownerAnimal.animalFeedStatus) {
             // 记录调试日志：加速卡判定前的关键状态
-            Log.record(
+            Log.runtime(
                 TAG,
                 "加速卡判断⏩[动物状态=" + toFeedStatusName(ownerAnimal.animalFeedStatus) +
                         ", 今日封顶=" + Status.hasFlagToday("farm::accelerateLimit") + "]"
@@ -1336,7 +1336,7 @@ class AntFarm : ModelTask() {
                         // 计算下次执行时间（毫秒）
                         val nextFeedTime = System.currentTimeMillis() + (remainingSec * 1000).toLong()
                         // 调试日志：显示服务器倒计时详情
-                        Log.record(
+                        Log.runtime(
                             TAG, "服务器倒计时🕐[小鸡状态=" + toFeedStatusName(ownerAnimal.animalFeedStatus) +
                                     ", 剩余=${remainingSec.toInt()}秒" +
                                     ", 执行时间=" + TimeUtil.getCommonDate(nextFeedTime) + "]"
@@ -1348,7 +1348,7 @@ class AntFarm : ModelTask() {
                                 group = "FA",
                                 suspendRunnable = {
                                     try {
-                                        Log.record(TAG, "🔔 蹲点投喂任务触发")
+                                        Log.runtime(TAG, "🔔 蹲点投喂任务触发")
                                         // 重新进入庄园，获取最新状态
                                         enterFarm()
                                         // 同步最新状态
@@ -1363,7 +1363,7 @@ class AntFarm : ModelTask() {
                                         }
                                         // 喂鸡
                                         handleAutoFeedAnimal(true)
-                                        Log.record(TAG, "🔄 下一次蹲点任务已创建")
+                                        Log.runtime(TAG, "🔄 下一次蹲点任务已创建")
                                     } catch (e: Exception) {
                                         Log.printStackTrace(TAG,"蹲点投喂任务执行失败", e)
                                     }
@@ -1372,9 +1372,9 @@ class AntFarm : ModelTask() {
                                 useSmartScheduler = useSmartSchedulerManager!!.value
                             )
                         )
-                        Log.record(UserMap.getCurrentMaskName() + "小鸡的蹲点投喂时间[" + TimeUtil.getCommonDate(nextFeedTime)+"]")
+                        Log.runtime(UserMap.getCurrentMaskName() + "小鸡的蹲点投喂时间[" + TimeUtil.getCommonDate(nextFeedTime)+"]")
                     } else {
-                        Log.record(TAG, "蹲点投喂🥣[倒计时为0，开始投喂]")
+                        Log.runtime(TAG, "蹲点投喂🥣[倒计时为0，开始投喂]")
                         if (feedAnimal(ownerFarmId)) {
                             // 刷新状态
                             syncAnimalStatus(ownerFarmId)
@@ -1387,7 +1387,7 @@ class AntFarm : ModelTask() {
         } else {
             // 小鸡在睡觉，跳过创建蹲点投喂任务
             // 注意：已存在的任务会在小鸡醒来时被新任务自动替换
-            Log.record(TAG, "蹲点投喂🥣[小鸡正在睡觉，暂不安排投喂任务]")
+            Log.runtime(TAG, "蹲点投喂🥣[小鸡正在睡觉，暂不安排投喂任务]")
         }
 
         // 6. 其他功能（换装、领取饲料）
@@ -1502,7 +1502,7 @@ class AntFarm : ModelTask() {
         try {
             val s = AntFarmRpcCall.enterFarm(userId, friendUserId)
             var jo = JSONObject(s)
-            Log.record(TAG, "DEBUG$jo")
+            Log.runtime(TAG, "DEBUG$jo")
             jo = jo.getJSONObject("farmVO").getJSONObject("subFarmVO")
             val jaAnimals = jo.getJSONArray("animals")
             for (i in 0..<jaAnimals.length()) {
@@ -1543,8 +1543,8 @@ class AntFarm : ModelTask() {
                             )
                         )
                     } else {
-                        Log.record(memo)
-                        Log.record(s)
+                        Log.runtime(memo)
+                        Log.runtime(s)
                     }
                 }
                 rewardList = null
@@ -1570,8 +1570,8 @@ class AntFarm : ModelTask() {
                 // 这里不需要加
                 // add2FoodStock((int)foodHaveStolen);
             } else {
-                Log.record(memo)
-                Log.record(s)
+                Log.runtime(memo)
+                Log.runtime(s)
             }
         } catch (t: Throwable) {
             Log.printStackTrace(TAG, "recallAnimal err:",t)
@@ -1607,8 +1607,8 @@ class AntFarm : ModelTask() {
                     if (ResChecker.checkRes(TAG, jo)) {
                         Log.farm("${UserMap.getCurrentMaskName()} 驱赶小鸡🧶[$user]")
                     } else {
-                        Log.record(memo)
-                        Log.record(s)
+                        Log.runtime(memo)
+                        Log.runtime(s)
                     }
                 }
             }
@@ -1642,7 +1642,7 @@ class AntFarm : ModelTask() {
                             }
                         }
                         if (isFull) {
-                            Log.record(TAG, "领取道具[" + toolType.nickName() + "]#已满，暂不领取")
+                            Log.runtime(TAG, "领取道具[" + toolType.nickName() + "]#已满，暂不领取")
                             continue
                         }
                         val awardCount = bizInfo.getInt("awardCount")
@@ -1655,14 +1655,14 @@ class AntFarm : ModelTask() {
                             Log.farm("领取道具🎖️[" + taskTitle + "-" + toolType.nickName() + "]#" + awardCount + "张")
                         } else {
                             memo = memo.replace("道具", toolType.nickName().toString())
-                            Log.record(memo)
-                            Log.record(s)
+                            Log.runtime(memo)
+                            Log.runtime(s)
                         }
                     }
                 }
             } else {
-                Log.record(memo)
-                Log.record(s)
+                Log.runtime(memo)
+                Log.runtime(s)
             }
         } catch (t: Throwable) {
             Log.printStackTrace(TAG, "receiveToolTaskReward err:",t)
@@ -1679,8 +1679,8 @@ class AntFarm : ModelTask() {
                 harvestBenevolenceScore = jo.getDouble("finalBenevolenceScore")
                 Log.farm("收取鸡蛋🥚[" + harvest + "颗]#剩余" + harvestBenevolenceScore + "颗")
             } else {
-                Log.record(memo)
-                Log.record(s)
+                Log.runtime(memo)
+                Log.runtime(s)
             }
         } catch (t: Throwable) {
             Log.printStackTrace(TAG, "harvestProduce err:",t)
@@ -1716,11 +1716,11 @@ class AntFarm : ModelTask() {
                     Status.donationEgg(userId)
                 }
                 if (activityId == null) {
-                    Log.record(TAG, "今日已无可捐赠的活动")
+                    Log.runtime(TAG, "今日已无可捐赠的活动")
                 }
             } else {
-                Log.record(memo)
-                Log.record(s)
+                Log.runtime(memo)
+                Log.runtime(s)
             }
         } catch (t: Throwable) {
             Log.printStackTrace(TAG, "donation err:",t)
@@ -1738,8 +1738,8 @@ class AntFarm : ModelTask() {
                 Log.farm("捐赠活动❤️[" + activityName + "]#累计捐赠" + donationDetails.getInt("donationTimesStat") + "次")
                 return true
             } else {
-                Log.record(memo)
-                Log.record(s)
+                Log.runtime(memo)
+                Log.runtime(s)
             }
         } catch (t: Throwable) {
             Log.printStackTrace(t)
@@ -1811,7 +1811,7 @@ class AntFarm : ModelTask() {
 
             // 缓存未命中时调用AI
             if (!cacheHit) {
-                Log.record(TAG, "缓存未命中，尝试使用AI答题：$title")
+                Log.runtime(TAG, "缓存未命中，尝试使用AI答题：$title")
                 answer = AnswerAI.getAnswer(title, JsonUtil.jsonArrayToList(labels), "farm")
                 if (answer == null || answer.isEmpty()) {
                     answer = labels.getString(0) // 默认选择第一个选项
@@ -1842,7 +1842,7 @@ class AntFarm : ModelTask() {
      */
     private fun updateTomorrowAnswerCache(operationConfigList: JSONArray, date: String?) {
         try {
-            Log.record(TAG, "updateTomorrowAnswerCache 开始更新缓存")
+            Log.runtime(TAG, "updateTomorrowAnswerCache 开始更新缓存")
             val farmAnswerCache = DataStore.getOrCreate<MutableMap<String, String>>(FARM_ANSWER_CACHE_KEY)
             for (j in 0..<operationConfigList.length()) {
                 val operationConfig = operationConfigList.getJSONObject(j)
@@ -1861,7 +1861,7 @@ class AntFarm : ModelTask() {
                 }
             }
             DataStore.put(FARM_ANSWER_CACHE_KEY, farmAnswerCache)
-            Log.record(TAG, "updateTomorrowAnswerCache 缓存更新完毕")
+            Log.runtime(TAG, "updateTomorrowAnswerCache 缓存更新完毕")
         } catch (e: Exception) {
             Log.printStackTrace(TAG, "updateTomorrowAnswerCache 错误:", e)
         }
@@ -1873,7 +1873,7 @@ class AntFarm : ModelTask() {
      */
     private fun cleanOldAnswers(farmAnswerCache: MutableMap<String, String>?, today: String?) {
         try {
-            Log.record(TAG, "cleanOldAnswers 开始清理缓存")
+            Log.runtime(TAG, "cleanOldAnswers 开始清理缓存")
             if (farmAnswerCache == null || farmAnswerCache.isEmpty()) return
             // 将今天日期转为数字格式：20250405
             val todayInt = convertDateToInt(today) // 如 "2025-04-05" → 20250405
@@ -1890,13 +1890,13 @@ class AntFarm : ModelTask() {
                         if (dateInt == -1) continue
                         if (todayInt - dateInt <= daysToKeep) {
                             cleanedMap[entry.key] = entry.value //保存7天内的答案
-                            Log.record(TAG, "保留 日期：" + todayInt + "缓存日期：" + dateInt + " 题目：" + parts[0])
+                            Log.runtime(TAG, "保留 日期：" + todayInt + "缓存日期：" + dateInt + " 题目：" + parts[0])
                         }
                     }
                 }
             }
             DataStore.put(FARM_ANSWER_CACHE_KEY, cleanedMap)
-            Log.record(TAG, "cleanOldAnswers 清理缓存完毕")
+            Log.runtime(TAG, "cleanOldAnswers 清理缓存完毕")
         } catch (e: Exception) {
             Log.printStackTrace(TAG, "cleanOldAnswers error:", e)
         }
@@ -1910,7 +1910,7 @@ class AntFarm : ModelTask() {
      * @return 日期数字格式，如 "2025-04-05" → 20250405
      */
     private fun convertDateToInt(dateStr: String?): Int {
-        Log.record(TAG, "convertDateToInt 开始转换日期：$dateStr")
+        Log.runtime(TAG, "convertDateToInt 开始转换日期：$dateStr")
         if (dateStr == null || dateStr.length != 10 || dateStr[4] != '-' || dateStr[7] != '-') {
             Log.error("日期格式错误：$dateStr")
             return -1 // 格式错误
@@ -1943,7 +1943,7 @@ class AntFarm : ModelTask() {
 
                 val gameAward = joInit.optJSONObject("gameAward")
                 if (gameAward?.optBoolean("level3Get") == true) {
-                    Log.record(TAG, "庄园游戏🎮[${gameType.gameName()}]#今日奖励已领满")
+                    Log.runtime(TAG, "庄园游戏🎮[${gameType.gameName()}]#今日奖励已领满")
                     break
                 }
 
@@ -1960,7 +1960,7 @@ class AntFarm : ModelTask() {
                             continue
                         }
                     } else {
-                        Log.record(TAG, "庄园游戏提交失败: $joRecord")
+                        Log.runtime(TAG, "庄园游戏提交失败: $joRecord")
                     }
                 }
 
@@ -1974,7 +1974,7 @@ class AntFarm : ModelTask() {
             }
         } catch (e: CancellationException) {
             // 协程取消异常必须重新抛出，不能吞掉
-            Log.record(TAG, "recordFarmGame 协程被取消")
+            Log.runtime(TAG, "recordFarmGame 协程被取消")
             throw e
         } catch (t: Throwable) {
             Log.printStackTrace(TAG, "recordFarmGame err:",t)
@@ -2052,7 +2052,7 @@ class AntFarm : ModelTask() {
     private suspend fun handleFarmGameLogic() {
         // 1. 检查游戏改分是否已完成
         if (Status.hasFlagToday("farm::farmGameFinished")) {
-            Log.record("今日庄园游戏改分已完成")
+            Log.runtime("今日庄园游戏改分已完成")
             return
         }
         val isAccelEnabled = useAccelerateTool!!.value
@@ -2069,7 +2069,7 @@ class AntFarm : ModelTask() {
                     }
                     playAllFarmGames()
                 } else {
-                    Log.record("当前处于按时游戏改分模式，未到设定时间，跳过")
+                    Log.runtime("当前处于按时游戏改分模式，未到设定时间，跳过")
                 }
             }
 
@@ -2089,24 +2089,24 @@ class AntFarm : ModelTask() {
                     isSatisfied -> playAllFarmGames()
 
                     !isTaskEnabled -> {
-                        Log.record("未开启饲料任务，虽然尝试领取了奖励，但饲料缺口仍超过${gameRewardMax!!.value}g，直接执行游戏")
+                        Log.runtime("未开启饲料任务，虽然尝试领取了奖励，但饲料缺口仍超过${gameRewardMax!!.value}g，直接执行游戏")
                         playAllFarmGames()
                     }
 
                     isTaskFinished -> {
-                        Log.record("已开启饲料任务且今日已完成，但领取奖励后缺口仍超过${gameRewardMax!!.value}g，暂不执行游戏改分。" +
+                        Log.runtime("已开启饲料任务且今日已完成，但领取奖励后缺口仍超过${gameRewardMax!!.value}g，暂不执行游戏改分。" +
                                 "请确认饲料奖励完成情况，可以关闭设置里的“做饲料任务”选项直接进行游戏改分")
                     }
 
                     else -> {
-                        Log.record("已开启饲料任务但尚未完成，现有饲料缺口超过${gameRewardMax!!.value}g，等待任务完成后再执行")
+                        Log.runtime("已开启饲料任务但尚未完成，现有饲料缺口超过${gameRewardMax!!.value}g，等待任务完成后再执行")
                     }
                 }
             }
 
             // 加速卡还没用完，等待加速卡用完
             isAccelEnabled && accelerateToolCount > 0 -> {
-                Log.record("加速卡有${accelerateToolCount}张，已使用${Status.INSTANCE.useAccelerateToolCount}张，" +
+                Log.runtime("加速卡有${accelerateToolCount}张，已使用${Status.INSTANCE.useAccelerateToolCount}张，" +
                         "尚未达到今日使用上限，等待加速完成后再改分")
             }
         }
@@ -2119,13 +2119,13 @@ class AntFarm : ModelTask() {
             Status.setFlagToday("farm::chouChouLeFinished")
             Log.farm("今日抽抽乐已完成")
         } else {
-            Log.record(TAG, "抽抽乐尚有未完成项（请检查是否需要验证）")
+            Log.runtime(TAG, "抽抽乐尚有未完成项（请检查是否需要验证）")
         }
     }
     private fun handleChouChouLeLogic() {
         // 1. 检查抽抽乐是否已完成
         if (Status.hasFlagToday("farm::chouChouLeFinished")) {
-            Log.record("今日抽抽乐已完成")
+            Log.runtime("今日抽抽乐已完成")
             return
         }
         val isGameFinished = Status.hasFlagToday("farm::farmGameFinished")
@@ -2138,7 +2138,7 @@ class AntFarm : ModelTask() {
                 if (isTimeReached) {
                     playChouChouLe()
                 } else {
-                    Log.record(TAG, "当前处于按时抽抽乐模式，未到设定时间，跳过")
+                    Log.runtime(TAG, "当前处于按时抽抽乐模式，未到设定时间，跳过")
                 }
             }
 
@@ -2149,7 +2149,7 @@ class AntFarm : ModelTask() {
 
             // 游戏改分任务尚未完成
             isGameEnabled && !isGameFinished -> {
-                Log.record("游戏改分还没有完成，暂不执行抽抽乐")
+                Log.runtime("游戏改分还没有完成，暂不执行抽抽乐")
             }
         }
     }
@@ -2180,7 +2180,7 @@ class AntFarm : ModelTask() {
                 val bizKeyInBlacklist = TaskBlacklist.isTaskInBlacklist(bizKey)
 
                 if (titleInBlacklist || bizKeyInBlacklist) {
-//                    Log.record(TAG, "跳过黑名单任务: $title ($bizKey)")
+//                    Log.runtime(TAG, "跳过黑名单任务: $title ($bizKey)")
                     continue
                 }
 
@@ -2191,7 +2191,7 @@ class AntFarm : ModelTask() {
                         when (bizKey) {
                             "VIDEO_TASK" -> {
                                 // --- 视频任务专项逻辑 ---
-                                Log.record(TAG, "开始处理视频任务: $title ($bizKey)")
+                                Log.runtime(TAG, "开始处理视频任务: $title ($bizKey)")
                                 handleVideoTask(bizKey, title)
                             }
                             "ANSWER" -> {
@@ -2202,7 +2202,7 @@ class AntFarm : ModelTask() {
                             }
                             else -> {
                                 // --- 普通任务通用逻辑 ---
-                                Log.record(TAG, "开始处理庄园任务: $title ($bizKey)")
+                                Log.runtime(TAG, "开始处理庄园任务: $title ($bizKey)")
                                 handleGeneralTask(bizKey, title)
                             }
                         }
@@ -2214,7 +2214,7 @@ class AntFarm : ModelTask() {
                         }
                     }
                     else -> {
-                        Log.record(TAG, "跳过非TODO任务: $title ($bizKey) 状态: $taskStatus")
+                        Log.runtime(TAG, "跳过非TODO任务: $title ($bizKey) 状态: $taskStatus")
                     }
                 }
                 // 3. 额外处理某些即便不是 TODO 状态也可能需要检查的任务（如答题补漏）
@@ -2266,7 +2266,7 @@ class AntFarm : ModelTask() {
             val resultCode = jo.optString("resultCode", "")
             if (resultCode == "309") {
                 Status.setFlagToday("farm::task::limit::$bizKey")
-                Log.record(TAG, "庄园任务[$title]已达上限")
+                Log.runtime(TAG, "庄园任务[$title]已达上限")
             } else {
                 val errorMsg = when {
                     jo.has("memo") -> jo.optString("memo")
@@ -2289,7 +2289,7 @@ class AntFarm : ModelTask() {
                 val response = AntFarmRpcCall.listFarmTask()
                 // 检查空响应
                 if (response.isNullOrEmpty()) {
-                    Log.record(TAG, "receiveFarmAwards: 收到空响应，跳过本次执行")
+                    Log.runtime(TAG, "receiveFarmAwards: 收到空响应，跳过本次执行")
                     return
                 }
                 val jo = JSONObject(response)
@@ -2327,7 +2327,7 @@ class AntFarm : ModelTask() {
                             }
                         }  else {
                             val msg = if (needFarmGame) "预留游戏改分的饲料空间，庄园暂不执行签到" else "饲料空间不足${awardCount}g，庄园暂不签到"
-                            Log.record(TAG, "${msg}。14点后会强制签到；如已签到请忽略")
+                            Log.runtime(TAG, "${msg}。14点后会强制签到；如已签到请忽略")
                         }
                     }
                     for (i in 0..<farmTaskList.length()) {
@@ -2352,7 +2352,7 @@ class AntFarm : ModelTask() {
                                     完成吧？同时也避免了原逻辑的饲料差90g以内后总是领不满的问题。
                                  */
                                 if (foodStock >= foodStockLimit) {
-                                    Log.record(TAG, "饲料[已满],暂不领取")
+                                    Log.runtime(TAG, "饲料[已满],暂不领取")
                                     unreceiveTaskAward++
                                     isFeedFull = true
                                     break
@@ -2360,7 +2360,7 @@ class AntFarm : ModelTask() {
                                 // 针对连续使用加速卡时的领取饲料逻辑，留gameRewardMax以内（含）的空间。(同时确认开启游戏改分)
                                 if (!ignoreAcceLimit!!.value && (needFarmGame && foodStock >= (foodStockLimit - gameRewardMax!!.value))) {
                                     unreceiveTaskAward++
-                                    Log.record("当日游戏改分未完成，预留最多${gameRewardMax!!.value}饲料空间，现有饲料${foodStock}g")
+                                    Log.runtime("当日游戏改分未完成，预留最多${gameRewardMax!!.value}饲料空间，现有饲料${foodStock}g")
                                     isFeedFull = true
                                     break
                                 }
@@ -2371,12 +2371,12 @@ class AntFarm : ModelTask() {
                                             unreceiveTaskAward++
                                             continue
                                         }
-                                        Log.record(TAG, "领取任务：${taskTitle} 的饲料奖励 ${awardCount}g后将超过[${foodStockLimit}g]上限!终止领取。现有饲料${foodStock}g")
+                                        Log.runtime(TAG, "领取任务：${taskTitle} 的饲料奖励 ${awardCount}g后将超过[${foodStockLimit}g]上限!终止领取。现有饲料${foodStock}g")
                                         unreceiveTaskAward++
                                         isFeedFull = true
                                         break
                                     } else {
-                                        Log.record("20点后领取任务：${taskTitle} 的饲料奖励 ${awardCount}g后饲料将超过上限，现有饲料${foodStock}g，溢出${awardCount - foodStockLeft}g")
+                                        Log.runtime("20点后领取任务：${taskTitle} 的饲料奖励 ${awardCount}g后饲料将超过上限，现有饲料${foodStock}g，溢出${awardCount - foodStockLeft}g")
                                     }
                                 }
                             }
@@ -2397,7 +2397,7 @@ class AntFarm : ModelTask() {
                                 val resultCode = receiveTaskAwardjo.optString("resultCode", "")
                                 val memo = receiveTaskAwardjo.optString("memo", "")
                                 if ("331" == resultCode || memo.contains("饲料槽已满")) {
-                                    Log.record(TAG, "领取失败：饲料槽已满，停止后续领取")
+                                    Log.runtime(TAG, "领取失败：饲料槽已满，停止后续领取")
                                     isFeedFull = true
                                     break
                                 } else {
@@ -2411,7 +2411,7 @@ class AntFarm : ModelTask() {
             } while (doubleCheck && !isFeedFull) // 如果饲料槽已满，不再进行双重检查
         } catch (e: CancellationException) {
             // 协程取消异常必须重新抛出，不能吞掉
-            Log.record(TAG, "receiveFarmAwards 协程被取消")
+            Log.runtime(TAG, "receiveFarmAwards 协程被取消")
             throw e
         } catch (t: Throwable) {
             Log.printStackTrace(TAG, "receiveFarmAwards 错误:", t)
@@ -2442,7 +2442,7 @@ class AntFarm : ModelTask() {
                             return false
                         }
                     } else {
-                        Log.record(TAG,"今日已经签到了")
+                        Log.runtime(TAG,"今日已经签到了")
                         Status.setFlagToday(flag)
                         return false
                     }
@@ -2464,7 +2464,7 @@ class AntFarm : ModelTask() {
         try {
             // 检查小鸡是否在睡觉，如果在睡觉则直接返回
             if (AnimalFeedStatus.SLEEPY.name == ownerAnimal.animalFeedStatus) {
-                Log.record(TAG, "投喂小鸡🥣[小鸡正在睡觉中，跳过投喂]")
+                Log.runtime(TAG, "投喂小鸡🥣[小鸡正在睡觉中，跳过投喂]")
                 return false
             }
 
@@ -2472,12 +2472,12 @@ class AntFarm : ModelTask() {
             // 检查小鸡是否正在吃饭，如果在吃饭则直接返回
             // EATING: 小鸡正在进食状态，此时不能重复投喂，会返回"不要着急，还没吃完呢"错误
             if (AnimalFeedStatus.EATING.name == ownerAnimal.animalFeedStatus) {
-                Log.record(TAG, "投喂小鸡🥣[小鸡正在吃饭中，跳过投喂]")
+                Log.runtime(TAG, "投喂小鸡🥣[小鸡正在吃饭中，跳过投喂]")
                 return false
             }
 
             if (foodStock < 180) {
-                Log.record(TAG, "喂鸡饲料不足，停止本次投喂尝试")
+                Log.runtime(TAG, "喂鸡饲料不足，停止本次投喂尝试")
                 return false // 明确返回 false
             } else {
                 val jo = JSONObject(AntFarmRpcCall.feedAnimal(farmId))
@@ -2491,7 +2491,7 @@ class AntFarm : ModelTask() {
                     if (timeSendBack!!.value in 10..interval){
                         timeSendBackAnimal = timeSendBack!!.value
                     } else if(timeSendBack!!.value > interval){
-                        Log.record(TAG, "设置个合理的喂食后赶鸡时间，建议 30 分钟")
+                        Log.runtime(TAG, "设置个合理的喂食后赶鸡时间，建议 30 分钟")
                     }
                     if (sendBackAnimal!!.value && timeSendBackAnimal > 0) {
                         try {
@@ -2503,7 +2503,7 @@ class AntFarm : ModelTask() {
                                 group = "KC",
                                 suspendRunnable = {
                                     try {
-                                        Log.record(TAG, "🔔 蹲点赶鸡任务触发")
+                                        Log.runtime(TAG, "🔔 蹲点赶鸡任务触发")
                                         enterFarm()
                                         syncAnimalStatus(ownerFarmId)
                                         sendBackAnimal()
@@ -2516,7 +2516,7 @@ class AntFarm : ModelTask() {
                                 useSmartScheduler = useSmartSchedulerManager!!.value
                             )
                             addChildTask(task)
-                            Log.record(UserMap.getCurrentMaskName() + "${timeSendBackAnimal}分钟后${kcTime}蹲点赶小鸡")
+                            Log.runtime(UserMap.getCurrentMaskName() + "${timeSendBackAnimal}分钟后${kcTime}蹲点赶小鸡")
 
                         } catch (e: Exception) {
                             Log.printStackTrace(TAG, "创建蹲点赶鸡失败: ${e.message}", e)
@@ -2528,9 +2528,9 @@ class AntFarm : ModelTask() {
                     val resultCode = jo.optString("resultCode", "")
                     val memo = jo.optString("memo", "")
                     if ("311" == resultCode) {
-                        Log.record(TAG, "投喂小鸡🥣[$memo]")
+                        Log.runtime(TAG, "投喂小鸡🥣[$memo]")
                     } else {
-                        Log.record(TAG, "投喂小鸡失败: $jo")
+                        Log.runtime(TAG, "投喂小鸡失败: $jo")
                     }
                 }
             }
@@ -2610,7 +2610,7 @@ class AntFarm : ModelTask() {
         }
         // 自己的小鸡每小时消耗的饲料g数
         val  foodConsumePerHour = ownerAnimal.consumeSpeed!! * 60 * 60
-        Log.record(
+        Log.runtime(
             TAG,
             "加速卡内部计算⏩[totalConsumeSpeed=$totalConsumeSpeed, totalFoodHaveEatten=$totalFoodHaveEatten, limit=$foodInTroughLimitCurrent]"
         )
@@ -2644,7 +2644,7 @@ class AntFarm : ModelTask() {
         while (remainingFood >= remainingTimeValue / 60.0 * foodConsumePerHour ) {
             // 检查本地计数器上限，防止无限使用
             if (!Status.canUseAccelerateTool()) {
-                Log.record(TAG, "加速卡内部⏩已达到本地使用上限(8次)，停止使用")
+                Log.runtime(TAG, "加速卡内部⏩已达到本地使用上限(8次)，停止使用")
                 Status.setFlagToday("farm::accelerateLimit")
                 exitReason = "REACHED_LIMIT"
                 break
@@ -2708,7 +2708,7 @@ class AntFarm : ModelTask() {
                     }
                 }
             } else {
-                Log.record(TAG, "加速卡内部⏩useFarmTool 返回失败，终止循环")
+                Log.runtime(TAG, "加速卡内部⏩useFarmTool 返回失败，终止循环")
                 exitReason = "TOOL_USE_FAILED"
                 break
             }
@@ -2720,11 +2720,11 @@ class AntFarm : ModelTask() {
         }
         // 这里打印没有连续使用8张加速卡的原因
         when(exitReason){
-            "CONDITION_NOT_MET" -> Log.record("剩余可加速的时间少于设置的${remainingTimeValue}分钟，将在下次喂食后再次使用加速卡")
-            "SINGLE_USE_MODE" -> Log.record("开启了“仅在满状态使用加速卡")
-            "EMOTION_NOT_MAX" -> Log.record("开启了“仅心情满值时加速”，且当前心情不为 100")
+            "CONDITION_NOT_MET" -> Log.runtime("剩余可加速的时间少于设置的${remainingTimeValue}分钟，将在下次喂食后再次使用加速卡")
+            "SINGLE_USE_MODE" -> Log.runtime("开启了“仅在满状态使用加速卡")
+            "EMOTION_NOT_MAX" -> Log.runtime("开启了“仅心情满值时加速”，且当前心情不为 100")
         }
-        Log.record(TAG, "加速卡内部⏩最终 isUseAccelerateTool=$isUseAccelerateTool")
+        Log.runtime(TAG, "加速卡内部⏩最终 isUseAccelerateTool=$isUseAccelerateTool")
         return isUseAccelerateTool
     }
 
@@ -2741,7 +2741,7 @@ class AntFarm : ModelTask() {
                         val toolCount = jo.getInt("toolCount")
                         if (toolCount > 0) {
                             if (toolType == ToolType.FENCETOOL && hasFence) {
-                                Log.record(TAG, "🛡️ 篱笆效果尚在（剩余${fenceCountDown/60}分钟），跳过重复使用")
+                                Log.runtime(TAG, "🛡️ 篱笆效果尚在（剩余${fenceCountDown/60}分钟），跳过重复使用")
                                 return false
                             }
                             var toolId = ""
@@ -2763,16 +2763,16 @@ class AntFarm : ModelTask() {
                                 if (toolType == ToolType.ACCELERATETOOL && resultCode == "3D16") {
                                     Status.setFlagToday("farm::accelerateLimit")
                                 }
-                                Log.record(memo)
+                                Log.runtime(memo)
                             }
-                            Log.record(s)
+                            Log.runtime(s)
                         }
                         break
                     }
                 }
             } else {
-                Log.record(memo)
-                Log.record(s)
+                Log.runtime(memo)
+                Log.runtime(s)
             }
         } catch (t: Throwable) {
             Log.printStackTrace(TAG, "useFarmTool err:",t)
@@ -2825,7 +2825,7 @@ class AntFarm : ModelTask() {
                                 val user = UserMap.getMaskName(userId) //喂 给我喂
                                 if (foodStock < 180) {
                                     if (unreceiveTaskAward > 0) {
-                                        Log.record(TAG, "✨还有待领取的饲料")
+                                        Log.runtime(TAG, "✨还有待领取的饲料")
                                         receiveFarmAwards() //先去领个饲料
                                     }
                                 }
@@ -2853,7 +2853,7 @@ class AntFarm : ModelTask() {
                                         break
                                     }
                                 } else {
-                                    Log.record(TAG, "😞喂鸡[$user]饲料不足")
+                                    Log.runtime(TAG, "😞喂鸡[$user]饲料不足")
                                 }
                             }
                             break
@@ -2866,7 +2866,7 @@ class AntFarm : ModelTask() {
             }
         } catch (e: CancellationException) {
             // 协程取消异常必须重新抛出，不能吞掉
-            Log.record(TAG, "feedFriend 协程被取消")
+            Log.runtime(TAG, "feedFriend 协程被取消")
             throw e
         } catch (t: Throwable) {
             Log.printStackTrace(TAG, "feedFriendAnimal err:", t)
@@ -2885,7 +2885,7 @@ class AntFarm : ModelTask() {
                 s = AntFarmRpcCall.rankingList(pageStartSum)
                 // 检查空响应
                 if (s.isNullOrEmpty()) {
-                    Log.record(TAG, "notifyFriend.rankingList: 收到空响应，终止通知")
+                    Log.runtime(TAG, "notifyFriend.rankingList: 收到空响应，终止通知")
                     break // 跳出do-while循环
                 }
                 jo = JSONObject(s)
@@ -2932,17 +2932,17 @@ class AntFarm : ModelTask() {
                                     }
                                 }
                             } else {
-                                Log.record(memo)
-                                Log.record(s)
+                                Log.runtime(memo)
+                                Log.runtime(s)
                             }
                         }
                     }
                 } else {
-                    Log.record(memo)
-                    Log.record(s)
+                    Log.runtime(memo)
+                    Log.runtime(s)
                 }
             } while (hasNext)
-            Log.record(TAG, "饲料剩余[" + foodStock + "g]")
+            Log.runtime(TAG, "饲料剩余[" + foodStock + "g]")
         } catch (t: Throwable) {
             Log.printStackTrace(TAG, "notifyFriend err:",t)
         }
@@ -3022,7 +3022,7 @@ class AntFarm : ModelTask() {
                             val collectManurePotNum = joManurePot.getInt("collectManurePotNum")
                             Log.farm("打扫鸡屎🧹[" + collectManurePotNum + "g]" + i + 1 + "次")
                         } else {
-                            Log.record(TAG, "打扫鸡屎失败: 第" + i + 1 + "次" + joManurePot)
+                            Log.runtime(TAG, "打扫鸡屎失败: 第" + i + 1 + "次" + joManurePot)
                         }
                     }
                 }
@@ -3058,7 +3058,7 @@ class AntFarm : ModelTask() {
                     hasFence = buffInfo.optBoolean("hasBuffEffect", false)
                     fenceCountDown = buffInfo.optInt("buffCountDown", 0)
                     if (hasFence) {
-                        Log.record(TAG, "🛡️ 篱笆生效中，剩余时间: ${fenceCountDown / 3600}小时${(fenceCountDown % 3600) / 60}分")
+                        Log.runtime(TAG, "🛡️ 篱笆生效中，剩余时间: ${fenceCountDown / 3600}小时${(fenceCountDown % 3600) / 60}分")
                     }
                 }
             } else {
@@ -3076,7 +3076,7 @@ class AntFarm : ModelTask() {
                 if (animal.masterFarmId == ownerFarmId) {
                     ownerAnimal = animal
                 }
-                //                Log.record(TAG, "当前动物：" + animal.toString());
+                //                Log.runtime(TAG, "当前动物：" + animal.toString());
             }
             animals = animalList.toTypedArray()
         } catch (t: Throwable) {
@@ -3164,7 +3164,7 @@ class AntFarm : ModelTask() {
         try {
             val userId = UserMap.currentUid
             var jo = JSONObject(AntFarmRpcCall.enterKitchen(userId))
-            Log.record(TAG, "cook userid :$userId")
+            Log.runtime(TAG, "cook userid :$userId")
             if (ResChecker.checkRes(TAG, jo)) {
                 val cookTimesAllowed = jo.getInt("cookTimesAllowed")
                 if (cookTimesAllowed > 0) {
@@ -3174,7 +3174,7 @@ class AntFarm : ModelTask() {
                             val cuisineVO = jo.getJSONObject("cuisineVO")
                             Log.farm("小鸡厨房👨🏻‍🍳[" + cuisineVO.getString("name") + "]制作成功")
                         } else {
-                            Log.record(TAG, "小鸡厨房制作$jo")
+                            Log.runtime(TAG, "小鸡厨房制作$jo")
                         }
                         delay(RandomUtil.delay().toLong())
                     }
@@ -3182,7 +3182,7 @@ class AntFarm : ModelTask() {
             }
         } catch (e: CancellationException) {
             // 协程取消异常必须重新抛出，不能吞掉
-            Log.record(TAG, "cook 协程被取消")
+            Log.runtime(TAG, "cook 协程被取消")
             throw e
         } catch (t: Throwable) {
             Log.printStackTrace(TAG, "cook err:",t)
@@ -3199,7 +3199,7 @@ class AntFarm : ModelTask() {
                 cuisineList.getJSONObject(i).optInt("count", 0)
             }
             val totalFoodCount = counts.sum()
-            Log.record(TAG, "美食总量为:$totalFoodCount")
+            Log.runtime(TAG, "美食总量为:$totalFoodCount")
 
             while (totalUsed < maxUsage) {
                 var usedInThisRound = false
@@ -3246,7 +3246,7 @@ class AntFarm : ModelTask() {
                         val singleDesc = userSevenDaysGiftsItem.getString("singleDesc")
                         val awardCount = userSevenDaysGiftsItem.getInt("awardCount")
                         if (singleDesc.contains("饲料") && awardCount + foodStock > foodStockLimit) {
-                            Log.record(
+                            Log.runtime(
                                 TAG,
                                 "暂停领取[$awardCount]g饲料，上限为[$foodStockLimit]g"
                             )
@@ -3290,7 +3290,7 @@ class AntFarm : ModelTask() {
             }
         } catch (e: CancellationException) {
             // 协程取消异常必须重新抛出，不能吞掉
-            Log.record(TAG, "visit 协程被取消")
+            Log.runtime(TAG, "visit 协程被取消")
             throw e
         } catch (t: Throwable) {
             Log.printStackTrace(TAG, "visit err:",t)
@@ -3316,7 +3316,7 @@ class AntFarm : ModelTask() {
                         Log.farm("赠送麦子🌾[" + UserMap.getMaskName(userId) + "]#" + jo.getInt("giveFoodNum") + "g")
                         visitedTimes++
                         if (jo.optBoolean("isReachLimit")) {
-                            Log.record(
+                            Log.runtime(
                                 TAG,
                                 "今日给[" + UserMap.getMaskName(userId) + "]送麦子已达上限"
                             )
@@ -3329,7 +3329,7 @@ class AntFarm : ModelTask() {
             }
         } catch (e: CancellationException) {
             // 协程取消异常必须重新抛出，不能吞掉
-            Log.record(TAG, "visitFriend 协程被取消")
+            Log.runtime(TAG, "visitFriend 协程被取消")
             throw e
         } catch (t: Throwable) {
             Log.printStackTrace(TAG, "visitFriend err:",t)
@@ -3370,8 +3370,8 @@ class AntFarm : ModelTask() {
                             val prizeNum = jo.optInt("prizeNum", 0)
                             Log.farm("[$diaryDateStr]贴贴小鸡💞[$prizeType*$prizeNum]")
                         } else {
-                            Log.record(TAG, "贴贴小鸡失败:")
-                            Log.record(jo.getString("memo"), jo.toString())
+                            Log.runtime(TAG, "贴贴小鸡失败:")
+                            Log.runtime(jo.getString("memo"), jo.toString())
                         }
                         if (!chickenDiary.has("statisticsList")) return
                         val statisticsList = chickenDiary.getJSONArray("statisticsList")
@@ -3390,16 +3390,16 @@ class AntFarm : ModelTask() {
                                     val prizeNum = jo.optInt("prizeNum", 0)
                                     Log.farm("[$diaryDateStr]贴贴小鸡💞[$prizeType*$prizeNum]")
                                 } else {
-                                    Log.record(TAG, "贴贴小鸡失败:")
-                                    Log.record(jo.getString("memo"), jo.toString())
+                                    Log.runtime(TAG, "贴贴小鸡失败:")
+                                    Log.runtime(jo.getString("memo"), jo.toString())
                                 }
                             }
                         }
                     }
                 }
             } else {
-                Log.record(TAG, "贴贴小鸡-获取小鸡日记详情 err:")
-                Log.record(jo.getString("resultDesc"), jo.toString())
+                Log.runtime(TAG, "贴贴小鸡-获取小鸡日记详情 err:")
+                Log.runtime(jo.getString("resultDesc"), jo.toString())
             }
         } catch (t: Throwable) {
             Log.printStackTrace(TAG, "queryChickenDiary err:",t)
@@ -3427,8 +3427,8 @@ class AntFarm : ModelTask() {
                     }
                 }
             } else {
-                Log.record(TAG, "日记点赞-获取小鸡日记详情 err:")
-                Log.record(jo.getString("resultDesc"), jo.toString())
+                Log.runtime(TAG, "日记点赞-获取小鸡日记详情 err:")
+                Log.runtime(jo.getString("resultDesc"), jo.toString())
             }
         } catch (t: Throwable) {
             Log.printStackTrace(TAG, "queryChickenDiary err:",t)
@@ -3465,11 +3465,11 @@ class AntFarm : ModelTask() {
                     }
                 }
             } else {
-                Log.record(jo.getString("resultDesc"), jo.toString())
+                Log.runtime(jo.getString("resultDesc"), jo.toString())
             }
         } catch (e: CancellationException) {
             // 协程取消异常必须重新抛出，不能吞掉
-            Log.record(TAG, "queryChickenDiaryList 协程被取消")
+            Log.runtime(TAG, "queryChickenDiaryList 协程被取消")
             throw e
         } catch (t: Throwable) {
             hasPreviousMore = false
@@ -3518,7 +3518,7 @@ class AntFarm : ModelTask() {
             }
         } catch (e: CancellationException) {
             // 协程取消异常必须重新抛出，不能吞掉
-            Log.record(TAG, "doChickenDiary 协程被取消")
+            Log.runtime(TAG, "doChickenDiary 协程被取消")
             throw e
         } catch (e: Exception) {
             Log.printStackTrace(TAG, "doChickenDiary err:",e)
@@ -3529,7 +3529,7 @@ class AntFarm : ModelTask() {
         try {
             val response = AntFarmRpcCall.visitAnimal()
             if (response.isNullOrEmpty()) {
-                Log.record(TAG, "visitAnimal: 收到空响应")
+                Log.runtime(TAG, "visitAnimal: 收到空响应")
                 return
             }
             var jo = JSONObject(response)
@@ -3542,7 +3542,7 @@ class AntFarm : ModelTask() {
 
                 val response2 = AntFarmRpcCall.feedFriendAnimalVisit(farmId)
                 if (response2.isNullOrEmpty()) {
-                    Log.record(TAG, "feedFriendAnimalVisit: 收到空响应")
+                    Log.runtime(TAG, "feedFriendAnimalVisit: 收到空响应")
                     return
                 }
                 jo = JSONObject(response2)
@@ -3559,14 +3559,14 @@ class AntFarm : ModelTask() {
                             val prizeName = jo.getString("prizeName")
                             Log.farm("小鸡到访💞[$prizeName]")
                         } else {
-                            Log.record(jo.getString("memo"), jo.toString())
+                            Log.runtime(jo.getString("memo"), jo.toString())
                         }
                     }
                 } else {
-                    Log.record(jo.getString("memo"), jo.toString())
+                    Log.runtime(jo.getString("memo"), jo.toString())
                 }
             } else {
-                Log.record(jo.getString("resultDesc"), jo.toString())
+                Log.runtime(jo.getString("resultDesc"), jo.toString())
             }
         } catch (t: Throwable) {
             Log.printStackTrace(TAG, "visitAnimal err:",t)
@@ -3585,7 +3585,7 @@ class AntFarm : ModelTask() {
                 val subFarmVO = farmVO.getJSONObject("subFarmVO")
                 animals = subFarmVO.getJSONArray("animals")
             } else {
-                Log.record(jsonObject.getString("memo"))
+                Log.runtime(jsonObject.getString("memo"))
             }
         } catch (t: Throwable) {
             Log.printStackTrace(TAG, "getAnimalCount err:",t)
@@ -3611,7 +3611,7 @@ class AntFarm : ModelTask() {
                                 beHiredEndTime
                             )
                         )
-                        Log.record(
+                        Log.runtime(
                             TAG,
                             "添加蹲点雇佣👷在[" + TimeUtil.getCommonDate(beHiredEndTime) + "]执行"
                         )
@@ -3637,14 +3637,14 @@ class AntFarm : ModelTask() {
 
             // 前置检查：饲料是否足够
             if (foodStock < 50) {
-                Log.record(TAG, "❌ 雇佣失败：饲料不足（当前${foodStock}g，至少需要50g）")
+                Log.runtime(TAG, "❌ 雇佣失败：饲料不足（当前${foodStock}g，至少需要50g）")
                 return
             }
 
             // 前置检查：是否配置了雇佣好友列表
             val hireAnimalSet = hireAnimalList!!.value
             if (hireAnimalSet.isEmpty()) {
-                Log.record(TAG, "❌ 雇佣失败：未配置雇佣好友列表")
+                Log.runtime(TAG, "❌ 雇佣失败：未配置雇佣好友列表")
                 Toast.show(
                     "⚠️ 雇佣小鸡配置错误\n" +
                             "已开启「雇佣小鸡」但未配置好友列表\n" +
@@ -3696,8 +3696,8 @@ class AntFarm : ModelTask() {
                         }
                     }
                 } else {
-                    Log.record(memo)
-                    Log.record(s)
+                    Log.runtime(memo)
+                    Log.runtime(s)
                     break
                 }
             } while (hasNext && animalCount < 3)
@@ -3706,22 +3706,22 @@ class AntFarm : ModelTask() {
             val hiredCount = animalCount - initialAnimalCount
             if (animalCount < 3) {
                 val stillNeed = 3 - animalCount
-                Log.record(TAG, "雇佣小鸡结果统计：")
-                Log.record(TAG, "  • 成功雇佣：${hiredCount}只")
-                Log.record(TAG, "  • 还需雇佣：${stillNeed}只")
-                Log.record(TAG, "  • 已检查好友：${checkedCount}人")
-                Log.record(TAG, "  • 可雇佣状态：${availableCount}人")
+                Log.runtime(TAG, "雇佣小鸡结果统计：")
+                Log.runtime(TAG, "  • 成功雇佣：${hiredCount}只")
+                Log.runtime(TAG, "  • 还需雇佣：${stillNeed}只")
+                Log.runtime(TAG, "  • 已检查好友：${checkedCount}人")
+                Log.runtime(TAG, "  • 可雇佣状态：${availableCount}人")
 
                 if (availableCount == 0) {
-                    Log.record(TAG, "❌ 失败原因：好友列表中没有可雇佣的小鸡")
-                    Log.record(TAG, "   建议：等待好友的小鸡回家或添加更多好友")
+                    Log.runtime(TAG, "❌ 失败原因：好友列表中没有可雇佣的小鸡")
+                    Log.runtime(TAG, "   建议：等待好友的小鸡回家或添加更多好友")
                 } else if (hiredCount < availableCount) {
-                    Log.record(TAG, "⚠️ 部分雇佣失败：好友的小鸡可能不在家")
+                    Log.runtime(TAG, "⚠️ 部分雇佣失败：好友的小鸡可能不在家")
                 } else {
-                    Log.record(TAG, "❌ 失败原因：可雇佣的小鸡数量不足")
+                    Log.runtime(TAG, "❌ 失败原因：可雇佣的小鸡数量不足")
                 }
             } else if (hiredCount > 0) {
-                Log.record(TAG, "✅ 雇佣成功：共雇佣${hiredCount}只小鸡")
+                Log.runtime(TAG, "✅ 雇佣成功：共雇佣${hiredCount}只小鸡")
             }
         } catch (t: Throwable) {
             Log.printStackTrace(TAG, "hireAnimal err:",t)
@@ -3744,7 +3744,7 @@ class AntFarm : ModelTask() {
                     if (animal.getJSONObject("masterUserInfoVO").getString("userId") == userId) {
                         val animalStatusVo = animal.getJSONObject("animalStatusVO")
                         if (AnimalInteractStatus.HOME.name != animalStatusVo.getString("animalInteractStatus")) {
-                            Log.record(UserMap.getMaskName(userId) + "的小鸡不在家")
+                            Log.runtime(UserMap.getMaskName(userId) + "的小鸡不在家")
                             return false
                         }
                         val animalId = animal.getString("animalId")
@@ -3766,7 +3766,7 @@ class AntFarm : ModelTask() {
                                             beHiredEndTime
                                         )
                                     )
-                                    Log.record(
+                                    Log.runtime(
                                         TAG,
                                         "添加蹲点雇佣👷在[" + TimeUtil.getCommonDate(beHiredEndTime) + "]执行"
                                     )
@@ -3781,18 +3781,18 @@ class AntFarm : ModelTask() {
                             // 如果庄园已满，设置标志并返回false
                             if (resultCode == "I07" || memo.contains("庄园的小鸡太多了")) {
                                 isFarmFull = true
-                                Log.record(TAG, "庄园小鸡已满，停止雇佣")
+                                Log.runtime(TAG, "庄园小鸡已满，停止雇佣")
                                 return false
                             }
-                            Log.record(memo)
-                            Log.record(s)
+                            Log.runtime(memo)
+                            Log.runtime(s)
                         }
                         return false
                     }
                     i++
                 }
             } else {
-                Log.record(jo.getString("memo"))
+                Log.runtime(jo.getString("memo"))
             }
         } catch (t: Throwable) {
             Log.printStackTrace(TAG, "hireAnimal err:",t)
@@ -3810,7 +3810,7 @@ class AntFarm : ModelTask() {
 
             if (selectedNpcNames.isNotEmpty()) {
                 // 使用智能调度
-                Log.record(TAG, "NPC智能调度🤖[已选择: ${selectedNpcNames.joinToString(", ")}]")
+                Log.runtime(TAG, "NPC智能调度🤖[已选择: ${selectedNpcNames.joinToString(", ")}]")
                 val npcChicken = NpcChicken()
                 ownerFarmId?.let { npcChicken.runSmartScheduler(it, selectedNpcNames) }
                 return
@@ -3855,7 +3855,7 @@ class AntFarm : ModelTask() {
             // 3. 决策逻辑
             if (currentNpcAnimal == null) {
                 // 场景A: 当前没有NPC -> 直接雇佣目标NPC
-                Log.record(TAG, "NPC小鸡🤖[当前未雇佣，准备雇佣${targetConfig.nickName}]")
+                Log.runtime(TAG, "NPC小鸡🤖[当前未雇佣，准备雇佣${targetConfig.nickName}]")
                 hireNpc(targetConfig)
             } else {
                 // 场景B: 当前有NPC
@@ -3867,7 +3867,7 @@ class AntFarm : ModelTask() {
                 } else {
                     // B2: 是其他类型的NPC -> 遣返旧的，雇佣新的
                     val currentName = currentNpcAnimal.masterUserInfoVO?.get("nickName") as? String ?: "未知NPC"
-                    Log.record(TAG, "NPC小鸡🤖[检测到${currentName}，目标是${targetConfig.nickName}，执行切换]")
+                    Log.runtime(TAG, "NPC小鸡🤖[检测到${currentName}，目标是${targetConfig.nickName}，执行切换]")
 
                     // 遣返当前
                     val sendBackRes = AntFarmRpcCall.sendBackNpcAnimal(
@@ -3881,7 +3881,7 @@ class AntFarm : ModelTask() {
                         // 雇佣新的
                         hireNpc(targetConfig)
                     } else {
-                        Log.record(TAG, "NPC小鸡🤖[遣返失败，暂停切换]")
+                        Log.runtime(TAG, "NPC小鸡🤖[遣返失败，暂停切换]")
                     }
                 }
             }
@@ -3899,7 +3899,7 @@ class AntFarm : ModelTask() {
                 syncAnimalStatus(ownerFarmId) // 刷新状态
                 return true
             } else {
-                Log.record(TAG, "NPC小鸡🤖[雇佣${config.nickName}失败: ${jo.optString("memo")}]")
+                Log.runtime(TAG, "NPC小鸡🤖[雇佣${config.nickName}失败: ${jo.optString("memo")}]")
             }
         } catch (e: Exception) {
             Log.printStackTrace(TAG, "hireNpc err", e)
@@ -3936,13 +3936,13 @@ class AntFarm : ModelTask() {
                 Log.farm("NPC小鸡🤖[产出奖励领取成功]")
                 delay(2000)
                 if (!hireNpc(config)) {
-                    Log.record(TAG, "NPC小鸡🤖[重雇失败，请检查状态]")
+                    Log.runtime(TAG, "NPC小鸡🤖[重雇失败，请检查状态]")
                 }
             } else {
-                Log.record(TAG, "NPC小鸡🤖[遣返领取奖励失败: ${joSendBack.optString("memo")}]")
+                Log.runtime(TAG, "NPC小鸡🤖[遣返领取奖励失败: ${joSendBack.optString("memo")}]")
             }
         } else {
-            Log.record(TAG, "NPC小鸡🤖[${config.nickName}工作中... 当前产出:$currentReward]")
+            Log.runtime(TAG, "NPC小鸡🤖[${config.nickName}工作中... 当前产出:$currentReward]")
         }
     }
 
@@ -4017,7 +4017,7 @@ class AntFarm : ModelTask() {
                         // 针对特殊任务进行额外模拟
                         if ("CAIFU_NPC_FUND_TASK" == bizKey) {
                             // 领20000元体验金：需要模拟进入页面并开启计划
-                            Log.record(TAG, "NPC任务🤖[处理体验金任务: $title]")
+                            Log.runtime(TAG, "NPC任务🤖[处理体验金任务: $title]")
                             // 1. 查询首页
                             AntFarmRpcCall.lctyj2025PromoIndex()
                             delay(1000) // 🟢 delay 必须在 suspend 函数中调用
@@ -4029,7 +4029,7 @@ class AntFarm : ModelTask() {
                             }
                         } else if ("CAIFU_NPC_SAVE_TASK" == bizKey) {
                             // 开始攒黄金：仅模拟进入页面，不执行签约/扣款
-                            Log.record(TAG, "NPC任务🤖[浏览攒黄金页面: $title]")
+                            Log.runtime(TAG, "NPC任务🤖[浏览攒黄金页面: $title]")
                             AntFarmRpcCall.queryGoldCollectionV2()
                         }
 
@@ -4084,7 +4084,7 @@ class AntFarm : ModelTask() {
 
                 // 使用你的 ResChecker 工具类判断
                 if (!jo.optBoolean("success")) {
-                    Log.record(TAG, "queryGameList 失败: $jo")
+                    Log.runtime(TAG, "queryGameList 失败: $jo")
                     return
                 }
 
@@ -4094,7 +4094,7 @@ class AntFarm : ModelTask() {
                 // 1. 处理当前可开的宝箱 (对应你说的 canUse)
                 var quotaCanUse = drawRights.optInt("quotaCanUse") // 当前手头的机会
                 if (quotaCanUse > 0) {
-                    Log.record(TAG, "当前有 $quotaCanUse 个宝箱待开启...")
+                    Log.runtime(TAG, "当前有 $quotaCanUse 个宝箱待开启...")
                     while (quotaCanUse > 0) {
                         val drawRes = JSONObject(AntFarmRpcCall.drawGameCenterAward(1))
                         if (drawRes.optBoolean("success")) {
@@ -4113,7 +4113,7 @@ class AntFarm : ModelTask() {
                             Log.farm("庄园小鸡🎁[获得奖品: ${awardStrings.joinToString(",")}]")
                             delay(3000)
                         } else {
-                            Log.record(TAG, "开启宝箱失败: ${drawRes.optString("desc")}")
+                            Log.runtime(TAG, "开启宝箱失败: ${drawRes.optString("desc")}")
                             break
                         }
                     }
@@ -4126,13 +4126,13 @@ class AntFarm : ModelTask() {
                 // 计算逻辑：如果 已获得 < 总上限，且当前没机会了，就去刷
                 val remainToTask = limit - used
                 if (remainToTask > 0 && quotaCanUse == 0) {
-                    Log.record(TAG, "宝箱进度: $used/$limit，开始自动刷任务补齐...")
+                    Log.runtime(TAG, "宝箱进度: $used/$limit，开始自动刷任务补齐...")
                     // 根据游戏类型选择上报任务
                     GameTask.Farm_ddply.report(remainToTask)
                     delay(3000)
                 } else {
                     if (remainToTask <= 0) {
-                        Log.record(TAG, "今日 $limit 个金蛋任务已全部满额")
+                        Log.runtime(TAG, "今日 $limit 个金蛋任务已全部满额")
                     }
                     break
                 }
@@ -4153,7 +4153,7 @@ class AntFarm : ModelTask() {
             val queryRes = AntFarmRpcCall.queryOptionalPlay()
             val jo = JSONObject(queryRes)
             if (!jo.optBoolean("success")) {
-                Log.record(TAG, "queryOptionalPlay 失败: $queryRes")
+                Log.runtime(TAG, "queryOptionalPlay 失败: $queryRes")
                 return
             }
             val taskTriggerPlayInfo = jo.optJSONObject("taskTriggerPlayInfo") ?: return
@@ -4168,26 +4168,26 @@ class AntFarm : ModelTask() {
                 // 自动签到逻辑
                 if (taskStatus == "TODO" && taskType == "2026cc_lyqd") {
                     val outBizNo = "${taskType}_${System.currentTimeMillis()}_${(100000..999999).random()}"
-                    Log.record(TAG, "正在尝试完成庄园乐园每日签到...")
+                    Log.runtime(TAG, "正在尝试完成庄园乐园每日签到...")
                     val finishRes = AntFarmRpcCall.finishTask(taskType, "ANTFARM_LEYUAN_DAILY_TASK", outBizNo)
                     val finishJo = JSONObject(finishRes)
                     if (finishJo.optBoolean("success")) {
-                        Log.record(TAG, "庄园乐园每日签到完成成功")
+                        Log.runtime(TAG, "庄园乐园每日签到完成成功")
                         taskStatus = "FINISHED"
                     } else {
-                        Log.record(TAG, "庄园乐园每日签到完成失败: ${finishJo.optString("desc")}")
+                        Log.runtime(TAG, "庄园乐园每日签到完成失败: ${finishJo.optString("desc")}")
                     }
                     delay(2000)
                 }
 
                 if (taskStatus == "FINISHED") {
-                    Log.record(TAG, "发现可领取的乐园任务奖励: $title, 额度: $awardCount")
+                    Log.runtime(TAG, "发现可领取的乐园任务奖励: $title, 额度: $awardCount")
                     val claimRes = AntFarmRpcCall.receiveTaskAwardantfarm(taskType, awardCount)
                     val claimJo = JSONObject(claimRes)
                     if (claimJo.optBoolean("success")) {
                         Log.farm("庄园乐园🎁[领取任务奖励: $title 成功，获得 ${claimJo.optInt("incAwardCount", awardCount)} 乐园币]")
                     } else {
-                        Log.record(TAG, "领取乐园任务奖励失败: ${claimJo.optString("desc")}")
+                        Log.runtime(TAG, "领取乐园任务奖励失败: ${claimJo.optString("desc")}")
                     }
                     delay(2000)
                 }
@@ -4273,7 +4273,7 @@ class AntFarm : ModelTask() {
                         Log.farm("庄园小鸡💞[换装:$wholeSetName]")
                         Status.setOrnamentToday()
                     } else {
-                        Log.record(TAG, "保存时装失败，错误码： $saveResultJson")
+                        Log.runtime(TAG, "保存时装失败，错误码： $saveResultJson")
                     }
                 }
             }
@@ -4313,7 +4313,7 @@ class AntFarm : ModelTask() {
                 if (getFeedType!!.value == GetFeedType.GIVE) {
                     for (userId in userIdList) {
                         if (invitesToSend <= 0) {
-//                            Log.record(TAG,"已达到最大邀请次数限制，停止发送邀请。");
+//                            Log.runtime(TAG,"已达到最大邀请次数限制，停止发送邀请。");
                             break
                         }
                         if (getFeedSet.contains(userId)) {
@@ -4322,7 +4322,7 @@ class AntFarm : ModelTask() {
                                 Log.farm("一起拿小鸡饲料🥡 [送饲料：" + UserMap.getMaskName(userId) + "]")
                                 invitesToSend-- // 每成功发送一次邀请，减少一次邀请次数
                             } else {
-                                Log.record(TAG, "邀请失败：$jo")
+                                Log.runtime(TAG, "邀请失败：$jo")
                                 break
                             }
                         }
@@ -4336,7 +4336,7 @@ class AntFarm : ModelTask() {
                         if (jo.optBoolean("success")) {
                             Log.farm("一起拿小鸡饲料🥡 [送饲料：" + UserMap.getMaskName(userId) + "]")
                         } else {
-                            Log.record(TAG, "邀请失败：$jo")
+                            Log.runtime(TAG, "邀请失败：$jo")
                             break
                         }
                         userIdList.removeAt(randomIndex)
@@ -4663,7 +4663,7 @@ class AntFarm : ModelTask() {
             ResChecker.checkRes(TAG, jo)
         } catch (e: CancellationException) {
             // 协程取消异常必须重新抛出，不能吞掉
-            Log.record(TAG, "syncFamilyStatusIntimacy 协程被取消")
+            Log.runtime(TAG, "syncFamilyStatusIntimacy 协程被取消")
             throw e
         } catch (t: Throwable) {
             Log.printStackTrace(TAG, "syncFamilyStatus err:",t)
@@ -4704,7 +4704,7 @@ class AntFarm : ModelTask() {
             }
         } catch (e: CancellationException) {
             // 协程取消异常必须重新抛出，不能吞掉
-            Log.record(TAG, "inviteFriendVisitFamily 协程被取消")
+            Log.runtime(TAG, "inviteFriendVisitFamily 协程被取消")
             throw e
         } catch (t: Throwable) {
             Log.printStackTrace(TAG, "inviteFriendVisitFamily err:",t)
@@ -4759,7 +4759,7 @@ class AntFarm : ModelTask() {
             }
         } catch (e: CancellationException) {
             // 协程取消异常必须重新抛出，不能吞掉
-            Log.record(TAG, "familyBatchInviteP2PTask 协程被取消")
+            Log.runtime(TAG, "familyBatchInviteP2PTask 协程被取消")
             throw e
         } catch (t: Throwable) {
             Log.printStackTrace(TAG, "familyBatchInviteP2PTask err:",t)
@@ -4814,7 +4814,7 @@ class AntFarm : ModelTask() {
             }
         } catch (e: CancellationException) {
             // 协程取消异常必须重新抛出，不能吞掉
-            Log.record(TAG, "familyDrawTask 协程被取消")
+            Log.runtime(TAG, "familyDrawTask 协程被取消")
             throw e
         } catch (t: Throwable) {
             Log.printStackTrace(TAG, "familyDrawTask err:",t)
@@ -4861,7 +4861,7 @@ class AntFarm : ModelTask() {
             }
         } catch (e: CancellationException) {
             // 协程取消异常必须重新抛出，不能吞掉
-            Log.record(TAG, "familyDraw 协程被取消")
+            Log.runtime(TAG, "familyDraw 协程被取消")
             throw e
         } catch (t: Throwable) {
             Log.printStackTrace(TAG, "familyDraw err:",t)
@@ -4928,7 +4928,7 @@ class AntFarm : ModelTask() {
             }
         } catch (e: CancellationException) {
             // 协程取消异常必须重新抛出，不能吞掉
-            Log.record(TAG, "familyEatTogether 协程被取消")
+            Log.runtime(TAG, "familyEatTogether 协程被取消")
             throw e
         } catch (t: Throwable) {
             Log.printStackTrace(TAG, "familyEatTogether err:",t)
@@ -4943,7 +4943,7 @@ class AntFarm : ModelTask() {
             }
         } catch (e: CancellationException) {
             // 协程取消异常必须重新抛出，不能吞掉
-            Log.record(TAG, "familyDrawSignReceiveFarmTaskAward 协程被取消")
+            Log.runtime(TAG, "familyDrawSignReceiveFarmTaskAward 协程被取消")
             throw e
         } catch (t: Throwable) {
             Log.printStackTrace(TAG, "familyDrawSignReceiveFarmTaskAward err:",t)
@@ -4969,7 +4969,7 @@ class AntFarm : ModelTask() {
             }
         } catch (e: CancellationException) {
             // 协程取消异常必须重新抛出，不能吞掉
-            Log.record(TAG, "queryRecentFarmFood 协程被取消")
+            Log.runtime(TAG, "queryRecentFarmFood 协程被取消")
             throw e
         } catch (t: Throwable) {
             Log.printStackTrace(TAG, "queryRecentFarmFood err:",t)
@@ -4994,7 +4994,7 @@ class AntFarm : ModelTask() {
                         continue
                     }
                     if (Status.hasFlagToday("farm::feedFriendLimit")) {
-                        Log.record("今日喂鸡次数已达上限🥣")
+                        Log.runtime("今日喂鸡次数已达上限🥣")
                         return
                     }
                     val jo = JSONObject(AntFarmRpcCall.feedFriendAnimal(farmId, groupId))
@@ -5009,7 +5009,7 @@ class AntFarm : ModelTask() {
             }
         } catch (e: CancellationException) {
             // 协程取消异常必须重新抛出，不能吞掉
-            Log.record(TAG, "familyFeedFriendAnimal 协程被取消")
+            Log.runtime(TAG, "familyFeedFriendAnimal 协程被取消")
             throw e
         } catch (t: Throwable) {
             Log.printStackTrace(TAG, "familyFeedFriendAnimal err:",t)
@@ -5113,13 +5113,13 @@ class AntFarm : ModelTask() {
      */
     fun manualSendBackAnimal() {
         try {
-            Log.record(TAG, "🚀 开始执行手动遣返小鸡任务...")
+            Log.runtime(TAG, "🚀 开始执行手动遣返小鸡任务...")
             // 必须先进入农场获取最新 animal 数据
             if (enterFarm() != null) {
                 sendBackAnimal()
-                Log.record(TAG, "✅ 手动遣返指令执行完毕")
+                Log.runtime(TAG, "✅ 手动遣返指令执行完毕")
             } else {
-                Log.record(TAG, "❌ 进入农场失败，无法执行遣返")
+                Log.runtime(TAG, "❌ 进入农场失败，无法执行遣返")
             }
         } catch (t: Throwable) {
             Log.printStackTrace(TAG, "manualSendBackAnimal 异常:", t)
@@ -5130,7 +5130,7 @@ class AntFarm : ModelTask() {
      */
     suspend fun manualFarmGameLogic() {
         try {
-            Log.record(TAG, "开始执行手动游戏改分任务...")
+            Log.runtime(TAG, "开始执行手动游戏改分任务...")
             if (enterFarm() != null) {
                 // 同步最新状态后执行原有逻辑
                 syncAnimalStatus(ownerFarmId)
@@ -5139,7 +5139,7 @@ class AntFarm : ModelTask() {
                     receiveFarmAwards()
                 }
                 playAllFarmGames()
-                Log.record(TAG, "手动游戏改分任务处理完毕")
+                Log.runtime(TAG, "手动游戏改分任务处理完毕")
             }
         } catch (t: Throwable) {
             Log.printStackTrace(TAG, "manualFarmGameLogic err:", t)
@@ -5150,10 +5150,10 @@ class AntFarm : ModelTask() {
      */
     fun manualChouChouLeLogic() {
         try {
-            Log.record(TAG, "🚀 开始执行手动抽抽乐任务...")
+            Log.runtime(TAG, "🚀 开始执行手动抽抽乐任务...")
             if (enterFarm() != null) {
                 playChouChouLe()
-                Log.record(TAG, "✅ 手动抽抽乐任务处理完毕")
+                Log.runtime(TAG, "✅ 手动抽抽乐任务处理完毕")
             }
         } catch (t: Throwable) {
             Log.printStackTrace(TAG, "manualChouChouLeLogic 异常:", t)
@@ -5167,23 +5167,23 @@ class AntFarm : ModelTask() {
         try {
             // 1. 严格校验：如果数量 <= 0，则不执行任何逻辑
             if (count <= 0) {
-                Log.record(TAG, "⚠️ 手动使用特殊美食已拦截：必须指定大于0的使用次数")
+                Log.runtime(TAG, "⚠️ 手动使用特殊美食已拦截：必须指定大于0的使用次数")
                 return
             }
 
-            Log.record(TAG, "🚀 开始执行手动使用特殊美食任务，目标数量: $count")
+            Log.runtime(TAG, "🚀 开始执行手动使用特殊美食任务，目标数量: $count")
             val jo = enterFarm()
             if (jo != null) {
                 val cuisineList = jo.getJSONArray("cuisineList")
 
                 if (AnimalFeedStatus.SLEEPY.name == ownerAnimal.animalFeedStatus) {
-                    Log.record(TAG, "❌ 小鸡正在睡觉，无法使用美食")
+                    Log.runtime(TAG, "❌ 小鸡正在睡觉，无法使用美食")
                 } else {
                     useSpecialFood(cuisineList, count)
-                    Log.record(TAG, "✅ 手动使用特殊美食任务处理完毕")
+                    Log.runtime(TAG, "✅ 手动使用特殊美食任务处理完毕")
                 }
             } else {
-                Log.record(TAG, "❌ 进入农场失败，无法执行任务")
+                Log.runtime(TAG, "❌ 进入农场失败，无法执行任务")
             }
         } catch (t: Throwable) {
             Log.printStackTrace(TAG, "manualUseSpecialFood 异常:", t)
@@ -5199,28 +5199,28 @@ class AntFarm : ModelTask() {
         try {
             if (enterFarm() != null) {
                 syncAnimalStatus(ownerFarmId)
-                Log.record(TAG, "开始执行手动使用道具: $toolType, 计划数量: $toolCount")
+                Log.runtime(TAG, "开始执行手动使用道具: $toolType, 计划数量: $toolCount")
                 val farmTools = listFarmTool()
                 if (farmTools == null || farmTools.isEmpty()) {
-                    Log.record(TAG, "❌ 获取道具列表失败或道具库为空")
+                    Log.runtime(TAG, "❌ 获取道具列表失败或道具库为空")
                     return
                 }
 
                 val tool = farmTools.find { it.toolType?.name == toolType }
                 if (tool == null) {
-                    Log.record(TAG, "❌ 道具库中没有道具: $toolType")
+                    Log.runtime(TAG, "❌ 道具库中没有道具: $toolType")
                     return
                 }
                 if (toolType == "FENCETOOL" && hasFence) {
-                    Log.record(TAG, "❌ 手动执行拦截：篱笆卡效果正在生效中")
+                    Log.runtime(TAG, "❌ 手动执行拦截：篱笆卡效果正在生效中")
                     return
                 }
 
-                Log.record(TAG, "当前道具 [${tool.toolType?.nickName()}] 余量: ${tool.toolCount}")
+                Log.runtime(TAG, "当前道具 [${tool.toolType?.nickName()}] 余量: ${tool.toolCount}")
 
                 val actualCount = if (toolType == "NEWEGGTOOL") {
                     if (tool.toolCount < toolCount) {
-                        Log.record(TAG, "⚠️ 道具余量不足，将用完剩余的 ${tool.toolCount} 个")
+                        Log.runtime(TAG, "⚠️ 道具余量不足，将用完剩余的 ${tool.toolCount} 个")
                         tool.toolCount
                     } else {
                         toolCount
@@ -5230,7 +5230,7 @@ class AntFarm : ModelTask() {
                 }
 
                 if (actualCount <= 0) {
-                    Log.record(TAG, "❌ 可用数量为0，终止操作")
+                    Log.runtime(TAG, "❌ 可用数量为0，终止操作")
                     return
                 }
 
@@ -5241,7 +5241,7 @@ class AntFarm : ModelTask() {
                         Log.farm("手动使用道具 [${tool.toolType?.nickName()}] 成功 (${index + 1}/$actualCount)")
                     } else {
                         val msg = jo.optString("memo", "未知错误")
-                        Log.record(TAG, "❌ 使用道具失败: $msg")
+                        Log.runtime(TAG, "❌ 使用道具失败: $msg")
                         return@repeat
                     }
                     // 使用多个时稍微延迟，避免过快
@@ -5249,7 +5249,7 @@ class AntFarm : ModelTask() {
                 }
             }
         } catch (t: Throwable) {
-            Log.record(TAG, "❌ manualUseFarmTool 出错: ${t.message}")
+            Log.runtime(TAG, "❌ manualUseFarmTool 出错: ${t.message}")
             Log.printStackTrace(t)
         }
     }

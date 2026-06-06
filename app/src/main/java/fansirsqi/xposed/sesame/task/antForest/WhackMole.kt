@@ -61,7 +61,7 @@ object WhackMole {
      */
     suspend fun startSuspend(mode: Mode) = withContext(Dispatchers.IO) {
         if (isRunning) {
-            Log.record(TAG, "⏭️ 打地鼠游戏正在运行中，跳过重复启动")
+            Log.runtime(TAG, "⏭️ 打地鼠游戏正在运行中，跳过重复启动")
             return@withContext
         }
         isRunning = true
@@ -76,7 +76,7 @@ object WhackMole {
             Log.printStackTrace(TAG, "打地鼠异常: ", e)
         } finally {
             isRunning = false
-            Log.record(TAG, "🎮 打地鼠运行状态已重置")
+            Log.runtime(TAG, "🎮 打地鼠运行状态已重置")
         }
     }
 
@@ -94,7 +94,7 @@ object WhackMole {
             // 1. 开始游戏 (使用 oldstartWhackMole)
             val response = JSONObject(AntForestRpcCall.oldstartWhackMole(SOURCE))
             if (!response.optBoolean("success")) {
-                Log.record(TAG, response.optString("resultDesc", "开始失败"))
+                Log.runtime(TAG, response.optString("resultDesc", "开始失败"))
                 return
             }
 
@@ -143,7 +143,7 @@ object WhackMole {
                 Log.forest("森林能量⚡️[兼容模式完成(打${remainingIds.size + hitCount}个) 总能量+${total}g]")
             }
         } catch (t: Throwable) {
-            Log.record(TAG, "兼容模式出错: ${t.message}")
+            Log.runtime(TAG, "兼容模式出错: ${t.message}")
         }
     }
 

@@ -11,7 +11,7 @@ class AntFarmRankAward {
 
     fun run() {
         try {
-            Log.record(TAG, "开始检查并领取排位奖励")
+            Log.runtime(TAG, "开始检查并领取排位奖励")
             val response = AntFarmRpcCall.enterCompetitionAwardPage()
             if (response.isNullOrBlank()) {
                 Log.error(TAG, "排位奖励🏆[获取奖励页面失败, 响应为空]")
@@ -25,7 +25,7 @@ class AntFarmRankAward {
 
             val levelAwardInfoList = jo.optJSONArray("levelAwardInfoList")
             if (levelAwardInfoList == null || levelAwardInfoList.length() == 0) {
-                Log.record(TAG, "排位奖励🏆[没有发现等级奖励列表]")
+                Log.runtime(TAG, "排位奖励🏆[没有发现等级奖励列表]")
                 return
             }
 
@@ -37,7 +37,7 @@ class AntFarmRankAward {
                 val levelName = awardInfo.optString("levelName")
                 
                 if (status == "unreceived") {
-                    Log.record(TAG, "发现未领取的等级奖励: $levelName (rightsId: $rightsId)")
+                    Log.runtime(TAG, "发现未领取的等级奖励: $levelName (rightsId: $rightsId)")
                     val claimRes = AntFarmRpcCall.receiveDonationLevelReward(rightsId)
                     if (!claimRes.isNullOrBlank()) {
                         val claimJo = JSONObject(claimRes)
@@ -65,7 +65,7 @@ class AntFarmRankAward {
                 }
             }
             if (claimedCount == 0) {
-                Log.record(TAG, "检查完毕，没有可领取的排位奖励")
+                Log.runtime(TAG, "检查完毕，没有可领取的排位奖励")
             }
         } catch (t: Throwable) {
             Log.printStackTrace(TAG, "AntFarmRankAward.run err:", t)

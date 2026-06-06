@@ -146,9 +146,22 @@ fun CaptureResendScreen(viewModel: CaptureResendViewModel, onBack: () -> Unit) {
             item {
                 Surface(color = surfaceColor, shape = RoundedCornerShape(10.dp), shadowElevation = 1.dp) {
                     Column(Modifier.padding(10.dp)) {
-                        Text("请求体", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = onSurface)
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                            Text("请求体", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = onSurface)
+                            TextButton(
+                                onClick = { viewModel.triggerManualUnescape() },
+                                contentPadding = PaddingValues(0.dp),
+                                modifier = Modifier.height(24.dp)
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(Icons.Rounded.Build, null, modifier = Modifier.size(12.dp))
+                                    Spacer(Modifier.width(2.dp))
+                                    Text("去除转义", fontSize = 10.sp)
+                                }
+                            }
+                        }
                         Spacer(Modifier.height(6.dp))
-                        OutlinedTextField(value = body, onValueChange = { viewModel.body.value = it }, modifier = Modifier.fillMaxWidth().heightIn(min = 100.dp, max = 250.dp), placeholder = { Text("JSON 或文本...", fontSize = 11.sp) }, textStyle = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace, fontSize = 11.sp), shape = RoundedCornerShape(6.dp))
+                        OutlinedTextField(value = body, onValueChange = { viewModel.updateBody(it) }, modifier = Modifier.fillMaxWidth().heightIn(min = 100.dp, max = 250.dp), placeholder = { Text("JSON 或文本...", fontSize = 11.sp) }, textStyle = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace, fontSize = 11.sp), shape = RoundedCornerShape(6.dp))
                     }
                 }
             }

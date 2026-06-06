@@ -16,7 +16,7 @@ object AlipayMiniMarkHelper {
      */
     fun init(loader: ClassLoader) {
         classLoader = loader
-        Log.record(TAG, "AlipayMiniMarkHelper 初始化完成")
+        Log.runtime(TAG, "AlipayMiniMarkHelper 初始化完成")
     }
     /**
      * 获取支付宝小程序标记

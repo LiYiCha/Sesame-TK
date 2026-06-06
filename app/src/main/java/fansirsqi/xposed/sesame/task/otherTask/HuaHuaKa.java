@@ -74,7 +74,7 @@ public class HuaHuaKa extends BaseCommTask {
         if (failCount >= 2) {
             blackList.add(title);
             DataStore.INSTANCE.put("huahuaka_blackList", blackList);
-            Log.record(displayName + "任务[" + title + "]失败" + failCount + "次，已加入黑名单");
+            Log.runtime(displayName + "任务[" + title + "]失败" + failCount + "次，已加入黑名单");
         }
     }
 

@@ -12,6 +12,7 @@ import fansirsqi.xposed.sesame.util.Log
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 import java.util.concurrent.Future
+import java.util.concurrent.atomic.AtomicBoolean
 
 class FlashSaleModule : BaseFlashSaleTask() {
 
@@ -57,14 +58,14 @@ class FlashSaleModule : BaseFlashSaleTask() {
     private var neverLandTaskFuture: Future<*>? = null
 
     companion object {
-        private val TASK_EXECUTOR: ExecutorService = Executors.newFixedThreadPool(2)
+        private val TASK_EXECUTOR: ExecutorService = Executors.newFixedThreadPool(10)
 
         private const val FLASH_SALE_LIST = "flash_sale_list"
         private const val NEVERLAND_LIST = "neverland_list"
 
         // 防止重复提交预加载任务
-        private val isPreloading = java.util.concurrent.atomic.AtomicBoolean(false)
-        private val isNeverLandPreloading = java.util.concurrent.atomic.AtomicBoolean(false)
+        private val isPreloading = AtomicBoolean(false)
+        private val isNeverLandPreloading = AtomicBoolean(false)
     }
 
     override fun getWakeUpConfigField(): IntegerModelField? {
@@ -221,7 +222,7 @@ class FlashSaleModule : BaseFlashSaleTask() {
      */
     private fun submitPrivilegeTask() {
         if (isTaskRunning(privilegeTaskFuture)) {
-            Log.record("[FlashSaleModule🚀]青春特权大额任务已在运行中，跳过重复提交")
+            Log.runtime("[FlashSaleModule🚀]青春特权大额任务已在运行中，跳过重复提交")
             return
         }
 
@@ -247,7 +248,7 @@ class FlashSaleModule : BaseFlashSaleTask() {
      */
     private fun submitPrivilegeSmallTask() {
         if (isTaskRunning(privilegeSmallTaskFuture)) {
-            Log.record("[FlashSaleModule🚀]青春特权小额任务已在运行中，跳过重复提交")
+            Log.runtime("[FlashSaleModule🚀]青春特权小额任务已在运行中，跳过重复提交")
             return
         }
 
@@ -272,7 +273,7 @@ class FlashSaleModule : BaseFlashSaleTask() {
      */
     private fun submitNeverLandTask() {
         if (isTaskRunning(neverLandTaskFuture)) {
-            Log.record("[FlashSaleModule🚀]健康岛任务已在运行中，跳过重复提交")
+            Log.runtime("[FlashSaleModule🚀]健康岛任务已在运行中，跳过重复提交")
             return
         }
 

@@ -268,7 +268,7 @@ object GdbizWebClient {
                     return@Thread
                 }
 
-                Log.record(TAG, "成功获取业务 Token: $token")
+                Log.runtime(TAG, "成功获取业务 Token: $token")
 
                 // F. 构造你要实现的目标请求
                 val mediaType = "application/json".toMediaType()
@@ -292,8 +292,8 @@ object GdbizWebClient {
                 client.newCall(request).execute().use { response ->
                     val code = response.code
                     val responseData = response.body?.string() ?: ""
-                    Log.record(TAG, "请求返回代码: $code, 数据长度: ${responseData.length}")
-                    Log.record(TAG, "返回数据明文: $responseData")
+                    Log.runtime(TAG, "请求返回代码: $code, 数据长度: ${responseData.length}")
+                    Log.runtime(TAG, "返回数据明文: $responseData")
                 }
             } catch (e: Exception) {
                 Log.printStackTrace(TAG, "自动化请求执行抛出异常", e)

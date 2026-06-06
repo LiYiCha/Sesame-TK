@@ -22,7 +22,7 @@ object AuthCodeHelper {
      */
     fun init(loader: ClassLoader) {
         classLoader = loader
-        Log.record(TAG, "Oauth2AuthCodeHelper 初始化完成")
+        Log.runtime(TAG, "Oauth2AuthCodeHelper 初始化完成")
     }
 
 

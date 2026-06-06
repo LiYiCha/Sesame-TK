@@ -5,6 +5,8 @@ import android.app.Service;
 import android.os.Handler;
 import android.os.PowerManager;
 
+import java.lang.annotation.Annotation;
+import java.lang.reflect.Method;
 import java.util.Calendar;
 import java.util.Objects;
 
@@ -36,7 +38,6 @@ import fansirsqi.xposed.sesame.util.Log;
 import fansirsqi.xposed.sesame.util.Notify;
 import fansirsqi.xposed.sesame.util.PermissionUtil;
 import fansirsqi.xposed.sesame.util.maps.UserMap;
-import lombok.Getter;
 
 /**
  * 生命周期管理器
@@ -109,14 +110,14 @@ public class LifecycleManager {
                 return false;
             }
             if (TaskCommon.IS_MODULE_SLEEP_TIME) {
-                Log.record("💤 模块休眠中,停止初始化");
+                Log.runtime("💤 模块休眠中,停止初始化");
                 return false;
             }
             destroyHandler(force);
             if (force) {
                 String userId = AppContext.getUserId();
                 if (userId == null) {
-                    Log.record("用户未登录");
+                    Log.runtime("用户未登录");
                     Toast.show("用户未登录");
                     return false;
                 }
@@ -131,19 +132,19 @@ public class LifecycleManager {
                 // 启动所有模型
                 Model.initAllModel();
                 String startMsg = "芝麻粒-TK 开始初始化...";
-                Log.record(startMsg);
-                Log.record("⚙️模块版本：" + modelVersion);
-                Log.record("📦应用版本：" + AppContext.getAlipayVersion().getVersionString());
+                Log.runtime(startMsg);
+                Log.runtime("⚙️模块版本：" + modelVersion);
+                Log.runtime("📦应用版本：" + AppContext.getAlipayVersion().getVersionString());
                 Config.load(userId);
                 if (!Config.isLoaded()) {
-                    Log.record("用户模块配置加载失败");
+                    Log.runtime("用户模块配置加载失败");
                     Toast.show("用户模块配置加载失败");
                     return false;
                 }
                 // ！！所有权限申请应该放在加载配置之后
                 //闹钟权限申请
                 if (!PermissionUtil.checkAlarmPermissions()) {
-                    Log.record("❌ 目标应用无闹钟权限");
+                    Log.runtime("❌ 目标应用无闹钟权限");
                     Handler mainHandler = AppContext.getMainHandler();
                     mainHandler.postDelayed(
                             () -> {
@@ -156,7 +157,7 @@ public class LifecycleManager {
                 }
                 // 检查并请求后台运行权限
                 if (BaseModel.getBatteryPerm().getValue() && !init && !PermissionUtil.checkBatteryPermissions()) {
-                    Log.record("目标应用无始终在后台运行权限");
+                    Log.runtime("目标应用无始终在后台运行权限");
                     Handler mainHandler = AppContext.getMainHandler();
                     mainHandler.postDelayed(
                             () -> {
@@ -168,7 +169,7 @@ public class LifecycleManager {
                 }
                 Notify.start(service);
                 if (!Objects.requireNonNull(Model.getModel(BaseModel.class)).getEnableField().getValue()) {
-                    Log.record("❌ 芝麻粒已禁用");
+                    Log.runtime("❌ 芝麻粒已禁用");
                     Toast.show("❌ 芝麻粒已禁用");
                     Notify.setStatusTextDisabled();
                     return false;
@@ -203,7 +204,7 @@ public class LifecycleManager {
                 updateDay(userId);
 
                 String successMsg = "芝麻粒-TK 加载成功✨";
-                Log.record(successMsg);
+                Log.runtime(successMsg);
                 Toast.show(successMsg);
 
             }
@@ -315,7 +316,7 @@ public class LifecycleManager {
                 dayCalendar.set(Calendar.HOUR_OF_DAY, 0);
                 dayCalendar.set(Calendar.MINUTE, 0);
                 dayCalendar.set(Calendar.SECOND, 0);
-                Log.record("初始化日期为：" + dayCalendar.get(Calendar.YEAR) + "-" + (dayCalendar.get(Calendar.MONTH) + 1) + "-" + dayCalendar.get(Calendar.DAY_OF_MONTH));
+                Log.runtime("初始化日期为：" + dayCalendar.get(Calendar.YEAR) + "-" + (dayCalendar.get(Calendar.MONTH) + 1) + "-" + dayCalendar.get(Calendar.DAY_OF_MONTH));
                 AlarmScheduler.setWakenAtTimeAlarm();
                 return;
             }
@@ -328,7 +329,7 @@ public class LifecycleManager {
                 dayCalendar.set(Calendar.HOUR_OF_DAY, 0);
                 dayCalendar.set(Calendar.MINUTE, 0);
                 dayCalendar.set(Calendar.SECOND, 0);
-                Log.record("日期更新为：" + nowYear + "-" + (nowMonth + 1) + "-" + nowDay);
+                Log.runtime("日期更新为：" + nowYear + "-" + (nowMonth + 1) + "-" + nowDay);
                 AlarmScheduler.setWakenAtTimeAlarm();
             }
         } catch (Exception e) {
@@ -362,11 +363,90 @@ public class LifecycleManager {
                 });
     }
 
+    private static boolean logReceiverRegistered = false;
+    private static XC_MethodHook.Unhook rpcInvocationUnhook = null;
+
+    public static boolean isMainProcess() {
+        try {
+            android.content.Context context = AppContext.getAppContext();
+            if (context == null) return true;
+            String processName = getProcessName(context);
+            return context.getPackageName().equals(processName);
+        } catch (Throwable t) {
+            return true;
+        }
+    }
+
+    private static String getProcessName(android.content.Context context) {
+        if (android.os.Build.VERSION.SDK_INT >= 28) {
+            return android.app.Application.getProcessName();
+        }
+        try {
+            Class<?> clazz = Class.forName("android.app.ActivityThread");
+            Object currentActivityThread = clazz.getDeclaredMethod("currentActivityThread").invoke(null);
+            java.lang.reflect.Method getProcessName = clazz.getDeclaredMethod("getProcessName");
+            return (String) getProcessName.invoke(currentActivityThread);
+        } catch (Exception e) {
+            return context.getPackageName();
+        }
+    }
+
+    @SuppressLint("UnspecifiedRegisterReceiverFlag")
+    public static void registerCaptureLogReceiver() {
+        if (logReceiverRegistered) return;
+        android.content.Context context = AppContext.getAppContext();
+        if (context == null) return;
+        if (!isMainProcess()) return;
+        try {
+            android.content.BroadcastReceiver receiver = new android.content.BroadcastReceiver() {
+                @Override
+                public void onReceive(android.content.Context ctx, android.content.Intent intent) {
+                    if ("fansirsqi.xposed.sesame.WRITE_CAPTURE_LOG".equals(intent.getAction())) {
+                        String logMessage = intent.getStringExtra("log_message");
+                        if (logMessage != null) {
+                            Log.capture(logMessage);
+                        }
+                    }
+                }
+            };
+            android.content.IntentFilter filter = new android.content.IntentFilter("fansirsqi.xposed.sesame.WRITE_CAPTURE_LOG");
+            if (android.os.Build.VERSION.SDK_INT >= 33) {
+                context.registerReceiver(receiver, filter, android.content.Context.RECEIVER_EXPORTED);
+            } else {
+                context.registerReceiver(receiver, filter);
+            }
+            logReceiverRegistered = true;
+            Log.runtime(TAG, "Registered WRITE_CAPTURE_LOG receiver successfully");
+        } catch (Throwable t) {
+            Log.runtime(TAG, "Register WRITE_CAPTURE_LOG receiver err: " + t.getMessage());
+        }
+    }
+
+    public static void writeCaptureLog(String logMessage) {
+        android.content.Context context = AppContext.getAppContext();
+        if (context == null) {
+            Log.capture(logMessage);
+            return;
+        }
+        if (isMainProcess()) {
+            Log.capture(logMessage);
+        } else {
+            try {
+                android.content.Intent intent = new android.content.Intent("fansirsqi.xposed.sesame.WRITE_CAPTURE_LOG");
+                intent.putExtra("log_message", logMessage);
+                context.sendBroadcast(intent);
+            } catch (Throwable t) {
+                Log.capture(logMessage);
+            }
+        }
+    }
+
     /**
      * 设置RPC调试钩子
      */
     @SuppressLint("WakelockTimeout")
-    private static void setupRpcDebugHooks() {
+    public static void setupRpcDebugHooks() {
+        registerCaptureLogReceiver();
         try {
             ClassLoader classLoader = AppContext.getClassLoader();
 
@@ -407,11 +487,11 @@ public class LifecycleManager {
                                 // 只有在 rawDataObj 不为 null 时才记录日志
                                 if (rawDataObj != null) {
                                     String rawData = String.valueOf(rawDataObj);
-                                    String logMessage = "\n========================>\n" + "TimeStamp: " + TimeStamp + "\n" + "Method: " + Method + "\n" + "Params: " + Params + "\n" + "Data: " + rawData + "\n<========================\n";
-                                    Log.capture(logMessage);
+                                    String logMessage = "\n[H5] ========================>\n" + "TimeStamp: " + TimeStamp + "\n" + "Method: " + Method + "\n" + "Params: " + Params + "\n" + "Data: " + rawData + "\n<========================\n";
+                                    writeCaptureLog(logMessage);
                                 }
                             } else {
-                                Log.capture("delete record ID: " + object.hashCode());
+                                writeCaptureLog("delete record ID: " + object.hashCode());
                             }
                         }
                     });
@@ -443,6 +523,112 @@ public class LifecycleManager {
             Log.runtime(TAG, "hook record response err:");
             Log.printStackTrace(TAG, t);
         }
+        // Hook底层的 RpcInvocationHandler (拦截小游戏等底层RPC请求)
+        try {
+            ClassLoader classLoader = AppContext.getClassLoader();
+            Class<?> rpcHandlerClass = XposedHelpers.findClassIfExists("com.alipay.mobile.common.rpc.RpcInvocationHandler", classLoader);
+            if (rpcHandlerClass != null) {
+                rpcInvocationUnhook = XposedHelpers.findAndHookMethod(rpcHandlerClass, "invoke", Object.class, java.lang.reflect.Method.class, Object[].class,
+                    new XC_MethodHook() {
+                        @Override
+                        @SuppressWarnings("unchecked")
+                        protected void beforeHookedMethod(MethodHookParam param) throws Throwable {
+                            Method method = (Method) param.args[1];
+                            String opType = "";
+                            try {
+                                Class<?> operationTypeAnnClass = XposedHelpers.findClassIfExists("com.alipay.mobile.framework.service.annotation.OperationType", classLoader);
+                                if (operationTypeAnnClass != null) {
+                                    Annotation ann = method.getAnnotation((Class<? extends Annotation>) operationTypeAnnClass);
+                                    if (ann != null) {
+                                        opType = (String) XposedHelpers.callMethod(ann, "value");
+                                    }
+                                }
+                            } catch (Throwable t) {
+                                // 忽略
+                            }
+                            if (opType == null || opType.isEmpty()) {
+                                opType = method.getName();
+                            }
+                            XposedHelpers.setAdditionalInstanceField(param, "opType", opType);
+                            XposedHelpers.setAdditionalInstanceField(param, "startTime", System.currentTimeMillis());
+                            
+                            if (LifecycleManager.isUselessRpc(opType)) {
+                                return;
+                            }
+                            
+                            // 序列化入参
+                            String paramsJson = "";
+                            try {
+                                Object[] args = (Object[]) param.args[2];
+                                if (args != null) {
+                                    Class<?> jsonClass = classLoader.loadClass("com.alibaba.fastjson.JSON");
+                                    paramsJson = (String) XposedHelpers.callStaticMethod(jsonClass, "toJSONString", (Object) args);
+                                }
+                            } catch (Throwable t) {
+                                paramsJson = "[]";
+                            }
+                            XposedHelpers.setAdditionalInstanceField(param, "paramsJson", paramsJson);
+                        }
+
+                        @Override
+                        protected void afterHookedMethod(MethodHookParam param) throws Throwable {
+                            String opType = (String) XposedHelpers.getAdditionalInstanceField(param, "opType");
+                            if (opType == null) return;
+                            if (LifecycleManager.isUselessRpc(opType)) return;
+                            
+                            Long startTime = (Long) XposedHelpers.getAdditionalInstanceField(param, "startTime");
+                            if (startTime == null) startTime = System.currentTimeMillis();
+                            
+                            String paramsJson = (String) XposedHelpers.getAdditionalInstanceField(param, "paramsJson");
+                            if (paramsJson == null) paramsJson = "[]";
+                            
+                            String responseJson = "";
+                            if (param.hasThrowable()) {
+                                responseJson = "Error: " + param.getThrowable().toString();
+                            } else {
+                                try {
+                                    Object result = param.getResult();
+                                    if (result != null) {
+                                        Class<?> jsonClass = classLoader.loadClass("com.alibaba.fastjson.JSON");
+                                        responseJson = (String) XposedHelpers.callStaticMethod(jsonClass, "toJSONString", result);
+                                    } else {
+                                        responseJson = "null";
+                                    }
+                                } catch (Throwable t) {
+                                    responseJson = "Error serializing: " + t.toString();
+                                }
+                            }
+                            
+                            String logMessage = "\n[BOTTOM] ========================>\n" + 
+                                    "TimeStamp: " + startTime + "\n" + 
+                                    "Method: " + opType + "\n" + 
+                                    "Params: " + paramsJson + "\n" + 
+                                    "Data: " + responseJson + "\n" + 
+                                    "<========================\n";
+                            
+                            writeCaptureLog(logMessage);
+                        }
+                    });
+                Log.runtime(TAG, "hook RpcInvocationHandler successfully");
+            }
+        } catch (Throwable t) {
+            Log.runtime(TAG, "hook RpcInvocationHandler err: " + t.getMessage());
+        }
+    }
+
+    private static boolean isUselessRpc(String opType) {
+        if (opType == null || opType.isEmpty()) return false;
+        String lower = opType.toLowerCase();
+        return lower.contains("wireless.audit")
+                || lower.contains("locate.service")
+                || lower.contains("uploadlog")
+                || lower.contains("log.upload")
+                || lower.contains("behavior.logs")
+                || lower.contains("behaviorlog")
+                || lower.contains("diagnose")
+                || lower.contains("reportactive")
+                || lower.contains("monitor")
+                || lower.contains("telemetry");
     }
 
     /**

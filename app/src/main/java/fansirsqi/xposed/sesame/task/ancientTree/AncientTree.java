@@ -55,13 +55,13 @@ public class AncientTree extends ModelTask {
     @Override
     public void runJava() {
         try {
-            Log.record("开始执行"+getName());
+            Log.runtime("开始执行"+getName());
             ancientTree(ancientTreeCityCodeList.getValue());
         } catch (Throwable t) {
             Log.runtime(TAG, "start.run err:");
             Log.printStackTrace(TAG, t);
         }finally {
-            Log.record("结束执行"+getName());
+            Log.runtime("结束执行"+getName());
         }
     }
     private static void ancientTree(Collection<String> ancientTreeCityCodeList) {
@@ -147,12 +147,12 @@ public class AncientTree extends ModelTask {
                                 Log.forest("保护古树🎐[" + cityName + "-" + districtName
                                         + "]#" + age + "年" + name + ",消耗能量" + protectExpense + "g");
                             } else {
-                                Log.record(jo.getString("resultDesc"));
+                                Log.runtime(jo.getString("resultDesc"));
                                 Log.runtime(jo.toString());
                             }
                         }
                     } else {
-                        Log.record(jo.getString("resultDesc"));
+                        Log.runtime(jo.getString("resultDesc"));
                         Log.runtime(ancientTreeDetail.toString());
                     }
                     ThreadUtil.sleep(500L);

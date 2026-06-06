@@ -51,19 +51,19 @@ public class MemberNew extends BaseCommTask {
         // 检查冷却时间
         if (Status.hasTemporaryStatusValid(MEMBER_EXECUTION_COOLDOWN_FLAG)) {
             long remainingTime = Status.getTemporaryStatusRemainingMinutes(MEMBER_EXECUTION_COOLDOWN_FLAG);
-            Log.record(TAG, "距离上次执行间隔，还需等待" + remainingTime + "分钟，跳过本次调用");
+            Log.runtime(TAG, "距离上次执行间隔，还需等待" + remainingTime + "分钟，跳过本次调用");
             return;
         }
 
         // 线程安全检查 - 防止并发执行
         if (!isRunning.compareAndSet(false, true)) {
-            Log.record(TAG, "任务正在执行中，跳过本次调用");
+            Log.runtime(TAG, "任务正在执行中，跳过本次调用");
             return;
         }
         
         executionLock.lock();
         try {
-            Log.record(TAG, "开始执行会员积分任务");
+            Log.runtime(TAG, "开始执行会员积分任务");
             
             // 重置状态标记
             hasCompletedTask = false;
@@ -588,7 +588,7 @@ public class MemberNew extends BaseCommTask {
                     if (!SUCCESS.equalsIgnoreCase(applyResult.optString("resultCode"))) {
                         Log.error(TAG, "游戏任务申请失败: " + applyResult.optString("resultDesc"));
                     } else {
-                        Log.record(TAG, "使用applyTask2申请游戏任务");
+                        Log.runtime(TAG, "使用applyTask2申请游戏任务");
                         JSONObject applyResult2 = new JSONObject(AntMemberRpcCall.applyTask2(taskId));
                         TimeUtil.sleep(this.executeIntervalInt);
                     }
@@ -939,7 +939,7 @@ public class MemberNew extends BaseCommTask {
             JSONObject currentTaskInfo = json.optJSONObject("currentTaskInfo");
             
             if (currentTaskInfo == null) {
-                Log.record(TAG, "宝箱任务信息为空");
+                Log.runtime(TAG, "宝箱任务信息为空");
                 return;
             }
             
@@ -998,7 +998,7 @@ public class MemberNew extends BaseCommTask {
                 
                 JSONObject videoTaskInfo = queryResult.optJSONObject("videoTaskInfo");
                 if (videoTaskInfo == null) {
-                    Log.record(TAG, "宝箱广告任务信息为空,当前无广告");
+                    Log.runtime(TAG, "宝箱广告任务信息为空,当前无广告");
                     break;
                 }
                 
@@ -1053,13 +1053,13 @@ public class MemberNew extends BaseCommTask {
                 
                 // 防止无限循环，最多处理10个任务
                 if (completedCount >= 10) {
-                    Log.record(TAG, "已完成10个宝箱广告任务，停止处理");
+                    Log.runtime(TAG, "已完成10个宝箱广告任务，停止处理");
                     break;
                 }
             }
             
             if (completedCount > 0) {
-                Log.record(TAG, "宝箱广告任务处理完成，共完成" + completedCount + "个任务");
+                Log.runtime(TAG, "宝箱广告任务处理完成，共完成" + completedCount + "个任务");
             }
             
         } catch (Exception e) {

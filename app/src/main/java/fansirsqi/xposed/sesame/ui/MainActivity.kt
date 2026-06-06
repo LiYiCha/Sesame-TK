@@ -285,7 +285,7 @@ class MainActivity : BaseActivity() {
             menu.add(0, 6, 6, R.string.extend)                 // 扩展功能
             menu.add(0, 7, 7, R.string.settings)               // 设置
             menu.add(0, 8, 8, R.string.test_post)              // 模拟请求(RpcDebugActivity)
-            menu.add(0, 9, 9, "流量抓包查看")                   // 新版抓包浏览器
+            menu.add(0, 9, 9, "流量抓包日志")                   // 新版抓包浏览器
             if (BuildConfig.DEBUG) {
                 menu.add(0, 10, 10, R.string.clearn)           // 清空配置
             }

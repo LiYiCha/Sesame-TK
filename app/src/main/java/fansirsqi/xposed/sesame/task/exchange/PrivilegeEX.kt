@@ -181,12 +181,16 @@ class PrivilegeEX : BaseFlashSaleTask(), YouthPrivilegeSupport {
                         val count = (price * 10).toInt()
                         ExchangeItem(benefitId, price, count)
                     }
-                    benefitId.startsWith("large") -> {
+                    benefitId.startsWith("large_") -> {
                         // 大额红包，面额等于价格，数量也等于面额
                         val count = price.toInt()
                         ExchangeItem(benefitId, price, count)
                     }
-                    else -> null
+                    else -> {
+                        // 默认解析，防止未知命名格式被过滤
+                        val count = price.toInt()
+                        ExchangeItem(benefitId, price, count)
+                    }
                 }
             } catch (e: Exception) {
                 Log.error(TAG, "创建ExchangeItem时发生异常: ${e.message}")
@@ -219,7 +223,7 @@ class PrivilegeEX : BaseFlashSaleTask(), YouthPrivilegeSupport {
                         "${item.value}红包"
                     }
                 }
-                item.code.startsWith("large") -> {
+                item.code.startsWith("large_") -> {
                     "${item.value.toInt()}红包"
                 }
                 else -> "${item.value}红包"
@@ -275,14 +279,23 @@ class PrivilegeEX : BaseFlashSaleTask(), YouthPrivilegeSupport {
         if (enablePrivilegeList?.value == true && youthPrivilegeList?.value != null) {
             val selectedNames = getYouthPrivilegeSelectedNames()
 
+            // 过滤大额/小额对应的选中项，实现彻底解耦
+            val targetNames = selectedNames.filter { code ->
+                if (isSmallExchange) {
+                    code.startsWith("small_")
+                } else {
+                    code.startsWith("large_")
+                }
+            }
+
             // 检查是否有选中的项目
-            if (selectedNames.isNotEmpty()) {
+            if (targetNames.isNotEmpty()) {
                 val result = mutableListOf<ExchangeItem>()
 
                 // 按照用户选择的顺序添加项目
-                for (code in selectedNames) {
-                    // 从最新获取的可用项目中查找
-                    val item = availableItems.find { it.code == code }
+                for (code in targetNames) {
+                    // 从最新获取的可用项目中查找（允许匹配如 small_0.1_1 等带后缀的动态 code）
+                    val item = availableItems.find { it.code == code || it.code.startsWith(code + "_") }
 
                     if (item != null) {
                         result.add(item)
@@ -484,8 +497,8 @@ class PrivilegeEX : BaseFlashSaleTask(), YouthPrivilegeSupport {
                                 val prizePrice = prizeInfo.optString("prizePrice")
                                 val status = prizeInfo.optString("status")
 
-                                // 只添加可兑换的项目（状态为EXCHANGE）
-                                if ("EXCHANGE" == status && benefitId.isNotEmpty()) {
+                                // 只添加可兑换的项目（放宽状态过滤，只有已兑换或已领取的跳过，支持NOT_START状态的秒杀预构建）
+                                if (benefitId.isNotEmpty() && "EXCHANGED" != status && "RECEIVED" != status) {
                                     // 根据benefitId创建对应的ExchangeItem
                                     val item = createExchangeItem(benefitId, prizePrice)
                                     if (item != null) {
@@ -500,6 +513,9 @@ class PrivilegeEX : BaseFlashSaleTask(), YouthPrivilegeSupport {
         } catch (e: Exception) {
             Log.error(TAG, "查询可兑换权益列表时发生异常: ${e.message}")
         }
+
+
+
         return availableItems
     }
 
@@ -539,6 +555,8 @@ class PrivilegeEX : BaseFlashSaleTask(), YouthPrivilegeSupport {
             null
         }
     }
+
+
 
     override val exchangeMode: ExchangeMode
         get() = ExchangeMode.SINGLE

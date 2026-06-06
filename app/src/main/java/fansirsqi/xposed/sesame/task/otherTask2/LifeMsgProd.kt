@@ -436,9 +436,9 @@ class LifeMsgProd {
         }
 
         if (consecutiveFailures >= maxConsecutiveFailures) {
-            Log.record(TAG, "建筑任务连续失败次数过多，停止执行")
+            Log.runtime(TAG, "建筑任务连续失败次数过多，停止执行")
         } else if (retryCount >= maxRetries) {
-            Log.record(TAG, "建筑任务达到最大重试次数")
+            Log.runtime(TAG, "建筑任务达到最大重试次数")
         }
     }
 
@@ -607,7 +607,7 @@ class LifeMsgProd {
             return true
         }else {
             val errorMsg = data.optString("errorMsg")
-            Log.record(TAG, "处理失败:${errorMsg}")
+            Log.runtime(TAG, "处理失败:${errorMsg}")
         }
         return false
     }

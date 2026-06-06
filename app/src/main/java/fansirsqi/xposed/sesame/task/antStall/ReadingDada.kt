@@ -68,7 +68,7 @@ object ReadingDada {
 
                 val submitJson = JSONObject(submitResponse)
                 return if (submitJson.getString("resultCode") == "200") {
-                    Log.record(TAG, "答题完成")
+                    Log.runtime(TAG, "答题完成")
                     true
                 } else {
                     Log.error(TAG, "答题失败")

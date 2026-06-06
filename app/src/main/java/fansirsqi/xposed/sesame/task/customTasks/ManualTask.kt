@@ -43,28 +43,28 @@ object ManualTask {
      */
     suspend fun run(tasks: List<CustomTask>, extraParams: Map<String, Any> = emptyMap()) {
         if (!isManualEnabled) {
-            Log.record("ManualTask", "⚠️ 手动任务流总开关已关闭，无法执行")
+            Log.runtime("ManualTask", "⚠️ 手动任务流总开关已关闭，无法执行")
             return
         }
 
         if (tasks.isEmpty()) {
-            Log.record("ManualTask", "⚠️ 未选中任何子任务")
+            Log.runtime("ManualTask", "⚠️ 未选中任何子任务")
             return
         }
 
         if (isManualRunning) {
-            Log.record("ManualTask", "⚠️ 手动任务已在运行中，请勿重复启动")
+            Log.runtime("ManualTask", "⚠️ 手动任务已在运行中，请勿重复启动")
             return
         }
 
         withContext(Dispatchers.IO) {
             try {
                 isManualRunning = true
-                Log.record("ManualTask", "🚀 开始执行手动任务序列...")
+                Log.runtime("ManualTask", "🚀 开始执行手动任务序列...")
 
                 for (task in tasks) {
                     try {
-                        Log.record("ManualTask", "⏳ 正在执行: ${task.displayName}...")
+                        Log.runtime("ManualTask", "⏳ 正在执行: ${task.displayName}...")
                         when (task) {
                             // 森林类任务
                             CustomTask.FOREST_WHACK_MOLE -> {
@@ -74,7 +74,7 @@ object ManualTask {
                                     val games = extraParams["whackMoleGames"] as? Int ?: 5
                                     instance.manualWhackMole(mode, games)
                                 } else {
-                                    Log.record("ManualTask", "❌ 无法加载森林模块")
+                                    Log.runtime("ManualTask", "❌ 无法加载森林模块")
                                 }
                             }
 
@@ -84,7 +84,7 @@ object ManualTask {
                                     val exchange = extraParams["exchangeEnergyRainCard"] as? Boolean ?: false
                                     instance.manualUseEnergyRain(exchange)
                                 } else {
-                                    Log.record("ManualTask", "❌ 无法加载森林模块")
+                                    Log.runtime("ManualTask", "❌ 无法加载森林模块")
                                 }
                             }
 
@@ -103,11 +103,11 @@ object ManualTask {
                             }
                         }
                     } catch (t: Throwable) {
-                        Log.record("ManualTask", "❌ 执行 ${task.displayName} 出错: ${t.message}")
+                        Log.runtime("ManualTask", "❌ 执行 ${task.displayName} 出错: ${t.message}")
                         Log.printStackTrace(t)
                     }
                 }
-                Log.record("ManualTask", "✅ 手动任务执行完毕")
+                Log.runtime("ManualTask", "✅ 手动任务执行完毕")
             } finally {
                 isManualRunning = false
             }
@@ -121,7 +121,7 @@ object ManualTask {
         if (AntForest.instance == null) {
             val loader = ApplicationHook.getClassLoader() ?: return null
             Model.getModel(AntForest::class.java)?.let {
-                Log.record("ManualTask", "⚙️ 正在按需加载森林模块...")
+                Log.runtime("ManualTask", "⚙️ 正在按需加载森林模块...")
                 it.prepare()
                 it.boot(loader)
             }
@@ -136,7 +136,7 @@ object ManualTask {
         if (AntFarm.instance == null) {
             val loader = ApplicationHook.getClassLoader() ?: return null
             Model.getModel(AntFarm::class.java)?.let {
-                Log.record("ManualTask", "⚙️ 正在按需加载庄园模块...")
+                Log.runtime("ManualTask", "⚙️ 正在按需加载庄园模块...")
                 it.prepare()
                 it.boot(loader)
             }

@@ -22,7 +22,7 @@ public class MessageUtil {
     public static void printErrorMessage(String tag, JSONObject jo, String errorMessageField) {
         try {
             String errMsg = tag + " error:";
-            Log.record(errMsg + jo.getString(errorMessageField));
+            Log.runtime(errMsg + jo.getString(errorMessageField));
             Log.runtime(jo.getString(errorMessageField), jo.toString());
         } catch (Throwable t) {
             Log.error(TAG, "printErrorMessage err:");

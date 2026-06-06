@@ -19,7 +19,7 @@ object SecurityBodyHelper {
      */
     fun init(loader: ClassLoader) {
         classLoader = loader
-        Log.record(TAG, "SecurityBodyHelper 初始化完成")
+        Log.runtime(TAG, "SecurityBodyHelper 初始化完成")
     }
 
     /**

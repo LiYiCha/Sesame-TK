@@ -156,23 +156,23 @@ public class TaskScheduler {
 
             TaskCommon.update();
             if (TaskCommon.IS_MODULE_SLEEP_TIME) {
-                Log.record("️💤跳过执行-休眠时间");
+                Log.runtime("️💤跳过执行-休眠时间");
                 return;
             }
 
             if (!LifecycleManager.isInit()) {
-                Log.record("️🐣跳过执行-未初始化");
+                Log.runtime("️🐣跳过执行-未初始化");
                 return;
             }
 
             if (!Config.isLoaded()) {
-                Log.record("️⚙跳过执行-用户模块配置未加载");
+                Log.runtime("️⚙跳过执行-用户模块配置未加载");
                 return;
             }
 
             long currentTime = System.currentTimeMillis();
             if (lastExecTime + MIN_EXECUTION_INTERVAL > currentTime) {
-                Log.record("执行间隔较短，跳过执行");
+                Log.runtime("执行间隔较短，跳过执行");
                 scheduleNextExecution(currentTime);
                 return;
             }
@@ -180,19 +180,19 @@ public class TaskScheduler {
             String currentUid = UserMap.getCurrentUid();
             String targetUid = AppContext.getUserId();
             if (targetUid == null || !targetUid.equals(currentUid)) {
-                Log.record("用户切换或为空，重新登录");
+                Log.runtime("用户切换或为空，重新登录");
                 LifecycleManager.reLogin();
                 return;
             }
 
-            Log.record("⚡ 开始执行");
+            Log.runtime("⚡ 开始执行");
             lastExecTime = currentTime;
 
             ModelTask.startAllTask(false);
             scheduleNextExecution(lastExecTime);
 
         } catch (Exception e) {
-            Log.record(TAG, "❌执行异常");
+            Log.runtime(TAG, "❌执行异常");
             Log.printStackTrace(TAG, e);
             scheduleNextExecution(System.currentTimeMillis());
         }
@@ -223,7 +223,7 @@ public class TaskScheduler {
                                 && lastExecTimeCalendar.compareTo(execAtTimeCalendar) < 0
                                 && nextExecTimeCalendar.compareTo(execAtTimeCalendar) > 0) {
                             delayMillis = execAtTimeCalendar.getTimeInMillis() - execTime;
-                            Log.record("设置定时执行:" + execAtTime);
+                            Log.runtime("设置定时执行:" + execAtTime);
                             break;
                         }
                     }

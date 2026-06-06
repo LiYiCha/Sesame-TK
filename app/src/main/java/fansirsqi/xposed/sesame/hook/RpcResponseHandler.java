@@ -16,7 +16,7 @@ public class RpcResponseHandler {
      */
     public static void handle(String method, String Params) {
         if (Params == null || Params.isEmpty() || "null".equalsIgnoreCase(Params)) {
-            Log.record(TAG + ": Params为空或无效");
+            Log.runtime(TAG + ": Params为空或无效");
             return;
         }
 
@@ -27,12 +27,12 @@ public class RpcResponseHandler {
                     break;
                 // 其他接口的处理逻辑
                 default:
-                    //Log.record(TAG + ": 未定义处理逻辑的RPC方法: " + method);
+                    //Log.runtime(TAG + ": 未定义处理逻辑的RPC方法: " + method);
                     break;
             }
 
         } catch (Exception e) {
-            Log.record(TAG + ": JSON解析失败 Params=" + Params);
+            Log.runtime(TAG + ": JSON解析失败 Params=" + Params);
             Log.printStackTrace(e);
         }
     }
@@ -53,7 +53,7 @@ public class RpcResponseHandler {
             String riskToken = rawJson.substring(valueStart, valueEnd);
             OtherTask.getFishpondToken().setValue(riskToken);
             //saveConfigWithLog("fishpondToken", riskToken);
-            Log.record("✅ 配置 fishpondToken 已保存 ");
+            Log.runtime("✅ 配置 fishpondToken 已保存 ");
         }
     }
 
@@ -76,9 +76,9 @@ public class RpcResponseHandler {
     private static void saveConfigWithLog(String fieldName, String value) {
         String userId = fansirsqi.xposed.sesame.util.maps.UserMap.getCurrentUid();
             if (Config.save(userId, false)) {
-                Log.record("✅ 配置 [" + fieldName + "] 已保存: " + value);
+                Log.runtime("✅ 配置 [" + fieldName + "] 已保存: " + value);
             } else {
-                Log.record("❌ 配置 [" + fieldName + "] 保存失败: " + value);
+                Log.runtime("❌ 配置 [" + fieldName + "] 保存失败: " + value);
             }
     }
 }

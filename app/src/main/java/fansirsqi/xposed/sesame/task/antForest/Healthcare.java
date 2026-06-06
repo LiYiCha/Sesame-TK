@@ -37,7 +37,7 @@ public class Healthcare {
                 TimeUtil.sleepCompat(1000);
             }
         } catch (Throwable th) {
-            Log.record(TAG, "queryForestEnergy err:");
+            Log.runtime(TAG, "queryForestEnergy err:");
             Log.printStackTrace(TAG, th);
         }
     }
@@ -56,7 +56,7 @@ public class Healthcare {
                 }
             }
         } catch (Throwable th) {
-            Log.record(TAG, "produceForestEnergy err:");
+            Log.runtime(TAG, "produceForestEnergy err:");
             Log.printStackTrace(TAG, th);
         }
         return energyGeneratedList;
@@ -76,7 +76,7 @@ public class Healthcare {
                 return true;
             }
         } catch (Throwable th) {
-            Log.record(TAG, "harvestForestEnergy err:");
+            Log.runtime(TAG, "harvestForestEnergy err:");
             Log.printStackTrace(TAG, th);
         }
         return false;

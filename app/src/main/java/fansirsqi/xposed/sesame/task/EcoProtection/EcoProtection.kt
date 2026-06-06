@@ -61,12 +61,12 @@ class EcoProtection : ModelTask() {
 
     override suspend fun runSuspend() {
         try {
-            Log.record(TAG, "开始执行$name")
+            Log.runtime(TAG, "开始执行$name")
             ancientTree(ancientTreeCityCodeList!!.value)
         } catch (t: Throwable) {
             Log.printStackTrace(TAG, "start.run err:",t)
         } finally {
-            Log.record(TAG, "结束执行$name")
+            Log.runtime(TAG, "结束执行$name")
         }
     }
 
@@ -152,13 +152,13 @@ class EcoProtection : ModelTask() {
                                                 + "]#" + age + "年" + name + ",消耗能量" + protectExpense + "g")
                                     )
                                 } else {
-                                    Log.record(jo.getString("resultDesc"))
-                                    Log.record(jo.toString())
+                                    Log.runtime(jo.getString("resultDesc"))
+                                    Log.runtime(jo.toString())
                                 }
                             }
                         } else {
-                            Log.record(jo.getString("resultDesc"))
-                            Log.record(ancientTreeDetail.toString())
+                            Log.runtime(jo.getString("resultDesc"))
+                            Log.runtime(ancientTreeDetail.toString())
                         }
                         sleepCompat(500L)
                     }

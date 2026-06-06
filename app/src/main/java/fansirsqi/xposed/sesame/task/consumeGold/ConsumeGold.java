@@ -55,7 +55,7 @@ public class ConsumeGold extends ModelTask {
 
     public void run() {
         try {
-            Log.record("执行开始-" + getName());
+            Log.runtime("执行开始-" + getName());
             RuntimeInfo.getInstance().put("consumeGold", System.currentTimeMillis());
             if (consumeGoldSign.getValue()) {
                 consumeGoldSign();
@@ -80,7 +80,7 @@ public class ConsumeGold extends ModelTask {
         } catch (Throwable t) {
             Log.printStackTrace(TAG + ".run", t);
         } finally {
-            Log.record("执行结束-" + getName());
+            Log.runtime("执行结束-" + getName());
         }
     }
     /**

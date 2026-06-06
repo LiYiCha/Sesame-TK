@@ -106,8 +106,7 @@ class LogViewerComposeActivity : ComponentActivity() {
         try {
             val file = File(path)
             if (file.exists()) {
-                val content = file.readText(Charsets.UTF_8)
-                viewModel.setFullText(content)
+                viewModel.loadFile(file)
                 viewModel.startWatchingFile(path)
             }
         } catch (e: Exception) {

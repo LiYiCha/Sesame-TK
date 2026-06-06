@@ -123,7 +123,7 @@ public class AntOcean extends ModelTask {
     @Override
     public void runJava() {
         try {
-            Log.record(TAG, "执行开始-" + getName());
+            Log.runtime(TAG, "执行开始-" + getName());
 
             if (!queryOceanStatus()) {
                 return;
@@ -152,7 +152,7 @@ public class AntOcean extends ModelTask {
         } catch (Throwable t) {
             Log.printStackTrace(TAG,"start.run err:", t);
         } finally {
-            Log.record(TAG, "执行结束-" + getName());
+            Log.runtime(TAG, "执行结束-" + getName());
         }
     }
 
@@ -187,7 +187,7 @@ public class AntOcean extends ModelTask {
                             }
                         }
                     }
-                    Log.record(TAG, "初始化沙滩数据成功。");
+                    Log.runtime(TAG, "初始化沙滩数据成功。");
                 }
                 IdMapManager.getInstance(BeachMap.class).save();
             } else {
@@ -208,7 +208,7 @@ public class AntOcean extends ModelTask {
             if (ResChecker.checkRes(TAG, jo)) {
                 if (!jo.getBoolean("opened")) {
                     getEnableField().setValue(false);
-                    Log.record("请先开启神奇海洋,并完成引导教程");
+                    Log.runtime("请先开启神奇海洋,并完成引导教程");
                     return false;
                 }
                 initBeach();
@@ -345,7 +345,7 @@ public class AntOcean extends ModelTask {
             if (ResChecker.checkRes(TAG + "复查海洋区域详情:", jo)) {
                 if (jo.optBoolean("awardSeaAreaCanCreateExtraCollect", false)) {
                     String availableCode = jo.optString("awardSeaAreaCode", "");
-                    Log.record(TAG, "发现海域[" + availableCode + "]限时挑战已就绪！正在接取...");
+                    Log.runtime(TAG, "发现海域[" + availableCode + "]限时挑战已就绪！正在接取...");
 
                     String createRet = AntOceanRpcCall.createSeaAreaExtraCollect();
                     if (ResChecker.checkRes(TAG + "接取限时挑战:", new JSONObject(createRet))) {
@@ -504,7 +504,7 @@ public class AntOcean extends ModelTask {
                 }
 
                 if (isFinish && !StringUtil.isEmpty(dstChapterCode)) {
-                    Log.record(TAG, "当前海域已完成，等待切换...");
+                    Log.runtime(TAG, "当前海域已完成，等待切换...");
                     GlobalThreadPools.sleepCompat(5000);
 
                     // 切换动作
@@ -533,7 +533,7 @@ public class AntOcean extends ModelTask {
                 // 1. 检查接取
                 if (jo.optBoolean("awardSeaAreaCanCreateExtraCollect", false)) {
                     String availableCode = jo.optString("awardSeaAreaCode", "");
-                    Log.record(TAG, "发现海域[" + availableCode + "]限时挑战，正在自动接取...");
+                    Log.runtime(TAG, "发现海域[" + availableCode + "]限时挑战，正在自动接取...");
                     String createRet = AntOceanRpcCall.createSeaAreaExtraCollect();
                     if (ResChecker.checkRes(TAG + "接取限时挑战:", new JSONObject(createRet))) {
                         Log.forest("限时挑战🌊接取成功");
@@ -572,7 +572,7 @@ public class AntOcean extends ModelTask {
                                 if (!fishVO.getBoolean("unlock") && "COMPLETED".equals(fishVO.optString("status"))) {
                                     String fishId = fishVO.getString("id");
                                     String name = fishVO.optString("name", "未知鱼类");
-                                    Log.record(TAG, "发现限时挑战鱼类可合成: " + name);
+                                    Log.runtime(TAG, "发现限时挑战鱼类可合成: " + name);
                                     combineFish(fishId, "EXTRA_COLLECT");
                                 }
                             }
@@ -658,7 +658,7 @@ public class AntOcean extends ModelTask {
                 String s = AntOceanRpcCall.queryTaskList();
                 JSONObject jo = new JSONObject(s);
                 if (!ResChecker.checkRes(TAG + "查询海洋任务列表失败:", jo)) {
-                    Log.record(TAG, "查询任务列表失败：" + jo.getString("resultDesc"));
+                    Log.runtime(TAG, "查询任务列表失败：" + jo.getString("resultDesc"));
                 }
                 JSONArray jaTaskList = jo.getJSONArray("antOceanTaskVOList");
                 for (int i = 0; i < jaTaskList.length(); i++) {
@@ -680,7 +680,7 @@ public class AntOcean extends ModelTask {
                         GlobalThreadPools.sleepCompat(500);
                     } else if (TaskStatus.TODO.name().equals(taskStatus)) {
                         if (badTaskSet.contains(taskTitle)) {
-                            Log.record(TAG, "海洋任务🌊[" + taskTitle + "]已在黑名单中，跳过处理");
+                            Log.runtime(TAG, "海洋任务🌊[" + taskTitle + "]已在黑名单中，跳过处理");
                             continue;
                         }
                         if (taskTitle.contains("答题")) {
@@ -731,7 +731,7 @@ public class AntOcean extends ModelTask {
             String questionResponse = AntOceanRpcCall.getQuestion();
             JSONObject questionJson = new JSONObject(questionResponse);
             if (questionJson.getBoolean("answered")) {
-                Log.record(TAG, "问题已经被回答过，跳过答题流程");
+                Log.runtime(TAG, "问题已经被回答过，跳过答题流程");
                 return;
             }
             if (questionJson.getInt("resultCode") == 200) {
@@ -755,7 +755,7 @@ public class AntOcean extends ModelTask {
 
     private static void doOceanPDLTask() {
         try {
-            Log.record(TAG, "执行潘多拉海域任务");
+            Log.runtime(TAG, "执行潘多拉海域任务");
             String homeResponse = AntOceanRpcCall.PDLqueryReplicaHome();
             JSONObject homeJson = new JSONObject(homeResponse);
             if (ResChecker.checkRes(TAG + "查询潘多拉海洋副本主页失败:", homeJson)) {
@@ -778,15 +778,15 @@ public class AntOcean extends ModelTask {
                             Log.forest("海洋奖励🌊[领取:" + taskTitle + "]获得潘多拉能量x" + awardCount);
                         } else {
                             if (receiveTaskJson.has("message")) {
-                                Log.record(TAG, "领取任务奖励失败: " + receiveTaskJson.getString("message"));
+                                Log.runtime(TAG, "领取任务奖励失败: " + receiveTaskJson.getString("message"));
                             } else {
-                                Log.record(TAG, "领取任务奖励失败，未返回错误信息");
+                                Log.runtime(TAG, "领取任务奖励失败，未返回错误信息");
                             }
                         }
                     }
                 }
             } else {
-                Log.record(TAG, "PDLqueryReplicaHome调用失败: " + homeJson.optString("message"));
+                Log.runtime(TAG, "PDLqueryReplicaHome调用失败: " + homeJson.optString("message"));
             }
         } catch (Throwable t) {
             Log.printStackTrace(TAG, "doOceanPDLTask err:", t);

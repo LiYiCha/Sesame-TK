@@ -162,7 +162,7 @@ public class DebugRpc {
             } else {
                 // 如果RPC调用失败，记录错误描述和项目ID
                 // 注意：这里应该记录projectId而不是s（响应字符串）
-                Log.record(jo.getString("resultDesc") + " projectId: " + projectId);
+                Log.runtime(jo.getString("resultDesc") + " projectId: " + projectId);
             }
         } catch (JSONException e) {
             // 处理JSON解析异常
@@ -239,7 +239,7 @@ public class DebugRpc {
                 Log.debug("树苗查询🌱[" + region + "-" + treeName + "]#剩余:" + currentBudget);
             } else {
                 // 如果RPC调用失败，记录错误描述和项目ID
-                Log.record(jo.getString("resultDesc") + " projectId: " + projectId);
+                Log.runtime(jo.getString("resultDesc") + " projectId: " + projectId);
             }
         } catch (JSONException e) {
             // 处理JSON解析异常
@@ -308,7 +308,7 @@ public class DebugRpc {
                 }
             } else {
                 // 如果RPC调用失败，记录错误信息
-                Log.record(jo.getString("errorMsg") + s);
+                Log.runtime(jo.getString("errorMsg") + s);
             }
         } catch (JSONException e) {
             // 处理JSON解析异常

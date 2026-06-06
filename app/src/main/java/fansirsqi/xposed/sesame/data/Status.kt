@@ -427,13 +427,13 @@ class Status {
         @JvmStatic
         fun load(currentUid: String?): Status {
             if (StringUtil.isEmpty(currentUid)) {
-                Log.record(TAG, "用户为空，状态加载失败")
+                Log.runtime(TAG, "用户为空，状态加载失败")
                 throw RuntimeException("用户为空，状态加载失败")
             }
             try {
                 val statusFile = Files.getStatusFile(currentUid)
                 if (statusFile!!.exists()) {
-                    Log.record(TAG, "加载 status.json")
+                    Log.runtime(TAG, "加载 status.json")
                     val json = Files.readFromFile(statusFile)
                     if (!json.trim().isEmpty()) {
                         // 使用 Jackson 更新现有对象
@@ -441,25 +441,36 @@ class Status {
                         // 格式化检查
                         val formatted = JsonUtil.formatJson(INSTANCE)
                         if (formatted != null && formatted != json) {
-                            Log.record(TAG, "重新格式化 status.json")
+                            Log.runtime(TAG, "重新格式化 status.json")
                             Files.write2File(formatted, statusFile)
                         }
                     } else {
-                        Log.record(TAG, "配置文件为空，初始化默认配置")
+                        Log.runtime(TAG, "配置文件为空，初始化默认配置")
                         initializeDefaultConfig(statusFile)
                     }
                 } else {
-                    Log.record(TAG, "配置文件不存在，初始化默认配置")
+                    Log.runtime(TAG, "配置文件不存在，初始化默认配置")
                     initializeDefaultConfig(statusFile)
                 }
             } catch (t: Throwable) {
                 Log.printStackTrace(TAG, t)
-                Log.record(TAG, "状态文件格式有误，已重置")
+                Log.runtime(TAG, "状态文件格式有误，已重置")
                 resetAndSaveConfig()
             }
 
-            // 这里逻辑有点奇怪，如果 saveTime 是 0，则设为当前时间。
-            // 原始 Java 代码中 Long 默认为 null，但这里属性初始化为 0L。
+            // 跨天检测：如果加载出来的 saveTime 与当前时间不在同一天，则需要立刻重置（清除每日状态）并保存
+            val nowCalendar = Calendar.getInstance()
+            if (INSTANCE.saveTime != 0L && TimeUtil.isLessThanSecondOfDays(INSTANCE.saveTime, nowCalendar.timeInMillis)) {
+                Log.runtime(TAG, "检测到跨天加载，清空每日状态并保存")
+                unload()
+                INSTANCE.saveTime = System.currentTimeMillis()
+                try {
+                    Files.write2File(JsonUtil.formatJson(INSTANCE), Files.getStatusFile(currentUid)!!)
+                } catch (e: Exception) {
+                    Log.runtime(TAG, "跨天重置保存失败: ${e.message}")
+                }
+            }
+
             if (INSTANCE.saveTime == 0L) {
                 INSTANCE.saveTime = System.currentTimeMillis()
             }
@@ -469,7 +480,7 @@ class Status {
         private fun initializeDefaultConfig(statusFile: java.io.File) {
             try {
                 JsonUtil.copyMapper().updateValue(INSTANCE, Status())
-                Log.record(TAG, "初始化 status.json")
+                Log.runtime(TAG, "初始化 status.json")
                 Files.write2File(JsonUtil.formatJson(INSTANCE), statusFile)
             } catch (e: JsonMappingException) {
                 Log.printStackTrace(TAG, e)
@@ -491,12 +502,26 @@ class Status {
         @JvmStatic
         fun unload() {
             try {
-                // 创建新状态实例并确保清空所有每日标记
+                // 1. 通过反射清空 INSTANCE 中所有的 Collection 和 Map 类型的集合字段，确保跨天重置时 100% 擦除昨日残留集合数据
+                val fields = Status::class.java.declaredFields
+                for (field in fields) {
+                    try {
+                        field.isAccessible = true
+                        val value = field.get(INSTANCE) ?: continue
+                        if (value is MutableCollection<*>) {
+                            value.clear()
+                        } else if (value is MutableMap<*, *>) {
+                            value.clear()
+                        }
+                    } catch (fe: Exception) {
+                        Log.runtime(TAG, "反射清空字段 ${field.name} 失败: ${fe.message}")
+                    }
+                }
+                
+                // 2. 借助 Jackson 将其他基本类型与布尔型字段重置为默认值
                 val newStatus = Status()
-                // 确保清空flagList
-                INSTANCE.flagList.clear()
                 JsonUtil.copyMapper().updateValue(INSTANCE, newStatus)
-            } catch (e: JsonMappingException) {
+            } catch (e: Exception) {
                 Log.printStackTrace(TAG, e)
             }
         }
@@ -507,12 +532,12 @@ class Status {
         fun save(nowCalendar: Calendar = Calendar.getInstance(), immediate: Boolean = false) {
             val currentUid = UserMap.currentUid
             if (StringUtil.isEmpty(currentUid)) {
-                Log.record(TAG, "用户为空，状态保存失败")
+                Log.runtime(TAG, "用户为空，状态保存失败")
                 throw RuntimeException("用户为空，状态保存失败")
             }
             val lastSaveTime = INSTANCE.saveTime
-            INSTANCE.saveTime = System.currentTimeMillis()
             val isDayChanged = updateDay(nowCalendar)
+            INSTANCE.saveTime = System.currentTimeMillis()
             
             if (isDayChanged || immediate) {
                 saveJob?.cancel()
@@ -532,14 +557,14 @@ class Status {
         private fun writeStatusToFile(currentUid: String, isDayChanged: Boolean, lastSaveTime: Long) {
             try {
                 if (isDayChanged) {
-                    Log.record(TAG, "重置 statistics.json")
+                    Log.runtime(TAG, "重置 statistics.json")
                 } else {
-                    Log.record(TAG, "保存 status.json (防抖异步)")
+                    Log.runtime(TAG, "保存 status.json (防抖异步)")
                 }
                 Files.write2File(JsonUtil.formatJson(INSTANCE), Files.getStatusFile(currentUid)!!)
             } catch (e: Exception) {
                 INSTANCE.saveTime = lastSaveTime
-                Log.record(TAG, "保存 status.json 失败: ${e.message}")
+                Log.runtime(TAG, "保存 status.json 失败: ${e.message}")
             }
         }
 
@@ -666,7 +691,7 @@ class Status {
          * ```kotlin
          * // 检查任务是否在冷却期内
          * if (Status.hasTemporaryStatusValid("privilegeTask_completed_temp")) {
-         *     Log.record("任务仍在冷却期内，跳过执行")
+         *     Log.runtime("任务仍在冷却期内，跳过执行")
          *     return
          * }
          *

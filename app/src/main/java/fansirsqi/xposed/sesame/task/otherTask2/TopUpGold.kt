@@ -40,7 +40,7 @@ class TopUpGold {
 
             val token = getValidToken(userId)
             if (token.isNullOrEmpty()) {
-                Log.record(TAG, "⚠️ 无法获取有效的 Token，放弃执行")
+                Log.runtime(TAG, "⚠️ 无法获取有效的 Token，放弃执行")
                 return
             }
 

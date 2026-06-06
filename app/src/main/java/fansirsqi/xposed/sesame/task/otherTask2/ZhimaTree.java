@@ -158,7 +158,7 @@ public class ZhimaTree extends ModelTask {
 
             if ("NOT_DONE".equals(status) || "SIGNUP_COMPLETE".equals(status)) {
                 // SIGNUP_COMPLETE 通常表示已报名但未做，或者对于复访任务表示可以去完成
-                Log.record("芝麻树🌳[开始任务] " + title + (prizeName.isEmpty() ? "" : " (" + prizeName + ")"));
+                Log.runtime("芝麻树🌳[开始任务] " + title + (prizeName.isEmpty() ? "" : " (" + prizeName + ")"));
                 if (performTask(taskId, title, prizeName)) {
                     // 任务完成
                 }

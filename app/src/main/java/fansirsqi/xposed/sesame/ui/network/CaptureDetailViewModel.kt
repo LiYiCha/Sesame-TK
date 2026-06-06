@@ -162,9 +162,8 @@ class CaptureDetailViewModel : ViewModel() {
         var non = 0; val max = minOf(text.length, 2048)
         for (i in 0 until max) {
             val c = text[i]
-            // 更严格的非打印字符判定，增加对乱码的敏感度
+            // 仅对 c < 0x20 (且非 \n, \r, \t) 的控制字符累计为非打印字符
             if (c < 0x20.toChar() && c != '\n' && c != '\r' && c != '\t') non++
-            if (c > 0xFF.toChar() && c < 0x4E00.toChar()) non++ // 排除一些特殊生僻字符
         }
         return non.toFloat() / max < 0.02f // 判定阈值更严格 (2%)
     }

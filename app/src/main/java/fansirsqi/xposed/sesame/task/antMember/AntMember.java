@@ -105,10 +105,10 @@
 //  @Override
 //  public Boolean check() {
 //    if (TaskCommon.IS_ENERGY_TIME){
-//      Log.record(TAG,"⏸ 当前为只收能量时间【"+ BaseModel.getEnergyTime().getValue() +"】，停止执行" + getName() + "任务！");
+//      Log.runtime(TAG,"⏸ 当前为只收能量时间【"+ BaseModel.getEnergyTime().getValue() +"】，停止执行" + getName() + "任务！");
 //      return false;
 //    }else if (TaskCommon.IS_MODULE_SLEEP_TIME) {
-//      Log.record(TAG,"💤 模块休眠时间【"+ BaseModel.getModelSleepTime().getValue() +"】停止执行" + getName() + "任务！");
+//      Log.runtime(TAG,"💤 模块休眠时间【"+ BaseModel.getModelSleepTime().getValue() +"】停止执行" + getName() + "任务！");
 //      return false;
 //    } else {
 //      return true;
@@ -118,7 +118,7 @@
 //  @Override
 //  protected void runJava() {
 //    try {
-//      Log.record(TAG,"执行开始-" + getName());
+//      Log.runtime(TAG,"执行开始-" + getName());
 //      if (memberSign.getValue()) {
 //        doMemberSign();
 //      }
@@ -136,14 +136,14 @@
 //        // 芝麻粒福利签到
 //        doSesameZmlCheckIn();
 //        if (Status.hasFlagToday(StatusFlags.FLAG_AntMember_doAllAvailableSesameTask)) {
-//          Log.record(TAG, "⏭️ 今天已完成过芝麻信用任务，跳过执行");
+//          Log.runtime(TAG, "⏭️ 今天已完成过芝麻信用任务，跳过执行");
 //        } else {
 //          // 芝麻信用任务（今日首次）
-//          Log.record(TAG, "🎮 开始执行芝麻信用任务（今日首次）");
+//          Log.runtime(TAG, "🎮 开始执行芝麻信用任务（今日首次）");
 //          doAllAvailableSesameTask();
 //          handleGrowthGuideTasks();
 //          queryAndCollect();//做完任务领取球
-//          Log.record(TAG, "✅ 芝麻信用任务已完成，今天不再执行");
+//          Log.runtime(TAG, "✅ 芝麻信用任务已完成，今天不再执行");
 //        }
 //        if (collectSesame.getValue()) {
 //          collectSesame(collectSesameWithOneClick.getValue());
@@ -176,7 +176,7 @@
 //        if (!Status.hasFlagToday(StatusFlags.FLAG_ZMXY_ALCHEMY_NEXT_DAY_AWARD)) {
 //          doSesameAlchemyNextDayAward();
 //
-//        }else Log.record(TAG, "✅ 芝麻粒次日奖励已领取，今天不再执行");
+//        }else Log.runtime(TAG, "✅ 芝麻粒次日奖励已领取，今天不再执行");
 //      }
 //      // 芝麻树
 //      if (enableZhimaTree.getValue() && isSesameOpened) {
@@ -190,7 +190,7 @@
 //        }
 //        JSONObject data = jo.getJSONObject("data");
 //        if (!data.optBoolean("isOpened")) {
-//          Log.record(TAG,"商家服务👪未开通");
+//          Log.runtime(TAG,"商家服务👪未开通");
 //          return;
 //        }
 //        if (merchantKmdk.getValue()) {
@@ -209,14 +209,14 @@
 //    } catch (Throwable t) {
 //      Log.printStackTrace(TAG, t);
 //    }finally {
-//      Log.record(TAG,"执行结束-" + getName());
+//      Log.runtime(TAG,"执行结束-" + getName());
 //    }
 //  }
 //
 //  @SuppressLint("SimpleDateFormat")
 //  private void handleGrowthGuideTasks() {
 //    try {
-//      Log.record(TAG + ".", "开始执行信誉任务领取");
+//      Log.runtime(TAG + ".", "开始执行信誉任务领取");
 //      String resp = null;
 //      try {
 //        resp = AntMemberRpcCall.Zmxy.queryGrowthGuideToDoList("yuebao_7d", "1.0.2025.10.27");
@@ -226,7 +226,7 @@
 //      }
 //
 //      if (resp.isEmpty()) {
-//        Log.record(TAG + ".handleGrowthGuideTasks", "信誉任务列表返回空");
+//        Log.runtime(TAG + ".handleGrowthGuideTasks", "信誉任务列表返回空");
 //        return;
 //      }
 //
@@ -239,7 +239,7 @@
 //      }
 //
 //      if (!root.optBoolean("success")) {
-//        Log.record(TAG + ".handleGrowthGuideTasks", "信誉任务列表获取失败: " + root.optString("resultView", resp));
+//        Log.runtime(TAG + ".handleGrowthGuideTasks", "信誉任务列表获取失败: " + root.optString("resultView", resp));
 //        return;
 //      }
 //      // 成长引导列表（不会用，只做计数）
@@ -283,7 +283,7 @@
 //            if (openJo.optBoolean("success")) {
 //              Log.other(TAG, "信誉任务[领取成功] " + title);
 //            } else {
-//              Log.record(TAG + ".handleGrowthGuideTasks", "信誉任务[领取失败] behaviorId="
+//              Log.runtime(TAG + ".handleGrowthGuideTasks", "信誉任务[领取失败] behaviorId="
 //                      + behaviorId + " title=" + title + " resp=" + openResp);
 //            }
 //          } catch (Throwable e) {
@@ -419,7 +419,7 @@
 //            }
 //
 //            if (!"100".equals(spreadManureData.optString("resultCode"))) {
-//              Log.record(TAG, "农场 orchardSpreadManure 错误：" + spreadManureData.optString("resultDesc"));
+//              Log.runtime(TAG, "农场 orchardSpreadManure 错误：" + spreadManureData.optString("resultDesc"));
 //              Log.runtime(TAG, "农场 orchardSpreadManure 错误：" + spreadManureData.toString());
 //              continue;
 //            }
@@ -536,11 +536,11 @@
 //   */
 //  private void doAnnualReview () {
 //    try {
-//      Log.record(TAG + ".doAnnualReview", "年度回顾🎞[开始执行]");
+//      Log.runtime(TAG + ".doAnnualReview", "年度回顾🎞[开始执行]");
 //
 //      String resp = AntMemberRpcCall.annualReviewQueryTasks();
 //      if (resp == null || resp.isEmpty()) {
-//        Log.record(TAG + ".doAnnualReview", "年度回顾[查询返回空]");
+//        Log.runtime(TAG + ".doAnnualReview", "年度回顾[查询返回空]");
 //        return;
 //      }
 //
@@ -553,13 +553,13 @@
 //      }
 //
 //      if (!root.optBoolean("isSuccess", false)) {
-//        Log.record(TAG + ".doAnnualReview", "年度回顾[查询失败]#" + resp);
+//        Log.runtime(TAG + ".doAnnualReview", "年度回顾[查询失败]#" + resp);
 //        return;
 //      }
 //
 //      JSONObject components = root.optJSONObject("components");
 //      if (components == null || components.length() == 0) {
-//        Log.record(TAG + ".doAnnualReview", "年度回顾[components 为空]");
+//        Log.runtime(TAG + ".doAnnualReview", "年度回顾[components 为空]");
 //        return;
 //      }
 //
@@ -575,23 +575,23 @@
 //        }
 //      }
 //      if (queryComp == null) {
-//        Log.record(TAG + ".doAnnualReview", "年度回顾[未找到查询组件]");
+//        Log.runtime(TAG + ".doAnnualReview", "年度回顾[未找到查询组件]");
 //        return;
 //      }
 //      if (!queryComp.optBoolean("isSuccess", true)) {
-//        Log.record(TAG + ".doAnnualReview", "年度回顾[查询组件返回失败]");
+//        Log.runtime(TAG + ".doAnnualReview", "年度回顾[查询组件返回失败]");
 //        return;
 //      }
 //
 //      JSONObject content = queryComp.optJSONObject("content");
 //      if (content == null) {
-//        Log.record(TAG + ".doAnnualReview", "年度回顾[content 为空]");
+//        Log.runtime(TAG + ".doAnnualReview", "年度回顾[content 为空]");
 //        return;
 //      }
 //
 //      JSONArray taskList = content.optJSONArray("playTaskOrderInfoList");
 //      if (taskList == null || taskList.length() == 0) {
-//        Log.record(TAG + ".doAnnualReview", "年度回顾[当前无可处理任务]");
+//        Log.runtime(TAG + ".doAnnualReview", "年度回顾[当前无可处理任务]");
 //        return;
 //      }
 //
@@ -638,7 +638,7 @@
 //        // ========== Step 1: 领取任务 (apply) ==========
 //        String applyResp = AntMemberRpcCall.annualReviewApplyTask(code);
 //        if (applyResp == null || applyResp.isEmpty()) {
-//          Log.record(TAG + ".doAnnualReview", "年度回顾[领任务失败]" + taskName + "#响应为空");
+//          Log.runtime(TAG + ".doAnnualReview", "年度回顾[领任务失败]" + taskName + "#响应为空");
 //          failed++;
 //          continue;
 //        }
@@ -652,7 +652,7 @@
 //          continue;
 //        }
 //        if (!applyRoot.optBoolean("isSuccess", false)) {
-//          Log.record(TAG + ".doAnnualReview", "年度回顾[领任务失败]" + taskName + "#" + applyResp);
+//          Log.runtime(TAG + ".doAnnualReview", "年度回顾[领任务失败]" + taskName + "#" + applyResp);
 //          failed++;
 //          continue;
 //        }
@@ -697,7 +697,7 @@
 //        // ========== Step 2: 提交任务完成 (process) ==========
 //        String processResp = AntMemberRpcCall.annualReviewProcessTask(code, recordNo);
 //        if (processResp == null || processResp.isEmpty()) {
-//          Log.record(TAG + ".doAnnualReview", "年度回顾[提交任务失败]" + taskName + "#响应为空");
+//          Log.runtime(TAG + ".doAnnualReview", "年度回顾[提交任务失败]" + taskName + "#响应为空");
 //          failed++;
 //          continue;
 //        }
@@ -711,7 +711,7 @@
 //          continue;
 //        }
 //        if (!processRoot.optBoolean("isSuccess", false)) {
-//          Log.record(TAG + ".doAnnualReview", "年度回顾[提交任务失败]" + taskName + "#" + processResp);
+//          Log.runtime(TAG + ".doAnnualReview", "年度回顾[提交任务失败]" + taskName + "#" + processResp);
 //          failed++;
 //          continue;
 //        }
@@ -793,7 +793,7 @@
 //        Log.other("年度回顾🎞[任务完成]" + taskName + "#状态=" + newStatus + " 奖励状态=" + rewardStatus);
 //      }
 //
-//      Log.record(TAG + ".doAnnualReview",
+//      Log.runtime(TAG + ".doAnnualReview",
 //              "年度回顾🎞[执行结束] 待处理=" + candidate + " 已领取=" + applied + " 已提交=" + processed + " 失败=" + failed);
 //    } catch (Throwable t) {
 //      Log.printStackTrace(TAG + ".doAnnualReview", t);
@@ -816,7 +816,7 @@
 //        return;
 //      }
 //      if (!jo.has("benefits")) {
-//        Log.record(TAG,"会员积分[未找到可兑换权益]");
+//        Log.runtime(TAG,"会员积分[未找到可兑换权益]");
 //        return;
 //      }
 //      JSONArray benefits = jo.getJSONArray("benefits");
@@ -840,7 +840,7 @@
 //      }
 //      IdMapManager.getInstance(MemberBenefitsMap.class).save(userId);
 //    } catch (JSONException e) {
-//      Log.record(TAG,"JSON解析错误: " + e.getMessage());
+//      Log.runtime(TAG,"JSON解析错误: " + e.getMessage());
 //      Log.printStackTrace(TAG, e);
 //    } catch (Throwable t) {
 //      Log.runtime(TAG, "memberPointExchangeBenefit err:");
@@ -875,7 +875,7 @@
 //          Log.other("会员签到📅[" + jo.getString("signinPoint") + "积分]#已签到" + jo.getString("signinSumDay") + "天");
 //          Status.memberSignInToday(UserMap.getCurrentUid());
 //        } else {
-//          Log.record(jo.getString("resultDesc"));
+//          Log.runtime(jo.getString("resultDesc"));
 //          Log.runtime(s);
 //        }
 //      }
@@ -935,7 +935,7 @@
 //          if (ResChecker.checkRes(TAG + "会员积分领取失败:", jo)) {
 //            Log.other("会员积分🎖️[领取" + bizTitle + "]#" + pointAmount + "积分");
 //          } else {
-//            Log.record(jo.getString("resultDesc"));
+//            Log.runtime(jo.getString("resultDesc"));
 //            Log.runtime(s);
 //          }
 //        }
@@ -943,7 +943,7 @@
 //          queryPointCert(page + 1, pageSize);
 //        }
 //      } else {
-//        Log.record(jo.getString("resultDesc"));
+//        Log.runtime(jo.getString("resultDesc"));
 //        Log.runtime(s);
 //      }
 //    } catch (Throwable t) {
@@ -994,7 +994,7 @@
 //        return;
 //      }
 //
-//      // Log.record(TAG, "芝麻信用💳[查询任务响应]#" + s);
+//      // Log.runtime(TAG, "芝麻信用💳[查询任务响应]#" + s);
 //
 //      JSONObject taskObj = jo.getJSONObject("data");
 //      int totalTasks = 0;
@@ -1008,7 +1008,7 @@
 //        if (dailyTaskListVO.has("waitCompleteTaskVOS")) {
 //          JSONArray waitCompleteTaskVOS = dailyTaskListVO.getJSONArray("waitCompleteTaskVOS");
 //          totalTasks += waitCompleteTaskVOS.length();
-//          Log.record(TAG, "芝麻信用💳[待完成任务]#开始处理(" + waitCompleteTaskVOS.length() + "个)");
+//          Log.runtime(TAG, "芝麻信用💳[待完成任务]#开始处理(" + waitCompleteTaskVOS.length() + "个)");
 //          int[] results = joinAndFinishSesameTaskWithResult(waitCompleteTaskVOS);
 //          completedTasks += results[0];
 //          skippedTasks += results[1];
@@ -1017,7 +1017,7 @@
 //        if (dailyTaskListVO.has("waitJoinTaskVOS")) {
 //          JSONArray waitJoinTaskVOS = dailyTaskListVO.getJSONArray("waitJoinTaskVOS");
 //          totalTasks += waitJoinTaskVOS.length();
-//          Log.record(TAG, "芝麻信用💳[待加入任务]#开始处理(" + waitJoinTaskVOS.length() + "个)");
+//          Log.runtime(TAG, "芝麻信用💳[待加入任务]#开始处理(" + waitJoinTaskVOS.length() + "个)");
 //          int[] results = joinAndFinishSesameTaskWithResult(waitJoinTaskVOS);
 //          completedTasks += results[0];
 //          skippedTasks += results[1];
@@ -1028,19 +1028,19 @@
 //      if (taskObj.has("toCompleteVOS")) {
 //        JSONArray toCompleteVOS = taskObj.getJSONArray("toCompleteVOS");
 //        totalTasks += toCompleteVOS.length();
-//        Log.record(TAG, "芝麻信用💳[toCompleteVOS任务]#开始处理(" + toCompleteVOS.length() + "个)");
+//        Log.runtime(TAG, "芝麻信用💳[toCompleteVOS任务]#开始处理(" + toCompleteVOS.length() + "个)");
 //        int[] results = joinAndFinishSesameTaskWithResult(toCompleteVOS);
 //        completedTasks += results[0];
 //        skippedTasks += results[1];
 //      }
 //
 //      // 统计结果并决定是否关闭开关
-//      Log.record(TAG, "芝麻信用💳[任务处理完成]#总任务:" + totalTasks + "个, 完成:" + completedTasks + "个, 跳过:" + skippedTasks + "个");
+//      Log.runtime(TAG, "芝麻信用💳[任务处理完成]#总任务:" + totalTasks + "个, 完成:" + completedTasks + "个, 跳过:" + skippedTasks + "个");
 //
 //      // 如果所有任务都已完成或跳过（没有剩余可完成任务），关闭开关
 //      if (totalTasks > 0 && (completedTasks + skippedTasks) >= totalTasks) {
 //        Status.setFlagToday(StatusFlags.FLAG_AntMember_doAllAvailableSesameTask);
-//        Log.record(TAG, "芝麻信用💳[已全部完成任务，临时关闭]");
+//        Log.runtime(TAG, "芝麻信用💳[已全部完成任务，临时关闭]");
 //      }
 //    } catch (Throwable t) {
 //      Log.printStackTrace(TAG + ".doAllAvailableSesameTask", t);
@@ -1100,25 +1100,25 @@
 //      // 打印任务状态信息用于调试
 //      boolean finishFlag = task.optBoolean("finishFlag", false);
 //      String actionText = task.optString("actionText", "");
-//      //  Log.record(TAG, "芝麻信用💳[任务状态调试]#" + taskTitle + " - finishFlag:" + finishFlag + ", actionText:" + actionText);
+//      //  Log.runtime(TAG, "芝麻信用💳[任务状态调试]#" + taskTitle + " - finishFlag:" + finishFlag + ", actionText:" + actionText);
 //
 //      // 检查任务是否已完成
 //      if (finishFlag || "已完成".equals(actionText)) {
-//        Log.record(TAG, "芝麻信用💳[跳过已完成任务]#" + taskTitle);
+//        Log.runtime(TAG, "芝麻信用💳[跳过已完成任务]#" + taskTitle);
 //        skippedCount++;
 //        continue;
 //      }
 //
 //      // 检查黑名单
 //      if (isTaskInBlacklist(taskTitle)) {
-//        Log.record(TAG, "芝麻信用💳[跳过黑名单任务]#" + taskTitle);
+//        Log.runtime(TAG, "芝麻信用💳[跳过黑名单任务]#" + taskTitle);
 //        skippedCount++;
 //        continue;
 //      }
 //
 //      // 添加检查，确保templateId存在
 //      if (!task.has("templateId")) {
-//        Log.record(TAG, "芝麻信用💳[跳过缺少templateId任务]#" + taskTitle);
+//        Log.runtime(TAG, "芝麻信用💳[跳过缺少templateId任务]#" + taskTitle);
 //        skippedCount++;
 //        continue;
 //      }
@@ -1133,7 +1133,7 @@
 //
 //      if (task.has("actionUrl") && task.getString("actionUrl").contains("jumpAction")) {
 //        // 跳转APP任务 依赖跳转的APP发送请求鉴别任务完成 仅靠hook支付宝无法完成
-//        Log.record(TAG, "芝麻信用💳[跳过跳转APP任务]#" + taskTitle);
+//        Log.runtime(TAG, "芝麻信用💳[跳过跳转APP任务]#" + taskTitle);
 //        skippedCount++;
 //        continue;
 //      }
@@ -1165,7 +1165,7 @@
 //        GlobalThreadPools.sleepCompat(200);
 //        responseObj = new JSONObject(s);
 //        if (responseObj.optBoolean("success")) {
-//          Log.record(TAG, "芝麻信用💳[完成任务" + taskTitle + "]#(" + (j + 1) + "/" + needCompleteNum + "天)");
+//          Log.runtime(TAG, "芝麻信用💳[完成任务" + taskTitle + "]#(" + (j + 1) + "/" + needCompleteNum + "天)");
 //          taskCompleted = true;
 //        } else {
 //          Log.other(TAG, "芝麻信用💳[完成任务" + taskTitle + "失败]#" + s);
@@ -1260,7 +1260,7 @@
 //      if (gotNum > 0) {
 //        Log.other("芝麻炼金⚗️[次日奖励领取成功]#获得" + gotNum + "粒");
 //      } else {
-//        Log.record("芝麻炼金⚗️[次日奖励无奖励] 已领取或无可领奖励");
+//        Log.runtime("芝麻炼金⚗️[次日奖励无奖励] 已领取或无可领奖励");
 //      }
 //
 //      // ★★★★★ 不论有无奖励都标记今日完成 ★★★★★
@@ -1336,12 +1336,12 @@
 //          if (joSignIn.optBoolean("success")) {
 //            Log.other(TAG,"商家服务🏬[开门打卡签到成功]");
 //          } else {
-//            Log.record(TAG,joSignIn.getString("errorMsg"));
+//            Log.runtime(TAG,joSignIn.getString("errorMsg"));
 //            Log.runtime(TAG,joSignIn.toString());
 //          }
 //        }
 //      } else {
-//        Log.record(TAG,"queryActivity" + " " + s);
+//        Log.runtime(TAG,"queryActivity" + " " + s);
 //      }
 //    } catch (Throwable t) {
 //
@@ -1371,12 +1371,12 @@
 //              Log.other(TAG,"商家服务🏬[" + activityPeriodName + "开门打卡报名]");
 //              return;
 //            } else {
-//              Log.record(TAG,joSignUp.getString("errorMsg"));
+//              Log.runtime(TAG,joSignUp.getString("errorMsg"));
 //              Log.runtime(TAG,joSignUp.toString());
 //            }
 //          }
 //        } else {
-//          Log.record(TAG,"queryActivity");
+//          Log.runtime(TAG,"queryActivity");
 //          Log.runtime(TAG,jo.toString());
 //        }
 //        GlobalThreadPools.sleepCompat(500);
@@ -1403,7 +1403,7 @@
 //      if ("SUCCESS".equals(signResult)) {
 //        Log.other(TAG,"商家服务🏬[每日签到]#获得积分" + reward);
 //      } else {
-//        Log.record(TAG,s);
+//        Log.runtime(TAG,s);
 //        Log.runtime(TAG,s);
 //      }
 //    } catch (Throwable t) {
@@ -1531,7 +1531,7 @@
 //          }
 //        }
 //      } else {
-//        Log.record(TAG,"taskReceive" + " " + s);
+//        Log.runtime(TAG,"taskReceive" + " " + s);
 //      }
 //    } catch (Throwable t) {
 //      Log.runtime(TAG, "taskReceive err:");
@@ -1648,7 +1648,7 @@
 //   */
 //  private void doGoldTicketTask(boolean doSignIn, boolean doConsume) {
 //    try {
-//      Log.record("开始执行黄金票...");
+//      Log.runtime("开始执行黄金票...");
 //
 //      // 1. 获取首页数据 (签到需要)
 //      JSONObject homeResult = null;
@@ -1686,9 +1686,9 @@
 //      if (signObj != null) {
 //        boolean todayHasSigned = signObj.optBoolean("todayHasSigned", false);
 //        if (todayHasSigned) {
-//          Log.record("黄金票🎫[今日已签到]");
+//          Log.runtime("黄金票🎫[今日已签到]");
 //        } else {
-//          Log.record("黄金票🎫[准备签到]");
+//          Log.runtime("黄金票🎫[准备签到]");
 //          // 调用新接口进行签到
 //          String signRes = AntMemberRpcCall.welfareCenterTrigger("SIGN");
 //          JSONObject signJson = new JSONObject(signRes);
@@ -1713,7 +1713,7 @@
 //   */
 //  private void doGoldTicketConsume() {
 //    try {
-//      Log.record("黄金票🎫[准备检查余额及提取]");
+//      Log.runtime("黄金票🎫[准备检查余额及提取]");
 //
 //      // 1. 调用新接口 queryConsumeHome 获取最新的资产信息
 //      String queryRes = AntMemberRpcCall.queryConsumeHome();
@@ -1734,7 +1734,7 @@
 //      int extractAmount = (availableAmount / 100) * 100;
 //
 //      if (extractAmount < 100) {
-//        Log.record("黄金票🎫[余额不足] 当前: " + availableAmount + "，最低需100");
+//        Log.runtime("黄金票🎫[余额不足] 当前: " + availableAmount + "，最低需100");
 //        return;
 //      }
 //
@@ -1748,7 +1748,7 @@
 //      }
 //
 //      if (productId == null || productId.isEmpty()) {
-//        Log.record("黄金票🎫[提取异常] 未找到有效的基金ID");
+//        Log.runtime("黄金票🎫[提取异常] 未找到有效的基金ID");
 //        return;
 //      }
 //
@@ -1759,7 +1759,7 @@
 //      }
 //
 //      // 5. 提交提取
-//      Log.record("黄金票🎫[开始提取] 计划: " + extractAmount + " 份 (持有: " + availableAmount + ")");
+//      Log.runtime("黄金票🎫[开始提取] 计划: " + extractAmount + " 份 (持有: " + availableAmount + ")");
 //      String submitRes = AntMemberRpcCall.submitConsume(extractAmount, productId, bonusAmount);
 //
 //      if (submitRes != null) {
@@ -1771,7 +1771,7 @@
 //          if (!writeOffNo.isEmpty()) {
 //            Log.other("黄金票🎫[提取成功]#消耗: " + extractAmount + " 份");
 //          } else {
-//            Log.record("黄金票🎫[提取失败] 未返回核销码");
+//            Log.runtime("黄金票🎫[提取失败] 未返回核销码");
 //          }
 //        }
 //      }
@@ -1789,26 +1789,26 @@
 //        JSONObject root = new JSONObject(resp);
 //        if (!root.optBoolean("success")) {
 //          String msg = root.optString("errorMsg", root.optString("resultView", resp));
-//          Log.record(TAG + ".enableGameCenter.signIn", "游戏中心🎮[签到查询失败]#" + msg);
+//          Log.runtime(TAG + ".enableGameCenter.signIn", "游戏中心🎮[签到查询失败]#" + msg);
 //        } else {
 //          JSONObject data = root.optJSONObject("data");
 //
 //          // 情况1：data 为 null 或 空对象 → 默认已经签到过
 //          if (data == null || data.length() == 0) {
-//            Log.record(TAG + ".enableGameCenter.signIn", "游戏中心🎮[今日已签到](data为空)");
+//            Log.runtime(TAG + ".enableGameCenter.signIn", "游戏中心🎮[今日已签到](data为空)");
 //            return;
 //          }
 //          JSONObject signModule = data != null ? data.optJSONObject("signInBallModule") : null;
 //          boolean signed = signModule != null && signModule.optBoolean("signInStatus", false);
 //          if (signed) {
-//            Log.record(TAG + ".enableGameCenter.signIn", "游戏中心🎮[今日已签到]");
+//            Log.runtime(TAG + ".enableGameCenter.signIn", "游戏中心🎮[今日已签到]");
 //          } else {
 //            String signResp = AntMemberRpcCall.continueSignIn();
 //            GlobalThreadPools.sleepCompat(300);
 //            JSONObject signJo = new JSONObject(signResp);
 //            if (!signJo.optBoolean("success")) {
 //              String msg = signJo.optString("errorMsg", signJo.optString("resultView", signResp));
-//              Log.record(TAG + ".enableGameCenter.signIn", "游戏中心🎮[签到失败]#" + msg);
+//              Log.runtime(TAG + ".enableGameCenter.signIn", "游戏中心🎮[签到失败]#" + msg);
 //            } else {
 //              JSONObject signData = signJo.optJSONObject("data");
 //              String title = "";
@@ -1844,7 +1844,7 @@
 //                  if (sb.length() > 0) sb.append(" ");
 //                  sb.append(desc);
 //                }
-//                Log.record(TAG + ".enableGameCenter.signIn", "游戏中心🎮[签到失败]#" + (sb.length() > 0 ? sb.toString() : signResp));
+//                Log.runtime(TAG + ".enableGameCenter.signIn", "游戏中心🎮[签到失败]#" + (sb.length() > 0 ? sb.toString() : signResp));
 //              }
 //            }
 //          }
@@ -1860,7 +1860,7 @@
 //        JSONObject root = new JSONObject(resp);
 //        if (!root.optBoolean("success")) {
 //          String msg = root.optString("errorMsg", root.optString("resultView", resp));
-//          Log.record(TAG + ".enableGameCenter.tasks", "游戏中心🎮[任务列表查询失败]#" + msg);
+//          Log.runtime(TAG + ".enableGameCenter.tasks", "游戏中心🎮[任务列表查询失败]#" + msg);
 //        } else {
 //          JSONObject data = root.optJSONObject("data");
 //          if (data != null) {
@@ -1890,7 +1890,7 @@
 //                  if (taskId.equals(lastFailedTaskId)) {
 //                    lastFailedCount++;
 //                    if (lastFailedCount >= 2) {
-//                      Log.record(TAG + ".enableGameCenter.tasks",
+//                      Log.runtime(TAG + ".enableGameCenter.tasks",
 //                              "游戏中心🎮任务[" + task.optString("title") + "]连续失败2次,跳过");
 //                      continue;
 //                    }
@@ -1914,7 +1914,7 @@
 //                      JSONObject signUpJo = new JSONObject(signUpResp);
 //                      if (!signUpJo.optBoolean("success")) {
 //                        String msg = signUpJo.optString("errorMsg", signUpJo.optString("resultView", signUpResp));
-//                        Log.record(TAG + ".enableGameCenter.tasks", "游戏中心🎮任务[" + title + "]报名失败#" + msg);
+//                        Log.runtime(TAG + ".enableGameCenter.tasks", "游戏中心🎮任务[" + title + "]报名失败#" + msg);
 //                        failed++;
 //                        continue;
 //                      }
@@ -1932,7 +1932,7 @@
 //
 //                      if ("SIGNUP_COMPLETE".equals(resultStatus) || "NOT_DONE".equals(resultStatus)) {
 //                        // 状态未变更,记为失败
-//                        Log.record(TAG + ".enableGameCenter.tasks",
+//                        Log.runtime(TAG + ".enableGameCenter.tasks",
 //                                "游戏中心🎮任务[" + title + "]状态未变更,可能无法完成");
 //                        failed++;
 //                      } else {
@@ -1945,7 +1945,7 @@
 //                      }
 //                    } else {
 //                      String msg = doJo.optString("errorMsg", doJo.optString("resultView", doResp));
-//                      Log.record(TAG + ".enableGameCenter.tasks",
+//                      Log.runtime(TAG + ".enableGameCenter.tasks",
 //                              "游戏中心🎮任务[" + title + "]完成失败#" + msg);
 //                      failed++;
 //                    }
@@ -1956,13 +1956,13 @@
 //                }
 //
 //                if (total > 0) {
-//                  Log.record(TAG + ".enableGameCenter.tasks",
+//                  Log.runtime(TAG + ".enableGameCenter.tasks",
 //                          "游戏中心🎮[平台任务处理完成]#待做:" + total + " 完成:" + finished + " 失败:" + failed);
 //                } else {
-//                  Log.record(TAG + ".enableGameCenter.tasks", "游戏中心🎮[无待处理的平台任务]");
+//                  Log.runtime(TAG + ".enableGameCenter.tasks", "游戏中心🎮[无待处理的平台任务]");
 //                }
 //              } else {
-//                Log.record(TAG + ".enableGameCenter.tasks", "游戏中心🎮[平台任务列表为空]");
+//                Log.runtime(TAG + ".enableGameCenter.tasks", "游戏中心🎮[平台任务列表为空]");
 //              }
 //            }
 //          }
@@ -1978,12 +1978,12 @@
 //        JSONObject root = new JSONObject(resp);
 //        if (!root.optBoolean("success")) {
 //          String msg = root.optString("errorMsg", root.optString("resultView", resp));
-//          Log.record(TAG + ".enableGameCenter.point", "游戏中心🎮[查询待收乐豆失败]#" + msg);
+//          Log.runtime(TAG + ".enableGameCenter.point", "游戏中心🎮[查询待收乐豆失败]#" + msg);
 //        } else {
 //          JSONObject data = root.optJSONObject("data");
 //          JSONArray pointBallList = data != null ? data.optJSONArray("pointBallList") : null;
 //          if (pointBallList == null || pointBallList.length() == 0) {
-//            Log.record(TAG + ".enableGameCenter.point", "游戏中心🎮[暂无可领取乐豆]");
+//            Log.runtime(TAG + ".enableGameCenter.point", "游戏中心🎮[暂无可领取乐豆]");
 //          } else {
 //            String batchResp = AntMemberRpcCall.batchReceivePointBall();
 //            GlobalThreadPools.sleepCompat(300);
@@ -1995,11 +1995,11 @@
 //              if (receiveAmount > 0) {
 //                Log.other("游戏中心🎮[一键领取乐豆成功]#本次领取" + receiveAmount + " | 当前累计" + totalAmount + "玩乐豆");
 //              } else {
-//                Log.record(TAG + ".enableGameCenter.point", "游戏中心🎮[暂无可领取乐豆]");
+//                Log.runtime(TAG + ".enableGameCenter.point", "游戏中心🎮[暂无可领取乐豆]");
 //              }
 //            } else {
 //              String msg = batchJo.optString("errorMsg", batchJo.optString("resultView", batchResp));
-//              Log.record(TAG + ".enableGameCenter.point", "游戏中心🎮[一键领取乐豆失败]#" + msg);
+//              Log.runtime(TAG + ".enableGameCenter.point", "游戏中心🎮[一键领取乐豆失败]#" + msg);
 //            }
 //          }
 //        }
@@ -2030,7 +2030,7 @@
 //          jo = new JSONObject(signInTriggerStr);
 //          if (jo.optBoolean("success")) {
 //            String prizeName = jo.getJSONObject("result").getJSONArray("prizeSendOrderDTOList").getJSONObject(0).getString("prizeName");
-//            Log.record(TAG,"安心豆🫘[" + prizeName + "]");
+//            Log.runtime(TAG,"安心豆🫘[" + prizeName + "]");
 //          } else {
 //            Log.runtime(jo.toString());
 //          }
@@ -2082,7 +2082,7 @@
 //
 //        jo = new JSONObject(exchangeResult);
 //        if (jo.optBoolean("success")) {
-//          Log.record(TAG,"安心豆🫘[兑换:" + itemName + "]");
+//          Log.runtime(TAG,"安心豆🫘[兑换:" + itemName + "]");
 //        } else {
 //          Log.runtime(jo.toString());
 //        }
@@ -2101,7 +2101,7 @@
 //   */
 //  private void doSesameAlchemy() {
 //    try {
-//      Log.record(TAG, "开始执行芝麻炼金⚗️");
+//      Log.runtime(TAG, "开始执行芝麻炼金⚗️");
 //
 //      // ================= Step 1: 自动炼金 (消耗芝麻粒升级) =================
 //      String homeRes = AntMemberRpcCall.Zmxy.Alchemy.alchemyQueryHome();
@@ -2144,13 +2144,13 @@
 //                break;
 //              }
 //            } else {
-//              Log.record(TAG, "芝麻炼金失败: " + alchemyJo.optString("resultView"));
+//              Log.runtime(TAG, "芝麻炼金失败: " + alchemyJo.optString("resultView"));
 //              break;
 //            }
 //          }
 //        }
 //      } else {
-//        Log.record(TAG, "芝麻炼金首页查询失败");
+//        Log.runtime(TAG, "芝麻炼金首页查询失败");
 //      }
 //
 //      // ================= Step 2: 自动签到 & 时段奖励 =================
@@ -2187,7 +2187,7 @@
 //
 //      // 1. 查询时段任务
 //      String queryRespStr = AntMemberRpcCall.Zmxy.Alchemy.alchemyQueryTimeLimitedTask();
-//      Log.record(TAG, "芝麻炼金⚗️[检查时段奖励]");
+//      Log.runtime(TAG, "芝麻炼金⚗️[检查时段奖励]");
 //
 //      JSONObject queryResp = new JSONObject(queryRespStr);
 //      if (!ResChecker.checkRes(TAG + "查询时段任务失败:", queryResp)
@@ -2199,7 +2199,7 @@
 //
 //      JSONObject timeLimitedTaskVO = queryResp.getJSONObject("data").optJSONObject("timeLimitedTaskVO");
 //      if (timeLimitedTaskVO == null) {
-//        Log.record(TAG, "芝麻炼金⚗️[当前没有时段奖励任务]");
+//        Log.runtime(TAG, "芝麻炼金⚗️[当前没有时段奖励任务]");
 //        return;
 //      }
 //
@@ -2210,17 +2210,17 @@
 //      boolean tomorrow = timeLimitedTaskVO.optBoolean("tomorrow", false);
 //      int rewardAmount = timeLimitedTaskVO.optInt("rewardAmount", 0);
 //
-//      Log.record(TAG, "芝麻炼金⚗️[任务检查] 任务=" + taskName + " 状态=" + state + " 奖励=" + rewardAmount + " 明天=" + tomorrow);
+//      Log.runtime(TAG, "芝麻炼金⚗️[任务检查] 任务=" + taskName + " 状态=" + state + " 奖励=" + rewardAmount + " 明天=" + tomorrow);
 //
 //      // 3. 如果是明天任务，跳过
 //      if (tomorrow) {
-//        Log.record(TAG, "芝麻炼金⚗️[任务跳过] 任务=" + taskName + " 是明天的奖励");
+//        Log.runtime(TAG, "芝麻炼金⚗️[任务跳过] 任务=" + taskName + " 是明天的奖励");
 //        return;
 //      }
 //
 //      // 4. 如果状态是可领取，则领取奖励
 //      if (state == 1) { // 可领取
-//        Log.record(TAG, "芝麻炼金⚗️[开始领取任务奖励] 任务=" + taskName);
+//        Log.runtime(TAG, "芝麻炼金⚗️[开始领取任务奖励] 任务=" + taskName);
 //
 //        String collectRespStr = AntMemberRpcCall.Zmxy.Alchemy.alchemyCompleteTimeLimitedTask(templateId);
 //        JSONObject collectResp = new JSONObject(collectRespStr);
@@ -2231,14 +2231,14 @@
 //          JSONObject data = collectResp.getJSONObject("data");
 //          int zmlNum = data.optInt("zmlNum", 0);
 //          String toast = data.optString("toast", "");
-//          Log.record(TAG, "芝麻炼金⚗️[领取成功] 获得芝麻粒=" + zmlNum + " 提示=" + toast);
+//          Log.runtime(TAG, "芝麻炼金⚗️[领取成功] 获得芝麻粒=" + zmlNum + " 提示=" + toast);
 //        }
 //      } else { // 其他状态
-//        Log.record(TAG, "芝麻炼金⚗️[当前不可领取] 任务=" + taskName);
+//        Log.runtime(TAG, "芝麻炼金⚗️[当前不可领取] 任务=" + taskName);
 //      }
 //
 //      // ================= Step 3: 自动做任务 =================
-//      Log.record(TAG, "芝麻炼金⚗️[开始扫描任务列表]");
+//      Log.runtime(TAG, "芝麻炼金⚗️[开始扫描任务列表]");
 //      String listRes = AntMemberRpcCall.Zmxy.Alchemy.alchemyQueryListV3();
 //      JSONObject listJo = new JSONObject(listRes);
 //
@@ -2258,7 +2258,7 @@
 //      }
 //
 //      // ================= Step 4: [新增] 任务完成后一键收取芝麻粒 =================
-//      Log.record(TAG, "芝麻炼金⚗️[任务处理完毕，准备收取芝麻粒]");
+//      Log.runtime(TAG, "芝麻炼金⚗️[任务处理完毕，准备收取芝麻粒]");
 //      GlobalThreadPools.sleepCompat(2000); // 稍作等待，确保任务奖励到账
 //
 //      // 4.1 查询是否有可收取的芝麻粒
@@ -2267,7 +2267,7 @@
 //      if (feedbackJo.optBoolean("success")) {
 //        JSONArray feedbackList = feedbackJo.optJSONArray("creditFeedbackVOS");
 //        if (feedbackList != null && feedbackList.length() > 0) {
-//          Log.record(TAG, "芝麻炼金⚗️[发现" + feedbackList.length() + "个待收取项，执行一键收取]");
+//          Log.runtime(TAG, "芝麻炼金⚗️[发现" + feedbackList.length() + "个待收取项，执行一键收取]");
 //
 //          // 4.2 执行一键收取
 //          String collectRes = AntMemberRpcCall.collectAllCreditFeedback();
@@ -2275,10 +2275,10 @@
 //          if (collectJo.optBoolean("success")) {
 //            Log.other("芝麻炼金⚗️[一键收取成功]#收割完毕");
 //          } else {
-//            Log.record(TAG, "芝麻炼金⚗️[一键收取失败]#" + collectJo.optString("resultView"));
+//            Log.runtime(TAG, "芝麻炼金⚗️[一键收取失败]#" + collectJo.optString("resultView"));
 //          }
 //        } else {
-//          Log.record(TAG, "芝麻炼金⚗️[当前无待收取芝麻粒]");
+//          Log.runtime(TAG, "芝麻炼金⚗️[当前无待收取芝麻粒]");
 //        }
 //      }
 //
@@ -2320,7 +2320,7 @@
 //        }
 //      }
 //      if (isBlack) {
-//        Log.record(TAG, "跳过黑名单任务: " + title);
+//        Log.runtime(TAG, "跳过黑名单任务: " + title);
 //        continue;
 //      }
 //
@@ -2329,16 +2329,16 @@
 //      if ("AD_TASK".equals(bizType)) {
 //        JSONObject logExtMap = task.optJSONObject("logExtMap");
 //        if (logExtMap == null) {
-//          Log.record(TAG, "芝麻炼金广告任务缺少logExtMap, 跳过: " + title);
+//          Log.runtime(TAG, "芝麻炼金广告任务缺少logExtMap, 跳过: " + title);
 //          continue;
 //        }
 //        String bizId = logExtMap.optString("bizId", "");
 //        if (bizId.isEmpty()) {
-//          Log.record(TAG, "芝麻炼金广告任务缺少bizId, 跳过: " + title);
+//          Log.runtime(TAG, "芝麻炼金广告任务缺少bizId, 跳过: " + title);
 //          continue;
 //        }
 //
-//        Log.record(TAG, "芝麻炼金广告任务: " + title + " 准备执行");//(bizId=" + bizId + ")
+//        Log.runtime(TAG, "芝麻炼金广告任务: " + title + " 准备执行");//(bizId=" + bizId + ")
 //
 //        int sleepTime = 8000;
 //        if (title.contains("15秒") || title.contains("15s")) {
@@ -2355,7 +2355,7 @@
 //            int reward = task.optInt("rewardAmount", 0);
 //            Log.other("芝麻炼金⚗️[广告任务完成: " + title + "]#获得" + reward + "粒");
 //          } else {
-//            Log.record(TAG, "芝麻炼金广告任务上报失败: " + title + " - " + adFinishRes);
+//            Log.runtime(TAG, "芝麻炼金广告任务上报失败: " + title + " - " + adFinishRes);
 //          }
 //        } catch (Throwable e) {
 //          Log.printStackTrace(TAG + ".processAlchemyTasks.adTask", e);
@@ -2375,14 +2375,14 @@
 //        continue;
 //      }
 //
-//      Log.record(TAG, "芝麻炼金任务: " + title + " 准备执行");
+//      Log.runtime(TAG, "芝麻炼金任务: " + title + " 准备执行");
 //
 //      String recordId = task.optString("recordId", "");
 //
 //      if (recordId.isEmpty()) {
 //        // templateId 为空或无效时，直接跳过，避免 "参数[templateId]不是有效的入参"
 //        if (templateId == null || templateId.trim().isEmpty()) {
-//          Log.record(TAG, "芝麻炼金任务: 模板为空，跳过 " + title);
+//          Log.runtime(TAG, "芝麻炼金任务: 模板为空，跳过 " + title);
 //          continue;
 //        }
 //        String joinRes = AntMemberRpcCall.joinSesameTask(templateId);
@@ -2392,10 +2392,10 @@
 //          if (joinData != null) {
 //            recordId = joinData.optString("recordId");
 //          }
-//          Log.record(TAG, "任务领取成功: " + title);
+//          Log.runtime(TAG, "任务领取成功: " + title);
 //          GlobalThreadPools.sleepCompat(1000);
 //        } else {
-//          Log.record(TAG, "任务领取失败: " + title + " - " + joinJo.optString("resultView", joinRes));
+//          Log.runtime(TAG, "任务领取失败: " + title + " - " + joinJo.optString("resultView", joinRes));
 //          continue;
 //        }
 //      }
@@ -2415,7 +2415,7 @@
 //          int reward = task.optInt("rewardAmount", 0);
 //          Log.other("芝麻炼金⚗️[任务完成: " + title + "]#获得" + reward + "粒");
 //        } else {
-//          Log.record(TAG, "任务提交失败: " + title + " - " + finishJo.optString("resultView", finishRes));
+//          Log.runtime(TAG, "任务提交失败: " + title + " - " + finishJo.optString("resultView", finishRes));
 //        }
 //      }
 //      GlobalThreadPools.sleepCompat(2000);
@@ -2530,7 +2530,7 @@
 //
 //      if ("NOT_DONE".equals(status) || "SIGNUP_COMPLETE".equals(status)) {
 //        // SIGNUP_COMPLETE 通常表示已报名但未做，或者对于复访任务表示可以去完成
-//        Log.record("芝麻树🌳[开始任务] " + title + (prizeName.isEmpty() ? "" : " (" + prizeName + ")"));
+//        Log.runtime("芝麻树🌳[开始任务] " + title + (prizeName.isEmpty() ? "" : " (" + prizeName + ")"));
 //        if (performTask(taskId, title, prizeName)) {
 //          // 任务完成
 //        }
@@ -2670,7 +2670,7 @@
 //      }
 //
 //      if (clicks <= 0) {
-//        Log.record("芝麻树🌳[无需净化] 净化值不足（当前: " + score + "g，可点击: " + clicks + "次）");
+//        Log.runtime("芝麻树🌳[无需净化] 净化值不足（当前: " + score + "g，可点击: " + clicks + "次）");
 //        return;
 //      }
 //

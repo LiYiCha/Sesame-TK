@@ -351,7 +351,7 @@ public class AntFishpond extends BaseCommTask {
                         if (errorMsg.contains("不支持rpc调用") || errorMsg.contains("不支持") || "200000006".equals(errorCode)) {
                             failedTaskCache.add(taskId);
                             fansirsqi.xposed.sesame.util.TaskBlacklist.autoAddToBlacklist(taskId, title, errorCode, errorMsg);
-                            //Log.record(this.displayName + "任务[" + title + "]加入失败缓存，避免重复尝试");
+                            //Log.runtime(this.displayName + "任务[" + title + "]加入失败缓存，避免重复尝试");
                         }
                     }
                 } else {
@@ -359,7 +359,7 @@ public class AntFishpond extends BaseCommTask {
                     Log.error(this.TAG + "完成任务失败[" + title + "]:响应为空");
                     failedTaskCache.add(taskId);
                     fansirsqi.xposed.sesame.util.TaskBlacklist.autoAddToBlacklist(taskId, title, "RESPONSE_NULL", "响应为空");
-                    //Log.record(this.displayName + "任务[" + title + "]加入失败缓存，避免重复尝试");
+                    //Log.runtime(this.displayName + "任务[" + title + "]加入失败缓存，避免重复尝试");
                 }
             }
         } catch (Exception e) {
@@ -696,7 +696,7 @@ public class AntFishpond extends BaseCommTask {
                         int leftFishTimesValue = fishActivity.optInt("leftFishTimes", -1);
                         if (leftFishTimesValue > 0) {
                             this.leftFishTimes = leftFishTimesValue;
-                            //Log.record(displayName + "还需要钓几次得鱼竿: " + this.leftFishTimes);
+                            //Log.runtime(displayName + "还需要钓几次得鱼竿: " + this.leftFishTimes);
                         } else if (leftFishTimesValue == 0) {
                             receiveTriggerSub();
                         } else {

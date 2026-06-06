@@ -11,14 +11,14 @@ object HaoJiaWuyou {
     private const val TAG = "好家无忧卡"
 
     fun start() {
-        //Log.record(TAG, "开始执行")
+        //Log.runtime(TAG, "开始执行")
         try {
             doSignIn()
             doTasks()
         } catch (e: Exception) {
             Log.printStackTrace(TAG, e)
         }
-        //Log.record(TAG, "执行结束")
+        //Log.runtime(TAG, "执行结束")
     }
 
     /**
@@ -36,7 +36,7 @@ object HaoJiaWuyou {
                 ?.optJSONObject("independent_component_sign_in_00966139_independent_component_sign_in_recall")
 
             if (component == null) {
-                Log.record(TAG, "签到查询失败: 未找到组件")
+                Log.runtime(TAG, "签到查询失败: 未找到组件")
                 return
             }
 
@@ -45,10 +45,10 @@ object HaoJiaWuyou {
                 val errorCode = component.optString("errorCode")
                 val errorMsg = component.optString("errorMsg")
                 if (errorCode == "SIG_DUPLICATED_SIGN_IN") {
-                    Log.record(TAG, "今日已签到 (重复签到)")
+                    Log.runtime(TAG, "今日已签到 (重复签到)")
                     return
                 }
-                Log.record(TAG, "签到组件异常: $errorMsg")
+                Log.runtime(TAG, "签到组件异常: $errorMsg")
                 return
             }
 
@@ -75,9 +75,9 @@ object HaoJiaWuyou {
                 }
 
                 if (signed) {
-                    Log.record(TAG, "今日已签到")
+                    Log.runtime(TAG, "今日已签到")
                 } else if (signCode.isNotEmpty()) {
-                    //Log.record(TAG, "开始签到...")
+                    //Log.runtime(TAG, "开始签到...")
                     val signResp = HaoJiaRpcCall.doSignIn(signCode)
 
                     // 深度解析签到结果
@@ -91,17 +91,17 @@ object HaoJiaWuyou {
                     if (isRpcSuccess) {
                         // 即使RPC成功，也要看组件内部是否真的成功
                         if (signComp != null && signComp.optBoolean("isSuccess")) {
-                            Log.record(TAG, "签到成功")
+                            Log.runtime(TAG, "签到成功")
                         } else if (isDuplicate) {
-                            Log.record(TAG, "签到成功 (重复签到)")
+                            Log.runtime(TAG, "签到成功 (重复签到)")
                         } else {
                             val msg = signComp?.optString("errorMsg") ?: "未知错误"
-                            Log.record(TAG, "签到异常: $msg")
+                            Log.runtime(TAG, "签到异常: $msg")
                         }
                     } else if (isDuplicate) {
-                        Log.record(TAG, "签到成功 (重复签到)")
+                        Log.runtime(TAG, "签到成功 (重复签到)")
                     } else {
-                        Log.record(TAG, "签到失败: $signResp")
+                        Log.runtime(TAG, "签到失败: $signResp")
                     }
                 }
             }
@@ -127,7 +127,7 @@ object HaoJiaWuyou {
             val taskList = content.optJSONArray("playTaskOrderInfoList") ?: return
 
             if (taskList.length() == 0) {
-                Log.record(TAG, "暂无任务")
+                Log.runtime(TAG, "暂无任务")
                 return
             }
 
@@ -142,7 +142,7 @@ object HaoJiaWuyou {
 
                 // 1. 黑名单检查
                 if (TaskBlacklist.isTaskInBlacklist(taskName)) {
-                    //Log.record(TAG, "跳过黑名单任务: $taskName")
+                    //Log.runtime(TAG, "跳过黑名单任务: $taskName")
                     continue
                 }
 
@@ -155,15 +155,15 @@ object HaoJiaWuyou {
                         taskName.contains("流量") || taskName.contains("话费") ||
                         taskName.contains("理财") || taskName.contains("保险") ||
                         taskName.contains("购车")) {
-                        // Log.record(TAG, "跳过任务(无法自动完成): $taskName")
+                        // Log.runtime(TAG, "跳过任务(无法自动完成): $taskName")
                         continue
                     }
 
-                    Log.record(TAG, "开始任务: $taskName")
+                    Log.runtime(TAG, "开始任务: $taskName")
 
                     // 模拟浏览
                     if (browseTime > 0) {
-                        Log.record(TAG, "浏览任务: $taskName, 等待 ${browseTime}秒")
+                        Log.runtime(TAG, "浏览任务: $taskName, 等待 ${browseTime}秒")
                         GlobalThreadPools.sleepCompat((browseTime * 1000).toLong())
                     } else {
                         GlobalThreadPools.sleepCompat(1000)
@@ -189,9 +189,9 @@ object HaoJiaWuyou {
                                 ?: "unknown"
 
                             if (rewardStatus == "success" || rewardStatus == "REWARD_SUCCESS") {
-                                Log.record(TAG, "任务完成: $taskName")
+                                Log.runtime(TAG, "任务完成: $taskName")
                             } else {
-                                Log.record(TAG, "任务未发奖: $taskName, 状态: $rewardStatus")
+                                Log.runtime(TAG, "任务未发奖: $taskName, 状态: $rewardStatus")
                             }
                         } else {
                             // 获取具体的错误信息
@@ -199,7 +199,7 @@ object HaoJiaWuyou {
                                 ?: applyComp?.optString("errorMsg")
                                 ?: resJo.optString("resultView", "未知错误")
 
-                            Log.record(TAG, "任务失败: $taskName, 原因: $errorMsg")
+                            Log.runtime(TAG, "任务失败: $taskName, 原因: $errorMsg")
 
                             // 3. 失败自动加入黑名单
                             TaskBlacklist.autoAddToBlacklist(taskName, taskName, errorMsg)
@@ -207,7 +207,7 @@ object HaoJiaWuyou {
                     } else {
                         // RPC 层面失败
                         val errorMsg = resJo.optString("resultView", applyResp)
-                        Log.record(TAG, "任务RPC失败: $taskName, 原因: $errorMsg")
+                        Log.runtime(TAG, "任务RPC失败: $taskName, 原因: $errorMsg")
                         TaskBlacklist.autoAddToBlacklist(taskName, taskName, errorMsg)
                     }
                 }

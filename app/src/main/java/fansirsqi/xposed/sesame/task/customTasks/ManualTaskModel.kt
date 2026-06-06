@@ -47,7 +47,7 @@ class ManualTaskModel : ModelTask() {
     override fun getIcon(): String = "ManualTask.png"
 
     override suspend fun runSuspend() {
-        Log.record("ManualTask", "🔍 正在检查运行环境...")
+        Log.runtime("ManualTask", "🔍 正在检查运行环境...")
         
         // 检查是否有其他自动任务正在运行 (不包括自己)
         val otherRunningTasks = modelArray.filterIsInstance<ModelTask>()
@@ -55,8 +55,8 @@ class ManualTaskModel : ModelTask() {
             .map { it.getName() ?: "未知任务" }
 
         if (otherRunningTasks.isNotEmpty()) {
-            Log.record("ManualTask", "⚠️ 无法启动：自动任务队列正在运行中 (${otherRunningTasks.joinToString(", ")})")
-            Log.record("ManualTask", "请先在主界面点击“停止所有任务”后再运行手动任务流程。")
+            Log.runtime("ManualTask", "⚠️ 无法启动：自动任务队列正在运行中 (${otherRunningTasks.joinToString(", ")})")
+            Log.runtime("ManualTask", "请先在主界面点击“停止所有任务”后再运行手动任务流程。")
             return
         }
 

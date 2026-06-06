@@ -33,7 +33,7 @@ public class ResUtil {
     public static void printErrorMessage(String tag, JSONObject jo, String errorMessageField) {
         try {
             String errMsg = tag + " error:";
-            Log.record(errMsg + jo.getString(errorMessageField));
+            Log.runtime(errMsg + jo.getString(errorMessageField));
             Log.runtime(jo.getString(errorMessageField), jo.toString());
         } catch (Throwable t) {
             Log.error(TAG, "printErrorMessage err:");
@@ -114,7 +114,7 @@ public class ResUtil {
         try {
             Object resCode = jo.opt("resultCode");
             if (resCode == null) {
-                Log.record(TAG + "checkResultCode err: resultCode不存在");
+                Log.runtime(TAG + "checkResultCode err: resultCode不存在");
                 return false;
             }
             if (resCode instanceof Integer) {
@@ -130,7 +130,7 @@ public class ResUtil {
                 }
                 return true;
             }
-            Log.record(TAG + "checkResultCode Type fail: " + jo);
+            Log.runtime(TAG + "checkResultCode Type fail: " + jo);
             return false;
         } catch (Throwable t) {
             Log.runtime(TAG, "checkResultCode error: " + t.getMessage());
@@ -162,11 +162,11 @@ public class ResUtil {
 
     private static void recordError(String TAG, JSONObject jo, String key, String prefix) throws JSONException {
         if (jo.has(key)) {
-            Log.record(TAG + prefix + ": " + jo.getString(key));
+            Log.runtime(TAG + prefix + ": " + jo.getString(key));
         } else if (jo.has("resultView")) {
-            Log.record(TAG + prefix + ": " + jo.getString("resultView"));
+            Log.runtime(TAG + prefix + ": " + jo.getString("resultView"));
         } else {
-            Log.record(TAG + prefix + ": " + jo);
+            Log.runtime(TAG + prefix + ": " + jo);
         }
     }
 

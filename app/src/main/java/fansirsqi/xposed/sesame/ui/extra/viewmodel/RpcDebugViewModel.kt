@@ -127,8 +127,73 @@ class RpcDebugViewModel : ViewModel() {
     // 结果与输入更新
     fun updateResult(text: String) { _result.value = text }
     fun updateTitle(text: String) { _title.value = text }
-    fun updateMethod(text: String) { _method.value = text }
-    fun updateData(text: String) { _data.value = text }
+    fun updateMethod(text: String) {
+        if (shouldAutoUnescape(text)) {
+            _method.value = unescapeString(text)
+        } else {
+            _method.value = text
+        }
+    }
+    fun unescapeString(str: String): String {
+        var s = str.trim()
+        if (s.startsWith("\"") && s.endsWith("\"") && s.length >= 2) {
+            s = s.substring(1, s.length - 1)
+        }
+        val sb = java.lang.StringBuilder()
+        var i = 0
+        val len = s.length
+        while (i < len) {
+            val c = s[i]
+            if (c == '\\' && i + 1 < len) {
+                val next = s[i + 1]
+                when (next) {
+                    '"' -> sb.append('"')
+                    '\\' -> sb.append('\\')
+                    'n' -> sb.append('\n')
+                    'r' -> sb.append('\r')
+                    't' -> sb.append('\t')
+                    '/' -> sb.append('/')
+                    'u' -> {
+                        if (i + 5 < len) {
+                            try {
+                                val hex = s.substring(i + 2, i + 6)
+                                sb.append(hex.toInt(16).toChar())
+                                i += 4
+                            } catch (e: Exception) {
+                                sb.append('\\').append('u')
+                            }
+                        } else {
+                            sb.append('\\').append('u')
+                        }
+                    }
+                    else -> sb.append(next)
+                }
+                i += 2
+            } else {
+                sb.append(c)
+                i++
+            }
+        }
+        return sb.toString()
+    }
+
+    fun shouldAutoUnescape(text: String): Boolean {
+        val trimmed = text.trim()
+        return trimmed.contains("\\\"") || trimmed.contains("\\\\")
+    }
+
+    fun updateData(text: String) {
+        if (shouldAutoUnescape(text)) {
+            _data.value = unescapeString(text)
+        } else {
+            _data.value = text
+        }
+    }
+
+    fun triggerManualUnescape() {
+        _data.value = unescapeString(_data.value)
+        _method.value = unescapeString(_method.value)
+    }
     fun toggleZoom() { _zoomed.value = !_zoomed.value }
 
     /**
@@ -146,14 +211,37 @@ class RpcDebugViewModel : ViewModel() {
         var successCount = 0
         var failCount = 0
 
+        val trimmed = jsonText.trim()
+        
+        // 优先检查是否是单个 RPC 数组格式: ["methodName", "paramsJson", null]
+        if (trimmed.startsWith("[") && trimmed.endsWith("]")) {
+            try {
+                val mapper = com.fasterxml.jackson.databind.ObjectMapper()
+                val jsonNode = mapper.readTree(trimmed)
+                if (jsonNode.isArray && jsonNode.size() >= 2) {
+                    val rpcMethod = jsonNode.get(0).asText()
+                    val rpcParams = jsonNode.get(1).asText()
+                    if (rpcMethod != null && rpcMethod.contains(".")) {
+                        val cleanParams = unescapeString(rpcParams)
+                        val newItem = RequestItem(
+                            title = rpcMethod.substringAfterLast("."),
+                            method = rpcMethod,
+                            data = cleanParams
+                        )
+                        add(newItem)
+                        return Pair(1, 0)
+                    }
+                }
+            } catch (e: Exception) {
+                // 回退到通用解析
+            }
+        }
+
         try {
             val mapper = com.fasterxml.jackson.databind.ObjectMapper()
 
             // 尝试解析为 JSON 数组
             val jsonObjects = mutableListOf<String>()
-
-            // 预处理：尝试将文本分割成多个 JSON 对象
-            val trimmed = jsonText.trim()
 
             if (trimmed.startsWith("[") && trimmed.endsWith("]")) {
                 // 如果是 JSON 数组格式

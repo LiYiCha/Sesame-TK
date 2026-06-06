@@ -38,7 +38,7 @@ public abstract class BaseTask {
                 try {
                     childTask.startTask(false); // 子任务不强制重启，避免重复启动
                 } catch (Exception e) {
-                    Log.record("启动子任务失败: " + childTask.getId());
+                    Log.runtime("启动子任务失败: " + childTask.getId());
                     Log.printStackTrace(e);
                 }
             }
@@ -63,11 +63,11 @@ public abstract class BaseTask {
             
             if (currentThread != null && currentThread.isAlive()) {
                 if (!force) {
-                    Log.record("任务正在运行中，跳过启动: " + getId());
+                    Log.runtime("任务正在运行中，跳过启动: " + getId());
                     return;
                 }
                 // 强制启动时，先停止当前任务
-                Log.record("强制重启任务: " + getId());
+                Log.runtime("强制重启任务: " + getId());
                 stopTaskInternal(currentThread);
             }
             
@@ -80,10 +80,10 @@ public abstract class BaseTask {
             // 检查任务启动条件，满足条件则启动任务和子任务
             if (check()) {
                 thread.start();
-                Log.record("任务启动成功: " + getId());
+                Log.runtime("任务启动成功: " + getId());
                 startChildTasks();
             } else {
-                Log.record("任务启动条件不满足，取消启动: " + getId());
+                Log.runtime("任务启动条件不满足，取消启动: " + getId());
                 thread = null;
             }
         } catch (Exception e) {
@@ -94,7 +94,7 @@ public abstract class BaseTask {
 
     public synchronized void stopTask() {
         if (stopping.getAndSet(true)) {
-            Log.record("任务正在停止中，跳过重复停止: " + getId());
+            Log.runtime("任务正在停止中，跳过重复停止: " + getId());
             return;
         }
         try {
@@ -109,7 +109,7 @@ public abstract class BaseTask {
      */
     private void stopTaskInternal(Thread targetThread) {
         try {
-            Log.record("停止任务: " + getId());
+            Log.runtime("停止任务: " + getId());
             
             // 先停止所有子任务
             for (BaseTask childTask : childTaskMap.values()) {
@@ -117,7 +117,7 @@ public abstract class BaseTask {
                     try {
                         childTask.stopTask();
                     } catch (Exception e) {
-                        Log.record("停止子任务失败: " + childTask.getId());
+                        Log.runtime("停止子任务失败: " + childTask.getId());
                         Log.printStackTrace(e);
                     }
                 }
@@ -130,7 +130,7 @@ public abstract class BaseTask {
                 try {
                     targetThread.join(5000); // 等待5秒
                     if (targetThread.isAlive()) {
-                        Log.record("任务未能在5秒内停止: " + getId());
+                        Log.runtime("任务未能在5秒内停止: " + getId());
                     }
                 } catch (InterruptedException e) {
                     Thread.currentThread().interrupt();
@@ -138,7 +138,7 @@ public abstract class BaseTask {
             }
             
             thread = null;
-            Log.record("任务已停止: " + getId());
+            Log.runtime("任务已停止: " + getId());
         } catch (Exception e) {
             Log.printStackTrace(e);
             thread = null;

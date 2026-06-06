@@ -161,7 +161,7 @@ public class LuckCard extends BaseCommTask {
                     if (!b){
                         tasksLuckCardLocal.add(taskId);
                         DataStore.INSTANCE.put("blacklistedTasks_LuckCard", tasksLuckCardLocal);
-                        Log.record(displayName+"任务["+taskId+"]已加入黑名单");
+                        Log.runtime(displayName+"任务["+taskId+"]已加入黑名单");
                     }
                 }
             }else{

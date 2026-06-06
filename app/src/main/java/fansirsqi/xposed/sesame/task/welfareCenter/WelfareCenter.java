@@ -63,10 +63,10 @@ public class WelfareCenter extends ModelTask {
     @Override
     public boolean check() {
         if (TaskCommon.IS_ENERGY_TIME) {
-            Log.record("⏸ 当前为只收能量时间【" + BaseModel.getEnergyTime().getValue() + "】，停止执行" + getName() + "任务！");
+            Log.runtime("⏸ 当前为只收能量时间【" + BaseModel.getEnergyTime().getValue() + "】，停止执行" + getName() + "任务！");
             return false;
         } else if (TaskCommon.IS_MODULE_SLEEP_TIME) {
-            Log.record("💤 模块休眠时间【" + BaseModel.getModelSleepTime().getValue() + "】停止执行" + getName() + "任务！");
+            Log.runtime("💤 模块休眠时间【" + BaseModel.getModelSleepTime().getValue() + "】停止执行" + getName() + "任务！");
             return false;
         } else {
             return true;
@@ -123,11 +123,11 @@ public class WelfareCenter extends ModelTask {
                 int currentYearExpirePoint = result.optInt("currentYearExpirePoint");
 
                 if (expirePoint == null) {
-                    Log.record(TAG + "总福利金[" + pointBalance + "]今年快过期[" + currentYearExpirePoint + "]本月过期[无]");
+                    Log.runtime(TAG + "总福利金[" + pointBalance + "]今年快过期[" + currentYearExpirePoint + "]本月过期[无]");
                 } else {
                     String expireKey = nextMonthFirstDay.replace("-", "");
                     int expireValue = expirePoint.optInt(expireKey, 0);
-                    Log.record(TAG + "总福利金[" + pointBalance + "]今年快过期[" + currentYearExpirePoint + "]本月过期[" + expireValue + "]");
+                    Log.runtime(TAG + "总福利金[" + pointBalance + "]今年快过期[" + currentYearExpirePoint + "]本月过期[" + expireValue + "]");
                 }
 
 //                String expireKey = nextMonthFirstDay.replace("-", "");
@@ -182,7 +182,7 @@ public class WelfareCenter extends ModelTask {
                             JSONObject useResponse = new JSONObject(WelfareCenterRpcCall.batchUseVirtualProfit(ids));
 
                             if (useResponse.getBoolean("success")) {
-                                Log.record(String.format("网商银行🏦福利金[%s]%s×%d",
+                                Log.runtime(String.format("网商银行🏦福利金[%s]%s×%d",
                                         item.getString("sceneDesc"),
                                         item.getString("reward"),
                                         ids.length()));
@@ -228,7 +228,7 @@ public class WelfareCenter extends ModelTask {
                             if (prizes != null) {
                                 for (int j = 0; j < prizes.length(); j++) {
                                     JSONObject prize = prizes.getJSONObject(j);
-                                    Log.record("网商银行🏦获得[" + prize.getString("prizeName") + "]");
+                                    Log.runtime("网商银行🏦获得[" + prize.getString("prizeName") + "]");
                                 }
                             }
                         } else {
@@ -250,7 +250,7 @@ public class WelfareCenter extends ModelTask {
                 JSONObject response = new JSONObject(WelfareCenterRpcCall.signInTrigger(sceneCode));
 
                 if (response.getBoolean("success")) {
-                    Log.record(String.format("网商银行🏦福利金[签到成功]%s",
+                    Log.runtime(String.format("网商银行🏦福利金[签到成功]%s",
                             JsonUtil.getValueByPath(response, "result.prizeOrderDTOList.[0].price")));
                 } else {
                     Log.error(TAG + ".signIn err: " + response.optString("resultDesc"));
@@ -269,7 +269,7 @@ public class WelfareCenter extends ModelTask {
                 JSONObject response = new JSONObject(WelfareCenterRpcCall.signinPlay());
 
                 if (response.optBoolean("success")) {
-                    Log.record(String.format("网商银行🏦签到[%s]",
+                    Log.runtime(String.format("网商银行🏦签到[%s]",
                             JsonUtil.getValueByPath(response, "result.todaySignInfo.signPrizeSentPoint.point")));
                     Status.setFlagToday(CompletedKeyEnum.WelfareCenterSigninPlay.name());
                 } else {

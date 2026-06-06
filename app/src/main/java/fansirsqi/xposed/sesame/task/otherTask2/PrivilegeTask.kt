@@ -40,7 +40,7 @@ class PrivilegeTask {
 
         fun executeProcessStudentTasks() {
             if (!isTaskRunning.compareAndSet(false, true)) {
-                Log.record("$TAG 青春特权任务已在执行中，跳过本次执行")
+                Log.runtime("$TAG 青春特权任务已在执行中，跳过本次执行")
                 return
             }
 
@@ -107,7 +107,7 @@ class PrivilegeTask {
                         // 跳过异常累积过多的任务
                         val errorCount = taskErrorCounts[taskName] ?: 0
                         if (errorCount >= 3) {
-                            Log.record("$STUDENT_SIGN_PREFIX 跳过异常过多的任务：$taskName（已失败 $errorCount 次）")
+                            Log.runtime("$STUDENT_SIGN_PREFIX 跳过异常过多的任务：$taskName（已失败 $errorCount 次）")
                             continue
                         }
 
@@ -156,7 +156,7 @@ class PrivilegeTask {
                         (taskErrorCounts[t.optString("taskName")] ?: 0) >= 3
                     }
                     if (allPendingExhausted) {
-                        Log.record("$STUDENT_SIGN_PREFIX 剩余任务全部因异常被跳过，退出执行")
+                        Log.runtime("$STUDENT_SIGN_PREFIX 剩余任务全部因异常被跳过，退出执行")
                         return
                     }
                     // 否则继续外层 while（等待下一轮 query）
@@ -177,7 +177,7 @@ class PrivilegeTask {
                 val resultDesc = result.optString("resultDesc", "报名成功")
 
                 if (resultCode.equals("SUCCESS", ignoreCase = true)) {
-                    //Log.record(STUDENT_SIGN_PREFIX + "任务报名成功：" + taskCode);
+                    //Log.runtime(STUDENT_SIGN_PREFIX + "任务报名成功：" + taskCode);
                     //Log.forest(STUDENT_SIGN_PREFIX + "任务报名成功：" + taskCode);
                 } else {
                     Log.error(TAG, "任务报名失败:$resultDesc")

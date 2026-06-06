@@ -120,7 +120,7 @@ class CampusPai {
                 }
             }
             if(certTemplateId.isNullOrEmpty() || totalPrice == 0){
-                //Log.record(TAG, "没有可领取的派币")
+                //Log.runtime(TAG, "没有可领取的派币")
                 return
             }
             val params = "[{\"certTemplateInfoVos\":[{\"certTemplateId\":\"$certTemplateId\",\"consumeNum\":$consumeNum,\"price\":$price}]}]"
@@ -204,11 +204,11 @@ class CampusPai {
                 val showType = response.optInt("showType", 0)
 
                 // 记录人群状态信息
-                Log.record(TAG, "👥人群校验开关:$crowdCheckSwitch, 用户在目标人群中:$inCrowd, 显示类型:$showType")
+                Log.runtime(TAG, "👥人群校验开关:$crowdCheckSwitch, 用户在目标人群中:$inCrowd, 显示类型:$showType")
 
                 // 根据观察，即使inCrowd为false也能参与活动，所以这里只记录信息不阻断流程
                 if (!crowdCheckSwitch) {
-                    Log.record(TAG, "⚠️人群校验开关已关闭")
+                    Log.runtime(TAG, "⚠️人群校验开关已关闭")
                 }
             }else{
                 Log.error(TAG, "checkCrowd失败:$response")

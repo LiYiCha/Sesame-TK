@@ -142,12 +142,12 @@ object Files {
             }
         } else {
             val canWrite = targetFile.canWrite()
-//            Log.record(TAG, "$fullTargetFileName permissions: r=$canRead; w=$canWrite")
+//            Log.runtime(TAG, "$fullTargetFileName permissions: r=$canRead; w=$canWrite")
             if (!canWrite) {
                 if (targetFile.setWritable(true)) {
-                    Log.record(TAG, "${targetFile.name} write permission set successfully")
+                    Log.runtime(TAG, "${targetFile.name} write permission set successfully")
                 } else {
-                    Log.record(TAG, "${targetFile.name} write permission set failed")
+                    Log.runtime(TAG, "${targetFile.name} write permission set failed")
                 }
             }
         }
@@ -168,12 +168,12 @@ object Files {
             }
         } else {
             val canWrite = targetFile.canWrite()
-//            Log.record(TAG, "File permissions for ${targetFile.absolutePath}: r=$canRead; w=$canWrite")
+//            Log.runtime(TAG, "File permissions for ${targetFile.absolutePath}: r=$canRead; w=$canWrite")
             if (!canWrite) {
                 if (targetFile.setWritable(true)) {
-                    Log.record(TAG, "Write permission set successfully for file: ${targetFile.absolutePath}")
+                    Log.runtime(TAG, "Write permission set successfully for file: ${targetFile.absolutePath}")
                 } else {
-                    Log.record(TAG, "Write permission set failed for file: ${targetFile.absolutePath}")
+                    Log.runtime(TAG, "Write permission set failed for file: ${targetFile.absolutePath}")
                 }
             }
         }
@@ -259,7 +259,7 @@ object Files {
         val logFile = File(LOG_DIR, logFileName)
         if (logFile.exists() && logFile.isDirectory) {
             if (logFile.delete()) {
-                Log.record(TAG, "日志${logFile.name}目录存在，删除成功！")
+                Log.runtime(TAG, "日志${logFile.name}目录存在，删除成功！")
             } else {
                 Log.error(TAG, "日志${logFile.name}目录存在，删除失败！")
             }
@@ -267,7 +267,7 @@ object Files {
         if (!logFile.exists()) {
             try {
                 if (logFile.createNewFile()) {
-                    Log.record(TAG, "日志${logFile.name}文件不存在，创建成功！")
+                    Log.runtime(TAG, "日志${logFile.name}文件不存在，创建成功！")
                 } else {
                     Log.error(TAG, "日志${logFile.name}文件不存在，创建失败！")
                 }
@@ -440,7 +440,7 @@ object Files {
     fun delFile(file: File): Boolean {
         if (!file.exists()) {
             ToastUtil.showToast("${file.absoluteFile}不存在！无需删了")
-            Log.record(TAG, "delFile: ${file.absoluteFile}不存在！,无须删除")
+            Log.runtime(TAG, "delFile: ${file.absoluteFile}不存在！,无须删除")
             return false
         }
 
@@ -468,7 +468,7 @@ object Files {
                 return true
             }
             retryCount--
-            Log.record(TAG, "删除失败，重试中: ${file.absolutePath}")
+            Log.runtime(TAG, "删除失败，重试中: ${file.absolutePath}")
             CoroutineUtils.sleepCompat(500)
         }
         Log.error(TAG, "删除失败: ${file.absolutePath}")

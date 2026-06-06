@@ -98,10 +98,10 @@
 //  @Override
 //  public Boolean check() {
 //    if (TaskCommon.IS_ENERGY_TIME){
-//      Log.record(TAG,"⏸ 当前为只收能量时间【"+ BaseModel.getEnergyTime().getValue() +"】，停止执行" + getName() + "任务！");
+//      Log.runtime(TAG,"⏸ 当前为只收能量时间【"+ BaseModel.getEnergyTime().getValue() +"】，停止执行" + getName() + "任务！");
 //      return false;
 //    }else if (TaskCommon.IS_MODULE_SLEEP_TIME) {
-//      Log.record(TAG,"💤 模块休眠时间【"+ BaseModel.getModelSleepTime().getValue() +"】停止执行" + getName() + "任务！");
+//      Log.runtime(TAG,"💤 模块休眠时间【"+ BaseModel.getModelSleepTime().getValue() +"】停止执行" + getName() + "任务！");
 //      return false;
 //    } else {
 //      return true;
@@ -113,12 +113,12 @@
 //  @Override
 //  public void runJava() {
 //    try {
-//      Log.record(TAG,"执行开始-" + getName());
+//      Log.runtime(TAG,"执行开始-" + getName());
 //      if (executeInterval != null) {
 //        executeIntervalInt = Math.max(executeInterval.getValue(), 500);
 //      } else {
 //        executeIntervalInt = 500; // 默认值
-//        //Log.record(TAG, "executeInterval字段为null，使用默认执行间隔500ms");
+//        //Log.runtime(TAG, "executeInterval字段为null，使用默认执行间隔500ms");
 //      }
 //      String s = AntOrchardRpcCall.orchardIndex();
 //      // 用于获取农场游戏中心(更新敲金蛋情况）
@@ -180,7 +180,7 @@
 //      Log.runtime(TAG, "start.run err:");
 //      Log.printStackTrace(TAG, t);
 //    }finally {
-//      Log.record(TAG,"执行结束-" + getName());
+//      Log.runtime(TAG,"执行结束-" + getName());
 //    }
 //  }
 //  private String getWua() {
@@ -203,17 +203,17 @@
 //
 //      // 检查是否已达到目标
 //      if (totalWatered >= orchardSpreadManureCount.getValue()) {
-//        Log.record(TAG, "今日已完成施肥目标：" + totalWatered + "/" + orchardSpreadManureCount.getValue());
+//        Log.runtime(TAG, "今日已完成施肥目标：" + totalWatered + "/" + orchardSpreadManureCount.getValue());
 //        return;
 //      }
 //
-//      Log.record(TAG, "开始施肥任务，当前进度：" + totalWatered + "/" + orchardSpreadManureCount.getValue());
+//      Log.runtime(TAG, "开始施肥任务，当前进度：" + totalWatered + "/" + orchardSpreadManureCount.getValue());
 //
 //      do {
 //        try {
 //          loopCount++;
 //          if (loopCount > 20) {
-//            Log.record(TAG, "循环次数达到上限 " + loopCount + "，避免任务时间过长");
+//            Log.runtime(TAG, "循环次数达到上限 " + loopCount + "，避免任务时间过长");
 //            return;
 //          }
 //
@@ -244,18 +244,18 @@
 //          int wateringLeftTimes = accountInfo.getInt("wateringLeftTimes");
 //
 //          if (happyPoint < wateringCost) {
-//            Log.record(TAG, "肥料不足: 当前 " + happyPoint + " < 消耗 " + wateringCost);
+//            Log.runtime(TAG, "肥料不足: 当前 " + happyPoint + " < 消耗 " + wateringCost);
 //            return;
 //          }
 //
 //          if (wateringLeftTimes <= 0) {
-//            Log.record(TAG, "今日剩余施肥次数为 0");
+//            Log.runtime(TAG, "今日剩余施肥次数为 0");
 //            return;
 //          }
 //
 //          int remainingTarget = orchardSpreadManureCount.getValue() - totalWatered;
 //          if (remainingTarget <= 0) {
-//            Log.record(TAG, "已达今日施肥目标：" + totalWatered + "/" + orchardSpreadManureCount.getValue());
+//            Log.runtime(TAG, "已达今日施肥目标：" + totalWatered + "/" + orchardSpreadManureCount.getValue());
 //            return;
 //          }
 //
@@ -295,7 +295,7 @@
 //
 //          // 检查果树成长上限
 //          if (stageLevel >= stageMaxLevel && currentLevelProgressPercentage >= 100.0) {
-//            Log.record(TAG, "果树已达成长上限，停止施肥");
+//            Log.runtime(TAG, "果树已达成长上限，停止施肥");
 //            return;
 //          }
 //
@@ -304,7 +304,7 @@
 //        }
 //      } while (totalWatered < orchardSpreadManureCount.getValue());
 //
-//      Log.record(TAG, "施肥任务完成，总计施肥: " + totalWatered + "/" + orchardSpreadManureCount.getValue());
+//      Log.runtime(TAG, "施肥任务完成，总计施肥: " + totalWatered + "/" + orchardSpreadManureCount.getValue());
 //
 //    } catch (Throwable t) {
 //      Log.runtime(TAG, "orchardSpreadManure err:");
@@ -369,7 +369,7 @@
 //              Log.runtime(TAG, jo3.toString());
 //            }
 //          } else {
-//            Log.record(TAG, "七日礼包已领取");
+//            Log.runtime(TAG, "七日礼包已领取");
 //          }
 //          break;
 //        }
@@ -395,7 +395,7 @@
 //      }
 //
 //      if (!jo.has("goldenEggInfo")) {
-//        //Log.record(TAG, "暂无金蛋可砸");
+//        //Log.runtime(TAG, "暂无金蛋可砸");
 //        return;
 //      }
 //
@@ -403,10 +403,10 @@
 //      int unsmashedGoldenEggs = goldenEggInfo.optInt("unsmashedGoldenEggs", 0);
 //
 //      if (unsmashedGoldenEggs > 0) {
-//        Log.record(TAG, "检测到金蛋🥚数量: " + unsmashedGoldenEggs);
+//        Log.runtime(TAG, "检测到金蛋🥚数量: " + unsmashedGoldenEggs);
 //        smashedGoldenEgg(unsmashedGoldenEggs);
 //      } else {
-//        Log.record(TAG, "暂无金蛋可砸");
+//        Log.runtime(TAG, "暂无金蛋可砸");
 //      }
 //    } catch (Throwable t) {
 //      Log.runtime(TAG, "checkAndSmashGoldenEgg err:");
@@ -446,7 +446,7 @@
 //         */
 //
 //      } else {
-//        Log.record(TAG, jo.optString("resultDesc", "未知错误"));
+//        Log.runtime(TAG, jo.optString("resultDesc", "未知错误"));
 //        Log.runtime(TAG, response);
 //      }
 //
@@ -460,7 +460,7 @@
 //      String s = AntOrchardRpcCall.orchardListTask();
 //      JSONObject jo = new JSONObject(s);
 //      if (!"100".equals(jo.getString("resultCode"))) {
-//        Log.record(jo.getString("resultCode"));
+//        Log.runtime(jo.getString("resultCode"));
 //        Log.runtime(s);
 //        return;
 //      }
@@ -620,7 +620,7 @@
 //      if (result.optBoolean("success")) {
 //        Log.farm("农场任务🧾[" + title + "]");
 //      } else {
-//        Log.record(result.getString("desc"));
+//        Log.runtime(result.getString("desc"));
 //        Log.runtime(result.toString());
 //      }
 //    } catch (JSONException e) {
@@ -642,7 +642,7 @@
 //          Log.runtime(joSign.getString("resultDesc"), joSign.toString());
 //        }
 //      } else {
-//        Log.record(TAG,"农场今日已签到");
+//        Log.runtime(TAG,"农场今日已签到");
 //        Status.setFlagToday("orchardSign");
 //      }
 //    } catch (Throwable t) {
@@ -667,12 +667,12 @@
 //          if ("100".equals(jo.getString("resultCode"))) {
 //            Log.farm("领取奖励🎖️[" + title + "]#" + awardCount + "g肥料");
 //          } else {
-//            Log.record(jo.getString("resultDesc"));
+//            Log.runtime(jo.getString("resultDesc"));
 //            Log.runtime(jo.toString());
 //          }
 //        }
 //      } else {
-//        Log.record(jo.getString("resultDesc"));
+//        Log.runtime(jo.getString("resultDesc"));
 //        Log.runtime(s);
 //      }
 //    } catch (Throwable t) {
@@ -712,7 +712,7 @@
 //              if ("100".equals(jo5.getString("resultCode"))) {
 //                Log.farm("农场许愿✨[每日施肥" + taskRequire + "次]");
 //              } else {
-//                Log.record(TAG, jo5.getString("resultDesc"));
+//                Log.runtime(TAG, jo5.getString("resultDesc"));
 //              }
 //            }
 //          } else if ("FINISHED".equals(status)) {
@@ -722,12 +722,12 @@
 //              querySubplotsActivity(taskRequire);
 //              return;
 //            } else {
-//              Log.record(TAG, jo3.getString("resultDesc"));
+//              Log.runtime(TAG, jo3.getString("resultDesc"));
 //            }
 //          }
 //        }
 //      } else {
-//        Log.record(TAG, jo.getString("resultDesc"));
+//        Log.runtime(TAG, jo.getString("resultDesc"));
 //      }
 //    } catch (Throwable t) {
 //      Log.runtime(TAG, "querySubplotsActivity err:");
@@ -775,7 +775,7 @@
 //          }
 //        }
 //      } else {
-//        Log.record(jo.getString("resultDesc"));
+//        Log.runtime(jo.getString("resultDesc"));
 //        Log.runtime(jo.toString());
 //      }
 //    } catch (Throwable t) {
@@ -787,7 +787,7 @@
 //  private void orchardAssistFriend() {
 //    try {
 //      if (!Status.canAntOrchardAssistFriendToday()) {
-//        Log.record(TAG, "今日已助力，跳过农场助力");
+//        Log.runtime(TAG, "今日已助力，跳过农场助力");
 //        return;
 //      }
 //
@@ -805,7 +805,7 @@
 //        if (!ResChecker.checkRes(TAG, str)) {
 //          String code = jsonObject.getString("code");
 //          if ("600000027".equals(code)) {
-//            Log.record(TAG, "农场助力💪今日助力他人次数上限");
+//            Log.runtime(TAG, "农场助力💪今日助力他人次数上限");
 //            Status.antOrchardAssistFriendToday();
 //            return;
 //          }
@@ -1073,7 +1073,7 @@
 //
 //        JSONArray awardList = jo.optJSONArray("orchardVisitAwardList");
 //        if (awardList == null || awardList.length() == 0) {
-//          Log.record(TAG, "领取回访奖励完成 (source=" + sourceParam + "): 无奖励，可能已领取过");
+//          Log.runtime(TAG, "领取回访奖励完成 (source=" + sourceParam + "): 无奖励，可能已领取过");
 //          continue;
 //        }
 //
@@ -1090,9 +1090,9 @@
 //
 //      if (hasAwardReceived) {
 //        Status.setFlagToday(StatusFlags.FLAG_ANTORCHARD_WIDGET_DAILY_AWARD);
-//        Log.record(TAG, "回访奖励领取完成");
+//        Log.runtime(TAG, "回访奖励领取完成");
 //      } else {
-//        Log.record(TAG, "回访奖励已全部领取或无可领取奖励");
+//        Log.runtime(TAG, "回访奖励已全部领取或无可领取奖励");
 //      }
 //    } catch (Throwable t) {
 //      Log.runtime(TAG, "receiveOrchardVisitAward err:");
@@ -1107,7 +1107,7 @@
 //    try {
 //      // 1. 请求同步数据
 //      String wua = SecurityBodyHelper.getSecurityBodyData(4).toString();
-//      //Log.record(TAG, "限时奖励: set Wua " + wua);
+//      //Log.runtime(TAG, "限时奖励: set Wua " + wua);
 //      String response = AntOrchardRpcCall.orchardSyncIndex(wua);
 //      JSONObject root = new JSONObject(response);
 //
@@ -1156,7 +1156,7 @@
 //
 //      // 大任务已完成但未领取奖励
 //      if ("FINISHED".equals(mTaskStatus) && ongoing) {
-//        Log.record(TAG, "第 " + currentRound + " 轮 奖励未领取，尝试领取");
+//        Log.runtime(TAG, "第 " + currentRound + " 轮 奖励未领取，尝试领取");
 //
 //        String awardResp = AntOrchardRpcCall.receiveTaskAward("ORCHARD_LIMITED_TIME_CHALLENGE", mTaskId);
 //        JSONObject joo = new JSONObject(awardResp);
@@ -1182,7 +1182,7 @@
 //        return;
 //      }
 //
-//      Log.record(TAG, "开始处理第 " + currentRound + " 轮的 " + childTasks.length() + " 个子任务");
+//      Log.runtime(TAG, "开始处理第 " + currentRound + " 轮的 " + childTasks.length() + " 个子任务");
 //
 //      // 5. 遍历子任务
 //      for (int i = 0; i < childTasks.length(); i++) {
@@ -1206,7 +1206,7 @@
 //        if ("GROUP_1_STEP_3_GAME_WZZT_30s".equals(groupId)) continue;
 //        if ("GROUP_1_STEP_2_GAME_WZZT_30s".equals(groupId)) continue;
 //
-//        Log.record(TAG, "------ 开始处理子任务 " + i + " | ID=" + childTaskId + " ------");
+//        Log.runtime(TAG, "------ 开始处理子任务 " + i + " | ID=" + childTaskId + " ------");
 //
 //        switch (actionType) {
 //          case "SPREAD_MANURE":
@@ -1239,11 +1239,11 @@
 //    try {
 //      int need = taskRequire - taskProgress;
 //      if (need <= 0) {
-//        //Log.record(TAG, "施肥任务无需操作（当前进度 >= 需求）");
+//        //Log.runtime(TAG, "施肥任务无需操作（当前进度 >= 需求）");
 //        return;
 //      }
 //
-//      Log.record(TAG, "施肥任务需补充 " + need + " 次");
+//      Log.runtime(TAG, "施肥任务需补充 " + need + " 次");
 //      List<String> sourceList = Arrays.asList(
 //        "DNHZ_NC_zhimajingnangSF",
 //        "widget_shoufei",
@@ -1254,7 +1254,7 @@
 //        String wua = SecurityBodyHelper.getSecurityBodyData(4).toString();
 //        String randomSource = sourceList.get(RandomUtil.nextInt(0, sourceList.size()));
 //        String spreadResult = AntOrchardRpcCall.orchardSpreadManure(wua, randomSource);
-//        Log.record(TAG, "施肥第 " + (index + 1) + " 次");
+//        Log.runtime(TAG, "施肥第 " + (index + 1) + " 次");
 //
 //        JSONObject resultJson = new JSONObject(spreadResult);
 //        String resultCode = resultJson.optString("resultCode", "");
@@ -1267,7 +1267,7 @@
 //        GlobalThreadPools.sleep(executeIntervalInt);
 //      }
 //
-//      Log.record(TAG, "施肥任务成功完成 " + need + " 次");
+//      Log.runtime(TAG, "施肥任务成功完成 " + need + " 次");
 //    } catch (Throwable t) {
 //      Log.runtime(TAG, "handleSpreadManureTask err:");
 //      Log.printStackTrace(TAG, t);
@@ -1282,7 +1282,7 @@
 //      String r = AntOrchardRpcCall.noticeGame("2021004165643274");
 //      JSONObject jr = new JSONObject(r);
 //      if (ResChecker.checkRes(TAG, jr)) {
-//        Log.record(TAG, "游戏任务触发成功 → 子任务应当自动完成");
+//        Log.runtime(TAG, "游戏任务触发成功 → 子任务应当自动完成");
 //      } else {
 //        Log.error(TAG, "游戏任务触发失败，返回: " + r);
 //      }
@@ -1333,7 +1333,7 @@
 //      String r = XLightRpcCall.INSTANCE.xlightPlugin(finalUrl, pageFrom, session, finalSpaceCode);
 //      JSONObject jr = new JSONObject(r);
 //
-//      Log.record(TAG, "广告任务触发成功 → 即将调用 finishTask() 完成任务");
+//      Log.runtime(TAG, "广告任务触发成功 → 即将调用 finishTask() 完成任务");
 //
 //      // 获取playingResult
 //      JSONObject playingResult = null;
@@ -1370,7 +1370,7 @@
 //      JSONObject fr = new JSONObject(finishResult);
 //
 //      if (ResChecker.checkRes(TAG, fr)) {
-//        Log.record(TAG, "finishTask 完成成功 → 浏览广告任务完成");
+//        Log.runtime(TAG, "finishTask 完成成功 → 浏览广告任务完成");
 //      } else {
 //        Log.error(TAG, "finishTask 完成失败: " + finishResult);
 //      }

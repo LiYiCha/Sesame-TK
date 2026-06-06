@@ -84,7 +84,7 @@ public class RandomUtil {
     public static long nextLong(long min, long max) {
         if (min >= max) return min;
         long o = max - min;
-        return (rnd.nextLong() % o) + min;
+        return ((rnd.nextLong() & Long.MAX_VALUE) % o) + min;
     }
 
     /**

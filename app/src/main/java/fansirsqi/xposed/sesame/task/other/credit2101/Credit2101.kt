@@ -229,7 +229,7 @@ object Credit2101 {
     @JvmStatic
     fun doCredit2101(credittaskoptions: SelectModelField ,creditoptions: SelectAndCountModelField) {
         try {
-            Log.record(TAG, "执行开始 信用2101")
+            Log.runtime(TAG, "执行开始 信用2101")
             this.mCreditTaskOptions = credittaskoptions
             this.mCreditEventOptions = creditoptions
             val selectedTasks = credittaskoptions.value ?: emptyList<String>()
@@ -242,7 +242,7 @@ object Credit2101 {
             if (selectedTasks.contains(TaskType.AUTO_OPEN_CHEST)) {
                 var account = queryAccountAsset()
                 if (account != null && account.lotteryNo > 0) {
-                    Log.record(TAG, "检测到宝箱数量: ${account.lotteryNo}，准备开启")
+                    Log.runtime(TAG, "检测到宝箱数量: ${account.lotteryNo}，准备开启")
                     openChest(account.lotteryNo)
                 }
             }
@@ -272,7 +272,7 @@ object Credit2101 {
             var currentLng: Double
             val cityCode: String
             if (location == null) {
-                Log.record(TAG, "信用2101📍[定位失败] 使用北京默认值")
+                Log.runtime(TAG, "信用2101📍[定位失败] 使用北京默认值")
                 cityCode = "110000"
                 currentLat = 39.44 + Math.random() * (41.05 - 39.44)
                 currentLng = 115.42 + Math.random() * (117.50 - 115.42)
@@ -283,7 +283,7 @@ object Credit2101 {
                 currentLng = location.longitude
                 cityCode = location.cityCode
             }
-            Log.record(
+            Log.runtime(
                 TAG,
                 "信用2101📍[定位信息] 城市编码=$cityCode，纬度=$currentLat，经度=$currentLng"
             )
@@ -301,7 +301,7 @@ object Credit2101 {
 
             handleGuardMarkAward()        //检查是否有可领取的印记
 
-            Log.record(TAG, "信用2101🔍[开始探测循环]")
+            Log.runtime(TAG, "信用2101🔍[开始探测循环]")
 
             // ================== 主循环 ==================
             while (true) {
@@ -310,7 +310,7 @@ object Credit2101 {
                 // 防死循环保护
                 currentLoopCount++
                 if (currentLoopCount > maxLoopCount) {
-                    Log.record(TAG, "信用2101🔍[结束] 达到最大循环次数($maxLoopCount)")
+                    Log.runtime(TAG, "信用2101🔍[结束] 达到最大循环次数($maxLoopCount)")
                     break
                 }
 
@@ -321,12 +321,12 @@ object Credit2101 {
                 }
 
                 if (account.exploreStamina <= 0) {
-                    Log.record(TAG, "信用2101🔍[结束] 探索次数已用完")
+                    Log.runtime(TAG, "信用2101🔍[结束] 探索次数已用完")
                     break
                 }
 
                 if (account.energyStamina < 5) {
-                    Log.record(
+                    Log.runtime(
                         TAG,
                         "信用2101🔍[结束] 能量不足，不再执行(${account.energyStamina})"
                     )
@@ -345,7 +345,7 @@ object Credit2101 {
                     // 找到并处理了事件，重置探测/位移计数
                     failExploreCount = 0
                     shiftCount = 0
-                    // Log.record("找到并处理了事件")
+                    // Log.runtime("找到并处理了事件")
                     continue
                 }
 
@@ -356,7 +356,7 @@ object Credit2101 {
                     // 探测到事件，下轮重新查询处理
                     failExploreCount = 0
                     shiftCount = 0
-                    //Log.record("探测到事件")
+                    //Log.runtime("探测到事件")
                     continue
                 }
 
@@ -368,14 +368,14 @@ object Credit2101 {
                 currentLng = nLng
                 shiftCount++
 
-                Log.record(
+                Log.runtime(
                     TAG,
                     "信用2101📍[移动位置] 第$shiftCount 次 lat=$currentLat lng=$currentLng (≈±500m)"
                 )
 
                 // 位移次数耗尽才真正退出
                 if (shiftCount >= maxShiftCount) {
-                    Log.record(
+                    Log.runtime(
                         TAG,
                         "信用2101🔍[结束] 已移动 $shiftCount 次仍未发现事件"
                     )
@@ -384,7 +384,7 @@ object Credit2101 {
             }
 
 
-            Log.record(TAG, "执行结束 信用2101")
+            Log.runtime(TAG, "执行结束 信用2101")
 
         } catch (t: Throwable) {
             Log.printStackTrace(TAG, t)
@@ -428,13 +428,13 @@ object Credit2101 {
                 GlobalThreadPools.sleepCompat(5000)
                 val resp = Credit2101RpcCall.triggerBenefit()
                 if (!ResChecker.checkRes(TAG, resp)) {
-                    Log.record(TAG, "信用2101🎁[开宝箱失败] 第 $i 个返回为空，停止后续宝箱")
+                    Log.runtime(TAG, "信用2101🎁[开宝箱失败] 第 $i 个返回为空，停止后续宝箱")
                     break
                 }
 
                 val jo = JSONObject(resp)
                 if (!ResChecker.checkRes(TAG, jo)) {
-                    Log.record(TAG, "信用2101🎁[开宝箱失败] resp=$resp，停止后续宝箱")//第 $i 个
+                    Log.runtime(TAG, "信用2101🎁[开宝箱失败] resp=$resp，停止后续宝箱")//第 $i 个
                     break
                 }
 
@@ -482,7 +482,7 @@ object Credit2101 {
                 }
             }
 
-            Log.record(TAG, "信用2101🎁[宝箱统计] 共$lotteryNo 个，成功打开$successCount 个")
+            Log.runtime(TAG, "信用2101🎁[宝箱统计] 共$lotteryNo 个，成功打开$successCount 个")
         } catch (e: Throwable) {
             Log.printStackTrace(TAG, e)
         }
@@ -525,9 +525,9 @@ object Credit2101 {
 
             if (!success) {
                 if (resultCode == "SIGN_DAYS_NOT_ENOUGH") {
-                    Log.record(TAG, "信用2101🗓[签到] 已领取签到奖励")
+                    Log.runtime(TAG, "信用2101🗓[签到] 已领取签到奖励")
                 } else {
-                    Log.record(TAG, "信用2101🗓[签到失败] resp=$signResp")
+                    Log.runtime(TAG, "信用2101🗓[签到失败] resp=$signResp")
                 }
                 return
             }
@@ -564,7 +564,7 @@ object Credit2101 {
 
             val jo = JSONObject(resp)
             if (!ResChecker.checkRes(TAG, jo)) {
-                Log.record(
+                Log.runtime(
                     TAG, "信用2101📋[查询任务失败] resp=$resp"
                 )
                 return
@@ -572,7 +572,7 @@ object Credit2101 {
 
             val taskList = jo.optJSONArray("taskList") ?: return
             if (taskList.length() == 0) {
-                Log.record(TAG, "信用2101📋[任务] 当前无任务")
+                Log.runtime(TAG, "信用2101📋[任务] 当前无任务")
                 return
             }
 
@@ -592,7 +592,7 @@ object Credit2101 {
                 if (taskStatus == "INIT") {
                     val claimResp = Credit2101RpcCall.operateTask("TASK_CLAIM", taskConfigId)
                     if (claimResp.isEmpty()) {
-                        Log.record(TAG, "信用2101📋[任务领取失败] $taskName 返回为空")
+                        Log.runtime(TAG, "信用2101📋[任务领取失败] $taskName 返回为空")
                     } else {
                         val cJo = JSONObject(claimResp)
                         val ok = ResChecker.checkRes(TAG, cJo) &&
@@ -601,7 +601,7 @@ object Credit2101 {
                             claimCount++
                             Log.other("信用2101📋[任务领取成功] $taskName ($taskConfigId)")
                         } else {
-                            Log.record(TAG, "信用2101📋[任务领取失败] $taskName resp=$claimResp")
+                            Log.runtime(TAG, "信用2101📋[任务领取失败] $taskName resp=$claimResp")
                         }
                     }
                     continue
@@ -622,9 +622,9 @@ object Credit2101 {
 
                     if (!success || !awardSuccess) {
                         if (resultCode == "TASK_HAS_NO_AWARD") {
-                            Log.record(TAG, "信用2101📋[任务奖励] $taskName 当前无奖励可领")
+                            Log.runtime(TAG, "信用2101📋[任务奖励] $taskName 当前无奖励可领")
                         } else {
-                            Log.record(TAG, "信用2101📋[任务奖励领取失败] $taskName resp=$awardResp")
+                            Log.runtime(TAG, "信用2101📋[任务奖励领取失败] $taskName resp=$awardResp")
                         }
                         continue
                     }
@@ -675,7 +675,7 @@ object Credit2101 {
             }
 
             if (claimCount > 0 || awardCount > 0) {
-                Log.record(TAG, "信用2101📋[任务统计] 领取任务:$claimCount 领取奖励:$awardCount")
+                Log.runtime(TAG, "信用2101📋[任务统计] 领取任务:$claimCount 领取奖励:$awardCount")
             }
         } catch (e: Throwable) {
             Log.printStackTrace(TAG, e)
@@ -706,12 +706,12 @@ object Credit2101 {
             // val count = jo.optInt("guardMarkCount", 0)
 
             if (!hasClaim) {
-                // Log.record(TAG, "信用2101🛡️[修复奖励] 暂无奖励可领取 (已修复数: $count)")
+                // Log.runtime(TAG, "信用2101🛡️[修复奖励] 暂无奖励可领取 (已修复数: $count)")
                 return
             }
 
             // 3. 执行领取动作
-            Log.record(TAG, "信用2101🛡️[修复奖励] 检测到可领取奖励，正在领取...")
+            Log.runtime(TAG, "信用2101🛡️[修复奖励] 检测到可领取奖励，正在领取...")
             val claimResp = Credit2101RpcCall.claimGuardMarkAward()
 
 
@@ -802,7 +802,7 @@ object Credit2101 {
                         throw Exception("LocationHelper 定位数据不完整")
                     }
 
-                    Log.record(TAG, "信用2101📍[LocationHelper] 使用目标应用定位成功")
+                    Log.runtime(TAG, "信用2101📍[LocationHelper] 使用目标应用定位成功")
                 } else {
                     Log.error(TAG, "信用2101📍[LocationHelper] 返回为空，尝试使用 API 备用")
                     throw Exception("LocationHelper 返回为空")
@@ -845,7 +845,7 @@ object Credit2101 {
                     return@runCatching null
                 }
 
-                Log.record(TAG, "信用2101📍[API定位] 使用 API 定位成功")
+                Log.runtime(TAG, "信用2101📍[API定位] 使用 API 定位成功")
             }
 
             LocationInfo(cityCode.toString(), lat, lng)
@@ -924,7 +924,7 @@ object Credit2101 {
     ): Boolean {
         val resp = Credit2101RpcCall.queryGridEvent(cityCode, latitude, longitude)
         if (!ResChecker.checkRes(TAG, resp)) {
-            Log.record(TAG, "信用2101📋[事件] 查询失败 / 返回为空")
+            Log.runtime(TAG, "信用2101📋[事件] 查询失败 / 返回为空")
             return false
         }
 
@@ -934,13 +934,13 @@ object Credit2101 {
         }
 
         if (!ResChecker.checkRes(TAG, root)) {
-            Log.record(TAG, "信用2101📋[事件] success=false")
+            Log.runtime(TAG, "信用2101📋[事件] success=false")
             return false
         }
 
         val eventList = root.optJSONArray("gridEventVOList")
         if (eventList == null || eventList.length() == 0) {
-            Log.record(TAG, "信用2101📋[事件] 当前无事件")
+            Log.runtime(TAG, "信用2101📋[事件] 当前无事件")
             return false
         }
 
@@ -1014,19 +1014,19 @@ object Credit2101 {
                     val newCount = doneCount + 1
                     Status.setIntFlagToday(flagKey, newCount)
                     val countDesc = if (maxCount == -1) "∞" else maxCount.toString()
-                    Log.record(TAG, "信用2101✅[事件完成] type=$eventType (进度: $newCount/$countDesc)")
+                    Log.runtime(TAG, "信用2101✅[事件完成] type=$eventType (进度: $newCount/$countDesc)")
                 }
                 is EventResult.Skipped -> {
                     // 跳过不计入失败也不计入成功,静默处理
-                    Log.record(TAG, "信用2101⏭️[事件跳过] type=$eventType (条件不满足)")
+                    Log.runtime(TAG, "信用2101⏭️[事件跳过] type=$eventType (条件不满足)")
                 }
                 is EventResult.Failed -> {
-                    Log.record(TAG, "信用2101❌[事件失败] type=$eventType")
+                    Log.runtime(TAG, "信用2101❌[事件失败] type=$eventType")
                 }
             }
         }
 
-        Log.record(TAG, "信用2101📋[事件处理结果] 完成=$handledCount / 总数=${eventList.length()}")
+        Log.runtime(TAG, "信用2101📋[事件处理结果] 完成=$handledCount / 总数=${eventList.length()}")
         return handledCount > 0
     }
     /*
@@ -1039,7 +1039,7 @@ object Credit2101 {
 
         val resp = Credit2101RpcCall.queryGridEvent(cityCode, latitude, longitude)
         if (!ResChecker.checkRes(TAG, resp)) {
-            Log.record(TAG, "信用2101📋[事件] 查询失败 / 返回为空")
+            Log.runtime(TAG, "信用2101📋[事件] 查询失败 / 返回为空")
             return false
         }
 
@@ -1049,13 +1049,13 @@ object Credit2101 {
         }
 
         if (!ResChecker.checkRes(TAG, root)) {
-            Log.record(TAG, "信用2101📋[事件] success=false")
+            Log.runtime(TAG, "信用2101📋[事件] success=false")
             return false
         }
 
         val eventList = root.optJSONArray("gridEventVOList")
         if (eventList == null || eventList.length() == 0) {
-            Log.record(TAG, "信用2101📋[事件] 当前无事件")
+            Log.runtime(TAG, "信用2101📋[事件] 当前无事件")
             return false
         }
 
@@ -1063,12 +1063,12 @@ object Credit2101 {
         // --- 增加配置状态输出 ---
         val config = mCreditOptions!!.value // Map<String?, Int?>
         if (config.isNullOrEmpty()) {
-            Log.record(TAG, "⚠️ 信用2101配置为空，将跳过所有任务")
+            Log.runtime(TAG, "⚠️ 信用2101配置为空，将跳过所有任务")
         } else {
             val summary = config.entries
                 .filter { (it.value ?: 0) != 0 } // 只打印设置了次数的任务
                 .joinToString(", ") { "${it.key ?: "未知"}(${if(it.value == -1) "无限" else it.value})" }
-            Log.record(TAG, "配置概览: $summary")
+            Log.runtime(TAG, "配置概览: $summary")
         }
 
 
@@ -1097,7 +1097,7 @@ object Credit2101 {
 
             // 如果设置了固定次数且已达标，则跳过 (-1 代表不限)
             if (maxCount != -1 && doneCount >= maxCount) {
-                // Log.record(TAG, "信用2101⏭️[次数达标] $eventType (今日已完成 $doneCount 次)")
+                // Log.runtime(TAG, "信用2101⏭️[次数达标] $eventType (今日已完成 $doneCount 次)")
                 continue
             }
             var isSkipped = false // 专门标记“任务满了，根本没做”的情况   主要是黑色印记 进去之后的返回-1
@@ -1139,7 +1139,7 @@ object Credit2101 {
                             }
                         }
                     } else {
-                        Log.record(TAG, "信用2101⚫[黑色印记] 能量不足，跳过")
+                        Log.runtime(TAG, "信用2101⚫[黑色印记] 能量不足，跳过")
                         false
                     }
                 }
@@ -1158,17 +1158,17 @@ object Credit2101 {
                 Status.setIntFlagToday(flagKey, newCount)
 
                 val countDesc = if (maxCount == -1) "∞" else maxCount.toString()
-                Log.record(TAG, "信用2101✅[事件完成] type=$eventType (进度: $newCount/$countDesc)")
+                Log.runtime(TAG, "信用2101✅[事件完成] type=$eventType (进度: $newCount/$countDesc)")
             } else {
                 if (isSkipped) {
-                    Log.record(TAG, "信用2101⏭️[黑色印记] 能量已满，暂不处理")
+                    Log.runtime(TAG, "信用2101⏭️[黑色印记] 能量已满，暂不处理")
                 } else {
-                    Log.record(TAG, "信用2101❌[事件失败] type=$eventType")
+                    Log.runtime(TAG, "信用2101❌[事件失败] type=$eventType")
                 }
             }
         }
 
-        Log.record(
+        Log.runtime(
             TAG,
             "信用2101📋[事件处理结果] 完成=$handledCount / 总数=${eventList.length()}"
         )
@@ -1184,18 +1184,18 @@ object Credit2101 {
             val cfg = ev.optJSONObject("eventConfig")
             val stageId = cfg?.optString("id", "") ?: ""
             if (stageId.isEmpty()) {
-                Log.record(TAG, "信用2101🎮[小游戏关卡ID为空] resp=$ev")
+                Log.runtime(TAG, "信用2101🎮[小游戏关卡ID为空] resp=$ev")
                 return
             }
 
             val startResp = Credit2101RpcCall.eventGameStart(batchNo, eventId, stageId)
             val sJo = JSONObject(startResp)
             if (sJo.optString("resultCode") == "ENERGY_STAMINA_IS_ZERO") {
-                Log.record(TAG, "信用2101💤 能量已耗尽，停止小游戏M")
+                Log.runtime(TAG, "信用2101💤 能量已耗尽，停止小游戏M")
                 return
             }
             if (!ResChecker.checkRes(TAG, sJo)) {
-                Log.record(
+                Log.runtime(
                     TAG,
                     "信用2101🎮[小游戏开始接口失败] batchNo=$batchNo eventId=$eventId stageId=$stageId"
                 )
@@ -1206,7 +1206,7 @@ object Credit2101 {
             if (!success) {
                 val resultCode = sJo.optString("resultCode", "UNKNOWN")
                 val resultMsg = sJo.optString("resultMsg", "未知错误")
-                Log.record(TAG, "信用2101🎮[小游戏开始失败] 原因: $resultMsg (code=$resultCode) resp=$startResp")
+                Log.runtime(TAG, "信用2101🎮[小游戏开始失败] 原因: $resultMsg (code=$resultCode) resp=$startResp")
                 return
             }
 
@@ -1214,7 +1214,7 @@ object Credit2101 {
             val completeResp = Credit2101RpcCall.eventGameCompleteSimple(batchNo, eventId, stageId)
             val cJo = JSONObject(completeResp)
             if (cJo.optString("resultCode") == "ENERGY_STAMINA_IS_ZERO") {
-                Log.record(TAG, "信用2101💤 能量已耗尽，停止小游戏")
+                Log.runtime(TAG, "信用2101💤 能量已耗尽，停止小游戏")
                 return
             }
             if (!ResChecker.checkRes(TAG, completeResp)) {
@@ -1250,25 +1250,25 @@ object Credit2101 {
         try {
             val cfg = ev.optJSONObject("eventConfig")
             if (cfg == null) {
-                Log.record(TAG, "信用2101🎮[小游戏配置缺失] resp=$ev")
+                Log.runtime(TAG, "信用2101🎮[小游戏配置缺失] resp=$ev")
                 return
             }
 
             val stageId = cfg.optString("id", "")
             if (stageId.isEmpty()) {
-                Log.record(TAG, "信用2101🎮[小游戏关卡ID为空] resp=$ev")
+                Log.runtime(TAG, "信用2101🎮[小游戏关卡ID为空] resp=$ev")
                 return
             }
 
             val awardArray = cfg.optJSONArray("award")
             if (awardArray == null || awardArray.length() == 0) {
-                Log.record(TAG, "信用2101🎮[小游戏奖励信息获取失败] resp=$ev")
+                Log.runtime(TAG, "信用2101🎮[小游戏奖励信息获取失败] resp=$ev")
                 return
             }
 
             val award = awardArray.optJSONObject(0)
             if (award == null) {
-                Log.record(TAG, "信用2101🎮[小游戏奖励信息第一个元素为空] resp=$ev")
+                Log.runtime(TAG, "信用2101🎮[小游戏奖励信息第一个元素为空] resp=$ev")
                 return
             }
 
@@ -1276,12 +1276,12 @@ object Credit2101 {
             val startResp = Credit2101RpcCall.eventGameStart(batchNo, eventId, stageId)
             val sJo = JSONObject(startResp)
             if (sJo.optString("resultCode") == "ENERGY_STAMINA_IS_ZERO") {
-                Log.record(TAG, "信用2101💤 能量已耗尽，无法完成游戏YJ")
+                Log.runtime(TAG, "信用2101💤 能量已耗尽，无法完成游戏YJ")
                 return
             }
 
             if (!ResChecker.checkRes(TAG, sJo)) {
-                Log.record(TAG, "信用2101🎮[小游戏开始失败] type=COLLECTYJ resp=$startResp")
+                Log.runtime(TAG, "信用2101🎮[小游戏开始失败] type=COLLECTYJ resp=$startResp")
                 return
             }
 
@@ -1308,11 +1308,11 @@ object Credit2101 {
             )
             val cJo = JSONObject(completeResp)
             if (cJo.optString("resultCode") == "ENERGY_STAMINA_IS_ZERO") {
-                Log.record(TAG, "信用2101💤 能量已耗尽，无法完成游戏YJ")
+                Log.runtime(TAG, "信用2101💤 能量已耗尽，无法完成游戏YJ")
                 return
             }
             if (!ResChecker.checkRes(TAG, cJo)) {
-                Log.record(TAG, "信用2101🎮[小游戏完成接口返回为空] batchNo=$batchNo eventId=$eventId stageId=$stageId extParams=$extParams")
+                Log.runtime(TAG, "信用2101🎮[小游戏完成接口返回为空] batchNo=$batchNo eventId=$eventId stageId=$stageId extParams=$extParams")
                 return
             }
 
@@ -1379,7 +1379,7 @@ object Credit2101 {
             val sJo = JSONObject(startResp)
 
             if (sJo.optString("resultCode") == "ENERGY_STAMINA_IS_ZERO") {
-                Log.record(TAG, "信用2101💤 能量已耗尽，无法完成游戏M3")
+                Log.runtime(TAG, "信用2101💤 能量已耗尽，无法完成游戏M3")
                 return
             }
 
@@ -1424,7 +1424,7 @@ object Credit2101 {
             )
             val cJo = JSONObject(completeResp)
             if (cJo.optString("resultCode") == "ENERGY_STAMINA_IS_ZERO") {
-                Log.record(TAG, "信用2101💤 能量已耗尽，无法完成游戏M3")
+                Log.runtime(TAG, "信用2101💤 能量已耗尽，无法完成游戏M3")
                 return
             }
 
@@ -1475,7 +1475,7 @@ object Credit2101 {
 
             // ① 能量不足
             if (jo.optString("resultCode") == "ENERGY_STAMINA_IS_ZERO") {
-                Log.record(TAG, "信用2101💤 能量已耗尽，停止领取")
+                Log.runtime(TAG, "信用2101💤 能量已耗尽，停止领取")
                 return
             }
             if (!ResChecker.checkRes(TAG, jo)) {
@@ -1536,7 +1536,7 @@ object Credit2101 {
             val queryResp = Credit2101RpcCall.queryEventGate(batchNo, eventId, cityCode, latitude, longitude)
 
             if (!ResChecker.checkRes(TAG, queryResp)) {
-                Log.record(TAG, "信用2101📖[故事事件查询失败] resp=$queryResp")
+                Log.runtime(TAG, "信用2101📖[故事事件查询失败] resp=$queryResp")
                 return
             }
             JSONObject(queryResp)
@@ -1545,7 +1545,7 @@ object Credit2101 {
             //1001043 是沈万三
             //4001018 是郑和
 
-            Log.record(TAG, "信用2101📖[故事事件] 开始批量提交")
+            Log.runtime(TAG, "信用2101📖[故事事件] 开始批量提交")
 
             // 批量完成故事事件
             val results = mutableListOf<String>()
@@ -1556,7 +1556,7 @@ object Credit2101 {
                 // 检查是否已经处理过这个storyId
                 val isProcessed = DataStore.get(dataKey, Boolean::class.java) ?: false
                 if (isProcessed) {
-                    Log.record(TAG, "信用2101📖[故事事件${storyId}] 已处理过，跳过")
+                    Log.runtime(TAG, "信用2101📖[故事事件${storyId}] 已处理过，跳过")
                     continue
                 }
                 try {
@@ -1570,26 +1570,26 @@ object Credit2101 {
                         if (resultJson.optString("resultMsg", "").contains("资产流水重复处理")) {
                             // 标记为已处理（遇到重复错误说明已经处理过了）
                             DataStore.put(dataKey, true)
-                            Log.record(TAG, "信用2101📖[故事事件${storyId}] 检测到重复处理，标记为已处理")
+                            Log.runtime(TAG, "信用2101📖[故事事件${storyId}] 检测到重复处理，标记为已处理")
                             break
                         } else if (ResChecker.checkRes(TAG, result)) {
                             // 处理成功，标记为已处理
                             DataStore.put(dataKey, true)
-                            Log.record(TAG, "信用2101📖[故事事件${storyId}] 处理成功，标记为已处理")
+                            Log.runtime(TAG, "信用2101📖[故事事件${storyId}] 处理成功，标记为已处理")
                         } else {
-                            Log.record(TAG, "信用2101📖[故事事件${storyId}] 处理失败: $resultCode")
+                            Log.runtime(TAG, "信用2101📖[故事事件${storyId}] 处理失败: $resultCode")
                         }
                     } catch (_: Exception) {
                         // JSON解析失败，但也要标记避免重复尝试
                         DataStore.put(dataKey, true)
-                        Log.record(TAG, "信用2101📖[故事事件${storyId}] JSON解析失败，标记为已处理避免重试")
+                        Log.runtime(TAG, "信用2101📖[故事事件${storyId}] JSON解析失败，标记为已处理避免重试")
                     }
 
                 } catch (e: Exception) {
                     // 单个storyId处理失败，也要标记避免重复尝试
                     DataStore.put(dataKey, true)
                     results.add("""{"success":false,"resultMsg":"处理异常: ${e.message}"}""")
-                    Log.record(TAG, "信用2101📖[故事事件${storyId}] 处理异常，标记为已处理: ${e.message}")
+                    Log.runtime(TAG, "信用2101📖[故事事件${storyId}] 处理异常，标记为已处理: ${e.message}")
                 }
                 // 添加适当延迟避免请求过于频繁
                 try {
@@ -1613,7 +1613,7 @@ object Credit2101 {
                     val respJson = JSONObject(completeResp)
                     if (!ResChecker.checkRes(TAG, completeResp)) {
                         otherErrorCount++
-                        Log.record(TAG, "信用2101📖[故事事件${index + 1}完成失败] storyId=$currentStoryId resp=$completeResp")
+                        Log.runtime(TAG, "信用2101📖[故事事件${index + 1}完成失败] storyId=$currentStoryId resp=$completeResp")
                         continue
                     }
                     val gainBuff = respJson.optJSONObject("gainBuffVO")
@@ -1637,12 +1637,12 @@ object Credit2101 {
 
                 } catch (e: Exception) {
                     otherErrorCount++
-                    Log.record(TAG, "信用2101📖[故事事件${index + 1}处理异常] storyId=$currentStoryId error=${e.message}")
+                    Log.runtime(TAG, "信用2101📖[故事事件${index + 1}处理异常] storyId=$currentStoryId error=${e.message}")
                 }
             }
             // 汇总统计
             val processedCount = successCount + repeatErrorCount + otherErrorCount
-            Log.record(TAG, "信用2101📖[故事事件批量完成统计] 成功:$successCount 重复错误:$repeatErrorCount 其他错误:$otherErrorCount 已处理:$processedCount/${STORY_IDS.size}")
+            Log.runtime(TAG, "信用2101📖[故事事件批量完成统计] 成功:$successCount 重复错误:$repeatErrorCount 其他错误:$otherErrorCount 已处理:$processedCount/${STORY_IDS.size}")
 
             if (successCount > 0) {
                 Log.other("信用2101📖[故事事件总增益:+$totalGainAmount")
@@ -1699,18 +1699,18 @@ object Credit2101 {
             if (!hasSelf) {
                 // 2.1 检查前置条件
                 if (userCount >= maxUsers) {
-                    Log.record(TAG, "信用2101⚫[黑色印记] 占位已满($userCount/$maxUsers)")
+                    Log.runtime(TAG, "信用2101⚫[黑色印记] 占位已满($userCount/$maxUsers)")
                     return EventResult.Skipped
                 }
                 if (currentEnergy < joinCost) {
-                    Log.record(TAG, "信用2101⚫[黑色印记] 加入需要能量$joinCost, 当前不足")
+                    Log.runtime(TAG, "信用2101⚫[黑色印记] 加入需要能量$joinCost, 当前不足")
                     return EventResult.Skipped
                 }
 
                 // 2.2 执行加入
                 val joinResp = Credit2101RpcCall.joinBlackMarkEvent(joinCost, eventId)
                 if (!ResChecker.checkRes(TAG, joinResp)) {
-                    Log.record(TAG, "信用2101⚫[加入失败] 可能已被填满或过期")
+                    Log.runtime(TAG, "信用2101⚫[加入失败] 可能已被填满或过期")
                     return EventResult.Skipped
                 }
 
@@ -1743,7 +1743,7 @@ object Credit2101 {
             val remainNeed = total - curr
 
             if (remainNeed <= 0) {
-                Log.record(TAG, "信用2101⚫[黑色印记] 能量已满 $curr/$total")
+                Log.runtime(TAG, "信用2101⚫[黑色印记] 能量已满 $curr/$total")
                 return if (usedEnergy > 0) EventResult.Success(usedEnergy) else EventResult.Skipped
             }
 
@@ -1759,7 +1759,7 @@ object Credit2101 {
                     return if (usedEnergy > 0) EventResult.Success(usedEnergy) else EventResult.Failed
                 }
             } else {
-                Log.record(TAG, "信用2101⚫[黑色印记] 剩余需求 $remainNeed, 能量不足")
+                Log.runtime(TAG, "信用2101⚫[黑色印记] 剩余需求 $remainNeed, 能量不足")
                 // 同上，如果只加入了但不够充能，也算成功消耗了能量
                 return if (usedEnergy > 0) EventResult.Success(usedEnergy) else EventResult.Skipped
             }
@@ -1787,7 +1787,7 @@ object Credit2101 {
         val count = list?.length() ?: 0
 
         if (count <= 0) {
-            Log.record(TAG, "信用2101🔍[探测] 本次未发现新事件")
+            Log.runtime(TAG, "信用2101🔍[探测] 本次未发现新事件")
             return false
         }
 
@@ -1882,7 +1882,7 @@ object Credit2101 {
 
             // 最终检查：只有所有章节都处于 CLAIMED 状态
             if (allFinished) {
-                Log.record(TAG, "信用2101🎨[图鉴] 检查完毕：所有图鉴奖励均已领取完毕")
+                Log.runtime(TAG, "信用2101🎨[图鉴] 检查完毕：所有图鉴奖励均已领取完毕")
                 autoAddToBlacklist(StatusFlags.FLAG_CREDIT2101_CHAPTER_TASK_DONE, "信用2101🎨[图鉴]合成完毕", "1337")
             }
 
@@ -1907,7 +1907,7 @@ object Credit2101 {
 
             var availablePoint = jo.optInt("availablePoint", 0)
             if (availablePoint <= 0) {
-                Log.record(TAG, "信用2101🎮[天赋] 检查完毕：无可用天赋点")
+                Log.runtime(TAG, "信用2101🎮[天赋] 检查完毕：无可用天赋点")
                 return
             }
 
@@ -1923,7 +1923,7 @@ object Credit2101 {
             }
 
             if (upgradeableList.isEmpty()) {
-                Log.record(TAG, "信用2101🎮[天赋] 所有天赋已满级")
+                Log.runtime(TAG, "信用2101🎮[天赋] 所有天赋已满级")
                 return
             }
 

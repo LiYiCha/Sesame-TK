@@ -25,7 +25,7 @@ class SesameTree {
             doHomeTasks()
 
             // 3. 处理原有任务逻辑
-            handleTask()
+            queryTaskList()
 
             // 2. 执行常规列表任务 (赚净化值列表)
             doRentGreenTasks()
@@ -35,6 +35,12 @@ class SesameTree {
                 queryTreeInfo()
             }
 
+        } catch (e: RuntimeException) {
+            if (e.message == "NETWORK_ERROR_48") {
+                Log.error(TAG, "网络不可用(error 48)，停止后续任务执行！")
+            } else {
+                Log.error(TAG, "handle任务异常:${e}")
+            }
         } catch (e: Exception) {
             Log.error(TAG, "handle任务异常:${e}")
         }
@@ -57,7 +63,7 @@ class SesameTree {
                 val normalZhiMaUser = levelResult.optBoolean("normalZhiMaUser")
                 val normalZmScore = levelResult.optInt("normalZmScore")
                 val scoreLevel = levelResult.optString("scoreLevel")
-                Log.record(TAG, "是否正常芝麻分数:${normalZmScore}，芝麻等级:${scoreLevel}，是否正常用户:${normalZhiMaUser}")
+                Log.runtime(TAG, "是否正常芝麻分数:${normalZmScore}，芝麻等级:${scoreLevel}，是否正常用户:${normalZhiMaUser}")
             } else {
                 Log.error(TAG, "查询首页失败:${home}")
             }
@@ -68,10 +74,6 @@ class SesameTree {
         }
     }
 
-    // 处理任务
-    private fun handleTask() {
-        queryTaskList()
-    }
 
     // 查询任务列表
     private fun queryTaskList() {
@@ -130,7 +132,14 @@ class SesameTree {
 
                 // 获取基础参数
                 val needSignUp = task.optBoolean("needSignUp")
-                val taskId = task.optString("taskId")
+                val taskBaseInfo = task.optJSONObject("taskBaseInfo")
+                var taskId = taskBaseInfo?.optString("appletId") ?: ""
+                if (taskId.isEmpty()) {
+                    taskId = task.optString("taskId") ?: ""
+                }
+                if (taskId.isEmpty()) {
+                    continue
+                }
                 val taskProcessStatus = task.optString("taskProcessStatus")
 
                 // 额外参数
@@ -180,26 +189,46 @@ class SesameTree {
     }
 
 
+    // 判断是否是网络错误 (error 48)
+    private fun isNetworkError(res: JSONObject?): Boolean {
+        if (res == null) return false
+        val error = res.optInt("error", 0)
+        val errorNo = res.optInt("errorNo", 0)
+        val errorMsg = res.optString("errorMessage", "")
+        return error == 48 || errorNo == 3 || errorMsg.contains("网络不可用") || errorMsg.contains("网络")
+    }
+
     // 执行任务
     private fun executeTask(taskId: String, title: String) {
-        // 延迟15-16s
-        TimeUtil.sleep(RandomUtil.nextLong(15000, 16000))
+        try {
+            // 延迟15-16s
+            TimeUtil.sleep(RandomUtil.nextLong(15000, 16000))
 
-        // 完成任务 - 发送
-        val sendSuccess = completeTask(taskId, "send")
-        TimeUtil.sleep(RandomUtil.nextLong(1500, 1600))
+            // 完成任务 - 发送
+            val sendSuccess = completeTask(taskId, "send")
+            TimeUtil.sleep(RandomUtil.nextLong(1500, 1600))
 
-        if (sendSuccess) {
-            // 完成任务 - 领取
-            val receiveSuccess = completeTask(taskId, "receive")
-            if (receiveSuccess) {
-                Log.other(TAG, "完成[${title}]")
+            if (sendSuccess) {
+                // 完成任务 - 领取
+                val receiveSuccess = completeTask(taskId, "receive")
+                if (receiveSuccess) {
+                    Log.other(TAG, "完成[${title}]")
+                }
+            } else {
+                // 任务失败，加入黑名单
+                blackList.add(title)
+                DataStore.put("sesameTree_blackList", blackList)
+                Log.other(TAG, "任务[${title}]失败，已加入黑名单")
             }
-        } else {
-            // 任务失败，加入黑名单
-            blackList.add(title)
-            DataStore.put("sesameTree_blackList", blackList)
-            Log.other(TAG, "任务[${title}]失败，已加入黑名单")
+        } catch (e: RuntimeException) {
+            if (e.message == "NETWORK_ERROR_48") {
+                Log.other(TAG, "任务[${title}]执行因网络异常中断，不加入黑名单")
+                throw e // 继续抛出以终止整个 handle() 流程
+            } else {
+                Log.error(TAG, "处理单个任务异常:${e}")
+            }
+        } catch (e: Exception) {
+            Log.error(TAG, "处理单个任务异常:${e}")
         }
     }
 
@@ -210,9 +239,14 @@ class SesameTree {
             if (complete.optBoolean("success")) {
                 true
             } else {
+                if (isNetworkError(complete)) {
+                    throw RuntimeException("NETWORK_ERROR_48")
+                }
                 Log.error(TAG, "[completeTask]任务失败:${complete}")
                 false
             }
+        } catch (e: RuntimeException) {
+            throw e
         } catch (e: Exception) {
             Log.error(TAG, "[completeTask]任务异常:${e}")
             false
@@ -314,19 +348,22 @@ class SesameTree {
             when (status) {
                 "NOT_DONE", "SIGNUP_COMPLETE" -> {
                     // SIGNUP_COMPLETE 通常表示已报名但未做，或者对于复访任务表示可以去完成
-                    Log.record("芝麻树🌳[开始任务] $title${if (prizeName.isNotEmpty()) " ($prizeName)" else ""}")
+                    Log.runtime("芝麻树🌳[开始任务] $title${if (prizeName.isNotEmpty()) " ($prizeName)" else ""}")
                     if (performTask(taskId, title, prizeName)) {
                         // 任务完成
                     }
                 }
                 "TO_RECEIVE" -> {
                     // 待领取状态
-                    if (doTaskAction(taskId, "receive")) {
+                    if (doTaskAction(taskId, "receive", title)) {
                         val logMsg = "芝麻树🌳[领取奖励] $title #${if (prizeName.isNotEmpty()) prizeName else "奖励已领取"}"
                         Log.forest(logMsg) // 输出到 forest
                     }
                 }
             }
+        } catch (e: RuntimeException) {
+            if (e.message == "NETWORK_ERROR_48") throw e
+            Log.error(TAG, "处理单个任务异常: ${e.message}")
         } catch (e: Exception) {
             Log.error(TAG, "处理单个任务异常: ${e.message}")
         }
@@ -365,11 +402,19 @@ class SesameTree {
      */
     private fun performTask(taskId: String, title: String, prizeName: String): Boolean {
         try {
-            // 发送"去完成"指令
-            if (doTaskAction(taskId, "send")) {
-                var waitTime = 16000 // 默认等待16秒，覆盖大多数浏览任务
-                if (title.contains("复访")) waitTime = 3000 // 复访任务通常不需要太久
+            if (title.contains("复访")) {
+                // 复访任务直接领取即可，无需发送 "send"
+                if (doTaskAction(taskId, "receive", title)) {
+                    val logMsg = "芝麻树🌳[完成任务] $title #${if (prizeName.isNotEmpty()) prizeName else "奖励已领取"}"
+                    Log.forest(logMsg)
+                    return true
+                }
+                return false
+            }
 
+            // 发送"去完成"指令
+            if (doTaskAction(taskId, "send", title)) {
+                var waitTime = 16000 // 默认等待16秒，覆盖大多数浏览任务
                 try {
                     Thread.sleep(waitTime.toLong())
                 } catch (e: InterruptedException) {
@@ -377,12 +422,15 @@ class SesameTree {
                 }
 
                 // 发送"领取"指令
-                if (doTaskAction(taskId, "receive")) {
+                if (doTaskAction(taskId, "receive", title)) {
                     val logMsg = "芝麻树🌳[完成任务] $title #${if (prizeName.isNotEmpty()) prizeName else "奖励已领取"}"
                     Log.forest(logMsg) // 这里输出到 forest
                     return true
                 }
             }
+        } catch (e: RuntimeException) {
+            if (e.message == "NETWORK_ERROR_48") throw e
+            Log.error(TAG, "执行任务异常: ${e.message}")
         } catch (e: Exception) {
             Log.error(TAG, "执行任务异常: ${e.message}")
         }
@@ -392,16 +440,23 @@ class SesameTree {
     /**
      * 执行任务动作
      */
-    private fun doTaskAction(taskId: String, action: String): Boolean {
+    private fun doTaskAction(taskId: String, action: String, title: String = ""): Boolean {
         try {
             val result = CommonRequest().sesameTaskHandle(taskId, action)
             if (result.optBoolean("success")) {
                 return true
-            }else {
-                Log.error(TAG, "❌ 任务动作失败: ${result}")
+            } else {
+                if (isNetworkError(result)) {
+                    throw RuntimeException("NETWORK_ERROR_48")
+                }
+                val titleStr = if (title.isNotEmpty()) "[$title]" else ""
+                Log.error(TAG, "❌ 任务${titleStr}动作[$action]失败: ${result}")
             }
+        } catch (e: RuntimeException) {
+            throw e
         } catch (e: Exception) {
-            Log.error(TAG, "任务动作异常: ${e.message}")
+            val titleStr = if (title.isNotEmpty()) "[$title]" else ""
+            Log.error(TAG, "任务${titleStr}动作[$action]异常: ${e.message}")
         }
         return false
     }
@@ -424,7 +479,7 @@ class SesameTree {
                 // 检查净化值是否足够
                 val purificationScore = zhimaTreeHomePageQueryResult.optInt("purificationScore", 0)
                 if (purificationScore < 100) {
-                    Log.record(TAG, "❌ 净化值不足，当前: ${purificationScore}，需要: 100")
+                    Log.runtime(TAG, "❌ 净化值不足，当前: ${purificationScore}，需要: 100")
                     break
                 }
 
@@ -511,24 +566,24 @@ class SesameTree {
                         val remainPurificationClickNum = tree.optInt("remainPurificationClickNum", 0)
 
                         // 友好打印信息
-                        Log.record(TAG, "🌳 芝麻树信息")
-                        Log.record(TAG, "💧 净化值: $purificationScore")
-                        Log.record(TAG, "📈 当前等级进度: $currentLevelProcessState%")
-                        Log.record(TAG, "🌳 当前树等级: $treeLevel/$topLevel")
-                        Log.record(TAG, "⚡ 剩余净化次数: $remainPurificationClickNum")
-                        Log.record(TAG, "🍃 总能量: $accountEnergy")
+                        Log.runtime(TAG, "🌳 芝麻树信息")
+                        Log.runtime(TAG, "💧 净化值: $purificationScore")
+                        Log.runtime(TAG, "📈 当前等级进度: $currentLevelProcessState%")
+                        Log.runtime(TAG, "🌳 当前树等级: $treeLevel/$topLevel")
+                        Log.runtime(TAG, "⚡ 剩余净化次数: $remainPurificationClickNum")
+                        Log.runtime(TAG, "🍃 总能量: $accountEnergy")
 
                         // 显示可清理的垃圾项
                         val trashList = tree.optJSONArray("trashList")
                         if (trashList != null && trashList.length() > 0) {
-                            Log.record(TAG, "🗑️ 可清理垃圾数 ${trashList.length()}:")
+                            Log.runtime(TAG, "🗑️ 可清理垃圾数 ${trashList.length()}:")
                         }
 
                         // 检查是否可以升级
                         if (purificationScore >= 100) {
-                            Log.record(TAG, "✨ 净化值充足，可以升级树")
+                            Log.runtime(TAG, "✨ 净化值充足，可以升级树")
                         } else {
-                            Log.record(TAG, "⚠️ 净化值不足，无法升级树")
+                            Log.runtime(TAG, "⚠️ 净化值不足，无法升级树")
                         }
                     }
                 }

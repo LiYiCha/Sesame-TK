@@ -386,7 +386,7 @@ public class WebSettingsActivity extends BaseActivity {
 
         @JavascriptInterface
         public void Log(String log) {
-            Log.record(TAG, "设置：" + log);
+            Log.runtime(TAG, "设置：" + log);
         }
 
         @JavascriptInterface

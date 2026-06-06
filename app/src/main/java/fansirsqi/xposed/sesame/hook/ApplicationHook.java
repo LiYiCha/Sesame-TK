@@ -147,7 +147,7 @@ public class ApplicationHook implements IXposedHookLoadPackage {
     @Override
     public void handleLoadPackage(XC_LoadPackage.LoadPackageParam lpparam) {
         registerModules();
-        if (General.PACKAGE_NAME.equals(lpparam.packageName) && General.PACKAGE_NAME.equals(lpparam.processName)) {
+        if (General.PACKAGE_NAME.equals(lpparam.packageName) && lpparam.processName.startsWith(General.PACKAGE_NAME)) {
             if (hooked) return;
             AppContext.setClassLoader(lpparam.classLoader);
             
@@ -194,6 +194,24 @@ public class ApplicationHook implements IXposedHookLoadPackage {
                             }
 
                             HookModuleManager.INSTANCE.dispatchPostAppAttach(context, lpparam.classLoader);
+
+                            // 子进程处理：强制开启网络及RPC调试抓包
+                            if (!General.PACKAGE_NAME.equals(lpparam.processName)) {
+                                Log.runtime(TAG, "Subprocess detected: " + lpparam.processName + ", forcing captures...");
+                                try {
+                                    LifecycleManager.setupRpcDebugHooks();
+                                    Log.runtime(TAG, "Subprocess setupRpcDebugHooks success");
+                                } catch (Throwable t) {
+                                    Log.runtime(TAG, "Subprocess setupRpcDebugHooks err: " + t.getMessage());
+                                }
+                                try {
+                                    fansirsqi.xposed.sesame.hook.network.HttpCaptureHook.setup(lpparam.classLoader, true);
+                                    fansirsqi.xposed.sesame.hook.network.NetworkHook.setupHooks(lpparam.classLoader);
+                                    Log.runtime(TAG, "Subprocess HttpCaptureHook setup success");
+                                } catch (Throwable t) {
+                                    Log.runtime(TAG, "Subprocess HttpCaptureHook setup err: " + t.getMessage());
+                                }
+                            }
                         }
                     });
         } catch (Throwable t) {

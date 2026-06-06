@@ -54,7 +54,7 @@ object EnergyRainCoroutine {
             lastExecuteTime = System.currentTimeMillis()
         } catch (e: kotlinx.coroutines.CancellationException) {
             // 协程取消是正常现象，不记录为错误
-            Log.record(TAG, "execEnergyRain 协程被取消")
+            Log.runtime(TAG, "execEnergyRain 协程被取消")
             throw e  // 必须重新抛出以保证取消机制正常工作
         } catch (th: Throwable) {
             Log.printStackTrace(TAG, "执行能量雨出错:", th)
@@ -73,7 +73,7 @@ object EnergyRainCoroutine {
                 val joEnergyRainHome = JSONObject(AntForestRpcCall.queryEnergyRainHome())
                 randomDelay(250, 400) // 随机延迟 300-400ms
                 if (!ResChecker.checkRes(TAG, joEnergyRainHome)) {
-                    Log.record(TAG, "查询能量雨状态失败")
+                    Log.runtime(TAG, "查询能量雨状态失败")
                     break
                 }
 
@@ -100,7 +100,7 @@ object EnergyRainCoroutine {
 
                 // 2️⃣ 检查是否可以赠送能量雨
                 if (canGrantStatus) {
-                    Log.record(TAG, "有送能量雨的机会")
+                    Log.runtime(TAG, "有送能量雨的机会")
                     val joEnergyRainCanGrantList = JSONObject(AntForestRpcCall.queryEnergyRainCanGrantList())
                     val grantInfos = joEnergyRainCanGrantList.optJSONArray("grantInfos") ?: org.json.JSONArray()
                     val giveEnergyRainSet = AntForest.giveEnergyRainList!!.value
@@ -112,7 +112,7 @@ object EnergyRainCoroutine {
                             val uid = grantInfo.getString("userId")
                             if (giveEnergyRainSet.contains(uid)) {
                                 val rainJsonObj = JSONObject(AntForestRpcCall.grantEnergyRainChance(uid))
-                                Log.record(TAG, "尝试送能量雨给【${UserMap.getMaskName(uid)}】")
+                                Log.runtime(TAG, "尝试送能量雨给【${UserMap.getMaskName(uid)}】")
                                 if (ResChecker.checkRes(TAG, rainJsonObj)) {
                                     Log.forest("赠送能量雨机会给🌧️[${UserMap.getMaskName(uid)}]#${UserMap.getMaskName(UserMap.currentUid)}")
                                     randomDelay(300, 400) // 随机延迟 300-400ms
@@ -127,21 +127,21 @@ object EnergyRainCoroutine {
                     if (granted) {
                         continue
                     } else {
-                        Log.record(TAG, "今日无可送能量雨好友或已达到赠送上限")
+                        Log.runtime(TAG, "今日无可送能量雨好友或已达到赠送上限")
                     }
                 }
                 break
             } while (playedCount < maxPlayLimit)
 
             if (playedCount >= maxPlayLimit) {
-                Log.record(TAG, "能量雨执行达到单次任务上限($maxPlayLimit)，停止执行")
+                Log.runtime(TAG, "能量雨执行达到单次任务上限($maxPlayLimit)，停止执行")
             }
         } catch (e: kotlinx.coroutines.CancellationException) {
             // 协程取消是正常现象，不记录为错误
-            Log.record(TAG, "energyRain 协程被取消")
+            Log.runtime(TAG, "energyRain 协程被取消")
             throw e  // 必须重新抛出以保证取消机制正常工作
         } catch (th: Throwable) {
-            Log.record(TAG, "energyRain err:")
+            Log.runtime(TAG, "energyRain err:")
             Log.printStackTrace(TAG, th)
         }
     }
@@ -151,7 +151,7 @@ object EnergyRainCoroutine {
      */
     private suspend fun startEnergyRain() {
         try {
-            Log.record("开始执行能量雨🌧️")
+            Log.runtime("开始执行能量雨🌧️")
             val joStart = JSONObject(AntForestRpcCall.startEnergyRain())
 
             if (ResChecker.checkRes(TAG, joStart)) {
@@ -173,14 +173,14 @@ object EnergyRainCoroutine {
                 }
                 randomDelay(300, 400) // 随机延迟 300-400ms
             } else {
-                Log.record(TAG, "startEnergyRain: $joStart")
+                Log.runtime(TAG, "startEnergyRain: $joStart")
             }
         } catch (e: kotlinx.coroutines.CancellationException) {
             // 协程取消是正常现象，不记录为错误
-            Log.record(TAG, "startEnergyRain 协程被取消")
+            Log.runtime(TAG, "startEnergyRain 协程被取消")
             throw e  // 必须重新抛出以保证取消机制正常工作
         } catch (th: Throwable) {
-            Log.record(TAG, "startEnergyRain err:")
+            Log.runtime(TAG, "startEnergyRain err:")
             Log.printStackTrace(TAG, th)
         }
     }
@@ -202,10 +202,10 @@ object EnergyRainCoroutine {
 
             // 2. 先处理“有新任务可以接”的情况
             if (jo.optBoolean("needInitTask", false)) {
-                // Log.record(TAG, "检测到新任务，准备接入[森林救援队]...")
+                // Log.runtime(TAG, "检测到新任务，准备接入[森林救援队]...")
                 val initRes = JSONObject(AntForestRpcCall.initTask("GAME_DONE_SLJYD"))
                 if (ResChecker.checkRes(TAG, initRes)) {
-                    // Log.record(TAG, "[森林救援队] 任务接入成功")
+                    // Log.runtime(TAG, "[森林救援队] 任务接入成功")
                     // 接入后需要重新请求一次列表来获取最新的 taskStatus，或者直接去执行
                 }
             }
@@ -225,7 +225,7 @@ object EnergyRainCoroutine {
                     // 只有当任务是我们要的救援队，且状态是 to do 或还没开始触发时
                     if (taskType == "GAME_DONE_SLJYD") {
                         if (taskStatus == "TODO" || taskStatus == "NOT_TRIGGER") {
-                            // Log.record(TAG, "发现待完成任务[$taskType]，当前状态: $taskStatus，开始执行...")
+                            // Log.runtime(TAG, "发现待完成任务[$taskType]，当前状态: $taskStatus，开始执行...")
 
                             // 执行上报逻辑
                             GameTask.Forest_sljyd.report(1)
@@ -233,7 +233,7 @@ object EnergyRainCoroutine {
                             // 完成后可以根据需要决定是否 break，或者继续检查其他
                             break
                         } else if (taskStatus == "FINISHED" || taskStatus == "DONE") {
-                            // Log.record(TAG, "任务[$taskType]已完成，无需重复执行")
+                            // Log.runtime(TAG, "任务[$taskType]已完成，无需重复执行")
                         }
                     }
                 }

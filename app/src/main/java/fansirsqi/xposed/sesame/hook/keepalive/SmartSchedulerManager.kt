@@ -60,7 +60,7 @@ object SmartSchedulerManager {
             val appContext = context.applicationContext ?: context
             powerManager = appContext.getSystemService(Context.POWER_SERVICE) as PowerManager
             isInitialized = true
-            Log.record(TAG, "✅ 调度器已初始化 (Coroutines + WakeLock)")
+            Log.runtime(TAG, "✅ 调度器已初始化 (Coroutines + WakeLock)")
         } catch (e: Exception) {
             Log.error(TAG, "初始化失败: ${e.message}")
         }
@@ -92,15 +92,15 @@ object SmartSchedulerManager {
         // 启动协程
         val job = scope.launch {
             val wakeLock = acquireWakeLock(finalDelay + 5000)
-            Log.record(TAG, "⏳ 任务调度: [$taskName] | ID:$taskId | 延迟: ${TimeUtil.formatDuration(finalDelay)}")
-            Log.record( ">".repeat(40))
+            Log.runtime(TAG, "⏳ 任务调度: [$taskName] | ID:$taskId | 延迟: ${TimeUtil.formatDuration(finalDelay)}")
+            Log.runtime( ">".repeat(40))
 
             try {
                 // 核心：在 WakeLock 保护下进行挂起
                 delay(finalDelay)
 
                 if (isActive) {
-                    Log.record(TAG, "▶️ 开始执行: [$taskName] | ID:$taskId")
+                    Log.runtime(TAG, "▶️ 开始执行: [$taskName] | ID:$taskId")
                     // 切换到主线程执行 Hook 逻辑（通常 Hook 需要在主线程）
                     withContext(Dispatchers.Main) {
                         try {
@@ -111,7 +111,7 @@ object SmartSchedulerManager {
                     }
                 }
             } catch (e: CancellationException) {
-                Log.record(TAG, "🚫 任务已取消: [$taskName] | ID:$taskId")
+                Log.runtime(TAG, "🚫 任务已取消: [$taskName] | ID:$taskId")
             } finally {
                 // 释放锁和清理 Map
                 releaseWakeLock(wakeLock)
@@ -138,7 +138,7 @@ object SmartSchedulerManager {
      * 取消所有任务
      */
     fun cancelAll() {
-        Log.record(TAG, "正在取消所有任务...")
+        Log.runtime(TAG, "正在取消所有任务...")
         taskMap.values.forEach { it.cancel() }
         taskMap.clear()
         namedTasks.clear()

@@ -52,7 +52,7 @@ public class EnergyRain {
                     startEnergyRain();
                 }
                 if (joEnergyRainHome.getBoolean("canGrantStatus")) {
-                    Log.record(TAG,"有送能量雨的机会");
+                    Log.runtime(TAG,"有送能量雨的机会");
                     JSONObject joEnergyRainCanGrantList = new JSONObject(AntForestRpcCall.queryEnergyRainCanGrantList());
                     Thread.sleep(300);
                     JSONArray grantInfos = joEnergyRainCanGrantList.getJSONArray("grantInfos");
@@ -66,13 +66,13 @@ public class EnergyRain {
                             if (set.contains(uid)) {
                                 JSONObject rainJsonObj = new JSONObject(AntForestRpcCall.grantEnergyRainChance(uid));
                                 GlobalThreadPools.sleep(300);
-                                Log.record(TAG,"尝试送能量雨给【" + UserMap.getMaskName(uid) + "】");
+                                Log.runtime(TAG,"尝试送能量雨给【" + UserMap.getMaskName(uid) + "】");
                                 granted = true;
                                 if (ResChecker.checkRes(TAG + "赠送森林能量雨失败:", rainJsonObj)) {
                                     Log.forest("赠送能量雨机会给🌧️[" + UserMap.getMaskName(uid) + "]#" + UserMap.getMaskName(UserMap.getCurrentUid()));
                                     startEnergyRain();
                                 } else {
-                                    Log.record(TAG,"送能量雨失败");
+                                    Log.runtime(TAG,"送能量雨失败");
                                     Log.runtime(rainJsonObj.toString());
                                 }
                                 break;
@@ -80,7 +80,7 @@ public class EnergyRain {
                         }
                     }
                     if (!granted) {
-                        Log.record(TAG,"没有可以送的用户");
+                        Log.runtime(TAG,"没有可以送的用户");
                     }
                 }
             }

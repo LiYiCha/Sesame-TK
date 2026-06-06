@@ -62,7 +62,7 @@ public class CollectRedPacket {
                     // 重新请求
                     json = new JSONObject(RequestManager.requestString(method, params));
                     if (!json.optBoolean("success")) {
-                        Log.record(TAG + "验证后重试仍失败，退出执行");
+                        Log.runtime(TAG + "验证后重试仍失败，退出执行");
                         return false;
                     }
                 } else {
@@ -173,7 +173,7 @@ public class CollectRedPacket {
         // 如果错误次数达到2次，加入黑名单
         if (errorCount >= 2) {
             taskBlacklist.put(appletId, true);
-            Log.record(TAG + "任务[" + appletId + "]已加入黑名单");
+            Log.runtime(TAG + "任务[" + appletId + "]已加入黑名单");
         }
     }
 

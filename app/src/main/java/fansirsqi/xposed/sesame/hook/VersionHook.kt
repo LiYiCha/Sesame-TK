@@ -6,8 +6,8 @@ import de.robv.android.xposed.XC_MethodHook
 import de.robv.android.xposed.XposedHelpers
 import fansirsqi.xposed.sesame.data.General
 import fansirsqi.xposed.sesame.entity.AlipayVersion
+import fansirsqi.xposed.sesame.util.Log
 import fansirsqi.xposed.sesame.util.Log.printStackTrace
-import fansirsqi.xposed.sesame.util.Log.record
 import lombok.Getter
 import kotlin.concurrent.Volatile
 
@@ -39,7 +39,7 @@ object VersionHook {
     fun installHook(classLoader: ClassLoader?) {
         // 防止重复安装
         if (hookInstalled) {
-            record(TAG, "⚠️ Hook 已安装,跳过")
+            Log.runtime(TAG, "⚠️ Hook 已安装,跳过")
             return
         }
 
@@ -67,7 +67,7 @@ object VersionHook {
                                 // 只在第一次捕获时记录日志
                                 if (capturedVersion == null && versionName != null) {
                                     capturedVersion = AlipayVersion(versionName)
-                                    record(
+                                    Log.runtime(
                                         TAG, "✅ 捕获目标应用版本: " + versionName +
                                                 " (code: " + versionCode +
                                                 ", longCode: " + longVersionCode + ")"
@@ -83,9 +83,9 @@ object VersionHook {
             )
 
             hookInstalled = true
-            record(TAG, "✅ 版本号 Hook 安装成功")
+            Log.runtime(TAG, "✅ 版本号 Hook 安装成功")
         } catch (t: Throwable) {
-            record(TAG, "❌ 安装版本号 Hook 失败")
+            Log.runtime(TAG, "❌ 安装版本号 Hook 失败")
             printStackTrace(TAG, t)
         }
     }
@@ -114,6 +114,6 @@ object VersionHook {
     fun reset() {
         capturedVersion = null
         hookInstalled = false
-        record(TAG, "🔄 版本号 Hook 状态已重置")
+        Log.runtime(TAG, "🔄 版本号 Hook 状态已重置")
     }
 }

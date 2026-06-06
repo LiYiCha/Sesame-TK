@@ -59,7 +59,12 @@ object HttpCaptureHook {
 
     @JvmStatic
     fun setup(classLoader: ClassLoader) {
-        if (!BaseModel.enableHttpCapture.value) return
+        setup(classLoader, false)
+    }
+
+    @JvmStatic
+    fun setup(classLoader: ClassLoader, force: Boolean) {
+        if (!force && !BaseModel.enableHttpCapture.value) return
         if (isInstalled) return
         isInstalled = true
 
@@ -81,7 +86,7 @@ object HttpCaptureHook {
         )
         workerClasses.forEach { className ->
             try {
-                val clazz = XposedHelpers.findClass(className, classLoader)
+                val clazz = XposedHelpers.findClassIfExists(className, classLoader) ?: return@forEach
                 XposedHelpers.findAndHookMethod(
                     clazz,
                     "isCanUseExtTransport",
@@ -99,55 +104,59 @@ object HttpCaptureHook {
 
         // 2. 强制开启系统代理 (绕过 NO_PROXY 屏蔽)
         try {
-            val requestClass = XposedHelpers.findClass("com.alipay.mobile.common.transport.http.HttpUrlRequest", classLoader)
-            XposedHelpers.findAndHookMethod(
-                requestClass,
-                "isCapture",
-                object : XC_MethodHook() {
-                    override fun beforeHookedMethod(param: MethodHookParam) {
-                        param.result = true
+            val requestClass = XposedHelpers.findClassIfExists("com.alipay.mobile.common.transport.http.HttpUrlRequest", classLoader)
+            if (requestClass != null) {
+                XposedHelpers.findAndHookMethod(
+                    requestClass,
+                    "isCapture",
+                    object : XC_MethodHook() {
+                        override fun beforeHookedMethod(param: MethodHookParam) {
+                            param.result = true
+                        }
                     }
-                }
-            )
+                )
+            }
         } catch (e: Throwable) {
             Log.error(TAG, "Hook HttpUrlRequest.isCapture 失败: ${e.message}")
         }
 
         // 3. 强制开启 UC 内核的代理委托 (使其网络请求委托给 Java 层发送)
         try {
-            val ucSettingsClass = XposedHelpers.findClass("com.uc.webview.export.extension.UCSettings", classLoader)
-            try {
-                XposedHelpers.findAndHookMethod(
-                    ucSettingsClass,
-                    "setEnableUCProxy",
-                    Boolean::class.javaPrimitiveType,
-                    object : XC_MethodHook() {
-                        override fun beforeHookedMethod(param: MethodHookParam) {
-                            param.args[0] = true
+            val ucSettingsClass = XposedHelpers.findClassIfExists("com.uc.webview.export.extension.UCSettings", classLoader)
+            if (ucSettingsClass != null) {
+                try {
+                    XposedHelpers.findAndHookMethod(
+                        ucSettingsClass,
+                        "setEnableUCProxy",
+                        Boolean::class.javaPrimitiveType,
+                        object : XC_MethodHook() {
+                            override fun beforeHookedMethod(param: MethodHookParam) {
+                                param.args[0] = true
+                            }
                         }
-                    }
-                )
-                Log.runtime(TAG, "Hook UCSettings.setEnableUCProxy 成功")
-            } catch (e: Throwable) {
-                Log.error(TAG, "Hook UCSettings.setEnableUCProxy 失败: ${e.message}")
-            }
-            try {
-                XposedHelpers.findAndHookMethod(
-                    ucSettingsClass,
-                    "setForceUCProxy",
-                    Boolean::class.javaPrimitiveType,
-                    object : XC_MethodHook() {
-                        override fun beforeHookedMethod(param: MethodHookParam) {
-                            param.args[0] = true
+                    )
+                    Log.runtime(TAG, "Hook UCSettings.setEnableUCProxy 成功")
+                } catch (e: Throwable) {
+                    Log.error(TAG, "Hook UCSettings.setEnableUCProxy 失败: ${e.message}")
+                }
+                try {
+                    XposedHelpers.findAndHookMethod(
+                        ucSettingsClass,
+                        "setForceUCProxy",
+                        Boolean::class.javaPrimitiveType,
+                        object : XC_MethodHook() {
+                            override fun beforeHookedMethod(param: MethodHookParam) {
+                                param.args[0] = true
+                            }
                         }
-                    }
-                )
-                Log.runtime(TAG, "Hook UCSettings.setForceUCProxy 成功")
-            } catch (e: Throwable) {
-                Log.error(TAG, "Hook UCSettings.setForceUCProxy 失败: ${e.message}")
+                    )
+                    Log.runtime(TAG, "Hook UCSettings.setForceUCProxy 成功")
+                } catch (e: Throwable) {
+                    Log.error(TAG, "Hook UCSettings.setForceUCProxy 失败: ${e.message}")
+                }
             }
         } catch (e: Throwable) {
-            Log.error(TAG, "寻找 UCSettings 类失败: ${e.message}")
+            Log.error(TAG, "Hook UCSettings 异常: ${e.message}")
         }
     }
 
@@ -155,7 +164,7 @@ object HttpCaptureHook {
         val workerClasses = listOf(CLASS_HTTP_WORKER, CLASS_H5_HTTP_WORKER)
         workerClasses.forEach { className ->
             try {
-                val clazz = XposedHelpers.findClass(className, classLoader)
+                val clazz = XposedHelpers.findClassIfExists(className, classLoader) ?: return@forEach
                 XposedHelpers.findAndHookMethod(clazz, "call", object : XC_MethodHook() {
                     override fun beforeHookedMethod(param: MethodHookParam) {
                         try {
@@ -229,7 +238,7 @@ object HttpCaptureHook {
 
     private fun hookH5Plugin(classLoader: ClassLoader) {
         try {
-            val pluginClass = XposedHelpers.findClass(CLASS_H5_HTTP_PLUGIN, classLoader)
+            val pluginClass = XposedHelpers.findClassIfExists(CLASS_H5_HTTP_PLUGIN, classLoader) ?: return
             XposedHelpers.findAndHookMethod(pluginClass, "httpRequest", "com.alipay.mobile.h5container.api.H5Event", "com.alipay.mobile.h5container.api.H5BridgeContext", object : XC_MethodHook() {
                 override fun beforeHookedMethod(param: MethodHookParam) {
                     try {
@@ -261,19 +270,21 @@ object HttpCaptureHook {
             })
             listOf("com.android.okhttp.internal.huc.HttpURLConnectionImpl", "com.android.okhttp.internal.huc.HttpsURLConnectionImpl").forEach { className ->
                 try {
-                    val connClass = XposedHelpers.findClass(className, null)
+                    val connClass = XposedHelpers.findClassIfExists(className, null) ?: return@forEach
                     hookSpecificHttpImpl(connClass)
                     hookedClasses.add(className)
                 } catch (_: Throwable) {}
             }
             // Hook Alipay's custom AndroidH2UrlConnection
             try {
-                val h2Class = XposedHelpers.findClass(CLASS_H2_CONNECTION, classLoader)
-                hookSpecificHttpImpl(h2Class)
-                hookedClasses.add(CLASS_H2_CONNECTION)
-                Log.runtime(TAG, "Hook AndroidH2UrlConnection 成功")
+                val h2Class = XposedHelpers.findClassIfExists(CLASS_H2_CONNECTION, classLoader)
+                if (h2Class != null) {
+                    hookSpecificHttpImpl(h2Class)
+                    hookedClasses.add(CLASS_H2_CONNECTION)
+                    Log.runtime(TAG, "Hook AndroidH2UrlConnection 成功")
+                }
             } catch (e: Throwable) {
-                Log.error(TAG, "Hook AndroidH2UrlConnection 失败: ${e.message}")
+                Log.error(TAG, "Hook AndroidH2UrlConnection 异常: ${e.message}")
             }
         } catch (_: Throwable) {}
     }
@@ -334,8 +345,8 @@ object HttpCaptureHook {
         val okHttpPrefixes = listOf("okhttp3", "com.alipay.mobile.common.transport.okhttp")
         okHttpPrefixes.forEach { prefix ->
             try {
-                val realCallClass = XposedHelpers.findClass("$prefix.RealCall", classLoader)
-                val callbackClass = XposedHelpers.findClass("$prefix.Callback", classLoader)
+                val realCallClass = XposedHelpers.findClassIfExists("$prefix.RealCall", classLoader) ?: return@forEach
+                val callbackClass = XposedHelpers.findClassIfExists("$prefix.Callback", classLoader) ?: return@forEach
                 
                 // Hook execute (同步)
                 XposedHelpers.findAndHookMethod(realCallClass, "execute", object : XC_MethodHook() {
@@ -537,7 +548,7 @@ object HttpCaptureHook {
 
     private fun hookARiverTraffic(classLoader: ClassLoader) {
         try {
-            val serviceImpl = XposedHelpers.findClass(CLASS_TRANSPORT_SERVICE_IMPL, classLoader)
+            val serviceImpl = XposedHelpers.findClassIfExists(CLASS_TRANSPORT_SERVICE_IMPL, classLoader) ?: return
             XposedHelpers.findAndHookMethod(serviceImpl, "httpRequest", "com.alibaba.ariver.kernel.common.network.http.RVHttpRequest", object : XC_MethodHook() {
                 override fun beforeHookedMethod(param: MethodHookParam) {
                     val startTime = System.currentTimeMillis()
@@ -589,7 +600,61 @@ object HttpCaptureHook {
         } catch (_: Throwable) {}
     }
 
-    private fun dispatchRecord(record: CaptureRecord, skipSave: Boolean = false) {
+    private var saveReceiverRegistered = false
+
+    private fun isMainProcess(context: android.content.Context): Boolean {
+        return try {
+            val processName = getProcessName(context)
+            context.packageName == processName
+        } catch (_: Throwable) {
+            true
+        }
+    }
+
+    private fun getProcessName(context: android.content.Context): String {
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
+            return android.app.Application.getProcessName()
+        }
+        return try {
+            val clazz = Class.forName("android.app.ActivityThread")
+            val currentActivityThread = clazz.getDeclaredMethod("currentActivityThread").invoke(null)
+            val getProcessName = clazz.getDeclaredMethod("getProcessName")
+            getProcessName.invoke(currentActivityThread) as String
+        } catch (_: Throwable) {
+            context.packageName
+        }
+    }
+
+    private fun registerSaveReceiver(context: android.content.Context) {
+        if (saveReceiverRegistered) return
+        synchronized(this) {
+            if (saveReceiverRegistered) return
+            try {
+                val receiver = object : android.content.BroadcastReceiver() {
+                    override fun onReceive(ctx: android.content.Context, intent: android.content.Intent) {
+                        if (intent.action == "fansirsqi.xposed.sesame.SAVE_CAPTURE") {
+                            val json = intent.getStringExtra("record_json") ?: return
+                            val skipSave = intent.getBooleanExtra("skip_save", false)
+                            val rec = fansirsqi.xposed.sesame.util.JsonUtil.parseObject(json, CaptureRecord::class.java) ?: return
+                            dispatchRecordDirect(rec, skipSave)
+                        }
+                    }
+                }
+                val filter = android.content.IntentFilter("fansirsqi.xposed.sesame.SAVE_CAPTURE")
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+                    context.registerReceiver(receiver, filter, android.content.Context.RECEIVER_EXPORTED)
+                } else {
+                    context.registerReceiver(receiver, filter)
+                }
+                saveReceiverRegistered = true
+                Log.runtime(TAG, "Registered SAVE_CAPTURE receiver successfully")
+            } catch (e: Throwable) {
+                Log.error(TAG, "Register SAVE_CAPTURE receiver failed: ${e.message}")
+            }
+        }
+    }
+
+    private fun dispatchRecordDirect(record: CaptureRecord, skipSave: Boolean) {
         dispatchExecutor.execute {
             try {
                 val processed = if (skipSave) record else CaptureStorage.save(record)
@@ -605,9 +670,31 @@ object HttpCaptureHook {
         }
     }
 
+    private fun dispatchRecord(record: CaptureRecord, skipSave: Boolean = false) {
+        val context = fansirsqi.xposed.sesame.hook.context.AppContext.getAppContext()
+        if (context == null) {
+            dispatchRecordDirect(record, skipSave)
+            return
+        }
+
+        if (isMainProcess(context)) {
+            registerSaveReceiver(context)
+            dispatchRecordDirect(record, skipSave)
+        } else {
+            try {
+                val intent = android.content.Intent("fansirsqi.xposed.sesame.SAVE_CAPTURE")
+                intent.putExtra("record_json", fansirsqi.xposed.sesame.util.JsonUtil.formatJson(record, false))
+                intent.putExtra("skip_save", skipSave)
+                context.sendBroadcast(intent)
+            } catch (e: Throwable) {
+                dispatchRecordDirect(record, skipSave)
+            }
+        }
+    }
+
     private fun hookDtnTraffic(classLoader: ClassLoader) {
         try {
-            val dtnClientClass = XposedHelpers.findClass(CLASS_DTN_HTTP_CLIENT, classLoader)
+            val dtnClientClass = XposedHelpers.findClassIfExists(CLASS_DTN_HTTP_CLIENT, classLoader) ?: return
             XposedHelpers.findAndHookMethod(
                 dtnClientClass,
                 "executeHttpRequest",

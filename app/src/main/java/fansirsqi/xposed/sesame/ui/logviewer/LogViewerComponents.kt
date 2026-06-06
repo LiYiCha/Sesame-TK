@@ -18,8 +18,11 @@ import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.rounded.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -275,6 +278,43 @@ fun FilterPanel(
                 shape = RoundedCornerShape(4.dp)
             )
 
+            if (uiState.isCaptureLog) {
+                Spacer(modifier = Modifier.height(2.dp))
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 2.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.clickable { viewModel.toggleShowH5() }
+                    ) {
+                        Checkbox(
+                            checked = uiState.showH5,
+                            onCheckedChange = { viewModel.toggleShowH5() },
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("H5 容器", style = MaterialTheme.typography.labelSmall, fontSize = 11.sp)
+                    }
+
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.clickable { viewModel.toggleShowBottom() }
+                    ) {
+                        Checkbox(
+                            checked = uiState.showBottom,
+                            onCheckedChange = { viewModel.toggleShowBottom() },
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("底层 RPC", style = MaterialTheme.typography.labelSmall, fontSize = 11.sp)
+                    }
+                }
+            }
+
             Spacer(modifier = Modifier.height(2.dp))
 
             // 按钮
@@ -411,21 +451,40 @@ fun StatusBar(
             )
 
             Row(
-                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
-                    text = "自动滚动",
-                    style = MaterialTheme.typography.labelSmall,
-                    fontSize = 10.sp
-                )
-                Switch(
-                    checked = uiState.autoScroll,
-                    onCheckedChange = { viewModel.toggleAutoScroll() },
-                    modifier = Modifier
-                        .height(16.dp)
-                        .scale(0.7f)
-                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = "行复制",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontSize = 10.sp
+                    )
+                    Spacer(Modifier.width(2.dp))
+                    Switch(
+                        checked = uiState.showLineCopyButton,
+                        onCheckedChange = { viewModel.toggleShowLineCopyButton() },
+                        modifier = Modifier
+                            .height(16.dp)
+                            .scale(0.7f)
+                    )
+                }
+
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = "自动滚动",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontSize = 10.sp
+                    )
+                    Spacer(Modifier.width(2.dp))
+                    Switch(
+                        checked = uiState.autoScroll,
+                        onCheckedChange = { viewModel.toggleAutoScroll() },
+                        modifier = Modifier
+                            .height(16.dp)
+                            .scale(0.7f)
+                    )
+                }
             }
         }
     }
@@ -443,9 +502,50 @@ fun LogContent(
     val listState = rememberLazyListState()
     val coroutineScope = rememberCoroutineScope()
 
+    // 详情复制弹窗状态
+    var activeDetailText by remember { mutableStateOf<String?>(null) }
+
     // 双指缩放状态
     var zoomScale by remember { mutableFloatStateOf(1f) }
     val effectiveFontSize = (uiState.fontSize * zoomScale).roundToInt().coerceIn(6, 36)
+
+    // 拖动选择边界自动滚动支持
+    var dragY by remember { mutableStateOf<Float?>(null) }
+    var isPressed by remember { mutableStateOf(false) }
+    var componentHeight by remember { mutableStateOf(0) }
+    val edgeThreshold = with(LocalDensity.current) { 60.dp.toPx() }
+
+    LaunchedEffect(isPressed, dragY, componentHeight) {
+        if (isPressed && dragY != null && componentHeight > 0) {
+            val y = dragY!!
+            if (y < edgeThreshold) {
+                val ratio = (edgeThreshold - y).coerceAtLeast(0f) / edgeThreshold
+                val speed = 5f + ratio * 25f
+                while (true) {
+                    try {
+                        listState.scroll {
+                            scrollBy(-speed)
+                        }
+                    } catch (e: Exception) {
+                        // 忽略滚动打断异常
+                    }
+                    delay(16L)
+                }
+            } else if (y > componentHeight - edgeThreshold) {
+                val ratio = (y - (componentHeight - edgeThreshold)).coerceAtLeast(0f) / edgeThreshold
+                val speed = 5f + ratio * 25f
+                while (true) {
+                    try {
+                        listState.scroll {
+                            scrollBy(speed)
+                        }
+                    } catch (e: Exception) {
+                    }
+                    delay(16L)
+                }
+            }
+        }
+    }
 
     // 自动滚动到底部
     LaunchedEffect(uiState.displayedLines.size, uiState.autoScroll) {
@@ -487,7 +587,26 @@ fun LogContent(
         }
     }
 
-    Box(modifier = Modifier.fillMaxSize()) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .onSizeChanged { componentHeight = it.height }
+            .pointerInput(Unit) {
+                awaitPointerEventScope {
+                    while (true) {
+                        val event = awaitPointerEvent(PointerEventPass.Initial)
+                        val changes = event.changes
+                        val pressed = changes.any { it.pressed }
+                        isPressed = pressed
+                        if (pressed) {
+                            dragY = changes.firstOrNull()?.position?.y
+                        } else {
+                            dragY = null
+                        }
+                    }
+                }
+            }
+    ) {
         androidx.compose.foundation.text.selection.SelectionContainer {
             LazyColumn(
                 state = listState,
@@ -536,7 +655,9 @@ fun LogContent(
                         searchResults = uiState.searchResults,
                         currentSearchIndex = uiState.currentSearchIndex,
                         searchKeyword = uiState.searchKeyword,
-                        fontSize = effectiveFontSize
+                        fontSize = effectiveFontSize,
+                        showCopyButton = uiState.showLineCopyButton,
+                        onShowDetail = { activeDetailText = line }
                     )
                 }
             }
@@ -550,6 +671,61 @@ fun LogContent(
                 .fillMaxHeight()
                 .padding(vertical = 8.dp, horizontal = 2.dp)
         )
+
+        // 详情复制弹窗
+        if (activeDetailText != null) {
+            AlertDialog(
+                onDismissRequest = { activeDetailText = null },
+                title = { Text("日志详情", style = MaterialTheme.typography.titleMedium) },
+                text = {
+                    val scrollState = rememberScrollState()
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(max = 300.dp)
+                    ) {
+                        androidx.compose.foundation.text.selection.SelectionContainer {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .verticalScroll(scrollState)
+                            ) {
+                                Text(
+                                    text = activeDetailText!!,
+                                    style = MaterialTheme.typography.bodySmall.copy(
+                                        fontFamily = FontFamily.Monospace,
+                                        fontSize = 11.sp
+                                    )
+                                )
+                            }
+                        }
+                    }
+                },
+                confirmButton = {
+                    val context = androidx.compose.ui.platform.LocalContext.current
+                    TextButton(
+                        onClick = {
+                            try {
+                                val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                                val clip = android.content.ClipData.newPlainText("Log Detail", activeDetailText)
+                                clipboard.setPrimaryClip(clip)
+                                fansirsqi.xposed.sesame.util.ToastUtil.showToast("已复制到剪贴板")
+                            } catch (e: Exception) {
+                                fansirsqi.xposed.sesame.util.ToastUtil.showToast("复制失败")
+                            }
+                            activeDetailText = null
+                        }
+                    ) {
+                        Text("复制")
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { activeDetailText = null }) {
+                        Text("关闭")
+                    }
+                }
+            )
+        }
     }
 }
 
@@ -572,12 +748,20 @@ fun FastScrollbar(
 
     // 不需要滚动条的情况
     if (totalItems <= 0 || visibleItems.isEmpty()) return
-    val visibleRatio = visibleItems.size.toFloat() / totalItems
+    // 锁定可视项数量，防止在滚动过程中因为最边缘条目的隐现导致分母和滑块高度及最大偏移量抖动
+    val stableVisibleCount = remember(totalItems) {
+        visibleItems.size
+    }
+    val visibleRatio = stableVisibleCount.toFloat() / totalItems
     if (visibleRatio >= 0.99f) return
 
-    // 滚动进度
-    val maxScrollIndex = (totalItems - visibleItems.size).coerceAtLeast(1)
-    val scrollFraction = (listState.firstVisibleItemIndex.toFloat() / maxScrollIndex).coerceIn(0f, 1f)
+    // 滚动进度（分母由锁定后的 stableVisibleCount 决定，完全消除抖动）
+    val maxScrollIndex = (totalItems - stableVisibleCount).coerceAtLeast(1)
+    val scrollFraction = when {
+        !listState.canScrollBackward -> 0f
+        !listState.canScrollForward -> 1f
+        else -> (listState.firstVisibleItemIndex.toFloat() / maxScrollIndex).coerceIn(0f, 1f)
+    }
 
     // 自动隐藏逻辑
     val isScrolling = listState.isScrollInProgress
@@ -623,24 +807,29 @@ fun FastScrollbar(
         }
     }
 
+    val currentMaxThumbOffset by rememberUpdatedState(maxThumbOffset)
+    val currentTotalItems by rememberUpdatedState(totalItems)
+    val currentMaxScrollIndex by rememberUpdatedState(maxScrollIndex)
+    val currentThumbHeightPx by rememberUpdatedState(thumbHeightPx)
+
     Box(
         modifier = modifier
             .width(24.dp) // 增大触摸热区
             .onSizeChanged { trackHeightPx = it.height }
             .alpha(alpha)
-            .pointerInput(maxThumbOffset, totalItems, maxScrollIndex) {
+            .pointerInput(Unit) {
                 awaitEachGesture {
                     val down = awaitFirstDown(requireUnconsumed = false)
                     isDragging = true
                     showScrollbar = true
 
                     val initialY = down.position.y
-                    val halfThumb = thumbHeightPx / 2
-                    var currentY = (initialY - halfThumb).coerceIn(0f, maxThumbOffset)
+                    val halfThumb = currentThumbHeightPx / 2
+                    var currentY = (initialY - halfThumb).coerceIn(0f, currentMaxThumbOffset)
                     localDragOffset = currentY
 
-                    val initialFraction = if (maxThumbOffset > 0) currentY / maxThumbOffset else 0f
-                    val targetIndex = (initialFraction * maxScrollIndex).roundToInt().coerceIn(0, totalItems - 1)
+                    val initialFraction = if (currentMaxThumbOffset > 0) currentY / currentMaxThumbOffset else 0f
+                    val targetIndex = (initialFraction * currentMaxScrollIndex).roundToInt().coerceIn(0, currentTotalItems - 1)
                     coroutineScope.launch {
                         listState.scrollToItem(targetIndex)
                     }
@@ -653,11 +842,11 @@ fun FastScrollbar(
                             if (dragChange.positionChanged()) {
                                 dragChange.consume()
                                 val diffY = dragChange.position.y - dragEvent.position.y
-                                currentY = (currentY + diffY).coerceIn(0f, maxThumbOffset)
+                                currentY = (currentY + diffY).coerceIn(0f, currentMaxThumbOffset)
                                 localDragOffset = currentY
 
-                                val fraction = if (maxThumbOffset > 0) currentY / maxThumbOffset else 0f
-                                val index = (fraction * maxScrollIndex).roundToInt().coerceIn(0, totalItems - 1)
+                                val fraction = if (currentMaxThumbOffset > 0) currentY / currentMaxThumbOffset else 0f
+                                val index = (fraction * currentMaxScrollIndex).roundToInt().coerceIn(0, currentTotalItems - 1)
                                 coroutineScope.launch {
                                     listState.scrollToItem(index)
                                 }
@@ -713,7 +902,9 @@ fun LogLine(
     searchResults: List<LogViewerViewModel.SearchResult>,
     currentSearchIndex: Int,
     searchKeyword: String,
-    fontSize: Int = 11
+    fontSize: Int = 11,
+    showCopyButton: Boolean = false,
+    onShowDetail: () -> Unit
 ) {
     // 查找当前行的搜索结果
     val lineResults = searchResults.filter { it.lineIndex == lineIndex }
@@ -750,15 +941,35 @@ fun LogLine(
         buildAnnotatedString { append(line) }
     }
 
-    Text(
-        text = annotatedText,
-        style = MaterialTheme.typography.bodySmall.copy(
-            fontFamily = FontFamily.Monospace,
-            fontSize = fontSize.sp,
-            lineHeight = (fontSize + 5).sp
-        ),
+    Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 2.dp)
-    )
+            .padding(vertical = 1.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = annotatedText,
+            style = MaterialTheme.typography.bodySmall.copy(
+                fontFamily = FontFamily.Monospace,
+                fontSize = fontSize.sp,
+                lineHeight = (fontSize + 5).sp
+            ),
+            modifier = Modifier.weight(1f)
+        )
+        if (showCopyButton) {
+            Spacer(modifier = Modifier.width(4.dp))
+            IconButton(
+                onClick = onShowDetail,
+                modifier = Modifier
+                    .size(24.dp)
+                    .alpha(0.4f)
+            ) {
+                Icon(
+                    imageVector = Icons.Rounded.ContentCopy,
+                    contentDescription = "复制详情",
+                    modifier = Modifier.size(13.dp)
+                )
+            }
+        }
+    }
 }

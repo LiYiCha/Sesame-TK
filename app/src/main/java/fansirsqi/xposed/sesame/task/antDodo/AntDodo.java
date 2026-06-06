@@ -81,7 +81,7 @@ public class AntDodo extends ModelTask {
     @Override
     protected void runJava() {
         try {
-            Log.record(TAG,"执行开始-" + getName());
+            Log.runtime(TAG,"执行开始-" + getName());
             receiveTaskAward();
             propList();
             collect();
@@ -94,7 +94,7 @@ public class AntDodo extends ModelTask {
         } catch (Throwable t) {
             Log.printStackTrace(TAG,"start Dodo.run err:", t);
         }finally {
-            Log.record(TAG,"执行结束-" + getName());
+            Log.runtime(TAG,"执行结束-" + getName());
         }
     }
     /*
@@ -116,12 +116,12 @@ public class AntDodo extends ModelTask {
             if (ResChecker.checkRes(TAG,jo)) {
                 JSONObject data = jo.getJSONObject("data");
                 if (data.getBoolean("collect")) {
-                    Log.record(TAG,"神奇物种卡片今日收集完成！");
+                    Log.runtime(TAG,"神奇物种卡片今日收集完成！");
                 } else {
                     collectAnimalCard();
                 }
             } else {
-                Log.record(TAG, "collect错误"+jo.getString("resultDesc"));
+                Log.runtime(TAG, "collect错误"+jo.getString("resultDesc"));
             }
         } catch (Throwable t) {
             Log.printStackTrace(TAG, "AntDodo Collect err:",t);
@@ -170,7 +170,7 @@ public class AntDodo extends ModelTask {
                                 }
                             }
                         } else {
-                            Log.record(TAG,"collectAnimalCard错误"+ jo.getString("resultDesc"));
+                            Log.runtime(TAG,"collectAnimalCard错误"+ jo.getString("resultDesc"));
                         }
                     }
                 }
@@ -183,7 +183,7 @@ public class AntDodo extends ModelTask {
                     }
                 }
             } else {
-                Log.record(TAG, "collectAnimalCard错误2 "+ jo.getString("resultDesc"));
+                Log.runtime(TAG, "collectAnimalCard错误2 "+ jo.getString("resultDesc"));
             }
         } catch (Throwable t) {
             Log.printStackTrace(TAG,"AntDodo CollectAnimalCard err:",t);
@@ -208,7 +208,7 @@ public class AntDodo extends ModelTask {
                 JSONObject jsonResponse = new JSONObject(response); // 解析响应为 JSON 对象
                 // 检查响应结果码是否成功
                 if (!ResChecker.checkRes(TAG, jsonResponse)) {
-                    Log.record(TAG, "查询任务列表失败：" + jsonResponse.getString("resultDesc"));
+                    Log.runtime(TAG, "查询任务列表失败：" + jsonResponse.getString("resultDesc"));
                     break;
                 }
                 // 获取任务组信息列表
@@ -236,9 +236,9 @@ public class AntDodo extends ModelTask {
                                 doubleCheck = true;
                                 Log.forest("任务奖励🎖️[" + taskTitle + "]#" + awardCount + "个");
                             } else {
-                                Log.record(TAG,"领取失败，" + response); // 记录领取失败信息
+                                Log.runtime(TAG,"领取失败，" + response); // 记录领取失败信息
                             }
-                            Log.record(TAG,joAward.toString()); // 打印奖励响应
+                            Log.runtime(TAG,joAward.toString()); // 打印奖励响应
                         }
                         // 如果任务待完成，处理特定类型的任务
                         else if (TaskStatus.TODO.name().equals(taskStatus)) {
@@ -250,7 +250,7 @@ public class AntDodo extends ModelTask {
                                     Log.forest("物种任务🧾️[" + taskTitle + "]");
                                     doubleCheck = true;
                                 } else {
-                                    Log.record(TAG,"完成任务失败，" + taskTitle); // 记录完成任务失败信息
+                                    Log.runtime(TAG,"完成任务失败，" + taskTitle); // 记录完成任务失败信息
                                     badTaskSet.add(taskType);
                                     DataStore.INSTANCE.put("badDodoTaskList", badTaskSet);
                                 }
@@ -297,7 +297,7 @@ public class AntDodo extends ModelTask {
                         }
                     }
                 } catch (Exception e) {
-                    Log.record(TAG, "获取初始进度失败，将尝试默认抽卡");
+                    Log.runtime(TAG, "获取初始进度失败，将尝试默认抽卡");
                 }
 
                 // 标记位：如果一开始就满了，后面 COLLECT_ANIMAL 直接跳过
@@ -346,7 +346,7 @@ public class AntDodo extends ModelTask {
                             String pId = propIdList.getString(j);
                             String res = AntDodoRpcCall.consumePropForFriend(pId, propType);
                             if (ResChecker.checkRes(TAG, res)) {
-                                Log.record(TAG, "成功使用 [好友抽卡道具]");
+                                Log.runtime(TAG, "成功使用 [好友抽卡道具]");
                             }
                             GlobalThreadPools.sleepCompat(2000L);
                         }
@@ -358,7 +358,7 @@ public class AntDodo extends ModelTask {
 
                         for (int j = 0; j < propIdList.length(); j++) {
                             if (isBookFull) {
-                                Log.record(TAG, "图鉴已集满，自动关停后续抽卡动作");
+                                Log.runtime(TAG, "图鉴已集满，自动关停后续抽卡动作");
                                 break;
                             }
 
@@ -445,7 +445,7 @@ public class AntDodo extends ModelTask {
             if (ResChecker.checkRes(TAG,jo)) {
                 Log.forest("赠送卡片🦕[" + UserMap.getMaskName(targetUser) + "]#" + ecosystem + "-" + name);
             } else {
-                Log.record(TAG, "sendCard错误"+jo.getString("resultDesc"));
+                Log.runtime(TAG, "sendCard错误"+jo.getString("resultDesc"));
             }
         } catch (Throwable th) {
             Log.printStackTrace(TAG, "AntDodo SendCard err:",th);
@@ -467,7 +467,7 @@ public class AntDodo extends ModelTask {
                 if ("COLLECT_TO_FRIEND".equals(limit.getString("actionCode"))) {
                     // 检查是否有开始时间限制
                     if (limit.has("startTime") && limit.getLong("startTime") > System.currentTimeMillis()) {
-                        Log.record("神奇物种🦕帮好友抽卡未到开放时间: " + limit.getString("startTimeStr"));
+                        Log.runtime("神奇物种🦕帮好友抽卡未到开放时间: " + limit.getString("startTimeStr"));
                         return;
                     }
                     count = limit.getInt("leftLimit");
@@ -476,7 +476,7 @@ public class AntDodo extends ModelTask {
             }
 
             if (count <= 0) {
-                Log.record("神奇物种🦕帮好友抽卡次数已用完");
+                Log.runtime("神奇物种🦕帮好友抽卡次数已用完");
                 return;
             }
 
@@ -509,7 +509,7 @@ public class AntDodo extends ModelTask {
                     Log.forest("神奇物种🦕帮好友[" + userName + "]抽卡[" + ecosystem + "]#" + name);
                     count--;
                 } else {
-                    Log.record(TAG, "collecttarget错误"+jo.getString("resultDesc"));
+                    Log.runtime(TAG, "collecttarget错误"+jo.getString("resultDesc"));
                 }
             }
         } catch (Throwable t) {
@@ -525,7 +525,7 @@ public class AntDodo extends ModelTask {
         try {
             JSONArray allBooks = getAllBookList();
             if (allBooks == null || allBooks.length() == 0) {
-                Log.record(TAG, "万能卡：未获取到任何图鉴数据");
+                Log.runtime(TAG, "万能卡：未获取到任何图鉴数据");
                 return "";
             }
 
@@ -585,16 +585,16 @@ public class AntDodo extends ModelTask {
             // --- 逻辑分支匹配 ---
             if (strategy == UniversalCardUseType.EXCLUDE_CURRENT) {
                 targetBookId = bestOtherBookId;
-                Log.record(TAG, "万能卡策略 [排除当前]: 选中非DOING最高进度图鉴 " + targetBookId);
+                Log.runtime(TAG, "万能卡策略 [排除当前]: 选中非DOING最高进度图鉴 " + targetBookId);
             }
             else if (strategy == UniversalCardUseType.PRIORITY_MAX_PROGRESS) {
                 targetBookId = bestOverallBookId;
-                Log.record(TAG, "万能卡策略 [进度优先]: 选中全局最高进度图鉴 " + targetBookId);
+                Log.runtime(TAG, "万能卡策略 [进度优先]: 选中全局最高进度图鉴 " + targetBookId);
             }
             else {
                 // 模式：所有。优先进行中，进行中已满则选最高进度
                 targetBookId = !currentDoingBookId.isEmpty() ? currentDoingBookId : bestOverallBookId;
-                Log.record(TAG, "万能卡策略 [全部]: 优先进行中图鉴 " + targetBookId);
+                Log.runtime(TAG, "万能卡策略 [全部]: 优先进行中图鉴 " + targetBookId);
             }
 
             if (targetBookId.isEmpty()) return "";
@@ -620,7 +620,7 @@ public class AntDodo extends ModelTask {
                             if (animalInfo != null) {
                                 String animalId = animalInfo.optString("animalId");
                                 String name = animalInfo.optString("name");
-                                Log.record(TAG, "万能卡目标锁定: " + name + " (" + animalId + ")");
+                                Log.runtime(TAG, "万能卡目标锁定: " + name + " (" + animalId + ")");
                                 return animalId;
                             }
                         }
@@ -628,7 +628,7 @@ public class AntDodo extends ModelTask {
                 }
             }
         } catch (Exception e) {
-            Log.record(TAG, "万能卡逻辑执行失败: " + e.getMessage());
+            Log.runtime(TAG, "万能卡逻辑执行失败: " + e.getMessage());
         }
         return "";
     }
@@ -775,7 +775,7 @@ public class AntDodo extends ModelTask {
 
                 JSONObject animalBookResult = bookItem.optJSONObject("animalBookResult");
                 if (animalBookResult == null) {
-                    Log.record(TAG,"animalBookResult为空，停止合成");
+                    Log.runtime(TAG,"animalBookResult为空，停止合成");
                     continue;
 
                 }
@@ -790,7 +790,7 @@ public class AntDodo extends ModelTask {
                 if (ResChecker.checkRes(TAG, genResp)) {
                     Log.forest("神奇物种🦕合成勋章[" + ecosystem + "]");
                 } else {
-                    Log.record(TAG, "合成勋章失败[" + ecosystem + "]: " + genResp.optString("resultDesc"));
+                    Log.runtime(TAG, "合成勋章失败[" + ecosystem + "]: " + genResp.optString("resultDesc"));
                 }
 
                 // 合成操作建议稍微加一点点延迟，保护接口

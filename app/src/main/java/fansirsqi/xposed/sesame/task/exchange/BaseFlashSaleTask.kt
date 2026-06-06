@@ -61,11 +61,11 @@ abstract class BaseFlashSaleTask : ModelTask() {
     override fun check(): Boolean {
         return when {
             TaskCommon.IS_ENERGY_TIME -> {
-                Log.record("⏸ 当前为只收能量时间【${BaseModel.energyTime.value}】，停止执行${name}任务！")
+                Log.runtime("⏸ 当前为只收能量时间【${BaseModel.energyTime.value}】，停止执行${name}任务！")
                 false
             }
             TaskCommon.IS_MODULE_SLEEP_TIME -> {
-                Log.record("💤 模块休眠时间【${BaseModel.modelSleepTime.value}】停止执行${name}任务！")
+                Log.runtime("💤 模块休眠时间【${BaseModel.modelSleepTime.value}】停止执行${name}任务！")
                 false
             }
             else -> true
@@ -196,7 +196,7 @@ abstract class BaseFlashSaleTask : ModelTask() {
     // 检查任务是否需要运行
     private fun shouldExecuteTask(): Boolean {
         if (Status.hasFlagToday(completedKey)) {
-            Log.record("${name}任务已标记为完成，跳过执行")
+            Log.runtime("${name}任务已标记为完成，跳过执行")
             return false
         }
         if (TaskCommon.IS_MODULE_SLEEP_TIME) {
@@ -395,7 +395,17 @@ abstract class BaseFlashSaleTask : ModelTask() {
             // 发起异步兑换请求
             try {
                 item.exchangeParams?.let { params ->
-                    sendExchangeRequestAsync(params, item)
+                    val success = sendExchangeRequestAsync(params, item)
+                    if (success) {
+                        item.markAsExchanged()
+                        if (exchangeMode == ExchangeMode.SINGLE) {
+                            val wasFalse = successFlag.compareAndSet(false, true)
+                            if (wasFalse) {
+                                Log.other("🛑 单例模式，已成功兑换 [${item.value}]，终止其他任务")
+                            }
+                        }
+                        return
+                    }
                 }
             } catch (e: Exception) {
                 // 检查是否是中断导致的异常（包括被包装的InterruptedException）

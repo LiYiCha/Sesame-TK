@@ -22,7 +22,7 @@ public class AntForestRpcCall {
 
     public static void init() {
         AlipayVersion alipayVersion = ApplicationHook.getAlipayVersion();
-        Log.record("AntForestRpcCall", "当前目标应用版本: " + alipayVersion);
+        Log.runtime("AntForestRpcCall", "当前目标应用版本: " + alipayVersion);
         try {
             switch (alipayVersion.getVersionString()) {
                 case "10.7.30.8000":
@@ -37,7 +37,7 @@ public class AntForestRpcCall {
                 default:
                     VERSION = "20250813";
             }
-            Log.record("AntForestRpcCall", "使用API版本: " + VERSION);
+            Log.runtime("AntForestRpcCall", "使用API版本: " + VERSION);
         } catch (Exception e) {
             Log.error("AntForestRpcCall", "版本初始化异常，使用默认版本: " + VERSION);
             Log.printStackTrace(e);
@@ -715,7 +715,7 @@ public class AntForestRpcCall {
         requestData.put("source", source); // 必须传递 source
 
         String args = "[" + requestData + "]";
-        Log.record("AntForestRpcCall", "enterDrawActivityopengreen - 活动: " + activityId + ", 场景: " + sceneCode + ", source: " + source);
+        Log.runtime("AntForestRpcCall", "enterDrawActivityopengreen - 活动: " + activityId + ", 场景: " + sceneCode + ", source: " + source);
         return RequestManager.requestString("com.alipay.antiepdrawprod.enterDrawActivityopengreen", args);
     }
 
@@ -728,7 +728,7 @@ public class AntForestRpcCall {
         requestData.put("source", source); // 必须传递 source
 
         String args = "[" + requestData + "]";
-        Log.record("AntForestRpcCall", "listTaskopengreen - 场景: " + sceneCode + ", source: " + source);
+        Log.runtime("AntForestRpcCall", "listTaskopengreen - 场景: " + sceneCode + ", source: " + source);
         return RequestManager.requestString("com.alipay.antieptask.listTaskopengreen", args);
     }
 
@@ -744,7 +744,7 @@ public class AntForestRpcCall {
         requestData.put("userId", userId);
 
         String args = "[" + requestData + "]";
-        Log.record("AntForestRpcCall", "drawopengreen - 活动: " + activityId + ", 场景: " + sceneCode + ", source: " + source);
+        Log.runtime("AntForestRpcCall", "drawopengreen - 活动: " + activityId + ", 场景: " + sceneCode + ", source: " + source);
         return RequestManager.requestString("com.alipay.antiepdrawprod.drawopengreen", args);
     }
 
@@ -760,7 +760,7 @@ public class AntForestRpcCall {
         requestData.put("taskType", taskType);
 
         String args = "[" + requestData + "]";
-        Log.record("AntForestRpcCall", "receiveTaskAwardopengreen - 任务: " + taskType + ", source: " + source);
+        Log.runtime("AntForestRpcCall", "receiveTaskAwardopengreen - 任务: " + taskType + ", source: " + source);
         return RequestManager.requestString("com.alipay.antieptask.receiveTaskAwardopengreen", args);
     }
 
@@ -777,7 +777,7 @@ public class AntForestRpcCall {
         requestData.put("taskType", taskType);
 
         String args = "[" + requestData + "]";
-        Log.record("AntForestRpcCall", "exchangeTimesFromTaskopengreen - 活动: " + activityId + ", 任务: " + taskType + ", source: " + source);
+        Log.runtime("AntForestRpcCall", "exchangeTimesFromTaskopengreen - 活动: " + activityId + ", 任务: " + taskType + ", source: " + source);
         return RequestManager.requestString("com.alipay.antiepdrawprod.exchangeTimesFromTaskopengreen", args);
     }
 
@@ -800,7 +800,7 @@ public class AntForestRpcCall {
 
         params.put("taskType", taskType);
         String args = "[" + params + "]";
-        Log.record("AntForestRpcCall", "finishTask4Chouchoule - 任务: " + taskType);
+        Log.runtime("AntForestRpcCall", "finishTask4Chouchoule - 任务: " + taskType);
         return RequestManager.requestString("com.alipay.antiep.finishTask", args);
     }
 
@@ -817,7 +817,7 @@ public class AntForestRpcCall {
 
         params.put("taskType", taskType);
         String args = "[" + params + "]";
-        Log.record("AntForestRpcCall", "finishTaskopengreen - 任务: " + taskType);
+        Log.runtime("AntForestRpcCall", "finishTaskopengreen - 任务: " + taskType);
         return RequestManager.requestString("com.alipay.antieptask.finishTaskopengreen", args);
     }
 

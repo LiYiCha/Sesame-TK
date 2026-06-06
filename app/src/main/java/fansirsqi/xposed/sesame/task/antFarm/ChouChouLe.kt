@@ -218,7 +218,7 @@ class ChouChouLe {
             // 普通任务
             if (task.title == "消耗饲料换机会") {
                 if (AntFarm.foodStock < 90) {
-                    Log.record(TAG, "饲料余量(${AntFarm.foodStock}g)少于90g，跳过任务: ${task.title}")
+                    Log.runtime(TAG, "饲料余量(${AntFarm.foodStock}g)少于90g，跳过任务: ${task.title}")
                     return false // 返回 false 避免 doubleCheck，且不执行后续 RPC
                 }
             }
@@ -235,7 +235,7 @@ class ChouChouLe {
             } else {
                 val resultCode = jo.optString("resultCode")
                 if ("DRAW_MACHINE07" == resultCode) {
-                    Log.record(TAG, "${taskName}任务[${task.title}]失败: 饲料不足，停止后续尝试")
+                    Log.runtime(TAG, "${taskName}任务[${task.title}]失败: 饲料不足，停止后续尝试")
                     return false
                 }
             }
@@ -273,9 +273,9 @@ class ChouChouLe {
                         }
                     }
                 }
-                Log.record(TAG, "浏览广告任务[没有可用广告或不支持，使用普通完成方式]")
+                Log.runtime(TAG, "浏览广告任务[没有可用广告或不支持，使用普通完成方式]")
             } else {
-                Log.record(TAG, "浏览广告任务[没有可用Token，请手动看一起广告]")
+                Log.runtime(TAG, "浏览广告任务[没有可用Token，请手动看一起广告]")
             }
 
             // 没有token或广告任务失败，使用普通完成方式
@@ -354,7 +354,7 @@ class ChouChouLe {
                 }
             }
 
-            Log.record(TAG, "猜价格任务[未找到合适价格，使用普通完成方式]")
+            Log.runtime(TAG, "猜价格任务[未找到合适价格，使用普通完成方式]")
             return false
         } catch (t: Throwable) {
             Log.printStackTrace("处理猜价格任务 err:", t)
@@ -396,17 +396,17 @@ class ChouChouLe {
             val activityId = activity.optString("activityId")
             val endTime = activity.optLong("endTime", 0)
             if (endTime > 0 && System.currentTimeMillis() > endTime) {
-                Log.record(TAG, "该[${activity.optString("activityId")}]抽奖活动已结束")
+                Log.runtime(TAG, "该[${activity.optString("activityId")}]抽奖活动已结束")
                 return true
             }
 
             var remainingTimes = jo.optInt("drawTimes", 0)
             var allSuccess = true
-            Log.record(TAG, "IP抽抽乐剩余次数: $remainingTimes")
+            Log.runtime(TAG, "IP抽抽乐剩余次数: $remainingTimes")
 
             while (remainingTimes > 0) {
                 val batchCount = remainingTimes.coerceAtMost(10)
-                Log.record(TAG, "执行 IP 抽抽乐 $batchCount 连抽...")
+                Log.runtime(TAG, "执行 IP 抽抽乐 $batchCount 连抽...")
 
                 val response = AntFarmRpcCall.drawMachineIP(batchCount)
                 allSuccess = allSuccess and drawPrize("IP抽抽乐", response)
@@ -443,18 +443,18 @@ class ChouChouLe {
             val activity = jo.optJSONObject("drawMachineActivity") ?: return true
             val endTime = activity.optLong("endTime", 0)
             if (endTime > 0 && System.currentTimeMillis() > endTime) {
-                Log.record(TAG, "该[${activity.optString("activityId")}]抽奖活动已结束")
+                Log.runtime(TAG, "该[${activity.optString("activityId")}]抽奖活动已结束")
                 return true
             }
 
             var remainingTimes = jo.optInt("drawTimes", 0)
             var allSuccess = true
 
-            Log.record(TAG, "日常抽抽乐剩余次数: $remainingTimes")
+            Log.runtime(TAG, "日常抽抽乐剩余次数: $remainingTimes")
 
             while (remainingTimes > 0) {
                 val batchCount = remainingTimes.coerceAtMost(10)
-                Log.record(TAG, "执行日常抽抽乐 $batchCount 连抽...")
+                Log.runtime(TAG, "执行日常抽抽乐 $batchCount 连抽...")
 
                 val response = AntFarmRpcCall.drawMachineDaily(batchCount)
                 allSuccess = allSuccess and drawPrize("日常抽抽乐", response)
@@ -523,7 +523,7 @@ class ChouChouLe {
                         totalCent = holdingCount.optInt("cent", 0)
                     }
                 }
-                Log.record("自动兑换", "当前持有总碎片: " + (totalCent / 100))
+                Log.runtime("自动兑换", "当前持有总碎片: " + (totalCent / 100))
                 val itemVOList = respJson.optJSONArray("itemInfoVOList") ?: return
 
                 val allSkus = ArrayList<JSONObject>()
@@ -551,7 +551,7 @@ class ChouChouLe {
                     val skuName = sku.optString("skuName")
 
                     if (isNoEnoughPoint(sku) || (cent > 0 && totalCent < cent)) {
-                        Log.record("自动兑换", "最高价值项 [$skuName] 碎片不足(持有 ${totalCent/100}, 需 ${cent/100})，等攒够再换，终止本次兑换")
+                        Log.runtime("自动兑换", "最高价值项 [$skuName] 碎片不足(持有 ${totalCent/100}, 需 ${cent/100})，等攒够再换，终止本次兑换")
                         return
                     }
                     break
@@ -568,7 +568,7 @@ class ChouChouLe {
 
                     // 【核心逻辑】：如果当前项买不起，直接 return 停止，不再尝试后续更便宜的项目
                     if (isNoEnoughPoint(sku) || (cent > 0 && totalCent < cent)) {
-                        Log.record("自动兑换", "剩余碎片不足以兑换优先级项 [$skuName] (需 ${cent/100})，停止后续兑换任务")
+                        Log.runtime("自动兑换", "剩余碎片不足以兑换优先级项 [$skuName] (需 ${cent/100})，停止后续兑换任务")
                         return
                     }
 
@@ -588,19 +588,19 @@ class ChouChouLe {
                         if ("SUCCESS" == resultCode) {
                             sessionExchangedCount++
                             totalCent -= cent // 减去花费
-                            Log.record(
+                            Log.runtime(
                                 "自动兑换",
                                 "成功兑换: $skuName (本次第 $sessionExchangedCount 次，剩余碎片: ${totalCent/100})"
                             )
                             GlobalThreadPools.sleepCompat(800L)
                         } else if ("NO_ENOUGH_POINT" == resultCode) {
-                            Log.record("自动兑换", "兑换过程中积分不足，停止后续所有任务")
+                            Log.runtime("自动兑换", "兑换过程中积分不足，停止后续所有任务")
                             return
                         } else if (resultCode.contains("LIMIT") || resultCode.contains("MAX")) {
-                            Log.record("自动兑换", "[$skuName] 已达兑换上限: " + resObj.optString("resultDesc"))
+                            Log.runtime("自动兑换", "[$skuName] 已达兑换上限: " + resObj.optString("resultDesc"))
                             break
                         } else {
-                            Log.record("自动兑换", "跳过 [$skuName]: " + resObj.optString("resultDesc"))
+                            Log.runtime("自动兑换", "跳过 [$skuName]: " + resObj.optString("resultDesc"))
                             break
                         }
                     }

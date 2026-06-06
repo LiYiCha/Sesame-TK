@@ -51,7 +51,7 @@ public class AlarmScheduler {
                 calendar.set(Calendar.MILLISECOND, 0);
                 if (setAlarmTask(calendar.getTimeInMillis(), pendingIntent)) {
                     alarm0Pi = pendingIntent;
-                    Log.record("⏰ 设置定时唤醒:0|000000");
+                    Log.runtime("⏰ 设置定时唤醒:0|000000");
                 }
             } catch (Exception e) {
                 Log.runtime(TAG, "setWakenAt0 err:");
@@ -72,7 +72,7 @@ public class AlarmScheduler {
                                 if (setAlarmTask(wakenAtTimeCalendar.getTimeInMillis(), wakenAtTimePendingIntent)) {
                                     String wakenAtTimeKey = i + "|" + wakenAtTime;
                                     wakenAtTimeAlarmMap.put(wakenAtTimeKey, wakenAtTimePendingIntent);
-                                    Log.record("⏰ 设置定时唤醒:" + wakenAtTimeKey);
+                                    Log.runtime("⏰ 设置定时唤醒:" + wakenAtTimeKey);
                                 }
                             }
                         }
@@ -99,7 +99,7 @@ public class AlarmScheduler {
                     PendingIntent wakenAtTimePendingIntent = entry.getValue();
                     if (unsetAlarmTask(wakenAtTimePendingIntent)) {
                         wakenAtTimeAlarmMap.remove(wakenAtTimeKey);
-                        Log.record("⏰ 取消定时唤醒:" + wakenAtTimeKey);
+                        Log.runtime("⏰ 取消定时唤醒:" + wakenAtTimeKey);
                     }
                 } catch (Exception e) {
                     Log.runtime(TAG, "unsetWakenAtTime err:");
@@ -109,7 +109,7 @@ public class AlarmScheduler {
             try {
                 if (unsetAlarmTask(alarm0Pi)) {
                     alarm0Pi = null;
-                    Log.record("⏰ 取消定时唤醒:0|000000");
+                    Log.runtime("⏰ 取消定时唤醒:0|000000");
                 }
             } catch (Exception e) {
                 Log.runtime(TAG, "unsetWakenAt0 err:");

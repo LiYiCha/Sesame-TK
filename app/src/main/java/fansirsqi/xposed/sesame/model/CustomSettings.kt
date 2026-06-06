@@ -219,7 +219,7 @@ object CustomSettings {
 
         if (isSpecialTime && autoHandleOnceDaily.value) {
             isEnabled = false
-            if (enableLog) Log.record("自动单次运行触发: 现在处于自动全量运行时段，本次将运行所有已开启的任务")
+            if (enableLog) Log.runtime("自动单次运行触发: 现在处于自动全量运行时段，本次将运行所有已开启的任务")
         } else if (enableLog && autoHandleOnceDaily.value) {
             val sdf = SimpleDateFormat("HHmm", Locale.getDefault())
             val ranges = autoHandleOnceDailyTimes.value.mapNotNull { timeStr ->
@@ -228,15 +228,15 @@ object CustomSettings {
                     "$timeStr-${sdf.format(Date(endTime))}"
                 }
             }.joinToString(", ")
-            Log.record("已设置自动全量运行，时段为：$ranges")
+            Log.runtime("已设置自动全量运行，时段为：$ranges")
         }
 
         // 如果今日尚未完成首次全量运行，则不启用“跳过”拦截逻辑
         if (isEnabled && !isFinished) {
             isEnabled = false
-            if (enableLog) Log.record("当日单次运行模式生效: 今日尚未完成首次全量运行，本次将运行所有任务")
+            if (enableLog) Log.runtime("当日单次运行模式生效: 今日尚未完成首次全量运行，本次将运行所有任务")
         } else if (isEnabled) {
-            if (enableLog) Log.record("当日单次运行模式生效: 今日已完成全量运行，已启用跳过黑名单任务")
+            if (enableLog) Log.runtime("当日单次运行模式生效: 今日已完成全量运行，已启用跳过黑名单任务")
         }
 
         return OnceDailyStatus(isEnabled, isFinished)

@@ -81,7 +81,7 @@ class LifecycleModule : HookModule {
         try {
             val targetUid = AppContext.getUserId()
             if (targetUid == null) {
-                Log.record("用户未登录")
+                Log.runtime("用户未登录")
                 Toast.show("用户未登录")
                 return
             }
@@ -93,7 +93,7 @@ class LifecycleModule : HookModule {
             if (targetUid != currentUid) {
                 if (currentUid != null) {
                     LifecycleManager.initHandler(true)
-                    Log.record("用户已切换")
+                    Log.runtime("用户已切换")
                     Toast.show("用户已切换")
                     return
                 }
@@ -145,7 +145,7 @@ class LifecycleModule : HookModule {
     }
 
     private fun handleServiceDestroy(service: Service) {
-        Log.record("目标应用前台服务被销毁")
+        Log.runtime("目标应用前台服务被销毁")
         Toast.show("目标应用前台服务被销毁")
         LifecycleManager.destroyHandler(true)
 

@@ -1,5 +1,6 @@
 package fansirsqi.xposed.sesame.ui.extra.ui
 
+import android.annotation.SuppressLint
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.selection.SelectionContainer
@@ -18,9 +19,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.Surface
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import fansirsqi.xposed.sesame.ui.extra.Callbacks
 import fansirsqi.xposed.sesame.ui.extra.RequestItem
@@ -75,10 +78,24 @@ private fun RpcDebugScreen(vm: RpcDebugViewModel, callbacks: Callbacks) {
             modifier = Modifier.fillMaxWidth()
         )
         Spacer(Modifier.height(8.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text("Data(JSON)", style = MaterialTheme.typography.bodyMedium)
+            TextButton(
+                onClick = { vm.triggerManualUnescape() },
+                contentPadding = PaddingValues(0.dp),
+                modifier = Modifier.height(24.dp)
+            ) {
+                Text("去除转义", fontSize = 10.sp)
+            }
+        }
+        Spacer(Modifier.height(4.dp))
         OutlinedTextField(
             value = data,
             onValueChange = { vm.updateData(it) },
-            label = { Text("Data(JSON)") },
             modifier = Modifier.fillMaxWidth().heightIn(min = 120.dp)
         )
         Spacer(Modifier.height(12.dp))
@@ -187,8 +204,34 @@ private fun RpcDebugScreen(vm: RpcDebugViewModel, callbacks: Callbacks) {
                     ) {
                         OutlinedTextField(value = editTitle, onValueChange = { editTitle = it }, label = { Text("Title") })
                         OutlinedTextField(value = editDescription, onValueChange = { editDescription = it }, label = { Text("Description") })
-                        OutlinedTextField(value = editMethod, onValueChange = { editMethod = it }, label = { Text("Method") })
-                        OutlinedTextField(value = editData, onValueChange = { editData = it }, label = { Text("Data(JSON)") }, modifier = Modifier.heightIn(min = 100.dp))
+                        OutlinedTextField(
+                            value = editMethod,
+                            onValueChange = {
+                                editMethod = if (vm.shouldAutoUnescape(it)) vm.unescapeString(it) else it
+                            },
+                            label = { Text("Method") }
+                        )
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text("Data(JSON)", style = MaterialTheme.typography.bodyMedium)
+                            TextButton(
+                                onClick = { editData = vm.unescapeString(editData) },
+                                contentPadding = PaddingValues(0.dp),
+                                modifier = Modifier.height(24.dp)
+                            ) {
+                                Text("去除转义", fontSize = 10.sp)
+                            }
+                        }
+                        OutlinedTextField(
+                            value = editData,
+                            onValueChange = {
+                                editData = if (vm.shouldAutoUnescape(it)) vm.unescapeString(it) else it
+                            },
+                            modifier = Modifier.fillMaxWidth().heightIn(min = 100.dp)
+                        )
                     }
                 }
             )
@@ -265,6 +308,7 @@ private fun RpcDebugScreen(vm: RpcDebugViewModel, callbacks: Callbacks) {
 }
 
 object RpcDebugScreenBinder {
+    @SuppressLint("StateFlowValueCalledInComposition")
     @JvmStatic
     fun bindFullScreen(composeView: ComposeView, initial: List<RequestItem>, callbacks: Callbacks) {
         composeView.setContent {

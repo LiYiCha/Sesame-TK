@@ -20,6 +20,7 @@
     <uses-permission android:name="com.android.alarm.permission.SET_ALARM" />
 
     <application
+        android:name="fansirsqi.xposed.sesame.MyApplication"
         android:allowBackup="true"
         tools:replace="android:allowBackup"
         android:enableOnBackInvokedCallback="true"

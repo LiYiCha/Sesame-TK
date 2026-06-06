@@ -142,7 +142,7 @@ public class SesameReceiver extends BroadcastReceiver {
                 // 在Android 13以下版本，注册广播接收器
                 context.registerReceiver(receiver, intentFilter);
             }
-            Log.record("注册广播成功");
+            Log.runtime("注册广播成功");
             Log.runtime(TAG, "hook registerBroadcastReceiver successfully");
         } catch (Throwable th) {
             Log.error("注册广播失败");

@@ -31,7 +31,7 @@ public class Vitality {
                 itemInfoVOList = jo.optJSONArray("itemInfoVOList");
             }
         } catch (Throwable th) {
-            Log.record(TAG, "ItemListByType err");
+            Log.runtime(TAG, "ItemListByType err");
             Log.printStackTrace(TAG, th);
         }
         return itemInfoVOList;
@@ -45,7 +45,7 @@ public class Vitality {
                 handleItemDetail(ItemDetail);
             }
         } catch (Throwable th) {
-            Log.record(TAG, "ItemDetailBySpuId err");
+            Log.runtime(TAG, "ItemDetailBySpuId err");
             Log.printStackTrace(TAG, th);
         }
     }
@@ -62,7 +62,7 @@ public class Vitality {
                 Log.error(TAG, "活力兑换🍃初始化失败！");
             }
         } catch (Throwable th) {
-            Log.record(TAG, "initVitality err");
+            Log.runtime(TAG, "initVitality err");
             Log.printStackTrace(TAG, th);
         }
     }
@@ -92,7 +92,7 @@ public class Vitality {
             }
             IdMapManager.getInstance(VitalityRewardsMap.class).save(UserMap.getCurrentUid());
         } catch (Throwable th) {
-            Log.record(TAG, "handleVitalityItem err");
+            Log.runtime(TAG, "handleVitalityItem err");
             Log.printStackTrace(TAG, th);
         }
     }
@@ -113,7 +113,7 @@ public class Vitality {
             }
             IdMapManager.getInstance(VitalityRewardsMap.class).save(UserMap.getCurrentUid());
         } catch (Throwable th) {
-            Log.record(TAG, "handleItemDetail err:");
+            Log.runtime(TAG, "handleItemDetail err:");
             Log.printStackTrace(TAG, th);
         }
     }
@@ -127,7 +127,7 @@ public class Vitality {
     public static Boolean handleVitalityExchange(String skuId) {
         // 检查是否已经达到今日兑换上限
         if (Status.hasFlagToday("forest::VitalityExchangeLimit::" + skuId)) {
-            Log.record(TAG, "活力兑换🍃[" + skuId + "]今日已达上限，跳过兑换");
+            Log.runtime(TAG, "活力兑换🍃[" + skuId + "]今日已达上限，跳过兑换");
             return false;
         }
 
@@ -136,7 +136,7 @@ public class Vitality {
         }
         JSONObject sku = skuInfo.get(skuId);
         if (sku == null) {
-            Log.record(TAG, "活力兑换🍃找不到要兑换的权益！");
+            Log.runtime(TAG, "活力兑换🍃找不到要兑换的权益！");
             return false;
         }
         try {
@@ -146,7 +146,7 @@ public class Vitality {
                 String itemStatus = itemStatusList.getString(i);
                 ExchangeStatus Status = ExchangeStatus.valueOf(itemStatus);
                 if (Status.name().equals(itemStatus) || Status.name().equals(itemStatus) || Status.name().equals(itemStatus)) {
-                    Log.record(TAG, "活力兑换🍃[" + skuName + "]停止:" + Status.getNickName());
+                    Log.runtime(TAG, "活力兑换🍃[" + skuName + "]停止:" + Status.getNickName());
                     if (ExchangeStatus.REACH_LIMIT.name().equals(itemStatus)) {
                         fansirsqi.xposed.sesame.data.Status.setFlagToday("forest::VitalityExchangeLimit::" + skuId);
                         Log.forest("活力兑换🍃[" + skuName + "]已达上限,停止兑换！");
@@ -163,7 +163,7 @@ public class Vitality {
             }
             ItemDetailBySpuId(spuId);
         } catch (Throwable th) {
-            Log.record(TAG, "VitalityExchange err");
+            Log.runtime(TAG, "VitalityExchange err");
             Log.printStackTrace(TAG, th);
         }
         return false;
@@ -178,7 +178,7 @@ public class Vitality {
                 return true;
             }
         } catch (Throwable th) {
-            Log.record(TAG, "VitalityExchange err:" + spuId + "," + skuId);
+            Log.runtime(TAG, "VitalityExchange err:" + spuId + "," + skuId);
             Log.printStackTrace(TAG, th);
         }
         return false;
@@ -197,7 +197,7 @@ public class Vitality {
             }
             return ResChecker.checkRes(TAG + "森林活力值兑换失败:", jo);
         } catch (Throwable th) {
-            Log.record(TAG, "VitalityExchange err:" + spuId + "," + skuId);
+            Log.runtime(TAG, "VitalityExchange err:" + spuId + "," + skuId);
             Log.printStackTrace(TAG, th);
         }
         return false;
@@ -221,7 +221,7 @@ public class Vitality {
                 }
             }
         } catch (Exception e) {
-            Log.record(TAG, "findSkuInfoBySkuName err:");
+            Log.runtime(TAG, "findSkuInfoBySkuName err:");
             Log.printStackTrace(TAG, e);
         }
         return null;

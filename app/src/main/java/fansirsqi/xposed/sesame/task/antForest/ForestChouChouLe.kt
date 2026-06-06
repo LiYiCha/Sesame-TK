@@ -98,11 +98,11 @@ class ForestChouChouLe {
         runCatching {
             val scenes = getScenes()
             if (scenes.all { Status.hasFlagToday(it.flag) }) {
-                Log.record("⏭️ 今天所有森林寻宝任务已完成, 跳过执行")
+                Log.runtime("⏭️ 今天所有森林寻宝任务已完成, 跳过执行")
                 return
             }
 
-            Log.record("开始处理森林寻宝, 共 ${scenes.size} 个场景")
+            Log.runtime("开始处理森林寻宝, 共 ${scenes.size} 个场景")
             scenes.forEach {
                 processScene(it)
                 sleepCompat(RandomUtil.nextInt(1000, 2001).toLong())
@@ -112,11 +112,11 @@ class ForestChouChouLe {
 
     private fun processScene(s: Scene) = runCatching {
         if (Status.hasFlagToday(s.flag)) {
-            Log.record("⏭️ ${s.name} 今天已完成, 跳过")
+            Log.runtime("⏭️ ${s.name} 今天已完成, 跳过")
             return@runCatching
         }
 
-        Log.record("👉 开始处理: ${s.name}")
+        Log.runtime("👉 开始处理: ${s.name}")
 
         // 1. 检查活动有效期
         val enterResp = AntForestRpcCall.enterDrawActivityopengreen(s.id, s.code, SOURCE).toJson()
@@ -128,7 +128,7 @@ class ForestChouChouLe {
             val startTime = drawActivity.optLong("startTime")
             val endTime = drawActivity.optLong("endTime")
             if (now !in startTime..endTime) {
-                Log.record("⛔ ${s.name} 活动不在有效期内, 跳过")
+                Log.runtime("⛔ ${s.name} 活动不在有效期内, 跳过")
                 return@runCatching
             }
         }
@@ -149,7 +149,7 @@ class ForestChouChouLe {
      */
     private fun processTasksLoop(s: Scene) {
         repeat(3) { loop ->
-//            Log.record("${s.name} 第 ${loop + 1} 轮任务检查")
+//            Log.runtime("${s.name} 第 ${loop + 1} 轮任务检查")
             val tasksResp = AntForestRpcCall.listTaskopengreen(s.taskCode, SOURCE).toJson() ?: return@repeat
             if (!tasksResp.check()) return@repeat
 
@@ -164,7 +164,7 @@ class ForestChouChouLe {
             }
 
             if (!hasChange) {
-                Log.record("${s.name} 本轮无任务状态变更, 结束任务循环")
+                Log.runtime("${s.name} 本轮无任务状态变更, 结束任务循环")
                 return
             }
             if (loop < 2) sleepCompat(RandomUtil.nextInt(2000, 3001).toLong())
@@ -182,13 +182,13 @@ class ForestChouChouLe {
         var balance = drawAsset.optInt("blance", 0)
         val total = drawAsset.optInt("totalTimes", 0)
 
-        Log.record("${s.name} 剩余抽奖次数: $balance / $total")
+        Log.runtime("${s.name} 剩余抽奖次数: $balance / $total")
 
         var retry = 0
         // 最多抽50次，防止死循环
         while (balance > 0 && retry < 50) {
             retry++
-            Log.record("${s.name} 第 $retry 次抽奖")
+            Log.runtime("${s.name} 第 $retry 次抽奖")
 
             val drawResp = AntForestRpcCall.drawopengreen(s.id, s.code, SOURCE, UserMap.currentUid).toJson()
             if (drawResp == null || !drawResp.check()) {
@@ -237,17 +237,17 @@ class ForestChouChouLe {
                 completed++
             } else {
                 allDone = false
-                Log.record("${s.name} 未完成: $taskName [$taskStatus]")
+                Log.runtime("${s.name} 未完成: $taskName [$taskStatus]")
             }
         }
 
-        Log.record("${s.name} 进度: $completed / $total")
+        Log.runtime("${s.name} 进度: $completed / $total")
         if (allDone) {
             Status.setFlagToday(s.flag)
             val msg = if (total > 0) "全部完成" else "无有效任务"
-            Log.record("✅ ${s.name} $msg ($completed/$total)")
+            Log.runtime("✅ ${s.name} $msg ($completed/$total)")
         } else {
-            Log.record("⚠️ ${s.name} 未全部完成")
+            Log.runtime("⚠️ ${s.name} 未全部完成")
         }
     }
 
@@ -274,7 +274,7 @@ class ForestChouChouLe {
 
         if (isBlockedTask(taskType, taskName)) return false
 
-        Log.record("${s.name} 任务: $taskName [$taskStatus]")
+        Log.runtime("${s.name} 任务: $taskName [$taskStatus]")
 
         return when (taskStatus) {
             TaskStatus.TODO.name -> handleTodoTask(s, taskName, taskCode, taskType)
@@ -286,7 +286,7 @@ class ForestChouChouLe {
     private fun handleTodoTask(s: Scene, name: String, code: String, type: String): Boolean {
         return if (type == "NORMAL_DRAW_EXCHANGE_VITALITY") {
             // 活力值兑换
-            Log.record("${s.name} 兑换活力值: $name")
+            Log.runtime("${s.name} 兑换活力值: $name")
             val res = AntForestRpcCall.exchangeTimesFromTaskopengreen(s.id, s.code, SOURCE, code, type).toJson()
             if (res != null && res.check()) {
                 Log.forest("${s.name} 🧾 $name 兑换成功")
@@ -294,7 +294,7 @@ class ForestChouChouLe {
             } else false
         } else if (type.startsWith("FOREST_NORMAL_DRAW") || type.startsWith("FOREST_ACTIVITY_DRAW")) {
             // 普通任务
-            Log.record("${s.name} 执行任务(模拟耗时): $name")
+            Log.runtime("${s.name} 执行任务(模拟耗时): $name")
             sleepCompat(RandomUtil.nextInt(3000, 4001).toLong())
 
             val result = if (type.contains("XLIGHT")) {
@@ -325,7 +325,7 @@ class ForestChouChouLe {
     }
 
     private fun handleFinishedTask(s: Scene, name: String, code: String, type: String): Boolean {
-        Log.record("${s.name} 领取奖励: $name")
+        Log.runtime("${s.name} 领取奖励: $name")
         sleepCompat(RandomUtil.nextInt(3000, 4001).toLong())
         val res = AntForestRpcCall.receiveTaskAwardopengreen(SOURCE, code, type).toJson()
         return if (res != null && res.check()) {

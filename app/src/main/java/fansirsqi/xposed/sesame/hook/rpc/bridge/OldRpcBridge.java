@@ -138,7 +138,7 @@ public class OldRpcBridge implements RpcBridge {
         if (resultObject.optString("memo", "").contains("系统繁忙")) {
             ApplicationHook.setOffline(true); // 设置为离线状态
             Notify.updateStatusText("系统繁忙，可能需要滑动验证");
-            Log.record(TAG,"系统繁忙，可能需要滑动验证");
+            Log.runtime(TAG,"系统繁忙，可能需要滑动验证");
             return null; // 返回 null
         }
         if (!resultObject.optBoolean("success")) {
@@ -204,7 +204,7 @@ public class OldRpcBridge implements RpcBridge {
             ApplicationHook.setOffline(true);
             Notify.updateStatusText("登录超时");
             if (BaseModel.getTimeoutRestart().getValue()) {
-                Log.record(TAG,"尝试重新登录");
+                Log.runtime(TAG,"尝试重新登录");
                 ApplicationHook.reLoginByBroadcast();
             }
         }
@@ -217,7 +217,7 @@ public class OldRpcBridge implements RpcBridge {
             long waitTime = System.currentTimeMillis() + BaseModel.getWaitWhenException().getValue();
             RuntimeInfo.getInstance().put(RuntimeInfo.RuntimeInfoKey.ForestPauseTime, waitTime);
             Notify.updateStatusText("异常");
-            Log.record(TAG,"触发异常, 等待至" + TimeUtil.getCommonDate(waitTime));
+            Log.runtime(TAG,"触发异常, 等待至" + TimeUtil.getCommonDate(waitTime));
         }
     }
     /**

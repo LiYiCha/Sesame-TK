@@ -259,7 +259,7 @@ class AntSports : ModelTask() {
                     }
                 }
             )
-            Log.record(TAG, "hook readDailyStep successfully")
+            Log.runtime(TAG, "hook readDailyStep successfully")
         } catch (t: Throwable) {
             Log.printStackTrace(TAG, "hook readDailyStep err:", t)
         }
@@ -269,7 +269,7 @@ class AntSports : ModelTask() {
      * @brief 任务主入口
      */
     override fun runJava() {
-        Log.record(TAG, "执行开始-" + name)
+        Log.runtime(TAG, "执行开始-" + name)
 
         try {
             val loader = ApplicationHook.getClassLoader()
@@ -280,9 +280,9 @@ class AntSports : ModelTask() {
 
             // 健康岛整体任务（任务大厅 + 泡泡 + 走路建造）
             if (neverlandTask.value || neverlandGrid.value) {
-                Log.record(TAG, "开始执行健康岛")
+                Log.runtime(TAG, "开始执行健康岛")
                 NeverlandTaskHandler().runNeverland()
-                Log.record(TAG, "健康岛结束")
+                Log.runtime(TAG, "健康岛结束")
             }
 
             // 步数同步
@@ -348,10 +348,10 @@ class AntSports : ModelTask() {
             }
 
         } catch (t: Throwable) {
-            Log.record(TAG, "runJava error:")
+            Log.runtime(TAG, "runJava error:")
             Log.printStackTrace(TAG, t)
         } finally {
-            Log.record(TAG, "执行结束-" + name)
+            Log.runtime(TAG, "执行结束-" + name)
         }
     }
 
@@ -420,14 +420,14 @@ class AntSports : ModelTask() {
                         // 获取 RpcManager 单例，兼容混淆后的方法名
                         val rpcManager = tryCallStaticMethod(rpcManagerClass, "get", "a")
                         if (rpcManager == null) {
-                            Log.record(TAG, "获取RpcManager实例失败")
+                            Log.runtime(TAG, "获取RpcManager实例失败")
                             return@Runnable
                         }
                         
                         // 调用上传步数方法，兼容混淆后的方法名
                         val success = tryCallUploadStep(rpcManager, step)
                         if (success == null) {
-                            Log.record(TAG, "调用同步步数方法失败")
+                            Log.runtime(TAG, "调用同步步数方法失败")
                             return@Runnable
                         }
 
@@ -522,14 +522,14 @@ class AntSports : ModelTask() {
                     }
                 }
 
-                Log.record(TAG, "运动任务完成情况：$completedTasks/$totalTasks，可执行任务：$availableTasks")
+                Log.runtime(TAG, "运动任务完成情况：$completedTasks/$totalTasks，可执行任务：$availableTasks")
 
                 // 所有任务完成后标记
                 if (totalTasks > 0 && completedTasks >= totalTasks && availableTasks == 0) {
                     val today = TimeUtil.getDateStr2()
                     DataStore.put(SPORTS_TASKS_COMPLETED_DATE, today)
                     Status.setFlagToday(StatusFlags.FLAG_ANTSPORTS_DAILY_TASKS_DONE)
-                    Log.record(TAG, "✅ 所有运动任务已完成，今日不再执行")
+                    Log.runtime(TAG, "✅ 所有运动任务已完成，今日不再执行")
                 }
             }
         } catch (e: Exception) {
@@ -598,7 +598,7 @@ class AntSports : ModelTask() {
             for (i in 0 until remainingNum) {
                 val result = JSONObject(AntSportsRpcCall.completeExerciseTasks(taskId))
                 if (ResChecker.checkRes(TAG, result)) {
-                    Log.record(
+                    Log.runtime(
                         TAG,
                         "做任务得能量🎈[完成任务：$taskName，得$prizeAmount💰]#(${i + 1}/$remainingNum)"
                     )
@@ -689,7 +689,7 @@ class AntSports : ModelTask() {
 
                 val sourceName = bubble.optString("simpleSourceName", "")
                 val coinAmount = bubble.optInt("coinAmount", 0)
-                Log.record(TAG, "运动首页任务[开始完成：$sourceName，taskId=$taskId，coin=$coinAmount]")
+                Log.runtime(TAG, "运动首页任务[开始完成：$sourceName，taskId=$taskId，coin=$coinAmount]")
 
                 val completeRes = JSONObject(AntSportsRpcCall.completeExerciseTasks(taskId))
                 if (ResChecker.checkRes(TAG, completeRes)) {
@@ -722,7 +722,7 @@ class AntSports : ModelTask() {
                     Log.error(TAG, "领取能量球任务失败: ${resultJson.optString("errorMsg", "未知错误")}")
                 }
             } else {
-                Log.record(TAG, "未完成任何任务，跳过领取能量球")
+                Log.runtime(TAG, "未完成任何任务，跳过领取能量球")
             }
         } catch (t: Throwable) {
             Log.printStackTrace(TAG, "sportsEnergyBubbleTask err:", t)
@@ -765,16 +765,16 @@ class AntSports : ModelTask() {
                                             coinAmount + "能量，" + toast + "💰]"
                                 )
                             } else {
-                                Log.record(TAG, "签到接口调用失败：$signJo")
+                                Log.runtime(TAG, "签到接口调用失败：$signJo")
                             }
                             break
                         }
                     }
                 } else {
-                    Log.record(TAG, "运动签到今日已签到")
+                    Log.runtime(TAG, "运动签到今日已签到")
                 }
             } else {
-                Log.record(TAG, "查询签到状态失败：$queryJo")
+                Log.runtime(TAG, "查询签到状态失败：$queryJo")
             }
         } catch (e: Exception) {
             Log.printStackTrace(TAG, "sportsCheck_in err", e)
@@ -801,11 +801,11 @@ class AntSports : ModelTask() {
                     if (ResChecker.checkRes(TAG, res)) {
                         Log.other("收集金币💰[$coinAmount 个]")
                     } else {
-                        Log.record(TAG, "首页收集金币 $res")
+                        Log.runtime(TAG, "首页收集金币 $res")
                     }
                 }
             } else {
-                Log.record(TAG, s)
+                Log.runtime(TAG, s)
             }
         } catch (t: Throwable) {
             Log.printStackTrace(TAG, "receiveCoinAsset err:", t)
@@ -843,11 +843,11 @@ class AntSports : ModelTask() {
 
             //如果是 JOIN 则还没走完
             if ("COMPLETED" == userPathStep.getString("pathCompleteStatus")) {
-                Log.record(TAG, "行走路线🚶🏻‍♂️路线[${userPathStep.getString("pathName")}]已完成")
+                Log.runtime(TAG, "行走路线🚶🏻‍♂️路线[${userPathStep.getString("pathName")}]已完成")
                 // 获取新路线 ID
                 val newPathId = queryJoinPath(walkPathThemeId)    //walkPathThemeId 在进入walk()之前已经获取了
                 if (!newPathId.isNullOrEmpty()) {
-                    Log.record(TAG, "发现新路线，准备加入: $newPathId")
+                    Log.runtime(TAG, "发现新路线，准备加入: $newPathId")
                     joinPath(newPathId)
                 } else {
                     Log.error(TAG, "未发现可加入的新路线，可能当前地图已全部走完")
@@ -976,7 +976,7 @@ class AntSports : ModelTask() {
 
             // --- 逻辑处理 ---
             val userPath = data.optJSONObject("userPathStep")
-            Log.record(TAG, "路线: ${userPath?.optString("pathName")}, 进度: ${userPath?.optInt("pathProgress")}%")
+            Log.runtime(TAG, "路线: ${userPath?.optString("pathName")}, 进度: ${userPath?.optInt("pathProgress")}%")
 
             val boxList = data.optJSONArray("treasureBoxList")
             if (boxList != null && boxList.length() > 0) {
@@ -1004,7 +1004,7 @@ class AntSports : ModelTask() {
             val ja = jo.getJSONObject("data").getJSONArray("rewards")
             for (i in 0 until ja.length()) {
                 val reward = ja.getJSONObject(i)
-                Log.record(
+                Log.runtime(
                     TAG,
                     "行走路线🎁开启宝箱[${reward.getString("rewardName")}]*${reward.getInt("count")}"
                 )
@@ -1060,7 +1060,7 @@ class AntSports : ModelTask() {
             val jo = JSONObject(AntSportsRpcCall.joinPath(realPathId))
             if (ResChecker.checkRes(TAG, jo)) {
                 val path = queryPath(realPathId)
-                Log.record(TAG, "行走路线🚶🏻‍♂️路线[${path?.getJSONObject("path")?.getString("name")}]已加入")
+                Log.runtime(TAG, "行走路线🚶🏻‍♂️路线[${path?.getJSONObject("path")?.getString("name")}]已加入")
             } else {
                 Log.error(TAG, "行走路线🚶🏻‍♂️路线[$realPathId]有误，无法加入！")
             }
@@ -1106,7 +1106,7 @@ class AntSports : ModelTask() {
                                     .getJSONArray("allPathBaseInfoList")
                                 join(loader, allPathBaseInfoList, otherAllPathBaseInfoList, "")
                             } else {
-                                Log.record(TAG, jo.getString("resultDesc"))
+                                Log.runtime(TAG, jo.getString("resultDesc"))
                             }
                         }
                     } else {
@@ -1136,7 +1136,7 @@ class AntSports : ModelTask() {
                     join(loader, allPathBaseInfoList, otherAllPathBaseInfoList, firstJoinPathTitle)
                 }
             } else {
-                Log.record(TAG, jo.getString("resultDesc"))
+                Log.runtime(TAG, jo.getString("resultDesc"))
             }
         } catch (t: Throwable) {
             Log.printStackTrace(TAG, "queryMyHomePage err:", t)
@@ -1191,10 +1191,10 @@ class AntSports : ModelTask() {
                     Log.other("加入线路🚶🏻‍♂️[$title]")
                     queryMyHomePage(loader)
                 } else {
-                    Log.record(TAG, jo.getString("resultDesc"))
+                    Log.runtime(TAG, jo.getString("resultDesc"))
                 }
             } else {
-                Log.record(TAG, "好像没有可走的线路了！")
+                Log.runtime(TAG, "好像没有可走的线路了！")
             }
         } catch (t: Throwable) {
             Log.printStackTrace(TAG, "join err:", t)
@@ -1220,7 +1220,7 @@ class AntSports : ModelTask() {
                     queryMyHomePage(loader)
                 }
             } else {
-                Log.record(TAG, jo.getString("resultDesc"))
+                Log.runtime(TAG, jo.getString("resultDesc"))
             }
         } catch (t: Throwable) {
             Log.printStackTrace(TAG, "go err:", t)
@@ -1249,13 +1249,13 @@ class AntSports : ModelTask() {
                 if (delay < BaseModel.checkInterval.value) {
                     val taskId = "BX|$boxNo"
                     if (hasChildTask(taskId)) return
-                    Log.record(TAG, "还有 $delay ms 开运动宝箱")
+                    Log.runtime(TAG, "还有 $delay ms 开运动宝箱")
                     addChildTask(
                         ChildModelTask(
                             taskId,
                             "BX",
                             Runnable {
-                                Log.record(TAG, "蹲点开箱开始")
+                                Log.runtime(TAG, "蹲点开箱开始")
                                 val startTime = System.currentTimeMillis()
                                 while (System.currentTimeMillis() - startTime < 5_000) {
                                     if (openTreasureBox(boxNo, userId) > 0) {
@@ -1292,10 +1292,10 @@ class AntSports : ModelTask() {
                 }
                 return num
             } else if ("TREASUREBOX_NOT_EXIST" == jo.getString("resultCode")) {
-                Log.record(jo.getString("resultDesc"))
+                Log.runtime(jo.getString("resultDesc"))
                 return 1
             } else {
-                Log.record(jo.getString("resultDesc"))
+                Log.runtime(jo.getString("resultDesc"))
             }
         } catch (t: Throwable) {
             Log.printStackTrace(TAG, "openTreasureBox err:", t)
@@ -1333,8 +1333,8 @@ class AntSports : ModelTask() {
                     if (donateCharityCoinType.value == DonateCharityCoinType.ONE) break
                 }
             } else {
-                Log.record(TAG)
-                Log.record(jo.getString("resultDesc"))
+                Log.runtime(TAG)
+                Log.runtime(jo.getString("resultDesc"))
             }
         } catch (t: Throwable) {
             Log.printStackTrace(TAG, "queryProjectList err:", t)
@@ -1351,7 +1351,7 @@ class AntSports : ModelTask() {
             if (ResChecker.checkRes(TAG, jo)) {
                 Log.other("捐赠活动❤️[$title][$donateCharityCoin 能量🎈]")
             } else {
-                Log.record(TAG, jo.getString("resultDesc"))
+                Log.runtime(TAG, jo.getString("resultDesc"))
             }
         } catch (t: Throwable) {
             Log.printStackTrace(TAG, "donate err:", t)
@@ -1395,11 +1395,11 @@ class AntSports : ModelTask() {
                     } else if (s.contains("已捐步")) {
                         Status.exchangeToday(UserMap.currentUid ?: return)
                     } else {
-                        Log.record(TAG, jo.getString("resultDesc"))
+                        Log.runtime(TAG, jo.getString("resultDesc"))
                     }
                 }
             } else {
-                Log.record(TAG, jo.getString("resultDesc"))
+                Log.runtime(TAG, jo.getString("resultDesc"))
             }
         } catch (t: Throwable) {
             Log.printStackTrace(TAG, "queryWalkStep err:", t)
@@ -1431,11 +1431,11 @@ class AntSports : ModelTask() {
                         val taskName = taskInfo.optString("taskName", taskId)
                         Log.other("完成任务🧾[$taskName]")
                     } else {
-                        Log.record(TAG, "文体每日任务 $res")
+                        Log.runtime(TAG, "文体每日任务 $res")
                     }
                 }
             } else {
-                Log.record(TAG, "文体每日任务 $s")
+                Log.runtime(TAG, "文体每日任务 $s")
             }
         } catch (t: Throwable) {
             Log.printStackTrace(TAG, "userTaskGroupQuery err:", t)
@@ -1487,11 +1487,11 @@ class AntSports : ModelTask() {
                             val targetStepCount = data.getInt("targetStepCount")
                             Log.other("走路挑战🚶🏻‍♂️[$roundDescription]#$targetStepCount")
                         } else {
-                            Log.record(TAG, "走路挑战赛 $res")
+                            Log.runtime(TAG, "走路挑战赛 $res")
                         }
                     }
                 } else {
-                    Log.record(TAG, "queryRoundList $jo")
+                    Log.runtime(TAG, "queryRoundList $jo")
                 }
             }
         } catch (t: Throwable) {
@@ -1528,13 +1528,13 @@ class AntSports : ModelTask() {
                         }
                         Log.other("领取奖励🎖️[$taskName]#$award")
                     } else {
-                        Log.record(TAG, "文体中心领取奖励")
-                        Log.record(res.toString())
+                        Log.runtime(TAG, "文体中心领取奖励")
+                        Log.runtime(res.toString())
                     }
                 }
             } else {
-                Log.record(TAG, "文体中心领取奖励")
-                Log.record(s)
+                Log.runtime(TAG, "文体中心领取奖励")
+                Log.runtime(s)
             }
         } catch (t: Throwable) {
             Log.printStackTrace(TAG, "userTaskRightsReceive err:", t)
@@ -1575,7 +1575,7 @@ class AntSports : ModelTask() {
                     pathMapJoin(title, pathId)
                 }
             } else {
-                Log.record(TAG, jo.getString("resultDesc"))
+                Log.runtime(TAG, jo.getString("resultDesc"))
             }
         } catch (t: Throwable) {
             Log.printStackTrace(TAG, "pathFeatureQuery err:", t)
@@ -1609,13 +1609,13 @@ class AntSports : ModelTask() {
                         }
                         Log.other("文体宝箱🎁[$award]")
                     } else {
-                        Log.record(TAG, "文体中心开宝箱")
-                        Log.record(res.toString())
+                        Log.runtime(TAG, "文体中心开宝箱")
+                        Log.runtime(res.toString())
                     }
                 }
             } else {
-                Log.record(TAG, "文体中心开宝箱")
-                Log.record(s)
+                Log.runtime(TAG, "文体中心开宝箱")
+                Log.runtime(s)
             }
         } catch (t: Throwable) {
             Log.printStackTrace(TAG, "pathMapHomepage err:", t)
@@ -1632,7 +1632,7 @@ class AntSports : ModelTask() {
                 Log.other("加入线路🚶🏻‍♂️[$title]")
                 pathFeatureQuery()
             } else {
-                Log.record(TAG, jo.toString())
+                Log.runtime(TAG, jo.toString())
             }
         } catch (t: Throwable) {
             Log.printStackTrace(TAG, "pathMapJoin err:", t)
@@ -1665,7 +1665,7 @@ class AntSports : ModelTask() {
                     pathFeatureQuery()
                 }
             } else {
-                Log.record(TAG, s)
+                Log.runtime(TAG, s)
             }
         } catch (t: Throwable) {
             Log.printStackTrace(TAG, "tiyubizGo err:", t)
@@ -1685,7 +1685,7 @@ class AntSports : ModelTask() {
             if (zeroTrainCoinCount >= maxCount) {
                 val today = TimeUtil.getDateStr2()
                 DataStore.put(TRAIN_FRIEND_ZERO_COIN_DATE, today)
-                Log.record(TAG, "✅ 训练好友获得0金币已达${maxCount}次上限，今日不再执行")
+                Log.runtime(TAG, "✅ 训练好友获得0金币已达${maxCount}次上限，今日不再执行")
                 return
             }
             val clubHomeData = JSONObject(AntSportsRpcCall.queryClubHome())
@@ -1736,10 +1736,10 @@ class AntSports : ModelTask() {
                     if (zeroTrainCoinCount >= maxCount) {
                         val today = TimeUtil.getDateStr2()
                         DataStore.put(TRAIN_FRIEND_ZERO_COIN_DATE, today)
-                        Log.record(TAG, "✅ 连续获得0金币已达${maxCount}次，今日停止执行")
+                        Log.runtime(TAG, "✅ 连续获得0金币已达${maxCount}次，今日停止执行")
                         return
                     } else {
-                        Log.record(TAG, "训练好友0金币计数: $zeroTrainCoinCount/$maxCount")
+                        Log.runtime(TAG, "训练好友0金币计数: $zeroTrainCoinCount/$maxCount")
                     }
                 }
 
@@ -1774,7 +1774,7 @@ class AntSports : ModelTask() {
                     val responseData = AntSportsRpcCall.queryTrainItem()
                     val responseJson = JSONObject(responseData)
                     if (!ResChecker.checkRes(TAG, responseJson)) {
-                        Log.record(
+                        Log.runtime(
                             TAG,
                             "queryTrainItem rpc failed: ${responseJson.optString("resultDesc")}"
                         )
@@ -1788,7 +1788,7 @@ class AntSports : ModelTask() {
 
                     val trainItemList = responseJson.optJSONArray("trainItemList")
                     if (bizId.isEmpty() || trainItemList == null || trainItemList.length() == 0) {
-                        Log.record(TAG, "queryTrainItem response missing bizId or trainItemList")
+                        Log.runtime(TAG, "queryTrainItem response missing bizId or trainItemList")
                         return
                     }
 
@@ -1816,7 +1816,7 @@ class AntSports : ModelTask() {
                     )
                     val trainMemberJson = JSONObject(trainMemberResponse)
                     if (!ResChecker.checkRes(TAG, trainMemberJson)) {
-                        Log.record(
+                        Log.runtime(
                             TAG,
                             "trainMember request failed: ${trainMemberJson.optString("resultDesc")}"
                         )
@@ -1843,14 +1843,14 @@ class AntSports : ModelTask() {
             val clubHomeJson = JSONObject(clubHomeResponse)
 
             if ("ENABLE" != clubHomeJson.optString("clubAuth")) {
-                Log.record(TAG, "抢好友大战🧑‍🤝‍🧑未授权开启")
+                Log.runtime(TAG, "抢好友大战🧑‍🤝‍🧑未授权开启")
                 return
             }
 
             val assetsInfo = clubHomeJson.optJSONObject("assetsInfo") ?: return
             val coinBalance = assetsInfo.optInt("energyBalance", 0)
             if (coinBalance <= 0) {
-                Log.record(TAG, "抢好友大战🧑‍🤝‍🧑当前能量为0，跳过抢好友")
+                Log.runtime(TAG, "抢好友大战🧑‍🤝‍🧑当前能量为0，跳过抢好友")
                 return
             }
 
@@ -1874,7 +1874,7 @@ class AntSports : ModelTask() {
                 }
 
                 val memberDetailList = memberPriceJson.optJSONArray("memberDetailList") ?: run {
-                    Log.record(TAG, "抢好友大战🧑‍🤝‍🧑暂无可抢好友")
+                    Log.runtime(TAG, "抢好友大战🧑‍🤝‍🧑暂无可抢好友")
                     continue
                 }
 
@@ -1930,10 +1930,10 @@ class AntSports : ModelTask() {
                         }
                         return
                     } else if ("CLUB_AMOUNT_NOT_ENOUGH" == buyMemberResponse.optString("resultCode")) {
-                        Log.record(TAG, "[能量🎈不足，无法完成抢购好友！]")
+                        Log.runtime(TAG, "[能量🎈不足，无法完成抢购好友！]")
                         return
                     } else if ("CLUB_MEMBER_TRADE_PROTECT" == buyMemberResponse.optString("resultCode")) {
-                        Log.record(TAG, "[暂时无法抢购好友，给Ta一段独处的时间吧！]")
+                        Log.runtime(TAG, "[暂时无法抢购好友，给Ta一段独处的时间吧！]")
                     }
                 }
             }
@@ -1975,7 +1975,7 @@ class AntSports : ModelTask() {
          */
         fun runNeverland() {
             try {
-                Log.record(TAG, "开始执行健康岛任务")
+                Log.runtime(TAG, "开始执行健康岛任务")
                 if (neverlandTask.value) {
                     // 1. 签到
                     neverlandDoSign()
@@ -1992,7 +1992,7 @@ class AntSports : ModelTask() {
                     neverlandAutoTask()
                 }
 
-                Log.record(TAG, "健康岛任务结束")
+                Log.runtime(TAG, "健康岛任务结束")
             } catch (t: Throwable) {
                 Log.printStackTrace(TAG, "runNeverland err:", t)
             }
@@ -2009,7 +2009,7 @@ class AntSports : ModelTask() {
             try {
                 if (Status.hasFlagToday("AntSports::neverlandDoSign::已签到")) return
 
-                Log.record(TAG, "健康岛 · 检查签到状态")
+                Log.runtime(TAG, "健康岛 · 检查签到状态")
                 val jo = JSONObject(AntSportsRpcCall.NeverlandRpcCall.querySign(3, "jkdsportcard"))
 
                 if (!ResChecker.checkRes(TAG + "查询签到失败:", jo) ||
@@ -2028,14 +2028,14 @@ class AntSports : ModelTask() {
                 val data = jo.getJSONObject("data")
                 val signInfo = data.optJSONObject("continuousSignInfo")
                 if (signInfo != null && signInfo.optBoolean("signedToday", false)) {
-                    Log.record(
+                    Log.runtime(
                         TAG,
                         "今日已签到 ✔ 连续：${signInfo.optInt("continuitySignedDayCount")} 天"
                     )
                     return
                 }
 
-                Log.record(TAG, "健康岛 · 正在签到…")
+                Log.runtime(TAG, "健康岛 · 正在签到…")
                 val signRes = JSONObject(AntSportsRpcCall.NeverlandRpcCall.takeSign(3, "jkdsportcard"))
 
                 if (!ResChecker.checkRes(TAG + "签到失败:", signRes) ||
@@ -2073,7 +2073,7 @@ class AntSports : ModelTask() {
          */
         private fun loopHandleTaskCenter() {
             var errorCount = 0
-            Log.record(TAG, "开始循环处理任务大厅（失败限制：$MAX_ERROR_COUNT 次）")
+            Log.runtime(TAG, "开始循环处理任务大厅（失败限制：$MAX_ERROR_COUNT 次）")
 
             while (true) {
                 try {
@@ -2108,7 +2108,7 @@ class AntSports : ModelTask() {
                         val taskId = task.optString("id", task.optString("taskId", ""))
 
                         if ("NOT_SIGNUP" == status) {
-                            Log.record(TAG, "任务 [$title] 需要手动报名，已自动拉黑并跳过")
+                            Log.runtime(TAG, "任务 [$title] 需要手动报名，已自动拉黑并跳过")
                             if (taskId.isNotEmpty()) {
                                 TaskBlacklist.addToBlacklist(taskId, title)
                             }
@@ -2125,11 +2125,11 @@ class AntSports : ModelTask() {
                     }
 
                     if (pendingTasks.isEmpty()) {
-                        Log.record(TAG, "没有可处理或领取的任务，退出循环")
+                        Log.runtime(TAG, "没有可处理或领取的任务，退出循环")
                         break
                     }
 
-                    Log.record(TAG, "本次发现 ${pendingTasks.size} 个可处理任务（含待领取）")
+                    Log.runtime(TAG, "本次发现 ${pendingTasks.size} 个可处理任务（含待领取）")
 
                     var currentBatchError = 0
                     for (task in pendingTasks) {
@@ -2139,7 +2139,7 @@ class AntSports : ModelTask() {
                     }
 
                     errorCount += currentBatchError
-                    Log.record(TAG, "当前批次执行完毕，准备下一次刷新检查")
+                    Log.runtime(TAG, "当前批次执行完毕，准备下一次刷新检查")
                     GlobalThreadPools.sleepCompat(TASK_LOOP_DELAY)
                 } catch (t: Throwable) {
                     errorCount++
@@ -2158,7 +2158,7 @@ class AntSports : ModelTask() {
                 val status = task.optString("taskStatus", "")
                 val jumpLink = task.optString("jumpLink", "")
 
-                Log.record(TAG, "任务：[$title] 状态：$status 类型：$type")
+                Log.runtime(TAG, "任务：[$title] 状态：$status 类型：$type")
 
                 if ("TO_RECEIVE" == status) {
                     try {
@@ -2185,7 +2185,7 @@ class AntSports : ModelTask() {
                                 }
                                 rewardDetail = sb.toString()
                             }
-                            Log.record(TAG, "完成[$title]✔$rewardDetail")
+                            Log.runtime(TAG, "完成[$title]✔$rewardDetail")
                             return true
                         } else {
                             val errorMsg = res.optString("errorMsg", "未知错误")
@@ -2210,7 +2210,7 @@ class AntSports : ModelTask() {
                     }
                 }
 
-                Log.record(TAG, "任务状态为 $status，跳过执行")
+                Log.runtime(TAG, "任务状态为 $status，跳过执行")
                 true
             } catch (e: Exception) {
                 Log.printStackTrace(TAG, "handleSingleTask 异常", e)
@@ -2227,7 +2227,7 @@ class AntSports : ModelTask() {
          */
         private fun handleHealthIslandTask() {
             try {
-                Log.record(TAG, "开始检查健康岛浏览任务")
+                Log.runtime(TAG, "开始检查健康岛浏览任务")
                 var hasTask = true
                 while (hasTask) {
                     val taskInfoResp = JSONObject(
@@ -2246,7 +2246,7 @@ class AntSports : ModelTask() {
 
                     val taskInfos = taskInfoResp.getJSONObject("data").optJSONArray("taskInfos")
                     if (taskInfos == null || taskInfos.length() == 0) {
-                        Log.record(TAG, "健康岛浏览任务列表为空")
+                        Log.runtime(TAG, "健康岛浏览任务列表为空")
                         hasTask = false
                         continue
                     }
@@ -2262,7 +2262,7 @@ class AntSports : ModelTask() {
                             continue
                         }
 
-                        Log.record(TAG, "健康岛浏览任务：能量+$energyNum，需等待${viewSec}秒")
+                        Log.runtime(TAG, "健康岛浏览任务：能量+$energyNum，需等待${viewSec}秒")
                         GlobalThreadPools.sleepCompat((viewSec / 3).toLong())
 
                         val receiveResp = JSONObject(
@@ -2365,7 +2365,7 @@ class AntSports : ModelTask() {
          */
         private fun neverlandPickAllBubble() {
             try {
-                Log.record(TAG, "健康岛 · 检查可领取泡泡")
+                Log.runtime(TAG, "健康岛 · 检查可领取泡泡")
 
                 val jo = JSONObject(AntSportsRpcCall.NeverlandRpcCall.queryBubbleTask())
 
@@ -2394,7 +2394,7 @@ class AntSports : ModelTask() {
 
                     if ("INIT" == bubbleTaskStatus && encryptValue.isNotEmpty()) {
                         encryptValues.add(encryptValue)
-                        Log.record(
+                        Log.runtime(
                             TAG,
                             "找到可浏览任务： ${item.optString("title")}，能量+$energyNum，需等待${viewSec}秒"
                         )
@@ -2406,12 +2406,12 @@ class AntSports : ModelTask() {
                 }
 
                 if (ids.isEmpty() && encryptValues.isEmpty()) {
-                    Log.record(TAG, "没有可领取的泡泡任务")
+                    Log.runtime(TAG, "没有可领取的泡泡任务")
                     return
                 }
 
                 if (ids.isNotEmpty()) {
-                    Log.record(TAG, "健康岛 · 正在领取 ${ids.size} 个泡泡…")
+                    Log.runtime(TAG, "健康岛 · 正在领取 ${ids.size} 个泡泡…")
                     val pick = JSONObject(AntSportsRpcCall.NeverlandRpcCall.pickBubbleTaskEnergy(ids))
 
                     if (!ResChecker.checkRes(TAG + "领取泡泡失败:", pick) ||
@@ -2425,14 +2425,14 @@ class AntSports : ModelTask() {
                     val changeAmount = data.optString("changeAmount", "0")
                     val balance = data.optString("balance", "0")
                     if (changeAmount == "0") {
-                        Log.record(TAG, "健康岛 · 本次未获得任何能量")
+                        Log.runtime(TAG, "健康岛 · 本次未获得任何能量")
                     } else {
                         Log.other("捡泡泡成功 🎈 +$changeAmount 余额：$balance")
                     }
                 }
 
                 for (encryptValue in encryptValues) {
-                    Log.record(TAG, "开始浏览任务，任务 encryptValue: $encryptValue")
+                    Log.runtime(TAG, "开始浏览任务，任务 encryptValue: $encryptValue")
 
                     for (i in 0 until arr.length()) {
                         val item = arr.getJSONObject(i)
@@ -2481,7 +2481,7 @@ class AntSports : ModelTask() {
             val maxStepLimit = neverlandGridStepCount.value
             val remainSteps = maxStepLimit - stepCount
 
-            Log.record(
+            Log.runtime(
                 TAG,
                 String.format(
                     "今日步数统计: 已走 %d/%d 步, 剩余 %d 步",
@@ -2506,7 +2506,7 @@ class AntSports : ModelTask() {
             val newSteps = currentSteps + addedSteps
             Status.setIntFlagToday(StatusFlags.FLAG_NEVERLAND_STEP_COUNT, newSteps)
             val maxLimit = neverlandGridStepCount.value
-            Log.record(
+            Log.runtime(
                 TAG,
                 String.format(
                     "步数增加: +%d 步, 当前总计 %d/%d 步",
@@ -2523,7 +2523,7 @@ class AntSports : ModelTask() {
          */
         private fun neverlandAutoTask() {
             try {
-                Log.record(TAG, "健康岛 · 启动走路建造任务")
+                Log.runtime(TAG, "健康岛 · 启动走路建造任务")
 
                 val baseInfo = JSONObject(AntSportsRpcCall.NeverlandRpcCall.queryBaseinfo())
                 if (!ResChecker.checkRes(TAG + " 查询基础信息失败:", baseInfo) ||
@@ -2539,7 +2539,7 @@ class AntSports : ModelTask() {
                 var mapId = baseData.optString("mapId", "")
                 val mapName = baseData.optString("mapName", "未知地图")
 
-                Log.record(
+                Log.runtime(
                     TAG,
                     String.format(
                         "当前地图: [%s](%s) | 模式: %s",
@@ -2551,13 +2551,13 @@ class AntSports : ModelTask() {
 
                 var remainSteps = checkDailyStepLimit()
                 if (remainSteps <= 0) {
-                    Log.record(TAG, "今日步数已达上限, 任务结束")
+                    Log.runtime(TAG, "今日步数已达上限, 任务结束")
                     return
                 }
 
                 var leftEnergy = queryUserEnergy()
                 if (leftEnergy < 5) {
-                    Log.record(TAG, "剩余能量不足(< 5), 无法执行任务")
+                    Log.runtime(TAG, "剩余能量不足(< 5), 无法执行任务")
                     return
                 }
 
@@ -2567,7 +2567,7 @@ class AntSports : ModelTask() {
                     executeAutoWalk(branchId, mapId, remainSteps, leftEnergy, mapName)
                 }
 
-                Log.record(TAG, "健康岛自动走路建造执行完成 ✓")
+                Log.runtime(TAG, "健康岛自动走路建造执行完成 ✓")
             } catch (t: Throwable) {
                 Log.printStackTrace(TAG, "neverlandAutoTask 发生异常$t", t)
             }
@@ -2586,7 +2586,7 @@ class AntSports : ModelTask() {
                     0
                 } else {
                     val balance = energyResp.getJSONObject("data").optInt("balance", 0)
-                    Log.record(TAG, "当前剩余能量: $balance")
+                    Log.runtime(TAG, "当前剩余能量: $balance")
                     balance
                 }
             } catch (t: Throwable) {
@@ -2607,7 +2607,7 @@ class AntSports : ModelTask() {
         ) {
             var leftEnergy = leftEnergyInit
             try {
-                Log.record(TAG, "开始执行旧版行走任务")
+                Log.runtime(TAG, "开始执行旧版行走任务")
                 val mapInfoResp = JSONObject(
                     AntSportsRpcCall.NeverlandRpcCall.queryMapInfo(mapId, branchId)
                 )
@@ -2621,7 +2621,7 @@ class AntSports : ModelTask() {
 
                 val mapInfo = mapInfoResp.getJSONObject("data")
                 if (!mapInfo.optBoolean("canWalk", false)) {
-                    Log.record(TAG, "当前地图不可走(canWalk=false)，跳过走路任务")
+                    Log.runtime(TAG, "当前地图不可走(canWalk=false)，跳过走路任务")
                     return
                 }
 
@@ -2630,7 +2630,7 @@ class AntSports : ModelTask() {
 
                 for (i in 0 until remainSteps) {
                     if (leftEnergy < 5) {
-                        Log.record(TAG, "[$mapName] 能量不足(< 5), 停止走路任务")
+                        Log.runtime(TAG, "[$mapName] 能量不足(< 5), 停止走路任务")
                         break
                     }
 
@@ -2697,7 +2697,7 @@ class AntSports : ModelTask() {
                     }
                     Thread.sleep(888)
                 }
-                Log.record(TAG, "自动走路任务完成 ✓")
+                Log.runtime(TAG, "自动走路任务完成 ✓")
             } catch (t: Throwable) {
                 Log.printStackTrace(TAG, "executeAutoWalk err", t)
             }
@@ -2757,7 +2757,7 @@ class AntSports : ModelTask() {
             val data = rewardResp.optJSONObject("data")
             val receiveResult = data?.optJSONObject("receiveResult")
             if (receiveResult == null) {
-                Log.record(TAG, "关卡奖励领取成功 🎉（无奖励详情）")
+                Log.runtime(TAG, "关卡奖励领取成功 🎉（无奖励详情）")
                 return
             }
 
@@ -2850,7 +2850,7 @@ class AntSports : ModelTask() {
                     AntSportsRpcCall.NeverlandRpcCall.chooseMap(branchId, mapId)
                 )
                 if (ResChecker.checkRes(TAG, resp)) {
-                    Log.record(TAG, "切换地图成功: $mapId")
+                    Log.runtime(TAG, "切换地图成功: $mapId")
                     map
                 } else {
                     Log.error(TAG, "切换地图失败: $resp")
@@ -2916,11 +2916,11 @@ class AntSports : ModelTask() {
                 if (buildings != null && buildings.length() > 0) {
                     lastBuildingIndex = buildings.getJSONObject(buildings.length() - 1)
                         .optInt("buildingIndex", -1)
-                    Log.record(TAG, "最后一个建筑 Index: $lastBuildingIndex")
+                    Log.runtime(TAG, "最后一个建筑 Index: $lastBuildingIndex")
                 }
 
                 if (mapEnergyProcess == mapEnergyFinal) {
-                    Log.record(TAG, "当前地图已建造完成，准备切换地图...")
+                    Log.runtime(TAG, "当前地图已建造完成，准备切换地图...")
                     val choiceMapInfo = chooseAvailableMap()
                     if (choiceMapInfo == null) {
                         Log.error(TAG, "切换地图失败，可能无可用地图，任务终止。")
@@ -2929,9 +2929,9 @@ class AntSports : ModelTask() {
                     if (choiceMapInfo.optBoolean("newIsLandFlg", true)) {
                         branchId = choiceMapInfo.optString("branchId")
                         mapId = choiceMapInfo.optString("mapId")
-                        Log.record(TAG, "成功切换到可建造的新地图: $mapId，继续执行建造。")
+                        Log.runtime(TAG, "成功切换到可建造的新地图: $mapId，继续执行建造。")
                     } else {
-                        Log.record(TAG, "已切换至走路地图: $mapId，将在下次运行时执行，任务终止。")
+                        Log.runtime(TAG, "已切换至走路地图: $mapId，将在下次运行时执行，任务终止。")
                         return
                     }
                 }
@@ -2958,7 +2958,7 @@ class AntSports : ModelTask() {
 
                     val buildData = buildResp.optJSONObject("data")
                     if (buildData == null || buildData.length() == 0) {
-                        Log.record(TAG, "⚠️ build响应数据为空，当前地图已达限制，任务重新进入地图完成处理流程。")
+                        Log.runtime(TAG, "⚠️ build响应数据为空，当前地图已达限制，任务重新进入地图完成处理流程。")
                         chooseAvailableMap()
                         return
                     }

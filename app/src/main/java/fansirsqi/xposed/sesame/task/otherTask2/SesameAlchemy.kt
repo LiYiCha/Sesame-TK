@@ -29,13 +29,13 @@ class SesameAlchemy {
     fun run(){
         // 防止并发执行
         if (isRunning) {
-            Log.record(TAG, "任务正在执行中，跳过本次执行")
+            Log.runtime(TAG, "任务正在执行中，跳过本次执行")
             return
         }
 
         executionLock.withLock {
             if (isRunning) {
-                Log.record(TAG, "任务已在执行中，跳过本次执行")
+                Log.runtime(TAG, "任务已在执行中，跳过本次执行")
                 return
             }
 
@@ -120,13 +120,13 @@ class SesameAlchemy {
                             break
                         }
                     } else {
-                        Log.record(TAG, "芝麻炼金失败: " + alchemyJo.optString("resultView"))
+                        Log.runtime(TAG, "芝麻炼金失败: " + alchemyJo.optString("resultView"))
                         break
                     }
                 }
             }
         } else {
-            Log.record(TAG, "芝麻炼金首页查询失败")
+            Log.runtime(TAG, "芝麻炼金首页查询失败")
         }
     }
 
@@ -290,7 +290,7 @@ class SesameAlchemy {
                             processedTasks.add(templateId)
                             hasNewTasks = true // 标记有新任务被处理，需要重新检查
 
-                            Log.record("$TAG 已处理 LIFE_RECORD 任务: $title (templateId: $templateId)")
+                            Log.runtime("$TAG 已处理 LIFE_RECORD 任务: $title (templateId: $templateId)")
                         }
                         //协程随机休眠
                         sleepCompat(7000 + (Math.random() * 1000).toLong())

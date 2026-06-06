@@ -132,7 +132,7 @@ public class NeverLand extends BaseCommTask {
                     // 检查该recordId是否在错误缓存中
                     String bubbleTaskErrorKey = BUBBLE_TASK_ERROR_CACHE_PREFIX + recordId;
                     if (Status.hasTemporaryStatusValid(bubbleTaskErrorKey)) {
-                        Log.record(this.displayName + "能量球[" + title + "]已在错误缓存中，跳过处理");
+                        Log.runtime(this.displayName + "能量球[" + title + "]已在错误缓存中，跳过处理");
                         continue;
                     }
 
@@ -166,7 +166,7 @@ public class NeverLand extends BaseCommTask {
 
                             // 如果是状态校验错误，设置临时状态避免重复执行
                             if ("ENERGY_BALL_STATUS_IS_INVALID_ERROR".equals(errorCode)) {
-                                Log.record(this.displayName + "能量球状态校验错误，暂停30分钟");
+                                Log.runtime(this.displayName + "能量球状态校验错误，暂停30分钟");
                                 Status.setTemporaryStatusWithExpiry("NeverLandPickTemp30", 30 * 60 * 1000);
 
                                 // 将这些recordId加入错误缓存
@@ -897,7 +897,7 @@ public class NeverLand extends BaseCommTask {
                         try {
                             // 执行跳跃
                             if (!buildMap(multiNum)) {
-                                Log.record(TAG, "建造失败，停止跳跃");
+                                Log.runtime(TAG, "建造失败，停止跳跃");
                                 break;
                             }
                             TimeUtil.sleep(2000); // 每次跳跃间隔2秒
@@ -970,7 +970,7 @@ public class NeverLand extends BaseCommTask {
                 // 优先执行指定次数跳跃
                 for (int i = 0; i < jumpCount; i++) {
                     if (!walkGrid()) {
-                        Log.record(TAG, "剩余能量不足，停止跳跃");
+                        Log.runtime(TAG, "剩余能量不足，停止跳跃");
                         break;
                     }
                     // 在适当间隔检查地图奖励，而不是每次跳跃前检查

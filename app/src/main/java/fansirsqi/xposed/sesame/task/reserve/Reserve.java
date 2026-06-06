@@ -42,10 +42,10 @@ public class Reserve extends ModelTask {
     }
     public boolean check() {
         if (TaskCommon.IS_ENERGY_TIME){
-            Log.record("⏸ 当前为只收能量时间【"+ BaseModel.getEnergyTime().getValue() +"】，停止执行" + getName() + "任务！");
+            Log.runtime("⏸ 当前为只收能量时间【"+ BaseModel.getEnergyTime().getValue() +"】，停止执行" + getName() + "任务！");
             return false;
         }else if (TaskCommon.IS_MODULE_SLEEP_TIME) {
-            Log.record("💤 模块休眠时间【"+ BaseModel.getModelSleepTime().getValue() +"】停止执行" + getName() + "任务！");
+            Log.runtime("💤 模块休眠时间【"+ BaseModel.getModelSleepTime().getValue() +"】停止执行" + getName() + "任务！");
             return false;
         } else {
             return true;
@@ -53,18 +53,18 @@ public class Reserve extends ModelTask {
     }
     public void run() {
         try {
-            Log.record("开始保护地任务");
+            Log.runtime("开始保护地任务");
             animalReserve();
         } catch (Throwable t) {
             Log.runtime(TAG, "start.run err:");
             Log.printStackTrace(TAG, t);
         } finally {
-            Log.record("保护地任务");
+            Log.runtime("保护地任务");
         }
     }
     private void animalReserve() {
         try {
-            Log.record("开始执行-" + getName());
+            Log.runtime("开始执行-" + getName());
             String s = ReserveRpcCall.queryTreeItemsForExchange();
             if (s == null) {
                 ThreadUtil.sleep(RandomUtil.delay());
@@ -104,7 +104,7 @@ public class Reserve extends ModelTask {
             Log.runtime(TAG, "animalReserve err:");
             Log.printStackTrace(TAG, t);
         } finally {
-            Log.record("结束执行-" + getName());
+            Log.runtime("结束执行-" + getName());
         }
     }
     private boolean queryTreeForExchange(String projectId) {
@@ -127,7 +127,7 @@ public class Reserve extends ModelTask {
                     return false;
                 }
             } else {
-                Log.record(jo.getString("resultDesc"));
+                Log.runtime(jo.getString("resultDesc"));
                 Log.runtime(s);
             }
         } catch (Throwable t) {
@@ -155,7 +155,7 @@ public class Reserve extends ModelTask {
                     Log.forest(str);
                     Status.reserveToday(projectId, 1);
                 } else {
-                    Log.record(jo.getString("resultDesc"));
+                    Log.runtime(jo.getString("resultDesc"));
                     Log.runtime(jo.toString());
                     Log.forest("领保护地🏕️[" + itemName + "]#发生未知错误，停止申请");
                     // Statistics.reserveToday(projectId, count);

@@ -109,7 +109,7 @@ public class OtherTask2 extends ModelTask {
     public void runJava() {
         // 线程安全检查 - 防止并发执行
         if (!isRunning.compareAndSet(false, true)) {
-            //Log.record(TAG, "任务正在执行中，跳过本次调用");
+            //Log.runtime(TAG, "任务正在执行中，跳过本次调用");
             return;
         }
         
@@ -252,7 +252,7 @@ public class OtherTask2 extends ModelTask {
                 // 执行所有任务组
                 executeTaskGroups(taskGroups);
                 
-                Log.record(TAG, "其他任务2执行完成");
+                Log.runtime(TAG, "其他任务2执行完成");
 
             } catch (Throwable t) {
                 Log.error(TAG+"运行出错："+t);
@@ -274,13 +274,13 @@ public class OtherTask2 extends ModelTask {
             try {
                 // 更新通知显示当前执行的组
                 Notify.setStatusTextExec(group.getGroupName());
-                //Log.record(TAG, "开始执行[" + group.getGroupName() + "]，共" + group.getTasks().size() + "个任务");
+                //Log.runtime(TAG, "开始执行[" + group.getGroupName() + "]，共" + group.getTasks().size() + "个任务");
 
                 int completedTasks = 0;
                 // 执行组内所有任务
                 for (TaskWrapper task : group.getTasks()) {
                     try {
-                        //Log.record(TAG, "执行任务: " + task.taskName());
+                        //Log.runtime(TAG, "执行任务: " + task.taskName());
                         task.execute();
                         completedTasks++;
                     } catch (Exception e) {
@@ -290,7 +290,7 @@ public class OtherTask2 extends ModelTask {
                 }
 
                 completedGroups++;
-                //Log.record(TAG, "[" + group.getGroupName() + "]执行完成(" + completedTasks + "/" + group.getTasks().size() + "任务) [" + completedGroups + "/" + totalGroups + "组]");
+                //Log.runtime(TAG, "[" + group.getGroupName() + "]执行完成(" + completedTasks + "/" + group.getTasks().size() + "任务) [" + completedGroups + "/" + totalGroups + "组]");
                 
                 // 组间休息
                 try {

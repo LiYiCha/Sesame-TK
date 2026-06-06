@@ -66,7 +66,7 @@ object TaskTimeChecker {
 
             // 检查是否包含多个时间（比如 "0810 0830" 或 "0810,0820"）
             if (cleaned.contains(Regex("\\d{4}.*\\d{4}"))) {
-                Log.record(TAG, "⚠️ 检测到多个时间值，只使用第一个时间")
+                Log.runtime(TAG, "⚠️ 检测到多个时间值，只使用第一个时间")
                 // 提取第一个4位数字
                 val match = Regex("\\d{4}").find(cleaned)
                 cleaned = match?.value ?: defaultTime
@@ -77,7 +77,7 @@ object TaskTimeChecker {
 
             // 验证长度
             if (cleaned.length !in 2..4) {
-                Log.record(TAG, "⚠️ 时间格式错误（长度${cleaned.length}），使用默认时间: $defaultTime")
+                Log.runtime(TAG, "⚠️ 时间格式错误（长度${cleaned.length}），使用默认时间: $defaultTime")
                 return defaultTime.filter { it.isDigit() }
             }
 
@@ -90,7 +90,7 @@ object TaskTimeChecker {
 
             // 验证小时和分钟的有效性
             val hour = cleaned.substring(0, 2).toIntOrNull() ?: run {
-                Log.record(TAG, "⚠️ 小时解析失败，使用默认时间")
+                Log.runtime(TAG, "⚠️ 小时解析失败，使用默认时间")
                 return defaultTime.filter { it.isDigit() }
             }
 
@@ -98,18 +98,18 @@ object TaskTimeChecker {
 
             // 验证范围
             if (hour !in 0..23) {
-                Log.record(TAG, "⚠️ 小时[$hour]超出范围(0-23)，使用默认时间: $defaultTime")
+                Log.runtime(TAG, "⚠️ 小时[$hour]超出范围(0-23)，使用默认时间: $defaultTime")
                 return defaultTime.filter { it.isDigit() }
             }
 
             if (minute !in 0..59) {
-                Log.record(TAG, "⚠️ 分钟[$minute]超出范围(0-59)，使用默认时间: $defaultTime")
+                Log.runtime(TAG, "⚠️ 分钟[$minute]超出范围(0-59)，使用默认时间: $defaultTime")
                 return defaultTime.filter { it.isDigit() }
             }
 
             return cleaned
         } catch (e: Exception) {
-            Log.record(TAG, "⚠️ 时间验证异常: ${e.message}，使用默认时间")
+            Log.runtime(TAG, "⚠️ 时间验证异常: ${e.message}，使用默认时间")
             return defaultTime.filter { it.isDigit() }
         }
     }

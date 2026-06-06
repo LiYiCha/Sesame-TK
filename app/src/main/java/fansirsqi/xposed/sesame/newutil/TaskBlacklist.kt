@@ -87,7 +87,7 @@ object TaskBlacklist {
         if (currentBlacklist.remove(blacklistItem)) {
             saveBlacklist(currentBlacklist)
             val displayInfo = if (taskTitle.isNotBlank()) "$taskId - $taskTitle" else taskId
-            Log.record(TAG, "任务[$displayInfo]已从黑名单移除")
+            Log.runtime(TAG, "任务[$displayInfo]已从黑名单移除")
         }
     }
 
@@ -97,7 +97,7 @@ object TaskBlacklist {
     fun clearBlacklist() {
         try {
             saveBlacklist(emptySet())
-            Log.record(TAG, "黑名单已清空")
+            Log.runtime(TAG, "黑名单已清空")
         } catch (e: Exception) {
             Log.printStackTrace(TAG, "清空黑名单失败", e)
         }
@@ -149,7 +149,7 @@ object TaskBlacklist {
             // 第四步：生成日志信息并记录
             // 优先显示完整信息（ID-标题），如果标题为空则只显示ID
             val taskInfo = if (taskTitle.isNotBlank()) "$taskId - $taskTitle" else taskId
-            Log.record(TAG, "任务[$taskInfo]因$reason 自动加入黑名单")
+            Log.runtime(TAG, "任务[$taskInfo]因$reason 自动加入黑名单")
         }
     }
 }

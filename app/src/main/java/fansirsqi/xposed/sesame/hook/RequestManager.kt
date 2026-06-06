@@ -30,17 +30,17 @@ object RequestManager {
     @RequiresPermission(Manifest.permission.ACCESS_NETWORK_STATE)
     private fun getRpcBridge(): RpcBridge? {
         if (!NetworkUtils.isNetworkAvailable()) {
-            Log.record("网络未连接，等待5秒")
+            Log.runtime("网络未连接，等待5秒")
             fansirsqi.xposed.sesame.util.CoroutineUtils.sleepCompat(5000)
             if (!NetworkUtils.isNetworkAvailable()) {
                 val networkType = NetworkUtils.getNetworkType()
-                Log.record("网络仍未连接，当前网络类型: $networkType，放弃本次请求...")
+                Log.runtime("网络仍未连接，当前网络类型: $networkType，放弃本次请求...")
                 return null
             }
         }
         var rpcBridge = fansirsqi.xposed.sesame.hook.lifecycle.LifecycleManager.getRpcBridge()
         if (rpcBridge == null) {
-            Log.record("LifecycleManager.getRpcBridge() 为空，等待5秒")
+            Log.runtime("LifecycleManager.getRpcBridge() 为空，等待5秒")
             fansirsqi.xposed.sesame.util.CoroutineUtils.sleepCompat(5000)
             rpcBridge = fansirsqi.xposed.sesame.hook.lifecycle.LifecycleManager.getRpcBridge()
         }

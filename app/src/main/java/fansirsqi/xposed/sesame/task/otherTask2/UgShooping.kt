@@ -13,23 +13,33 @@ class UgShooping {
     private var taskFailureCount = mutableMapOf<String, Int>() // 记录任务失败次数
 
     fun handle() {
-        // 签到时间在7点之前，不执行任务
-        val hour = TimeUtil.getHourOfDay()
-        if (hour < 7) return
+        try {
+            // 签到时间在7点之前，不执行任务
+            val hour = TimeUtil.getHourOfDay()
+            if (hour < 7) return
 
-        // 初始化黑名单
-        initBlackList()
+            // 初始化黑名单
+            initBlackList()
 
-        // 首页
-        CheckHome()
+            // 首页
+            CheckHome()
 
-        // 签到
-        if (!Status.hasFlagToday("ugShooping_signin")) {
-            doSignIn()
+            // 签到
+            if (!Status.hasFlagToday("ugShooping_signin")) {
+                doSignIn()
+            }
+
+            // 任务处理
+            handleTask()
+        } catch (e: RuntimeException) {
+            if (e.message == "NETWORK_ERROR_48") {
+                Log.error(TAG, "网络不可用(error 48)，停止天天领现金后续任务执行")
+            } else {
+                Log.error(TAG, "任务异常:${e}")
+            }
+        } catch (e: Exception) {
+            Log.error(TAG, "任务异常:${e}")
         }
-
-        // 任务处理
-        handleTask()
     }
 
     // 初始化黑名单
@@ -92,7 +102,7 @@ class UgShooping {
                         if (failureCount >= 2) {
                             blackList.add(taskTitle)
                             DataStore.put("ugShopping_blackList", blackList)
-                            Log.record(TAG, "任务[${taskTitle}]已失败${failureCount}次，加入黑名单")
+                            Log.runtime(TAG, "任务[${taskTitle}]已失败${failureCount}次，加入黑名单")
                         }
                     } else {
                         // 成功则清除失败计数
@@ -123,6 +133,15 @@ class UgShooping {
         return false
     }
 
+    // 判断是否是网络错误 (error 48)
+    private fun isNetworkError(res: org.json.JSONObject?): Boolean {
+        if (res == null) return false
+        val error = res.optInt("error", 0)
+        val errorNo = res.optInt("errorNo", 0)
+        val errorMsg = res.optString("errorMessage", "")
+        return error == 48 || errorNo == 3 || errorMsg.contains("网络不可用") || errorMsg.contains("网络")
+    }
+
     // 任务处理
     private fun doTask(taskCode: String, subTaskCode: String, taskTitle: String): Boolean {
         try {
@@ -132,8 +151,13 @@ class UgShooping {
                 Log.other(TAG, "完成[${taskTitle}]获得${rewardAmount}元")
                 return true
             } else {
+                if (isNetworkError(result)) {
+                    throw RuntimeException("NETWORK_ERROR_48")
+                }
                 Log.error(TAG, "任务[${taskTitle}]失败:${result}")
             }
+        } catch (e: RuntimeException) {
+            throw e
         } catch (e: Exception) {
             Log.error(TAG, "任务[${taskTitle}]异常:${e}")
         }

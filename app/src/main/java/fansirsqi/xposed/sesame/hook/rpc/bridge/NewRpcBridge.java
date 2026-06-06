@@ -145,7 +145,7 @@ public class NewRpcBridge implements RpcBridge {
                                                     } catch (InterruptedException e) {
                                                         Log.printStackTrace(e);
                                                     }
-                                                    //Log.record("✅ 验证等待结束");
+                                                    //Log.runtime("✅ 验证等待结束");
                                                 }
                                             }
                                             
@@ -174,7 +174,7 @@ public class NewRpcBridge implements RpcBridge {
                                 ApplicationHook.setOffline(true);
                                 Notify.updateStatusText("登录超时");
                                 if (BaseModel.getTimeoutRestart().getValue()) {
-                                    Log.record("尝试重新登录");
+                                    Log.runtime("尝试重新登录");
                                     ApplicationHook.reLoginByBroadcast();
                                 }
                             }

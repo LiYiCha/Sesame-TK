@@ -65,7 +65,7 @@ public class StudentAnswer {
 
                         // 检查任务是否在黑名单中
                         if (taskBlackList.contains(taskId) || blackCache.contains(taskId)) {
-                            //Log.record(TAG + "任务[" + taskName + "]在黑名单中，跳过执行");
+                            //Log.runtime(TAG + "任务[" + taskName + "]在黑名单中，跳过执行");
                             continue;
                         }
 
@@ -76,11 +76,11 @@ public class StudentAnswer {
                             TimeUtil.sleep(RandomUtil.nextInt(15000,17000));
                             boolean result = doTask("send", taskId);
                             if (result){
-                                Log.record(TAG+"完成[" + taskName+"]"+taskCompleteReward+"卡");
+                                Log.runtime(TAG+"完成[" + taskName+"]"+taskCompleteReward+"卡");
                                 // 任务成功执行，从黑名单中移除（如果存在）
                                 if (taskBlackList.contains(taskId)) {
                                     taskBlackList.remove(taskId);
-                                    Log.record(TAG + "任务[" + taskName + "]执行成功，从黑名单中移除");
+                                    Log.runtime(TAG + "任务[" + taskName + "]执行成功，从黑名单中移除");
                                 }
                             }else {
                                 Log.error(TAG+"任务[" + taskName+"]执行失败");
@@ -120,6 +120,6 @@ public class StudentAnswer {
         // 将任务加入黑名单
         taskBlackList.add(taskId);
         DataStore.INSTANCE.put("blacklistedTasks_stuAnswer", taskBlackList);
-        Log.record(TAG + "任务[" + taskId + "]已加入黑名单");
+        Log.runtime(TAG + "任务[" + taskId + "]已加入黑名单");
     }
 }

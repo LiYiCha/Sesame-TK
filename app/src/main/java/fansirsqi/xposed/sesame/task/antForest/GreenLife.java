@@ -25,11 +25,11 @@ public class GreenLife {
                     }
                 }
             } else {
-                Log.record(TAG, jo.getJSONObject("data").getString("resultCode"));
+                Log.runtime(TAG, jo.getJSONObject("data").getString("resultCode"));
                 CoroutineUtils.sleepCompat(300);
             }
         } catch (Throwable t) {
-            Log.record(TAG, "sendEnergyByAction err:");
+            Log.runtime(TAG, "sendEnergyByAction err:");
             Log.printStackTrace(TAG, t);
         }
     }

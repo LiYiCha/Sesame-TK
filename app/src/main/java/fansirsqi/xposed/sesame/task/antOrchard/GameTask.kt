@@ -58,14 +58,14 @@ enum class GameTask(
             val resJson = JSONObject(responseText)
             if (resJson.optInt("code") == 1) {
                 val token = resJson.optJSONObject("data")?.optString("token")
-                //Log.record(title, "✅ 登录成功，Token 已获取")
+                //Log.runtime(title, "✅ 登录成功，Token 已获取")
                 token
             } else {
-                // Log.record(title, "❌ 登录接口报错 (Code $respCode): $responseText")
+                // Log.runtime(title, "❌ 登录接口报错 (Code $respCode): $responseText")
                 null
             }
         } catch (e: Exception) {
-            //Log.record(title, "🚨 登录过程抛出异常: ${e.message}")
+            //Log.runtime(title, "🚨 登录过程抛出异常: ${e.message}")
             null
         }
     }
@@ -75,11 +75,11 @@ enum class GameTask(
      */
     fun report(eggCount: Int) {
         val totalNeeded = eggCount * (requestsPerEgg + 1) // 正常不需要加1，多1次确保网络请求不会错误
-        Log.record(title, "🚀 开始执行上报任务：目标 $eggCount 个蛋，需请求 $totalNeeded 次")
+        Log.runtime(title, "🚀 开始执行上报任务：目标 $eggCount 个蛋，需请求 $totalNeeded 次")
         
         cachedToken = login()
         if (cachedToken.isNullOrEmpty()) {
-            Log.record(title, "⚠️ 无法获取有效的 Token，放弃上报任务")
+            Log.runtime(title, "⚠️ 无法获取有效的 Token，放弃上报任务")
             return
         }
 
@@ -87,7 +87,7 @@ enum class GameTask(
         for (i in 1..totalNeeded) {
             // 执行单次上报，包含重试与Token失效重新登录逻辑
             if (!executeSingleReportWithRetry(i, totalNeeded)) {
-                Log.record(title, "⚠️ 上报任务在第 $i 次执行时中断")
+                Log.runtime(title, "⚠️ 上报任务在第 $i 次执行时中断")
                 break
             }
             successCount++
@@ -96,7 +96,7 @@ enum class GameTask(
                 CoroutineUtils.sleepCompat((1000..2000).random().toLong())
             }
         }
-        Log.record(title, "🏁 上报任务执行完毕，成功 $successCount/$totalNeeded 次")
+        Log.runtime(title, "🏁 上报任务执行完毕，成功 $successCount/$totalNeeded 次")
     }
 
     private fun executeSingleReportWithRetry(current: Int, total: Int): Boolean {
@@ -110,13 +110,13 @@ enum class GameTask(
             }
 
             if (result.isTokenInvalid) {
-                Log.record(title, "🔑 检测到 Token 失效，尝试重新登录... (尝试次: $attempts)")
+                Log.runtime(title, "🔑 检测到 Token 失效，尝试重新登录... (尝试次: $attempts)")
                 cachedToken = login()
                 if (cachedToken.isNullOrEmpty()) {
-                    Log.record(title, "🔑 重新登录获取 Token 失败")
+                    Log.runtime(title, "🔑 重新登录获取 Token 失败")
                 }
             } else {
-                Log.record(title, "⚠️ 第 $current 次上报失败: ${result.errorMsg} (尝试次: $attempts/$maxAttempts)")
+                Log.runtime(title, "⚠️ 第 $current 次上报失败: ${result.errorMsg} (尝试次: $attempts/$maxAttempts)")
             }
 
             if (attempts < maxAttempts) {

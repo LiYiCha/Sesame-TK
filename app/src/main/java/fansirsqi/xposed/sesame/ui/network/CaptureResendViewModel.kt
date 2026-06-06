@@ -229,9 +229,104 @@ class CaptureResendViewModel : ViewModel() {
         if (index in list.indices) { list[index] = key to value; headers.value = list }
     }
 
+    fun unescapeString(str: String): String {
+        var s = str.trim()
+        if (s.startsWith("\"") && s.endsWith("\"") && s.length >= 2) {
+            s = s.substring(1, s.length - 1)
+        }
+        val sb = java.lang.StringBuilder()
+        var i = 0
+        val len = s.length
+        while (i < len) {
+            val c = s[i]
+            if (c == '\\' && i + 1 < len) {
+                val next = s[i + 1]
+                when (next) {
+                    '"' -> sb.append('"')
+                    '\\' -> sb.append('\\')
+                    'n' -> sb.append('\n')
+                    'r' -> sb.append('\r')
+                    't' -> sb.append('\t')
+                    '/' -> sb.append('/')
+                    'u' -> {
+                        if (i + 5 < len) {
+                            try {
+                                val hex = s.substring(i + 2, i + 6)
+                                sb.append(hex.toInt(16).toChar())
+                                i += 4
+                            } catch (e: Exception) {
+                                sb.append('\\').append('u')
+                            }
+                        } else {
+                            sb.append('\\').append('u')
+                        }
+                    }
+                    else -> sb.append(next)
+                }
+                i += 2
+            } else {
+                sb.append(c)
+                i++
+            }
+        }
+        return sb.toString()
+    }
+
+    fun updateBody(newBody: String) {
+        val trimmed = newBody.trim()
+        if (trimmed.contains("\\\"") || trimmed.contains("\\\\")) {
+            body.value = unescapeString(newBody)
+        } else {
+            body.value = newBody
+        }
+    }
+
+    fun triggerManualUnescape() {
+        body.value = unescapeString(body.value)
+    }
+
     fun importRawRequest(raw: String) {
         if (raw.isBlank()) return
-        // 处理 cURL 风格的换行符
+        val trimmedRaw = raw.trim()
+        
+        // 优先尝试解析 RPC 数组格式: ["rpcMethod", "rpcParams", null]
+        if (trimmedRaw.startsWith("[") && trimmedRaw.endsWith("]")) {
+            try {
+                val jsonArray = org.json.JSONArray(trimmedRaw)
+                if (jsonArray.length() >= 2) {
+                    val rpcMethod = jsonArray.optString(0)
+                    val rpcParams = jsonArray.optString(1)
+                    if (!rpcMethod.isNullOrEmpty() && rpcMethod.contains(".")) {
+                        method.value = "POST"
+                        url.value = "https://mobilegw.alipay.com/mgw.htm"
+                        
+                        val newHeaders = headers.value.filterNot { it.first.equals("Operation-Type", true) }.toMutableList()
+                        newHeaders.add(0, "Operation-Type" to rpcMethod)
+                        if (!newHeaders.any { it.first.equals("Content-Type", true) }) {
+                            newHeaders.add("Content-Type" to "application/json")
+                        }
+                        headers.value = newHeaders
+                        
+                        body.value = try {
+                            val paramObj = org.json.JSONArray(rpcParams)
+                            paramObj.toString(4)
+                        } catch (e: Exception) {
+                            try {
+                                val paramObj = org.json.JSONObject(rpcParams)
+                                paramObj.toString(4)
+                            } catch (e2: Exception) {
+                                rpcParams
+                            }
+                        }
+                        return
+                    }
+                }
+            } catch (e: Exception) {
+                // 忽略解析错误，回退到普通解析
+            }
+        }
+
+        // 处理 cURL 风格 of 换行符
         val cleanedRaw = raw.replace("\\\n", " ").replace("\\\r\n", " ")
         val trimmed = cleanedRaw.trim()
         if (trimmed.startsWith("curl", true)) {

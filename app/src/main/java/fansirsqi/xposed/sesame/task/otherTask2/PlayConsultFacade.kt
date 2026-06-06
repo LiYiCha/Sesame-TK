@@ -72,9 +72,18 @@ class PlayConsultFacade {
         }
         if (hasError1009) return
 
-        //处理任务
-        processMultipleRounds(count)
+        val initialCertNum = CERTNUM ?: 0
+
+        //处理任务，并获取实际完成轮数
+        val completedRounds = processMultipleRounds(count)
         if (hasError1009) return
+
+        // 优化点：若初始次数为 0 且无做任务轮次，则直接退出不发起第二次 handleInfo()
+        if (initialCertNum == 0 && completedRounds == 0) {
+            Log.runtime(TAG, "当前无任务且无抽奖次数，直接安全退出，避免过期误判")
+            Status.setTemporaryStatusWithExpiry("MemberLuckyWheel_Cooldown", 30 * 60 * 1000)
+            return
+        }
 
         delay(2000 + (0..1000).random().toLong() )
         //更新抽奖次数
@@ -91,24 +100,25 @@ class PlayConsultFacade {
 
     /**
      * 处理多轮任务
+     * @return 实际完成的任务轮数
      */
-    private suspend fun processMultipleRounds(maxRounds: Int) {
+    private suspend fun processMultipleRounds(maxRounds: Int): Int {
+        var completedRounds = 0
         try {
             if (maxRounds <= 0) {
-                Log.record(TAG, "任务轮数为0，跳过任务处理")
-                return
+                Log.runtime(TAG, "任务轮数为0，跳过任务处理")
+                return 0
             }
 
-            Log.record(TAG, "开始处理多轮任务，最大轮数: $maxRounds")
-            var completedRounds = 0
+            Log.runtime(TAG, "开始处理多轮任务，最大轮数: $maxRounds")
             var hasMoreTasks = true
 
             for (round in 1..maxRounds) {
-                Log.record(TAG, "开始第${round}轮任务处理")
+                Log.runtime(TAG, "开始第${round}轮任务处理")
                 
                 // 再次检查是否有任务可执行，避免无效轮次
                 if (!hasMoreTasks) {
-                    Log.record(TAG, "没有更多任务需要处理，提前结束")
+                    Log.runtime(TAG, "没有更多任务需要处理，提前结束")
                     break
                 }
 
@@ -120,25 +130,26 @@ class PlayConsultFacade {
 
                 if (taskResult) {
                     completedRounds++
-                    Log.record(TAG, "第${round}轮任务处理完成")
+                    Log.runtime(TAG, "第${round}轮任务处理完成")
                     
                     // 如果不是最后一轮，等待后继续
                     if (round < maxRounds) {
-                        Log.record(TAG, "第${round}轮完成，准备下一轮")
+                        Log.runtime(TAG, "第${round}轮完成，准备下一轮")
                         // 轮次间延迟，避免请求过于频繁
                         delay(3000 + (0..2000).random().toLong())
                     }
                 } else {
-                    Log.record(TAG, "第${round}轮任务处理失败或无任务，停止后续轮次")
+                    Log.runtime(TAG, "第${round}轮任务处理失败或无任务，停止后续轮次")
                     hasMoreTasks = false
                     break
                 }
             }
 
-            Log.record(TAG, "多轮任务处理完成，实际完成轮数: $completedRounds/$maxRounds")
+            Log.runtime(TAG, "多轮任务处理完成，实际完成轮数: $completedRounds/$maxRounds")
         } catch (e: Exception) {
             Log.error(TAG, "processMultipleRounds error: ${e}")
         }
+        return completedRounds
     }
 
     /**
@@ -161,7 +172,7 @@ class PlayConsultFacade {
                 CERTNUM = newCertNum
                 
                 if (force) {
-                    Log.record(TAG, "${activityUpdateText}|抽奖次数:${CERTNUM}")
+                    Log.runtime(TAG, "${activityUpdateText}|抽奖次数:${CERTNUM}")
                 }
                 return true
             }else{
@@ -188,7 +199,7 @@ class PlayConsultFacade {
                     if (adTaskList != null && adTaskList.length() > 0) {
                         var completedTasks = 0
                         val totalTasks = adTaskList.length()
-                        Log.record(TAG, "发现 $totalTasks 个任务")
+                        Log.runtime(TAG, "发现 $totalTasks 个任务")
 
                         for (i in 0 until adTaskList.length()) {
                             val adTask = adTaskList.optJSONObject(i)
@@ -207,14 +218,14 @@ class PlayConsultFacade {
                                 if ("COMPLETED" == status || "FINISHED" == status || 
                                     (!isAdTask && currentCount >= targetCount) || 
                                     (targetCount > 0 && currentCount >= targetCount)) {
-                                    Log.record(TAG, "任务已完成/跳过: ${adTask.optJSONObject("simpleTaskConfig")?.optString("title","")}")
+                                    Log.runtime(TAG, "任务已完成/跳过: ${adTask.optJSONObject("simpleTaskConfig")?.optString("title","")}")
                                     continue
                                 }
 
                                 val simpleTaskConfig = adTask.optJSONObject("simpleTaskConfig")
                                 val title = simpleTaskConfig?.optString("title","")
 
-                                Log.record(TAG, "开始执行任务[${title}] (${i+1}/$totalTasks)")
+                                Log.runtime(TAG, "开始执行任务[${title}] (${i+1}/$totalTasks)")
 
                                 // 任务间隔时间随机化
                                 val baseDelay = 10000L + (0..5000).random()
@@ -231,7 +242,7 @@ class PlayConsultFacade {
                                     return false
                                 }
                                 if (taskResult.optBoolean("success")){
-                                    Log.record(TAG, "完成[${title}]")
+                                    Log.runtime(TAG, "完成[${title}]")
                                     completedTasks++
                                 } else {
                                     Log.error(TAG, "完成[${title}]失败:${taskResult}")
@@ -240,7 +251,7 @@ class PlayConsultFacade {
 
                                 // 风控：每完成一定数量任务后增加额外延迟
                                 if (completedTasks % 3 == 0) {
-                                    Log.record(TAG, "已完成 $completedTasks 个任务，增加风控延迟")
+                                    Log.runtime(TAG, "已完成 $completedTasks 个任务，增加风控延迟")
                                     delay(2000 + (0..2000).random().toLong() )
                                 }
                             }
@@ -250,12 +261,12 @@ class PlayConsultFacade {
                         adIdBlackList.clear()
                         adIdBlackList.addAll(newBlackList)
 
-                        Log.record(TAG, "本轮任务处理完成，完成任务数: $completedTasks/$totalTasks")
+                        Log.runtime(TAG, "本轮任务处理完成，完成任务数: $completedTasks/$totalTasks")
                         
                         // 如果有完成的任务，返回true表示可能还有下一轮
                         return completedTasks > 0
                     }else{
-                        Log.record(TAG, "当前没有可执行的任务")
+                        Log.runtime(TAG, "当前没有可执行的任务")
                         return false
                     }
                 }
@@ -280,18 +291,18 @@ class PlayConsultFacade {
                 var lotteryCount = CERTNUM ?: 0
                 
                 if (lotteryCount <= 0) {
-                    Log.record(TAG, "抽奖次数不足，跳过抽奖")
+                    Log.runtime(TAG, "抽奖次数不足，跳过抽奖")
                     return
                 }
 
-                Log.record(TAG, "开始抽奖，当前次数: $lotteryCount")
+                Log.runtime(TAG, "开始抽奖，当前次数: $lotteryCount")
                 
                 var i = 1
                 while (i <= lotteryCount && CERTNUM ?: 0 > 0) {
                     // 每次抽奖前再次检查次数
                     val remainingCertNum = CERTNUM ?: 0
                     if (remainingCertNum <= 0) {
-                        Log.record(TAG, "抽奖次数已用完，停止抽奖")
+                        Log.runtime(TAG, "抽奖次数已用完，停止抽奖")
                         break
                     }
 
@@ -305,7 +316,7 @@ class PlayConsultFacade {
                             resultData?.optJSONObject("wangZhuanLotteryResultInfo")
                         val prizeTextForLotteryResult =
                             wangZhuanLotteryResultInfo?.optString("prizeTextForLotteryResult")
-                        Log.record(TAG, "第${i}次抽奖成功[${prizeTextForLotteryResult}]")
+                        Log.runtime(TAG, "第${i}次抽奖成功[${prizeTextForLotteryResult}]")
                     } else {
                         Log.error(TAG, "第${i}次抽奖失败:${result}")
                     }
@@ -318,7 +329,7 @@ class PlayConsultFacade {
                     delay(6000 + (0..1000).random().toLong())
                 }
                 
-                Log.record(TAG, "抽奖完成，剩余次数: ${CERTNUM ?: 0}")
+                Log.runtime(TAG, "抽奖完成，剩余次数: ${CERTNUM ?: 0}")
             } catch (e: Exception) {
                 Log.error(TAG, "handleConsult error: ${e}")
             }

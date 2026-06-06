@@ -236,7 +236,7 @@ public class JobRight extends BaseCommTask{
                     //普通任务
                     subTask(taskCode,recordNoNew);
                 } else {
-                    //Log.record(displayName + "跳过任务:" + activityName + ",状态:" + taskStatus);
+                    //Log.runtime(displayName + "跳过任务:" + activityName + ",状态:" + taskStatus);
                 }
             }
         } catch (JSONException e) {
@@ -529,7 +529,7 @@ public class JobRight extends BaseCommTask{
                     // 重新请求
                     jsonObject = new JSONObject(RequestManager.requestString(method, params));
                     if (!jsonObject.optBoolean("success")) {
-                        Log.record(TAG + "验证后重试仍失败，退出执行");
+                        Log.runtime(TAG + "验证后重试仍失败，退出执行");
                         return "false";
                     }
                 } else {

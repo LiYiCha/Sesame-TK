@@ -13,7 +13,7 @@ public class Log {
     private static final String TAG = "[" + BuildConfig.BUILD_TAG + BuildConfig.BUILD_NUMBER + "]";
     private static final Logger RUNTIME_LOGGER;
     private static final Logger SYSTEM_LOGGER;
-    private static final Logger RECORD_LOGGER;
+//    private static final Logger RECORD_LOGGER;
     private static final Logger DEBUG_LOGGER;
     private static final Logger FOREST_LOGGER;
     private static final Logger FARM_LOGGER;
@@ -25,7 +25,7 @@ public class Log {
         Logback.configureLogbackDirectly();
         RUNTIME_LOGGER = LoggerFactory.getLogger("runtime");
         SYSTEM_LOGGER = LoggerFactory.getLogger("system");
-        RECORD_LOGGER = LoggerFactory.getLogger("record");
+//        RECORD_LOGGER = LoggerFactory.getLogger("record");
         DEBUG_LOGGER = LoggerFactory.getLogger("debug");
         FOREST_LOGGER = LoggerFactory.getLogger("forest");
         FARM_LOGGER = LoggerFactory.getLogger("farm");
@@ -58,19 +58,19 @@ public class Log {
         runtime("[" + TAG + "]: " + message);
     }
 
-    public static void record(String message) {
-        runtime(message);
-        if (BaseModel.getRecordLog().getValue()) {
-            RECORD_LOGGER.info(TAG + "{}", message);
-        }
-    }
+//    public static void Log.runtime(String message) {
+//        runtime(message);
+//        if (BaseModel.getRecordLog().getValue()) {
+//            RECORD_LOGGER.info(TAG + "{}", message);
+//        }
+//    }
 
-    public static void record(String TAG, String message) {
-        record("[" + TAG + "]: " + message);
-    }
+//    public static void Log.runtime(String TAG, String message) {
+//        Log.runtime("[" + TAG + "]: " + message);
+//    }
 
     public static void forest(String message) {
-        record(message);
+//        Log.runtime(message);
         FOREST_LOGGER.info("{}", message);
     }
 
@@ -79,7 +79,7 @@ public class Log {
     }
 
     public static void farm(String message) {
-        record(message);
+//        Log.runtime(message);
         FARM_LOGGER.info("{}", message);
     }
 
@@ -88,7 +88,7 @@ public class Log {
     }
 
     public static void other(String message) {
-        record(message);
+//        Log.runtime(message);
         OTHER_LOGGER.info("{}", message);
     }
 

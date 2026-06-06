@@ -119,7 +119,7 @@ class ExtendHandle {
                     append("================================")
                 }
 
-                Log.record(statusInfo)
+                Log.runtime(statusInfo)
                 Toast.show("状态检查完成，详情请查看日志", true)
 
             } catch (e: Exception) {

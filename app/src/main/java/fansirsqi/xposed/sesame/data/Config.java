@@ -188,7 +188,7 @@ public class Config {
      * @return 配置是否成功加载
      */
     public static synchronized Config load(String userId) {
-        Log.record(TAG, "开始加载配置");
+        Log.runtime(TAG, "开始加载配置");
         String userName = "";
         File configV2File = null;
         try {
@@ -196,7 +196,7 @@ public class Config {
                 configV2File = Files.getDefaultConfigV2File();
                 userName = "默认";
                 if (!configV2File.exists()) {
-                    Log.record(TAG, "默认配置文件不存在，初始化新配置");
+                    Log.runtime(TAG, "默认配置文件不存在，初始化新配置");
                     unload();
                     Files.write2File(toSaveStr(), configV2File);
                 }
@@ -206,7 +206,7 @@ public class Config {
                 userName = (userEntity == null) ? userId : userEntity.getShowName();
             }
 
-            Log.record(TAG, "加载配置: " + userName);
+            Log.runtime(TAG, "加载配置: " + userName);
             boolean configV2FileExists = configV2File.exists();
             boolean defaultConfigV2FileExists = Files.getDefaultConfigV2File().exists();
 

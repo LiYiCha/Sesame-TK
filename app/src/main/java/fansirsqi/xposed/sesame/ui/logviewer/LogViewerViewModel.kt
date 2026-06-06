@@ -49,7 +49,6 @@ class LogViewerViewModel : ViewModel() {
      * UI 状态数据类
      */
     data class UiState(
-        val fullLogText: String = "",
         val displayedLines: List<String> = emptyList(),
         val displayedLineIndices: List<Int> = emptyList(), // 保存过滤后每一行在原始文本中的索引
         val filterKeyword: String = "",
@@ -62,7 +61,11 @@ class LogViewerViewModel : ViewModel() {
         val autoScroll: Boolean = true,
         val statusMessage: String = "就绪",
         val isLoading: Boolean = false,
-        val fontSize: Int = DEFAULT_FONT_SIZE // 使用默认字体大小
+        val fontSize: Int = DEFAULT_FONT_SIZE, // 使用默认字体大小
+        val showH5: Boolean = true,
+        val showBottom: Boolean = true,
+        val isCaptureLog: Boolean = false,
+        val showLineCopyButton: Boolean = false
     )
 
     /**
@@ -80,6 +83,9 @@ class LogViewerViewModel : ViewModel() {
     private var watchJob: Job? = null
     private var raf: RandomAccessFile? = null
     private var watchingFile: File? = null
+
+    private val allLines = ArrayList<String>()
+    private var endsWithNewline = true
 
     init {
         // 从持久化存储加载字体大小
@@ -116,22 +122,187 @@ class LogViewerViewModel : ViewModel() {
      * 设置完整日志文本
      */
     fun setFullText(text: String) {
-        _uiState.update { state ->
-            state.copy(
-                fullLogText = text,
-                statusMessage = "日志已加载"
-            )
+        if (text.isEmpty()) {
+            synchronized(allLines) {
+                allLines.clear()
+                endsWithNewline = true
+            }
+            applyFilters()
+            return
         }
-        applyFilters()
+        viewModelScope.launch(Dispatchers.Default) {
+            val lines = mutableListOf<String>()
+            var hasH5 = false
+            var hasBottom = false
+            val rawLines = text.split('\n')
+            rawLines.forEachIndexed { i, line ->
+                if (i == rawLines.size - 1 && line.isEmpty() && text.endsWith("\n")) {
+                    return@forEachIndexed
+                }
+                if (line.contains("[H5] ========================>")) {
+                    hasH5 = true
+                }
+                if (line.contains("[BOTTOM] ========================>")) {
+                    hasBottom = true
+                }
+                if (line.length > 200) {
+                    var start = 0
+                    while (start < line.length) {
+                        val end = (start + 200).coerceAtMost(line.length)
+                        lines.add(line.substring(start, end))
+                        start = end
+                    }
+                } else {
+                    lines.add(line)
+                }
+            }
+            synchronized(allLines) {
+                allLines.clear()
+                allLines.addAll(lines)
+                endsWithNewline = text.endsWith("\n")
+            }
+            _uiState.update { state ->
+                state.copy(
+                    isCaptureLog = hasH5 || hasBottom,
+                    statusMessage = "日志已加载"
+                )
+            }
+            applyFilters()
+        }
     }
 
     /**
-     * 追加日志文本
+     * 从文件加载日志（流式读取，防OOM）
      */
+    fun loadFile(file: File) {
+        viewModelScope.launch(Dispatchers.IO) {
+            _uiState.update { it.copy(isLoading = true, statusMessage = "加载中...") }
+            try {
+                val lines = ArrayList<String>()
+                var hasH5 = false
+                var hasBottom = false
+
+                file.bufferedReader(Charsets.UTF_8).useLines { sequence ->
+                    sequence.forEach { line ->
+                        if (line.contains("[H5] ========================>")) {
+                            hasH5 = true
+                        }
+                        if (line.contains("[BOTTOM] ========================>")) {
+                            hasBottom = true
+                        }
+                        if (line.length > 200) {
+                            var start = 0
+                            while (start < line.length) {
+                                val end = (start + 200).coerceAtMost(line.length)
+                                lines.add(line.substring(start, end))
+                                start = end
+                            }
+                        } else {
+                            lines.add(line)
+                        }
+                    }
+                }
+
+                val endsWithNl = if (file.length() > 0) {
+                    try {
+                        RandomAccessFile(file, "r").use { raf ->
+                            raf.seek(file.length() - 1)
+                            raf.read() == '\n'.code
+                        }
+                    } catch (e: Exception) {
+                        true
+                    }
+                } else {
+                    true
+                }
+
+                synchronized(allLines) {
+                    allLines.clear()
+                    allLines.addAll(lines)
+                    endsWithNewline = endsWithNl
+                }
+
+                _uiState.update { state ->
+                    state.copy(
+                        isLoading = false,
+                        isCaptureLog = hasH5 || hasBottom,
+                        statusMessage = "已加载 ${lines.size} 行"
+                    )
+                }
+                applyFilters()
+            } catch (e: Exception) {
+                Log.error(TAG, "加载文件失败: ${e.message}")
+                _uiState.update { it.copy(isLoading = false, statusMessage = "加载失败: ${e.message}") }
+            }
+        }
+    }
+
     fun appendLog(chunk: String) {
         if (chunk.isEmpty()) return
-        _uiState.update { state ->
-            state.copy(fullLogText = state.fullLogText + chunk)
+        val rawLines = chunk.split('\n')
+        if (rawLines.isEmpty()) return
+
+        synchronized(allLines) {
+            var startIdx = 0
+            if (!endsWithNewline && allLines.isNotEmpty()) {
+                val lastIdx = allLines.size - 1
+                val mergedLine = allLines[lastIdx] + rawLines[0]
+                if (mergedLine.length > 200) {
+                    allLines.removeAt(lastIdx)
+                    var start = 0
+                    while (start < mergedLine.length) {
+                        val end = (start + 200).coerceAtMost(mergedLine.length)
+                        allLines.add(mergedLine.substring(start, end))
+                        start = end
+                    }
+                } else {
+                    allLines[lastIdx] = mergedLine
+                }
+                startIdx = 1
+            }
+
+            var hasH5 = false
+            var hasBottom = false
+
+            for (i in startIdx until rawLines.size) {
+                val line = rawLines[i]
+                if (i == rawLines.size - 1 && line.isEmpty() && chunk.endsWith("\n")) {
+                    break
+                }
+                if (line.contains("[H5] ========================>")) {
+                    hasH5 = true
+                }
+                if (line.contains("[BOTTOM] ========================>")) {
+                    hasBottom = true
+                }
+                if (line.length > 200) {
+                    var start = 0
+                    while (start < line.length) {
+                        val end = (start + 200).coerceAtMost(line.length)
+                        allLines.add(line.substring(start, end))
+                        start = end
+                    }
+                } else {
+                    allLines.add(line)
+                }
+            }
+
+            endsWithNewline = chunk.endsWith("\n")
+
+            // 限制内存
+            val maxLines = 150000
+            if (allLines.size > maxLines) {
+                val toRemove = allLines.size - 100000
+                if (toRemove > 0) {
+                    allLines.subList(0, toRemove).clear()
+                }
+            }
+
+            _uiState.update { state ->
+                state.copy(
+                    isCaptureLog = state.isCaptureLog || hasH5 || hasBottom
+                )
+            }
         }
         applyFilters()
     }
@@ -140,6 +311,10 @@ class LogViewerViewModel : ViewModel() {
      * 清空日志
      */
     fun clearLog() {
+        synchronized(allLines) {
+            allLines.clear()
+            endsWithNewline = true
+        }
         _uiState.update {
             UiState(statusMessage = "已清空显示")
         }
@@ -179,7 +354,7 @@ class LogViewerViewModel : ViewModel() {
         viewModelScope.launch(Dispatchers.Default) {
             try {
                 val results = mutableListOf<SearchResult>()
-                val lines = state.fullLogText.split('\n')
+                val lines = synchronized(allLines) { allLines.toList() }
 
                 if (state.isRegexSearch) {
                     // 正则表达式搜索
@@ -360,30 +535,69 @@ class LogViewerViewModel : ViewModel() {
         _uiState.update { it.copy(fontSize = clamped) }
     }
 
+    fun toggleShowH5() {
+        _uiState.update { it.copy(showH5 = !it.showH5) }
+        applyFilters()
+    }
+
+    fun toggleShowBottom() {
+        _uiState.update { it.copy(showBottom = !it.showBottom) }
+        applyFilters()
+    }
+
+    fun toggleShowLineCopyButton() {
+        _uiState.update { it.copy(showLineCopyButton = !it.showLineCopyButton) }
+    }
+
     private fun applyFilters() {
         viewModelScope.launch(Dispatchers.Default) {
             val state = _uiState.value
-            val lines = state.fullLogText.split('\n')
+            val lines = synchronized(allLines) { allLines.toList() }
 
-            val filteredLines = mutableListOf<String>()
-            val filteredIndices = mutableListOf<Int>()
+            val filteredLines = ArrayList<String>(lines.size)
+            val filteredIndices = ArrayList<Int>(lines.size)
 
+            var currentBlockType = 0 // 0: none/normal, 1: H5, 2: BOTTOM
             lines.forEachIndexed { index, line ->
+                var processedLine = line
+                if (line.contains("[H5] ========================>")) {
+                    currentBlockType = 1
+                } else if (line.contains("[BOTTOM] ========================>")) {
+                    currentBlockType = 2
+                }
+
+                val skipBlock = (currentBlockType == 1 && !state.showH5) || 
+                                (currentBlockType == 2 && !state.showBottom)
+
+                if (processedLine.startsWith("[H5] ")) {
+                    processedLine = processedLine.substring(5)
+                } else if (processedLine.startsWith("[BOTTOM] ")) {
+                    processedLine = processedLine.substring(9)
+                }
+
+                if (line.contains("<========================")) {
+                    currentBlockType = 0
+                }
+
+                if (skipBlock) {
+                    return@forEachIndexed
+                }
+
                 // 应用关键字筛选
                 val matchesFilter = state.filterKeyword.isEmpty() ||
-                                   line.contains(state.filterKeyword, ignoreCase = true)
+                                   processedLine.contains(state.filterKeyword, ignoreCase = true)
 
                 // 应用日志级别过滤
                 val matchesLevel = if (state.enabledLogLevels.size == LogLevel.entries.size) {
                     true // 所有级别都启用，不需要过滤
                 } else {
                     state.enabledLogLevels.any { level ->
-                        level.pattern.containsMatchIn(line)
+                        level.pattern.containsMatchIn(processedLine)
                     }
                 }
 
                 if (matchesFilter && matchesLevel) {
-                    filteredLines.add(line)
+                    filteredLines.add(processedLine)
                     filteredIndices.add(index)
                 }
             }
@@ -393,10 +607,11 @@ class LogViewerViewModel : ViewModel() {
                     displayedLines = filteredLines,
                     displayedLineIndices = filteredIndices,
                     statusMessage = if (state.filterKeyword.isNotEmpty() ||
-                                      state.enabledLogLevels.size < LogLevel.entries.size) {
+                                      state.enabledLogLevels.size < LogLevel.entries.size ||
+                                      !state.showH5 || !state.showBottom) {
                         "筛选结果: ${filteredLines.size}/${lines.size} 行"
                     } else {
-                        "就绪"
+                        "共 ${lines.size} 行"
                     }
                 )
             }
@@ -475,8 +690,11 @@ class LogViewerViewModel : ViewModel() {
         watchingFile = null
     }
 
+    // formatLongLines has been removed as chunking is done on the fly
+
     override fun onCleared() {
         super.onCleared()
         stopWatchingFile()
     }
 }
+

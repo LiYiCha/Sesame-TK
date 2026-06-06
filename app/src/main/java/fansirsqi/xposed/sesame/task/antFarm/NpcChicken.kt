@@ -241,8 +241,8 @@ class NpcChicken {
             }
             Log.farm("$TAG 进入庄园成功，获取NPC配置成功。")
             // 友好打印 NPC 配置列表（不含实时奖励值）
-            Log.record("$TAG===================================")
-            Log.record("$TAG 可用NPC配置：")
+            Log.runtime("$TAG===================================")
+            Log.runtime("$TAG 可用NPC配置：")
             val hires = npcHires
 
             if (hires != null) {
@@ -258,13 +258,13 @@ class NpcChicken {
                     val taskSceneCode = hire.optString("taskSceneCode")
                     val npcAnimalType = hire.optString("npcAnimalType")
 
-                    Log.record("$TAG 名称:$bizRewardName 场景:$taskSceneCode 满值:${formatDouble(bizRewardThreshold)} 初:${formatDouble(directBizRewardAfterHire)} 期间:${formatDaysFromSeconds(hireDuration)} 冷却:${hireCoolDownDays}天 型:$npcAnimalType ID:$animalId")
+                    Log.runtime("$TAG 名称:$bizRewardName 场景:$taskSceneCode 满值:${formatDouble(bizRewardThreshold)} 初:${formatDouble(directBizRewardAfterHire)} 期间:${formatDaysFromSeconds(hireDuration)} 冷却:${hireCoolDownDays}天 型:$npcAnimalType ID:$animalId")
                 }
-                Log.record("$TAG===================================")
+                Log.runtime("$TAG===================================")
                 Status.setFlagToday("NpcChicken")
             } else {
                 Log.farm("$TAG 未获取到NPC配置列表，可能的原因：1.接口返回数据格式变化 2.服务器问题")
-                Log.record("$TAG 原始返回数据: ${jo.toString()}")
+                Log.runtime("$TAG 原始返回数据: ${jo.toString()}")
             }
         } else {
             Log.farm("$TAG 进入庄园失败，无法获取NPC配置")
@@ -446,11 +446,11 @@ class NpcChicken {
             val selectedConfigs = selectedNpcNames.mapNotNull { NPC_CONFIG_MAP[it] }
 
             if (selectedConfigs.isEmpty()) {
-                Log.record(TAG, "智能调度🤖[未选择有效的NPC]")
+                Log.runtime(TAG, "智能调度🤖[未选择有效的NPC]")
                 return
             }
 
-            Log.record(TAG, "智能调度🤖[已选择: ${selectedConfigs.joinToString(", ") { it.nickName }}]")
+            Log.runtime(TAG, "智能调度🤖[已选择: ${selectedConfigs.joinToString(", ") { it.nickName }}]")
 
             // 3. 加载历史记录
             val records = loadNpcRecords(selectedConfigs)
@@ -503,7 +503,7 @@ class NpcChicken {
     ) {
         // 场景1：当前没有NPC
         if (currentNpc == null) {
-            Log.record(TAG, "智能调度🤖[当前无NPC，开始选择雇佣]")
+            Log.runtime(TAG, "智能调度🤖[当前无NPC，开始选择雇佣]")
             hireNextAvailableNpc(configs, records)
             return
         }
@@ -518,7 +518,7 @@ class NpcChicken {
 
         if (currentConfig == null) {
             // 当前NPC不在选中列表中，遣返并雇佣新的
-            Log.record(TAG, "智能调度🤖[当前NPC[$currentName]不在选中列表，执行遣返]")
+            Log.runtime(TAG, "智能调度🤖[当前NPC[$currentName]不在选中列表，执行遣返]")
             sendBackNpcAndRecord(currentNpc, null)
             GlobalThreadPools.sleep(2000)
             hireNextAvailableNpc(configs, records)
@@ -542,7 +542,7 @@ class NpcChicken {
             hireNextAvailableNpc(configs, updatedRecords)
         } else {
             // 未满产，执行任务
-            Log.record(TAG, "智能调度🤖[$currentName 工作中... 进度:$currentReward/${currentConfig.rewardThreshold}]")
+            Log.runtime(TAG, "智能调度🤖[$currentName 工作中... 进度:$currentReward/${currentConfig.rewardThreshold}]")
 
             // 执行对应的任务
             try {
@@ -575,20 +575,20 @@ class NpcChicken {
             val record = records[config.nickName]
             if (record == null || !record.isInCoolDown()) {
                 // 可以雇佣
-                Log.record(TAG, "智能调度🤖[准备雇佣${config.nickName}]")
+                Log.runtime(TAG, "智能调度🤖[准备雇佣${config.nickName}]")
                 if (hireNpcSmart(config)) {
                     Log.farm("智能调度🤖[成功雇佣${config.nickName}]")
                     return
                 } else {
-                    Log.record(TAG, "智能调度🤖[雇佣${config.nickName}失败，尝试下一个]")
+                    Log.runtime(TAG, "智能调度🤖[雇佣${config.nickName}失败，尝试下一个]")
                 }
             } else {
                 val remainingHours = record.getRemainingCoolDownHours()
-                Log.record(TAG, "智能调度🤖[${config.nickName}冷却中，剩余${String.format("%.1f", remainingHours)}小时]")
+                Log.runtime(TAG, "智能调度🤖[${config.nickName}冷却中，剩余${String.format("%.1f", remainingHours)}小时]")
             }
         }
 
-        Log.record(TAG, "智能调度🤖[所有NPC都在冷却期或雇佣失败]")
+        Log.runtime(TAG, "智能调度🤖[所有NPC都在冷却期或雇佣失败]")
     }
 
     /**
@@ -665,7 +665,7 @@ class NpcChicken {
             // 保存回 DataStore
             DataStore.put("NpcCoolDownRecords", coolDownData)
 
-            Log.record(TAG, "智能调度🤖[记录${config.nickName}遣返时间，冷却${config.coolDownDays}天]")
+            Log.runtime(TAG, "智能调度🤖[记录${config.nickName}遣返时间，冷却${config.coolDownDays}天]")
         } catch (e: Exception) {
             Log.error("$TAG.saveNpcRecord异常:$e")
         }

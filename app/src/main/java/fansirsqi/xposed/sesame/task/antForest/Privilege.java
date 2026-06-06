@@ -134,12 +134,12 @@ public class Privilege {
     public static void studentSignInRedEnvelope() {
         try {
             if (!isSignInTimeValid()) {
-                Log.record(STUDENT_SIGN_PREFIX + "5点前不执行签到");
+                Log.runtime(STUDENT_SIGN_PREFIX + "5点前不执行签到");
                 return;
             }
 
             if (Status.hasFlagToday(FLAG_STUDENT_TASK)) {
-                Log.record(STUDENT_SIGN_PREFIX + "今日已完成签到");
+                Log.runtime(STUDENT_SIGN_PREFIX + "今日已完成签到");
                 return;
             }
 
@@ -159,7 +159,7 @@ public class Privilege {
         JSONObject result = new JSONObject(response);
 
         if (!RPC_SUCCESS.equals(result.optString("resultCode"))) {
-            Log.record(STUDENT_SIGN_PREFIX + "查询失败：" + result.optString("resultDesc"));
+            Log.runtime(STUDENT_SIGN_PREFIX + "查询失败：" + result.optString("resultDesc"));
             return;
         }
 
