@@ -167,6 +167,7 @@ object HttpCaptureHook {
                 val clazz = XposedHelpers.findClassIfExists(className, classLoader) ?: return@forEach
                 XposedHelpers.findAndHookMethod(clazz, "call", object : XC_MethodHook() {
                     override fun beforeHookedMethod(param: MethodHookParam) {
+                        if (!BaseModel.enableHttpCapture.value) return
                         try {
                             val request = getRequestFromWorker(param.thisObject)
                             if (request != null) {
@@ -185,6 +186,7 @@ object HttpCaptureHook {
 
                 XposedHelpers.findAndHookMethod(clazz, "handleResponse", CLASS_HTTP_URL_REQUEST, "org.apache.http.HttpResponse", Int::class.javaPrimitiveType, String::class.java, object : XC_MethodHook() {
                     override fun afterHookedMethod(param: MethodHookParam) {
+                        if (!BaseModel.enableHttpCapture.value) return
                         try {
                             val request = param.args[0] ?: return
                             val response = param.result ?: return
@@ -351,6 +353,7 @@ object HttpCaptureHook {
                 // Hook execute (同步)
                 XposedHelpers.findAndHookMethod(realCallClass, "execute", object : XC_MethodHook() {
                     override fun beforeHookedMethod(param: MethodHookParam) {
+                        if (!BaseModel.enableHttpCapture.value) return
                         val startTime = System.currentTimeMillis()
                         XposedHelpers.setAdditionalInstanceField(param.thisObject, "capture_start_time", startTime)
                         try {
@@ -363,6 +366,7 @@ object HttpCaptureHook {
                         } catch (_: Exception) {}
                     }
                     override fun afterHookedMethod(param: MethodHookParam) {
+                        if (!BaseModel.enableHttpCapture.value) return
                         try {
                             val response = param.result ?: return
                             val request = XposedHelpers.callMethod(param.thisObject, "request") ?: return
@@ -376,6 +380,7 @@ object HttpCaptureHook {
                 // Hook enqueue (异步)
                 XposedHelpers.findAndHookMethod(realCallClass, "enqueue", callbackClass, object : XC_MethodHook() {
                     override fun beforeHookedMethod(param: MethodHookParam) {
+                        if (!BaseModel.enableHttpCapture.value) return
                         val originalCallback = param.args[0] ?: return
                         val startTime = System.currentTimeMillis()
                         val request = XposedHelpers.callMethod(param.thisObject, "request") ?: return
@@ -396,13 +401,33 @@ object HttpCaptureHook {
     }
 
     private fun captureOkHttpTraffic(request: Any, response: Any, startTime: Long, id: String) {
+        if (!BaseModel.enableHttpCapture.value) return
         try {
             val url = XposedHelpers.callMethod(request, "url").toString()
-            val method = XposedHelpers.callMethod(request, "method").toString()
             val reqHeadersObj = XposedHelpers.callMethod(request, "headers")
             val reqHeadersMap = mutableMapOf<String, String>()
-            val size = XposedHelpers.callMethod(reqHeadersObj, "size") as Int
-            for (i in 0 until size) { reqHeadersMap[XposedHelpers.callMethod(reqHeadersObj, "name", i) as String] = XposedHelpers.callMethod(reqHeadersObj, "value", i) as String }
+            if (reqHeadersObj != null) {
+                val size = XposedHelpers.callMethod(reqHeadersObj, "size") as Int
+                for (i in 0 until size) { reqHeadersMap[XposedHelpers.callMethod(reqHeadersObj, "name", i) as String] = XposedHelpers.callMethod(reqHeadersObj, "value", i) as String }
+            }
+            val host = try { java.net.URI(url).host ?: "" } catch (_: Throwable) { "" }
+            val opType = reqHeadersMap["Operation-Type"] ?: reqHeadersMap["operation-type"] ?: ""
+            
+            val filterKeywords = BaseModel.httpCaptureFilter.value
+            if (!filterKeywords.isNullOrBlank()) {
+                val keywords = filterKeywords.split(",").map { it.trim() }.filter { it.isNotEmpty() }
+                val urlLower = url.lowercase()
+                val hostLower = host.lowercase()
+                val opTypeLower = opType.lowercase()
+                if (keywords.any { kw ->
+                    val kwLower = kw.lowercase()
+                    urlLower.contains(kwLower) || hostLower.contains(kwLower) || opTypeLower.contains(kwLower)
+                }) {
+                    return
+                }
+            }
+
+            val method = XposedHelpers.callMethod(request, "method").toString()
             var reqBody: String? = null
             var reqBodyBase64: String? = null
             var reqBodySize = 0
@@ -444,6 +469,7 @@ object HttpCaptureHook {
     }
 
     private fun ensurePendingBroadcast(connection: java.net.HttpURLConnection) {
+        if (!BaseModel.enableHttpCapture.value) return
         if (XposedHelpers.getAdditionalInstanceField(connection, "capture_id") != null) return
         val id = UUID.randomUUID().toString()
         val startTime = System.currentTimeMillis()
@@ -457,14 +483,32 @@ object HttpCaptureHook {
     }
 
     private fun triggerStandardCapture(connection: java.net.HttpURLConnection) {
+        if (!BaseModel.enableHttpCapture.value) return
         try {
+            val url = try { connection.url.toString() } catch (_: Throwable) { "unknown" }
+            val host = try { java.net.URI(url).host ?: "" } catch (_: Throwable) { "" }
+            val headers = try { connection.requestProperties.mapValues { it.value.joinToString(", ") } } catch (_: Exception) { emptyMap() }
+            val opType = headers["Operation-Type"] ?: headers["operation-type"] ?: ""
+            
+            val filterKeywords = BaseModel.httpCaptureFilter.value
+            if (!filterKeywords.isNullOrBlank()) {
+                val keywords = filterKeywords.split(",").map { it.trim() }.filter { it.isNotEmpty() }
+                val urlLower = url.lowercase()
+                val hostLower = host.lowercase()
+                val opTypeLower = opType.lowercase()
+                if (keywords.any { kw ->
+                    val kwLower = kw.lowercase()
+                    urlLower.contains(kwLower) || hostLower.contains(kwLower) || opTypeLower.contains(kwLower)
+                }) {
+                    return
+                }
+            }
+
             val id = XposedHelpers.getAdditionalInstanceField(connection, "capture_id") as? String ?: UUID.randomUUID().toString().also { XposedHelpers.setAdditionalInstanceField(connection, "capture_id", it) }
             val startTime = XposedHelpers.getAdditionalInstanceField(connection, "capture_start_time") as? Long ?: System.currentTimeMillis()
-            val url = try { connection.url.toString() } catch (_: Throwable) { "unknown" }
             val method = try { connection.requestMethod } catch (_: Throwable) { "GET" }
             val stream = XposedHelpers.getAdditionalInstanceField(connection, "capture_stream_obj") as? CaptureInputStream
             val resData = XposedHelpers.getAdditionalInstanceField(connection, "captured_response_body") as? ByteArray ?: stream?.getCapturedData()
-            val headers = try { connection.requestProperties.mapValues { it.value.joinToString(", ") } } catch (_: Exception) { emptyMap() }
             var code = try { connection.responseCode } catch (_: Exception) { 0 }
             if (code <= 0) {
                 // 尝试从 Header 状态行解析 (HTTP/1.1 200 OK)
@@ -491,13 +535,32 @@ object HttpCaptureHook {
         try {
             val urlMethod = methodCache["req_url"] ?: listOf("getUrl", "getUri", "url", "getURL").firstOrNull { name -> try { XposedHelpers.callMethod(request, name); true } catch (_: Throwable) { false } }?.also { methodCache["req_url"] = it }
             val url = if (urlMethod != null) try { XposedHelpers.callMethod(request, urlMethod)?.toString() ?: "unknown" } catch (_: Throwable) { "unknown" } else "unknown"
-            val methodAttr = methodCache["req_method"] ?: listOf("getRequestMethod", "getMethod").firstOrNull { name -> try { XposedHelpers.callMethod(request, name); true } catch (_: Throwable) { false } }?.also { methodCache["req_method"] = it }
-            val method = if (methodAttr != null) try { XposedHelpers.callMethod(request, methodAttr) as? String ?: "UNKNOWN" } catch (_: Throwable) { "UNKNOWN" } else "UNKNOWN"
-            val parsed = CaptureClassifier.parse(url)
+            
             val reqHeaders = mutableMapOf<String, String>()
             val reqHeadersListMethod = methodCache["req_headers_list"] ?: listOf("getHeaders", "getHeaderList", "headers").firstOrNull { name -> try { XposedHelpers.callMethod(request, name) as? List<*>; true } catch (_: Throwable) { false } }?.also { methodCache["req_headers_list"] = it }
             val reqHeadersList = if (reqHeadersListMethod != null) try { XposedHelpers.callMethod(request, reqHeadersListMethod) as? List<*> } catch (_: Throwable) { null } else null
             reqHeadersList?.forEach { header -> if (header != null) { val name = try { XposedHelpers.callMethod(header, "getName")?.toString() ?: XposedHelpers.callMethod(header, "getKey")?.toString() } catch (_: Throwable) { null }; val value = try { XposedHelpers.callMethod(header, "getValue")?.toString() } catch (_: Throwable) { null }; if (name != null) reqHeaders[name] = value ?: "" } }
+
+            val host = try { java.net.URI(url).host ?: "" } catch (_: Throwable) { "" }
+            val opType = reqHeaders["Operation-Type"] ?: reqHeaders["operation-type"] ?: ""
+            
+            val filterKeywords = BaseModel.httpCaptureFilter.value
+            if (!filterKeywords.isNullOrBlank()) {
+                val keywords = filterKeywords.split(",").map { it.trim() }.filter { it.isNotEmpty() }
+                val urlLower = url.lowercase()
+                val hostLower = host.lowercase()
+                val opTypeLower = opType.lowercase()
+                if (keywords.any { kw ->
+                    val kwLower = kw.lowercase()
+                    urlLower.contains(kwLower) || hostLower.contains(kwLower) || opTypeLower.contains(kwLower)
+                }) {
+                    return
+                }
+            }
+
+            val methodAttr = methodCache["req_method"] ?: listOf("getRequestMethod", "getMethod").firstOrNull { name -> try { XposedHelpers.callMethod(request, name); true } catch (_: Throwable) { false } }?.also { methodCache["req_method"] = it }
+            val method = if (methodAttr != null) try { XposedHelpers.callMethod(request, methodAttr) as? String ?: "UNKNOWN" } catch (_: Throwable) { "UNKNOWN" } else "UNKNOWN"
+            val parsed = CaptureClassifier.parse(url)
             val reqDataRaw = try { XposedHelpers.callMethod(request, "getReqData") as? ByteArray } catch (_: Throwable) { null }
             val (reqBody, reqBodyBase64) = processBody(reqDataRaw, reqHeaders["Content-Encoding"] ?: reqHeaders["content-encoding"])
             val requestBodySize = reqDataRaw?.size ?: 0
@@ -551,6 +614,7 @@ object HttpCaptureHook {
             val serviceImpl = XposedHelpers.findClassIfExists(CLASS_TRANSPORT_SERVICE_IMPL, classLoader) ?: return
             XposedHelpers.findAndHookMethod(serviceImpl, "httpRequest", "com.alibaba.ariver.kernel.common.network.http.RVHttpRequest", object : XC_MethodHook() {
                 override fun beforeHookedMethod(param: MethodHookParam) {
+                    if (!BaseModel.enableHttpCapture.value) return
                     val startTime = System.currentTimeMillis()
                     XposedHelpers.setAdditionalInstanceField(param.thisObject, "capture_start_time", startTime)
                     try {
@@ -563,6 +627,7 @@ object HttpCaptureHook {
                     } catch (_: Throwable) {}
                 }
                 override fun afterHookedMethod(param: MethodHookParam) {
+                    if (!BaseModel.enableHttpCapture.value) return
                     try {
                         val request = param.args[0] ?: return
                         val response = param.result ?: return
@@ -654,7 +719,28 @@ object HttpCaptureHook {
         }
     }
 
+    private fun isBlacklisted(record: CaptureRecord): Boolean {
+        try {
+            val filterKeywords = BaseModel.httpCaptureFilter.value
+            if (!filterKeywords.isNullOrBlank()) {
+                val keywords = filterKeywords.split(",").map { it.trim() }.filter { it.isNotEmpty() }
+                val urlLower = record.url.lowercase()
+                val hostLower = record.host.lowercase()
+                val opTypeLower = (record.requestHeaders["Operation-Type"] 
+                    ?: record.requestHeaders["operation-type"] 
+                    ?: "").lowercase()
+                return keywords.any { kw ->
+                    val kwLower = kw.lowercase()
+                    urlLower.contains(kwLower) || hostLower.contains(kwLower) || opTypeLower.contains(kwLower)
+                }
+            }
+        } catch (_: Throwable) {}
+        return false
+    }
+
     private fun dispatchRecordDirect(record: CaptureRecord, skipSave: Boolean) {
+        if (!BaseModel.enableHttpCapture.value) return
+        if (isBlacklisted(record)) return
         dispatchExecutor.execute {
             try {
                 val processed = if (skipSave) record else CaptureStorage.save(record)
@@ -671,6 +757,8 @@ object HttpCaptureHook {
     }
 
     private fun dispatchRecord(record: CaptureRecord, skipSave: Boolean = false) {
+        if (!BaseModel.enableHttpCapture.value) return
+        if (isBlacklisted(record)) return
         val context = fansirsqi.xposed.sesame.hook.context.AppContext.getAppContext()
         if (context == null) {
             dispatchRecordDirect(record, skipSave)
@@ -702,6 +790,7 @@ object HttpCaptureHook {
                 "com.alipay.mobile.common.transport.context.TransportContext",
                 object : XC_MethodHook() {
                     override fun beforeHookedMethod(param: MethodHookParam) {
+                        if (!BaseModel.enableHttpCapture.value) return
                         try {
                             val request = param.args[0] ?: return
                             val id = UUID.randomUUID().toString()
@@ -725,6 +814,7 @@ object HttpCaptureHook {
                     }
 
                     override fun afterHookedMethod(param: MethodHookParam) {
+                        if (!BaseModel.enableHttpCapture.value) return
                         try {
                             val request = param.args[0] ?: return
                             val response = param.result ?: return

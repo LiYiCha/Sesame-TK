@@ -137,9 +137,6 @@ public class TaskScheduler {
                 }
                 isExecuting.set(false);
             }
-
-            // 检查资源泄漏
-            ExecutorManager.checkLeak();
         } finally {
             isShuttingDown.set(false);
         }

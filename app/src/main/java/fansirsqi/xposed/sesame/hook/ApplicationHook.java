@@ -195,21 +195,33 @@ public class ApplicationHook implements IXposedHookLoadPackage {
 
                             HookModuleManager.INSTANCE.dispatchPostAppAttach(context, lpparam.classLoader);
 
-                            // 子进程处理：强制开启网络及RPC调试抓包
+                            // 子进程处理：根据各自开关开启网络及RPC调试抓包
                             if (!General.PACKAGE_NAME.equals(lpparam.processName)) {
-                                Log.runtime(TAG, "Subprocess detected: " + lpparam.processName + ", forcing captures...");
                                 try {
-                                    LifecycleManager.setupRpcDebugHooks();
-                                    Log.runtime(TAG, "Subprocess setupRpcDebugHooks success");
+                                    if (!fansirsqi.xposed.sesame.data.Config.isLoaded()) {
+                                        fansirsqi.xposed.sesame.data.Config.load("");
+                                    }
                                 } catch (Throwable t) {
-                                    Log.runtime(TAG, "Subprocess setupRpcDebugHooks err: " + t.getMessage());
+                                    // 忽略
                                 }
-                                try {
-                                    fansirsqi.xposed.sesame.hook.network.HttpCaptureHook.setup(lpparam.classLoader, true);
-                                    fansirsqi.xposed.sesame.hook.network.NetworkHook.setupHooks(lpparam.classLoader);
-                                    Log.runtime(TAG, "Subprocess HttpCaptureHook setup success");
-                                } catch (Throwable t) {
-                                    Log.runtime(TAG, "Subprocess HttpCaptureHook setup err: " + t.getMessage());
+
+                                if (fansirsqi.xposed.sesame.model.BaseModel.getDebugMode().getValue()) {
+                                    try {
+                                        LifecycleManager.setupRpcDebugHooks();
+                                        Log.runtime(TAG, "Subprocess setupRpcDebugHooks success");
+                                    } catch (Throwable t) {
+                                        Log.runtime(TAG, "Subprocess setupRpcDebugHooks err: " + t.getMessage());
+                                    }
+                                }
+
+                                if (fansirsqi.xposed.sesame.model.BaseModel.enableHttpCapture.getValue()) {
+                                    try {
+                                        fansirsqi.xposed.sesame.hook.network.HttpCaptureHook.setup(lpparam.classLoader);
+                                        fansirsqi.xposed.sesame.hook.network.NetworkHook.setupHooks(lpparam.classLoader);
+                                        Log.runtime(TAG, "Subprocess HttpCaptureHook setup success");
+                                    } catch (Throwable t) {
+                                        Log.runtime(TAG, "Subprocess HttpCaptureHook setup err: " + t.getMessage());
+                                    }
                                 }
                             }
                         }

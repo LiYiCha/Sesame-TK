@@ -189,9 +189,12 @@ public class UserMap {
      */
     public static synchronized void load(String userId) {
         userMap.clear();
+        if (userId == null || userId.isEmpty()) {
+            return;
+        }
         try {
             String body = Files.readFromFile(Files.getFriendIdMapFile(userId));
-            if (!body.isEmpty()) {
+            if (body != null && !body.isEmpty()) {
                 Map<String, UserEntity.UserDto> dtoMap = JsonUtil.parseObject(body, new TypeReference<Map<String, UserEntity.UserDto>>() {
                 });
                 for (UserEntity.UserDto dto : dtoMap.values()) {
@@ -215,6 +218,9 @@ public class UserMap {
      * @return 保存结果
      */
     public static synchronized boolean save(String userId) {
+        if (userId == null || userId.isEmpty()) {
+            return false;
+        }
         return Files.write2File(JsonUtil.formatJson(userMap), Files.getFriendIdMapFile(userId));
     }
     /**
@@ -224,9 +230,12 @@ public class UserMap {
      */
     public static synchronized void loadSelf(String userId) {
         userMap.clear();
+        if (userId == null || userId.isEmpty()) {
+            return;
+        }
         try {
             String body = Files.readFromFile(Files.getSelfIdFile(userId));
-            if (!body.isEmpty()) {
+            if (body != null && !body.isEmpty()) {
                 UserEntity.UserDto dto = JsonUtil.parseObject(body, new TypeReference<UserEntity.UserDto>() {
                 });
                 userMap.put(dto.getUserId(), dto.toEntity());

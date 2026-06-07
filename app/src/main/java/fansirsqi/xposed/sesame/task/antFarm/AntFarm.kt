@@ -4129,7 +4129,23 @@ class AntFarm : ModelTask() {
                     Log.runtime(TAG, "宝箱进度: $used/$limit，开始自动刷任务补齐...")
                     // 根据游戏类型选择上报任务
                     GameTask.Farm_ddply.report(remainToTask)
-                    delay(3000)
+                    
+                    // 上报完成后，直接一次性开启所有的宝箱奖励（由于GameTask上报包含延时，此时机会已生成）
+                    val drawRes = JSONObject(AntFarmRpcCall.drawGameCenterAward(remainToTask))
+                    if (drawRes.optBoolean("success")) {
+                        val awardList = drawRes.optJSONArray("gameCenterDrawAwardList")
+                        val awardStrings = mutableListOf<String>()
+                        if (awardList != null) {
+                            for (i in 0 until awardList.length()) {
+                                val item = awardList.getJSONObject(i)
+                                awardStrings.add("${item.optString("awardName")}*${item.optInt("awardCount")}")
+                            }
+                        }
+                        Log.farm("庄园小鸡🎁[获得奖品: ${awardStrings.joinToString(",")}]")
+                    } else {
+                        Log.runtime(TAG, "开启宝箱失败: ${drawRes.optString("desc")}")
+                    }
+                    break
                 } else {
                     if (remainToTask <= 0) {
                         Log.runtime(TAG, "今日 $limit 个金蛋任务已全部满额")

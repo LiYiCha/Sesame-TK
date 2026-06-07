@@ -56,15 +56,51 @@ class RpcEntity @JvmOverloads constructor(
         get() {
             val jo = JSONObject()
             jo.put("__apiCallStartTime", System.currentTimeMillis())
-            // [__apiNativeCallId]不传是否有影响，取值又如何获取
+            // [__apiNativeCallId]不传是否有影响，取值又获取
             jo.put("apiCallLink", "XRiverNotFound")
             jo.put("appName", this.appName)
             jo.put("execEngine", "XRiver")
             jo.put("facadeName", this.facadeName)
             jo.put("methodName", this.methodName)
             jo.put("operationType", this.requestMethod)
-            jo.put("requestData", this.requestData)
+            if (this.requestData != null) {
+                val trimmed = this.requestData.trim()
+                val repaired = repairJson(trimmed)
+                try {
+                    if (repaired.startsWith("[")) {
+                        jo.put("requestData", org.json.JSONArray(repaired))
+                    } else if (repaired.startsWith("{")) {
+                        jo.put("requestData", org.json.JSONObject(repaired))
+                    } else {
+                        jo.put("requestData", this.requestData)
+                    }
+                } catch (e: Exception) {
+                    android.util.Log.e("RpcEntity", "JSONArray/JSONObject parsing failed: trimmed=$trimmed repaired=$repaired", e)
+                    jo.put("requestData", this.requestData)
+                }
+            } else {
+                jo.put("requestData", this.requestData)
+            }
             jo.put("relationLocal", this.requestRelation)
             return jo.toString()
         }
+
+    private fun repairJson(s: String): String {
+        try {
+            val pattern = java.util.regex.Pattern.compile("\"([^\"]+)\"\\s*:\\s*\"(\\{.*?\\})\"")
+            val matcher = pattern.matcher(s)
+            val sb = java.lang.StringBuffer()
+            while (matcher.find()) {
+                val key = matcher.group(1)
+                val inner = matcher.group(2)
+                val innerUnescaped = inner.replace("\\\"", "\"")
+                val innerEscaped = innerUnescaped.replace("\"", "\\\"")
+                matcher.appendReplacement(sb, java.util.regex.Matcher.quoteReplacement("\"$key\":\"$innerEscaped\""))
+            }
+            matcher.appendTail(sb)
+            return sb.toString()
+        } catch (e: Exception) {
+            return s
+        }
+    }
 }

@@ -142,18 +142,22 @@ class AntOrchard : ModelTask() {
             // 砸金蛋
             val goldenEggInfo = indexJson.optJSONObject("goldenEggInfo")
             if (goldenEggInfo != null) {
-                val unsmashed = goldenEggInfo.optInt("unsmashedGoldenEggs")
+                var unsmashed = goldenEggInfo.optInt("unsmashedGoldenEggs")
                 val limit = goldenEggInfo.optInt("goldenEggLimit")
-                val smashed = goldenEggInfo.optInt("smashedGoldenEggs")
+                var smashed = goldenEggInfo.optInt("smashedGoldenEggs")
 
                 if (unsmashed > 0) {
                     // 现成的蛋先砸了
                     smashedGoldenEgg(unsmashed)
-                } else {
-                    val remain = limit - smashed
-                    if (remain > 0) {
-                        GameTask.Orchard_ncscc.report(remain)
-                    }
+                    smashed += unsmashed
+                    unsmashed = 0
+                }
+
+                val remain = limit - smashed
+                if (remain > 0) {
+                    GameTask.Orchard_ncscc.report(remain)
+                    // 上报完成后，由于整个过程有延时，机会已就绪，直接砸掉对应数量的金蛋
+                    smashedGoldenEgg(remain)
                 }
             }
 
@@ -161,6 +165,7 @@ class AntOrchard : ModelTask() {
             if (receiveOrchardTaskAward.value) {
                 doOrchardDailyTask(userId!!)
                 triggerTbTask()
+                handleLeyuanDailyTasks()
             }
 
             // 摇钱树余额奖励 (每天7点后)
@@ -507,6 +512,59 @@ class AntOrchard : ModelTask() {
                     continue
                 }
 
+                if (task.has("taskDisplayConfig")) {
+                    val targetUrl = task.getJSONObject("taskDisplayConfig").optString("targetUrl", "")
+                    if (targetUrl.contains("jumpAction=userGrowth") &&
+                        (targetUrl.contains("alipayAppdonwlaodPlanId") || targetUrl.contains("alipayAppdownloadPlanId"))) {
+
+                        Log.runtime(TAG, "检测到外部应用跳转任务: $title")
+
+                        val planIdKey = if (targetUrl.contains("alipayAppdonwlaodPlanId")) "alipayAppdonwlaodPlanId" else "alipayAppdownloadPlanId"
+                        val planId = getQueryParameter(targetUrl, planIdKey)
+                        val rouseSceneCode = getQueryParameter(targetUrl, "sceneCode")
+
+                        if (planId.isNotEmpty() && rouseSceneCode.isNotEmpty()) {
+                            try {
+                                val schemaResponse = AntOrchardRpcCall.queryCallAppSchema(rouseSceneCode)
+                                val schemaJson = JSONObject(schemaResponse)
+                                if (schemaJson.optBoolean("success", false) && schemaJson.has("schemaConfigList")) {
+                                    val schemaConfigList = schemaJson.getJSONArray("schemaConfigList")
+                                    if (schemaConfigList.length() > 0) {
+                                        val firstConfig = schemaConfigList.getJSONObject(0)
+                                        val channelDeepLink = firstConfig.optString("channelDeepLink", "")
+
+                                        if (channelDeepLink.isNotEmpty()) {
+                                            val extInfo = "{\"actionSource\":\"odl-biz-user-growth\"}"
+                                            val rouseResponse = AntOrchardRpcCall.rouseRuleCheck(
+                                                appIdSource = "68687599",
+                                                extInfo = extInfo,
+                                                operate = "checkInfo",
+                                                originalUrl = targetUrl,
+                                                targetUrl = channelDeepLink,
+                                                urlSource = ""
+                                            )
+                                            val rouseJson = JSONObject(rouseResponse)
+                                            if (rouseJson.optBoolean("success", false)) {
+                                                Log.farm("农场跳转外部APP任务完成: $title")
+                                                CoroutineUtils.sleepCompat(5000)
+                                            } else {
+                                                Log.error(TAG, "rouseRuleCheck 校验失败: ${rouseJson.optString("errorMessage", "未知错误")}")
+                                            }
+                                        } else {
+                                            Log.error(TAG, "未获取到有效的 channelDeepLink")
+                                        }
+                                    }
+                                } else {
+                                    Log.error(TAG, "queryCallAppSchema 失败: ${schemaJson.optString("resultDesc", "未知错误")}")
+                                }
+                            } catch (e: Exception) {
+                                Log.printStackTrace(TAG, "执行跳转任务异常: $title", e)
+                            }
+                        }
+                        continue
+                    }
+                }
+
                 if (actionType == "VISIT" || actionType == "XLIGHT") {
                     val rightsTimes = task.optInt("rightsTimes", 0)
                     var rightsTimesLimit = task.optInt("rightsTimesLimit", 0)
@@ -831,6 +889,57 @@ class AntOrchard : ModelTask() {
         }
     }
 
+    private suspend fun handleLeyuanDailyTasks() {
+        try {
+            val queryRes = AntOrchardRpcCall.queryOptionalPlay()
+            val jo = JSONObject(queryRes)
+            if (!jo.optBoolean("success")) {
+                Log.runtime(TAG, "queryOptionalPlay 失败: $queryRes")
+                return
+            }
+            val taskTriggerPlayInfo = jo.optJSONObject("taskTriggerPlayInfo") ?: return
+            val taskList = taskTriggerPlayInfo.optJSONArray("taskList") ?: return
+            for (i in 0 until taskList.length()) {
+                val task = taskList.getJSONObject(i)
+                val taskType = task.optString("taskType")
+                var taskStatus = task.optString("taskStatus")
+                val title = task.optString("title")
+                val awardCount = task.optInt("awardCount", 0)
+
+                // 自动签到任务完成逻辑
+                if (taskStatus == "TODO" && taskType == "DAILY_LEYUAN_QIANDAO") {
+                    val outBizNo = "${taskType}_${System.currentTimeMillis()}_${(100000..999999).random()}"
+                    Log.runtime(TAG, "正在尝试完成农场乐园每日签到...")
+                    val finishRes = AntOrchardRpcCall.finishTaskLeyuan(taskType, "ANTORCHARD_LEYUAN_DAILY_TASK", outBizNo)
+                    val finishJo = JSONObject(finishRes)
+                    if (finishJo.optBoolean("success")) {
+                        Log.runtime(TAG, "农场乐园每日签到完成成功")
+                        taskStatus = "FINISHED"
+                    } else {
+                        Log.runtime(TAG, "农场乐园每日签到完成失败: ${finishJo.optString("desc")}")
+                    }
+                    CoroutineUtils.sleepCompat(2000)
+                }
+
+                if (taskStatus == "FINISHED") {
+                    Log.runtime(TAG, "发现可领取的农场乐园任务奖励: $title, 额度: $awardCount")
+                    val claimRes = AntOrchardRpcCall.receiveTaskAwardantorchard(taskType, awardCount)
+                    val claimJo = JSONObject(claimRes)
+                    if (claimJo.optBoolean("success")) {
+                        Log.farm("农场乐园🎁[领取任务奖励: $title 成功，获得 ${claimJo.optInt("incAwardCount", awardCount)} 肥料]")
+                    } else {
+                        Log.runtime(TAG, "领取农场乐园任务奖励失败: ${claimJo.optString("desc")}")
+                    }
+                    CoroutineUtils.sleepCompat(2000)
+                }
+            }
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (t: Throwable) {
+            Log.printStackTrace(TAG, "handleLeyuanDailyTasks 流程异常", t)
+        }
+    }
+
     private fun orchardAssistFriend() {
         try {
             if (!Status.canAntOrchardAssistFriendToday()) {
@@ -866,6 +975,23 @@ class AntOrchard : ModelTask() {
             Log.printStackTrace(TAG, "orchardAssistFriend err:", t)
         }
     }
+
+    private fun getQueryParameter(url: String, key: String): String {
+        try {
+            val uri = android.net.Uri.parse(url)
+            val value = uri.getQueryParameter(key)
+            if (value != null) return value
+            val nestedUrl = uri.getQueryParameter("url")
+            if (nestedUrl != null && nestedUrl.isNotEmpty()) {
+                val nestedUri = android.net.Uri.parse(nestedUrl)
+                val nestedValue = nestedUri.getQueryParameter(key)
+                if (nestedValue != null) return nestedValue
+            }
+        } catch (ignored: Throwable) {
+        }
+        return ""
+    }
+
     object PlantModeType {
         const val MAIN = 0
         const val YEB = 1

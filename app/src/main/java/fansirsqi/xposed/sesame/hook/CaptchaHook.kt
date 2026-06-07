@@ -36,6 +36,11 @@ object CaptchaHook {
     private var uiHookUnhook: XC_MethodHook.Unhook? = null
 
     /**
+     * 是否已完成首次初始化
+     */
+    private var hasSetup = false
+
+    /**
      * 保存ClassLoader供后续使用
      */
     private var savedClassLoader: ClassLoader? = null
@@ -47,6 +52,8 @@ object CaptchaHook {
      */
     fun setupHook(classLoader: ClassLoader) {
         savedClassLoader = classLoader
+        if (hasSetup) return
+        hasSetup = true
         Log.runtime(TAG, "验证码Hook系统初始化完成")
         Log.runtime(TAG, "⚠️ Hook配置将在配置文件加载后同步")
 

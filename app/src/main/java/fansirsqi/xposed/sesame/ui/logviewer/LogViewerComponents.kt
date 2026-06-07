@@ -18,6 +18,7 @@ import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -456,22 +457,6 @@ fun StatusBar(
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
-                        text = "行复制",
-                        style = MaterialTheme.typography.labelSmall,
-                        fontSize = 10.sp
-                    )
-                    Spacer(Modifier.width(2.dp))
-                    Switch(
-                        checked = uiState.showLineCopyButton,
-                        onCheckedChange = { viewModel.toggleShowLineCopyButton() },
-                        modifier = Modifier
-                            .height(16.dp)
-                            .scale(0.7f)
-                    )
-                }
-
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
                         text = "自动滚动",
                         style = MaterialTheme.typography.labelSmall,
                         fontSize = 10.sp
@@ -499,58 +484,100 @@ fun LogContent(
     viewModel: LogViewerViewModel,
     uiState: LogViewerViewModel.UiState
 ) {
-    val listState = rememberLazyListState()
+    val scrollState = rememberScrollState()
     val coroutineScope = rememberCoroutineScope()
-
-    // 详情复制弹窗状态
-    var activeDetailText by remember { mutableStateOf<String?>(null) }
+    val density = LocalDensity.current
 
     // 双指缩放状态
     var zoomScale by remember { mutableFloatStateOf(1f) }
     val effectiveFontSize = (uiState.fontSize * zoomScale).roundToInt().coerceIn(6, 36)
 
-    // 拖动选择边界自动滚动支持
-    var dragY by remember { mutableStateOf<Float?>(null) }
-    var isPressed by remember { mutableStateOf(false) }
-    var componentHeight by remember { mutableStateOf(0) }
-    val edgeThreshold = with(LocalDensity.current) { 60.dp.toPx() }
+    // 整篇日志的 AnnotatedString，只在数据变动时重构，保证极大性能
+    val annotatedString = remember(uiState.displayedLines, uiState.searchResults, uiState.currentSearchIndex, uiState.searchKeyword) {
+        buildAnnotatedString {
+            val lines = uiState.displayedLines
+            val indices = uiState.displayedLineIndices
+            val results = uiState.searchResults
+            val currentIndex = uiState.currentSearchIndex
+            val keyword = uiState.searchKeyword
 
-    LaunchedEffect(isPressed, dragY, componentHeight) {
-        if (isPressed && dragY != null && componentHeight > 0) {
-            val y = dragY!!
-            if (y < edgeThreshold) {
-                val ratio = (edgeThreshold - y).coerceAtLeast(0f) / edgeThreshold
-                val speed = 5f + ratio * 25f
-                while (true) {
-                    try {
-                        listState.scroll {
-                            scrollBy(-speed)
-                        }
-                    } catch (e: Exception) {
-                        // 忽略滚动打断异常
-                    }
-                    delay(16L)
+            val resultsByLine = if (results.isNotEmpty() && keyword.isNotEmpty()) {
+                results.groupBy { it.lineIndex }
+            } else {
+                null
+            }
+
+            lines.forEachIndexed { index, line ->
+                val originalIndex = indices.getOrNull(index) ?: index
+                val lineResults = resultsByLine?.get(originalIndex)
+
+                // 区分日志级别配色
+                val levelColor = when {
+                    line.contains("ERROR", ignoreCase = true) || line.contains("SEVERE", ignoreCase = true) || line.contains("FATAL", ignoreCase = true) -> Color(0xFFEF5350)
+                    line.contains("WARN", ignoreCase = true) || line.contains("WARNING", ignoreCase = true) -> Color(0xFFFFB74D)
+                    line.contains("DEBUG", ignoreCase = true) || line.contains("TRACE", ignoreCase = true) -> Color(0xFF90A4AE)
+                    line.contains("INFO", ignoreCase = true) -> Color(0xFF81C784)
+                    else -> Color.Unspecified
                 }
-            } else if (y > componentHeight - edgeThreshold) {
-                val ratio = (y - (componentHeight - edgeThreshold)).coerceAtLeast(0f) / edgeThreshold
-                val speed = 5f + ratio * 25f
-                while (true) {
-                    try {
-                        listState.scroll {
-                            scrollBy(speed)
+
+                if (lineResults != null && lineResults.isNotEmpty()) {
+                    var lastCharIndex = 0
+                    lineResults.sortedBy { it.charIndex }.forEach { result ->
+                        val preText = line.substring(lastCharIndex, result.charIndex)
+                        if (preText.isNotEmpty()) {
+                            if (levelColor != Color.Unspecified) {
+                                withStyle(style = SpanStyle(color = levelColor)) {
+                                    append(preText)
+                                }
+                            } else {
+                                append(preText)
+                            }
                         }
-                    } catch (e: Exception) {
+
+                        val isCurrent = results.indexOf(result) == currentIndex
+                        withStyle(
+                            style = SpanStyle(
+                                background = if (isCurrent) Color.Yellow else Color(0x4DFFFF00),
+                                color = if (isCurrent) Color.Red else Color.Unspecified,
+                                fontWeight = if (isCurrent) FontWeight.Bold else FontWeight.Normal
+                            )
+                        ) {
+                            append(line.substring(result.charIndex, result.charIndex + result.length))
+                        }
+                        lastCharIndex = result.charIndex + result.length
                     }
-                    delay(16L)
+
+                    if (lastCharIndex < line.length) {
+                        val postText = line.substring(lastCharIndex)
+                        if (levelColor != Color.Unspecified) {
+                            withStyle(style = SpanStyle(color = levelColor)) {
+                                append(postText)
+                            }
+                        } else {
+                            append(postText)
+                        }
+                    }
+                } else {
+                    if (levelColor != Color.Unspecified) {
+                        withStyle(style = SpanStyle(color = levelColor)) {
+                            append(line)
+                        }
+                    } else {
+                        append(line)
+                    }
+                }
+
+                if (index < lines.size - 1) {
+                    append("\n")
                 }
             }
         }
     }
 
     // 自动滚动到底部
-    LaunchedEffect(uiState.displayedLines.size, uiState.autoScroll) {
-        if (uiState.autoScroll && uiState.displayedLines.isNotEmpty()) {
-            listState.animateScrollToItem(uiState.displayedLines.size - 1)
+    LaunchedEffect(scrollState.maxValue, uiState.autoScroll) {
+        if (uiState.autoScroll) {
+            scrollState.scrollTo(scrollState.maxValue)
         }
     }
 
@@ -563,14 +590,11 @@ fun LogContent(
             // 找到该行在显示列表中的索引
             val displayIndex = uiState.displayedLineIndices.indexOf(targetLineIndex)
 
-            // 滚动到目标位置（居中显示）
-            if (displayIndex >= 0 && displayIndex < uiState.displayedLines.size) {
-                val distance = kotlin.math.abs(listState.firstVisibleItemIndex - displayIndex)
-                if (distance < 50) {
-                    listState.animateScrollToItem(index = displayIndex, scrollOffset = -200)
-                } else {
-                    listState.scrollToItem(index = displayIndex, scrollOffset = -200)
-                }
+            if (displayIndex >= 0) {
+                val lineSpacingPx = with(density) { (effectiveFontSize + 5).sp.toPx() }
+                val targetScrollValue = (displayIndex * lineSpacingPx).roundToInt()
+                val scrollOffset = (targetScrollValue - with(density) { 200.dp.toPx() }).roundToInt().coerceIn(0, scrollState.maxValue)
+                scrollState.animateScrollTo(scrollOffset)
             }
         }
     }
@@ -588,38 +612,21 @@ fun LogContent(
     }
 
     Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .onSizeChanged { componentHeight = it.height }
-            .pointerInput(Unit) {
-                awaitPointerEventScope {
-                    while (true) {
-                        val event = awaitPointerEvent(PointerEventPass.Initial)
-                        val changes = event.changes
-                        val pressed = changes.any { it.pressed }
-                        isPressed = pressed
-                        if (pressed) {
-                            dragY = changes.firstOrNull()?.position?.y
-                        } else {
-                            dragY = null
-                        }
-                    }
-                }
-            }
+        modifier = Modifier.fillMaxSize()
     ) {
         androidx.compose.foundation.text.selection.SelectionContainer {
-            LazyColumn(
-                state = listState,
+            Box(
                 modifier = Modifier
                     .fillMaxSize()
                     .background(MaterialTheme.colorScheme.background)
-                    .padding(start = 8.dp, end = 20.dp) // 右侧给滚动条留空间
+                    .verticalScroll(scrollState)
+                    .padding(start = 8.dp, end = 24.dp, top = 8.dp, bottom = 8.dp)
                     .pointerInput(Unit) {
                         awaitEachGesture {
                             awaitFirstDown(requireUnconsumed = false)
                             var prevDistance = 0f
                             do {
-                                val event = awaitPointerEvent() // 使用默认的 Main 通道，避免干扰子控件的 Initial 通道手势
+                                val event = awaitPointerEvent()
                                 if (event.changes.size >= 2) {
                                     val p1 = event.changes[0]
                                     val p2 = event.changes[1]
@@ -637,134 +644,66 @@ fun LogContent(
                                 }
                             } while (event.changes.any { it.pressed })
                         }
-                    },
-                contentPadding = PaddingValues(vertical = 8.dp)
-            ) {
-                itemsIndexed(
-                    items = uiState.displayedLines,
-                    key = { index, _ -> index }
-                ) { index, line ->
-                    val originalIndex = if (index < uiState.displayedLineIndices.size) {
-                        uiState.displayedLineIndices[index]
-                    } else {
-                        index
                     }
-                    LogLine(
-                        line = line,
-                        lineIndex = originalIndex,
-                        searchResults = uiState.searchResults,
-                        currentSearchIndex = uiState.currentSearchIndex,
-                        searchKeyword = uiState.searchKeyword,
-                        fontSize = effectiveFontSize,
-                        showCopyButton = uiState.showLineCopyButton,
-                        onShowDetail = { activeDetailText = line }
-                    )
-                }
+            ) {
+                Text(
+                    text = annotatedString,
+                    style = MaterialTheme.typography.bodySmall.copy(
+                        fontFamily = FontFamily.Monospace,
+                        fontSize = effectiveFontSize.sp,
+                        lineHeight = (effectiveFontSize + 5).sp
+                    ),
+                    modifier = Modifier.fillMaxWidth()
+                )
             }
         }
 
         // 快速滚动条
         FastScrollbar(
-            listState = listState,
+            scrollState = scrollState,
             modifier = Modifier
                 .align(Alignment.CenterEnd)
                 .fillMaxHeight()
                 .padding(vertical = 8.dp, horizontal = 2.dp)
         )
-
-        // 详情复制弹窗
-        if (activeDetailText != null) {
-            AlertDialog(
-                onDismissRequest = { activeDetailText = null },
-                title = { Text("日志详情", style = MaterialTheme.typography.titleMedium) },
-                text = {
-                    val scrollState = rememberScrollState()
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .heightIn(max = 300.dp)
-                    ) {
-                        androidx.compose.foundation.text.selection.SelectionContainer {
-                            Column(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .verticalScroll(scrollState)
-                            ) {
-                                Text(
-                                    text = activeDetailText!!,
-                                    style = MaterialTheme.typography.bodySmall.copy(
-                                        fontFamily = FontFamily.Monospace,
-                                        fontSize = 11.sp
-                                    )
-                                )
-                            }
-                        }
-                    }
-                },
-                confirmButton = {
-                    val context = androidx.compose.ui.platform.LocalContext.current
-                    TextButton(
-                        onClick = {
-                            try {
-                                val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
-                                val clip = android.content.ClipData.newPlainText("Log Detail", activeDetailText)
-                                clipboard.setPrimaryClip(clip)
-                                fansirsqi.xposed.sesame.util.ToastUtil.showToast("已复制到剪贴板")
-                            } catch (e: Exception) {
-                                fansirsqi.xposed.sesame.util.ToastUtil.showToast("复制失败")
-                            }
-                            activeDetailText = null
-                        }
-                    ) {
-                        Text("复制")
-                    }
-                },
-                dismissButton = {
-                    TextButton(onClick = { activeDetailText = null }) {
-                        Text("关闭")
-                    }
-                }
-            )
-        }
     }
 }
 
 /**
- * 快速滚动条组件
+ * 快速滚动条组件（基于 ScrollState）
  * - 拖拽滑块快速定位
- * - 点击轨道直接跳转
  * - 滚动时自动显示，空闲后自动隐藏
  */
 @Composable
 fun FastScrollbar(
-    listState: LazyListState,
+    scrollState: ScrollState,
     modifier: Modifier = Modifier
 ) {
     val coroutineScope = rememberCoroutineScope()
     val density = LocalDensity.current
 
-    val totalItems = listState.layoutInfo.totalItemsCount
-    val visibleItems = listState.layoutInfo.visibleItemsInfo
+    var trackHeightPx by remember { mutableIntStateOf(0) }
+    val maxValue = scrollState.maxValue
 
-    // 不需要滚动条的情况
-    if (totalItems <= 0 || visibleItems.isEmpty()) return
-    // 锁定可视项数量，防止在滚动过程中因为最边缘条目的隐现导致分母和滑块高度及最大偏移量抖动
-    val stableVisibleCount = remember(totalItems) {
-        visibleItems.size
+    // 无法滚动时，仅通过 Box 占位测量高度
+    if (maxValue <= 0 || trackHeightPx <= 0) {
+        Box(
+            modifier = modifier
+                .width(24.dp)
+                .fillMaxHeight()
+                .onSizeChanged { trackHeightPx = it.height }
+        )
+        if (maxValue <= 0) return
     }
-    val visibleRatio = stableVisibleCount.toFloat() / totalItems
+
+    val totalHeightPx = maxValue + trackHeightPx
+    val visibleRatio = trackHeightPx.toFloat() / totalHeightPx
     if (visibleRatio >= 0.99f) return
 
-    // 滚动进度（分母由锁定后的 stableVisibleCount 决定，完全消除抖动）
-    val maxScrollIndex = (totalItems - stableVisibleCount).coerceAtLeast(1)
-    val scrollFraction = when {
-        !listState.canScrollBackward -> 0f
-        !listState.canScrollForward -> 1f
-        else -> (listState.firstVisibleItemIndex.toFloat() / maxScrollIndex).coerceIn(0f, 1f)
-    }
+    val scrollFraction = (scrollState.value.toFloat() / maxValue).coerceIn(0f, 1f)
 
     // 自动隐藏逻辑
-    val isScrolling = listState.isScrollInProgress
+    val isScrolling = scrollState.isScrollInProgress
     var isDragging by remember { mutableStateOf(false) }
     var showScrollbar by remember { mutableStateOf(true) }
 
@@ -783,15 +722,11 @@ fun FastScrollbar(
         label = "scrollbar_alpha"
     )
 
-    // 轨道高度（像素）
-    var trackHeightPx by remember { mutableIntStateOf(0) }
-
     // 滑块尺寸
     val minThumbHeightPx = with(density) { 40.dp.toPx() }
     val thumbHeightPx = (visibleRatio * trackHeightPx).coerceAtLeast(minThumbHeightPx)
     val maxThumbOffset = (trackHeightPx - thumbHeightPx).coerceAtLeast(0f)
 
-    // 引入本地拖动变量，避免拖动与滚动状态在 recompose 时产生卡顿冲突
     var localDragOffset by remember { mutableFloatStateOf(0f) }
 
     val thumbOffset = if (isDragging) {
@@ -808,13 +743,12 @@ fun FastScrollbar(
     }
 
     val currentMaxThumbOffset by rememberUpdatedState(maxThumbOffset)
-    val currentTotalItems by rememberUpdatedState(totalItems)
-    val currentMaxScrollIndex by rememberUpdatedState(maxScrollIndex)
+    val currentMaxValue by rememberUpdatedState(maxValue)
     val currentThumbHeightPx by rememberUpdatedState(thumbHeightPx)
 
     Box(
         modifier = modifier
-            .width(24.dp) // 增大触摸热区
+            .width(24.dp)
             .onSizeChanged { trackHeightPx = it.height }
             .alpha(alpha)
             .pointerInput(Unit) {
@@ -829,9 +763,9 @@ fun FastScrollbar(
                     localDragOffset = currentY
 
                     val initialFraction = if (currentMaxThumbOffset > 0) currentY / currentMaxThumbOffset else 0f
-                    val targetIndex = (initialFraction * currentMaxScrollIndex).roundToInt().coerceIn(0, currentTotalItems - 1)
+                    val targetScrollValue = (initialFraction * currentMaxValue).roundToInt().coerceIn(0, currentMaxValue)
                     coroutineScope.launch {
-                        listState.scrollToItem(targetIndex)
+                        scrollState.scrollTo(targetScrollValue)
                     }
 
                     var dragEvent = down
@@ -846,9 +780,9 @@ fun FastScrollbar(
                                 localDragOffset = currentY
 
                                 val fraction = if (currentMaxThumbOffset > 0) currentY / currentMaxThumbOffset else 0f
-                                val index = (fraction * currentMaxScrollIndex).roundToInt().coerceIn(0, currentTotalItems - 1)
+                                val scrollValue = (fraction * currentMaxValue).roundToInt().coerceIn(0, currentMaxValue)
                                 coroutineScope.launch {
-                                    listState.scrollToItem(index)
+                                    scrollState.scrollTo(scrollValue)
                                 }
                             }
                             dragEvent = dragChange
@@ -889,87 +823,5 @@ fun FastScrollbar(
                     shape = RoundedCornerShape(thumbWidthDp / 2)
                 )
         )
-    }
-}
-
-/**
- * 单行日志显示
- */
-@Composable
-fun LogLine(
-    line: String,
-    lineIndex: Int,
-    searchResults: List<LogViewerViewModel.SearchResult>,
-    currentSearchIndex: Int,
-    searchKeyword: String,
-    fontSize: Int = 11,
-    showCopyButton: Boolean = false,
-    onShowDetail: () -> Unit
-) {
-    // 查找当前行的搜索结果
-    val lineResults = searchResults.filter { it.lineIndex == lineIndex }
-
-    val annotatedText = if (lineResults.isNotEmpty() && searchKeyword.isNotEmpty()) {
-        buildAnnotatedString {
-            var lastIndex = 0
-
-            lineResults.sortedBy { it.charIndex }.forEach { result ->
-                // 添加高亮前的文本
-                append(line.substring(lastIndex, result.charIndex))
-
-                // 添加高亮文本
-                val isCurrent = searchResults.indexOf(result) == currentSearchIndex
-                withStyle(
-                    style = SpanStyle(
-                        background = if (isCurrent) Color.Yellow else Color(0x4DFFFF00),
-                        color = if (isCurrent) Color.Red else Color.Unspecified,
-                        fontWeight = if (isCurrent) FontWeight.Bold else FontWeight.Normal
-                    )
-                ) {
-                    append(line.substring(result.charIndex, result.charIndex + result.length))
-                }
-
-                lastIndex = result.charIndex + result.length
-            }
-
-            // 添加剩余文本
-            if (lastIndex < line.length) {
-                append(line.substring(lastIndex))
-            }
-        }
-    } else {
-        buildAnnotatedString { append(line) }
-    }
-
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 1.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Text(
-            text = annotatedText,
-            style = MaterialTheme.typography.bodySmall.copy(
-                fontFamily = FontFamily.Monospace,
-                fontSize = fontSize.sp,
-                lineHeight = (fontSize + 5).sp
-            ),
-            modifier = Modifier.weight(1f)
-        )
-        if (showCopyButton) {
-            Spacer(modifier = Modifier.width(4.dp))
-            IconButton(
-                onClick = onShowDetail,
-                modifier = Modifier
-                    .size(24.dp)
-                    .alpha(0.4f)
-            ) {
-                Icon(
-                    imageVector = Icons.Rounded.ContentCopy,
-                    contentDescription = "复制详情",
-                    modifier = Modifier.size(13.dp)
-                )
-            }
-        }
     }
 }

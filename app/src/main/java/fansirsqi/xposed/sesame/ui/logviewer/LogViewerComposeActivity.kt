@@ -195,6 +195,7 @@ fun LogViewerScreen(
     onBack: () -> Unit
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    val context = androidx.compose.ui.platform.LocalContext.current
     var showMenu by remember { mutableStateOf(false) }
     var showSearchPanel by remember { mutableStateOf(false) }
     var showFilterPanel by remember { mutableStateOf(false) }

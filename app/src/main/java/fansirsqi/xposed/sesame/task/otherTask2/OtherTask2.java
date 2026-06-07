@@ -35,7 +35,7 @@ public class OtherTask2 extends ModelTask {
 
     @Override
     public String getName() {
-        return "⚔️其他任务2";
+        return "其他任务2";
     }
     protected Integer executeIntervalInt = 6000;  // 执行间隔
     private final StringModelField startTime = new StringModelField("startTime", "开始执行时间(关闭:-1)", "0700");

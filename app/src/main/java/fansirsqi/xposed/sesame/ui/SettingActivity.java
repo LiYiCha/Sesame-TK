@@ -116,7 +116,7 @@ public class SettingActivity extends BaseActivity {
         initializeTabs();
         WatermarkView watermarkView = WatermarkView.Companion.install(this);
         String tag = "用户: " + userName + "\n ID: " + userId;
-        if (userName.equals("默认") || userId == null) {
+        if ("默认".equals(userName) || userId == null) {
             tag = "用户: " + "未登录" + "\n ID: " + "*************";
         }
         //设置水印
@@ -126,7 +126,12 @@ public class SettingActivity extends BaseActivity {
     private void initializeTabs() {
         try {
             RecyclerView recyclerTabList = findViewById(R.id.recycler_tab_list);
+            if (recyclerTabList == null) {
+                Log.error(TAG, "未找到 recycler_tab_list 控件，原生设置界面不支持此环境");
+                return;
+            }
             recyclerTabList.setLayoutManager(new LinearLayoutManager(this));
+            
             Map<String, ModelConfig> modelConfigMap = ModelTask.getModelConfigMap();
             List<String> tabTitles = new ArrayList<>();
             for (ModelConfig config : modelConfigMap.values()) {
@@ -134,17 +139,26 @@ public class SettingActivity extends BaseActivity {
             }
             TabAdapter tabAdapter = new TabAdapter(this, tabTitles, position -> {
                 ViewPager2 viewPager = findViewById(R.id.view_pager_content);
-                viewPager.setCurrentItem(position, true);
+                if (viewPager != null) {
+                    viewPager.setCurrentItem(position, true);
+                }
             });
             recyclerTabList.setAdapter(tabAdapter);
+            
             ViewPager2 viewPager = findViewById(R.id.view_pager_content);
+            if (viewPager == null) {
+                Log.error(TAG, "未找到 view_pager_content 控件，原生设置界面不支持此环境");
+                return;
+            }
             ContentPagerAdapter contentAdapter = new ContentPagerAdapter(getSupportFragmentManager(), getLifecycle(), modelConfigMap);
             viewPager.setAdapter(contentAdapter);
             viewPager.setUserInputEnabled(false);// 禁止用户手动滑动
             viewPager.registerOnPageChangeCallback(new ViewPager2.OnPageChangeCallback() {
                 @Override
                 public void onPageSelected(int position) {
-                    recyclerTabList.smoothScrollToPosition(position);
+                    if (recyclerTabList != null) {
+                        recyclerTabList.smoothScrollToPosition(position);
+                    }
                     tabAdapter.setSelectedPosition(position);
                 }
             });

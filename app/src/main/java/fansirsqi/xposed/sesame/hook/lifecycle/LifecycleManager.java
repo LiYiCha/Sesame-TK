@@ -187,7 +187,7 @@ public class LifecycleManager {
                 rpcBridge.load();
                 rpcVersion = rpcBridge.getVersion();
                 //抓包调试模式
-                if (BaseModel.getNewRpc().getValue() && BaseModel.getDebugMode().getValue()) {
+                if (BaseModel.getDebugMode().getValue()) {
                     setupRpcDebugHooks();
                 }
                 
@@ -461,38 +461,15 @@ public class LifecycleManager {
                         protected void beforeHookedMethod(MethodHookParam param) {
                             Object[] args = param.args;
                             Object object = args[15];
+                            String Method = String.valueOf(args[0]);
+                            if (LifecycleManager.isUselessRpc(Method)) {
+                                return;
+                            }
                             Object[] recordArray = new Object[4];
                             recordArray[0] = System.currentTimeMillis();
                             recordArray[1] = args[0];
                             recordArray[2] = args[4];
                             rpcHookMap.put(object, recordArray);
-                        }
-
-                        @SuppressLint("WakelockTimeout")
-                        @Override
-                        protected void afterHookedMethod(MethodHookParam param) {
-                            Object object = param.args[15];
-                            Object[] recordArray = rpcHookMap.remove(object);
-                            if (recordArray != null) {
-                                String TimeStamp = String.valueOf(recordArray[0]);
-                                String Method = String.valueOf(recordArray[1]);
-                                String Params = String.valueOf(recordArray[2]);
-                                Object rawDataObj = recordArray[3];
-
-                                // 处理RPC响应数据
-                                if (BaseModel.getAutoTokenEnabled().getValue()) {
-                                    RpcResponseHandler.handle(Method, Params);
-                                }
-
-                                // 只有在 rawDataObj 不为 null 时才记录日志
-                                if (rawDataObj != null) {
-                                    String rawData = String.valueOf(rawDataObj);
-                                    String logMessage = "\n[H5] ========================>\n" + "TimeStamp: " + TimeStamp + "\n" + "Method: " + Method + "\n" + "Params: " + Params + "\n" + "Data: " + rawData + "\n<========================\n";
-                                    writeCaptureLog(logMessage);
-                                }
-                            } else {
-                                writeCaptureLog("delete record ID: " + object.hashCode());
-                            }
                         }
                     });
             Log.runtime(TAG, "hook record request successfully");
@@ -511,10 +488,26 @@ public class LifecycleManager {
                         @Override
                         protected void beforeHookedMethod(MethodHookParam param) {
                             Object callback = param.thisObject;
-                            Object[] recordArray = rpcHookMap.get(callback);
+                            Object[] recordArray = rpcHookMap.remove(callback);
 
-                            if (recordArray != null && param.args.length > 0) {
-                                recordArray[3] = param.args[0].toString();
+                            if (recordArray != null && param.args.length > 0 && param.args[0] != null) {
+                                String TimeStamp = String.valueOf(recordArray[0]);
+                                String Method = String.valueOf(recordArray[1]);
+                                String Params = String.valueOf(recordArray[2]);
+                                String rawData = param.args[0].toString();
+
+                                // 处理RPC响应数据并提取关键信息
+                                if (BaseModel.getAutoTokenEnabled().getValue()) {
+                                    RpcResponseHandler.handle(Method, rawData);
+                                }
+
+                                String logMessage = "\n[H5] ========================>\n" + 
+                                        "TimeStamp: " + TimeStamp + "\n" + 
+                                        "Method: " + Method + "\n" + 
+                                        "Params: " + Params + "\n" + 
+                                        "Data: " + rawData + "\n" + 
+                                        "<========================\n";
+                                writeCaptureLog(logMessage);
                             }
                         }
                     });
@@ -619,6 +612,22 @@ public class LifecycleManager {
     private static boolean isUselessRpc(String opType) {
         if (opType == null || opType.isEmpty()) return false;
         String lower = opType.toLowerCase();
+
+        try {
+            String filterKeywords = BaseModel.httpCaptureFilter.getValue();
+            if (filterKeywords != null && !filterKeywords.trim().isEmpty()) {
+                String[] keywords = filterKeywords.split(",");
+                for (String kw : keywords) {
+                    String trimmed = kw.trim();
+                    if (!trimmed.isEmpty() && lower.contains(trimmed.toLowerCase())) {
+                        return true;
+                    }
+                }
+            }
+        } catch (Throwable t) {
+            // Ignore
+        }
+
         return lower.contains("wireless.audit")
                 || lower.contains("locate.service")
                 || lower.contains("uploadlog")

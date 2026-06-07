@@ -102,10 +102,11 @@ public class BaseModel extends Model {
     public static final BooleanModelField enableHttpCapture = new BooleanModelField("enableHttpCapture", "开启网络抓包(HTTP/HTTPS)", false);
 
     /**
-     * 抓包域名过滤 (关键词排除)
+     * 抓包黑名单 (关键词排除)
      */
     @Getter
-    public static final StringModelField httpCaptureFilter = new StringModelField("httpCaptureFilter", "抓包黑名单(关键词逗号分隔)", "log.alipay.com,mdap.alipay.com,diagnose.alipay.com");
+    public static final StringModelField httpCaptureFilter = new StringModelField("httpCaptureFilter", "抓包黑名单(关键词逗号分隔)", "log.alipay.com,mdap.alipay.com,diagnose.alipay.com,alipay.client.executerpc,alipay.client.interfere.config.get,alipay.client.getDynamicBundle,alipay.client.getUnionResource");
+
 
     /**
      * 是否自动获取token

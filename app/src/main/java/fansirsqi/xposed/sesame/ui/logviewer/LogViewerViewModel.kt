@@ -602,17 +602,32 @@ class LogViewerViewModel : ViewModel() {
                 }
             }
 
-            _uiState.update {
-                it.copy(
-                    displayedLines = filteredLines,
-                    displayedLineIndices = filteredIndices,
-                    statusMessage = if (state.filterKeyword.isNotEmpty() ||
-                                      state.enabledLogLevels.size < LogLevel.entries.size ||
-                                      !state.showH5 || !state.showBottom) {
-                        "筛选结果: ${filteredLines.size}/${lines.size} 行"
-                    } else {
-                        "共 ${lines.size} 行"
-                    }
+            val limit = 3000
+            val isLimited = filteredLines.size > limit
+            val finalFilteredLines = if (isLimited) {
+                filteredLines.subList(filteredLines.size - limit, filteredLines.size)
+            } else {
+                filteredLines
+            }
+            val finalFilteredIndices = if (isLimited) {
+                filteredIndices.subList(filteredIndices.size - limit, filteredIndices.size)
+            } else {
+                filteredIndices
+            }
+
+            _uiState.update { state ->
+                val baseMsg = if (state.filterKeyword.isNotEmpty() ||
+                                  state.enabledLogLevels.size < LogLevel.entries.size ||
+                                  !state.showH5 || !state.showBottom) {
+                    "筛选结果: ${filteredLines.size}/${lines.size} 行"
+                } else {
+                    "共 ${lines.size} 行"
+                }
+                val suffix = if (isLimited) " (仅显示最新 $limit 行)" else ""
+                state.copy(
+                    displayedLines = finalFilteredLines,
+                    displayedLineIndices = finalFilteredIndices,
+                    statusMessage = baseMsg + suffix
                 )
             }
         }

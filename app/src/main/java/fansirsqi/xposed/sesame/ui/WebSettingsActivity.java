@@ -187,6 +187,16 @@ public class WebSettingsActivity extends BaseActivity {
                 return false;
             }
         });
+        webView.setWebChromeClient(new android.webkit.WebChromeClient() {
+            @Override
+            public boolean onConsoleMessage(android.webkit.ConsoleMessage consoleMessage) {
+                Log.runtime(TAG, "JS Console: " + consoleMessage.message() + " (line "
+                             + consoleMessage.lineNumber() + ") of " + consoleMessage.sourceId());
+                return true;
+            }
+        });
+        webView.addJavascriptInterface(new WebViewCallback(), "HOOK");
+        webView.addJavascriptInterface(new WebAppInterface(), "Android");
         if (BuildConfig.DEBUG) {
             WebView.setWebContentsDebuggingEnabled(true);
 //            webView.loadUrl("http://192.168.31.69:5500/app/src/main/assets/web/index.html");
@@ -194,7 +204,6 @@ public class WebSettingsActivity extends BaseActivity {
         } else {
             webView.loadUrl("file:///android_asset/web/index.html");
         }
-        webView.addJavascriptInterface(new WebViewCallback(), "HOOK");
 
         webView.requestFocus();
         Map<String, ModelConfig> modelConfigMap = ModelTask.getModelConfigMap();
@@ -235,7 +244,7 @@ public class WebSettingsActivity extends BaseActivity {
         }
     }
 
-    private class WebViewCallback {
+    public class WebViewCallback {
         @JavascriptInterface
         public String getTabs() {
             String result = JsonUtil.formatJson(tabList, false);

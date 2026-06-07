@@ -15,7 +15,7 @@ import fansirsqi.xposed.sesame.util.Log
 
 class OtherTask0 : ModelTask() {
     override fun getName(): String {
-        return "其他任务"
+        return "其他任务0"
     }
 
     override fun getGroup(): ModelGroup {

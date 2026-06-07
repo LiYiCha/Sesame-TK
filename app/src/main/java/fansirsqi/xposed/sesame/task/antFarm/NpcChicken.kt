@@ -471,7 +471,7 @@ class NpcChicken {
      */
     private fun getCurrentNpc(): JSONObject? {
         try {
-            val syncRes = syncAnimalStatus(ownerFarmId, "SYNC_RESUME", "QUERY_ALL")
+            val syncRes = syncAnimalStatus(ownerFarmId, "SYNC_NPC", "QUERY_FARM_INFO")
             val joSync = JSONObject(syncRes)
 
             if (!joSync.optBoolean("success")) {
@@ -570,6 +570,22 @@ class NpcChicken {
      * 雇佣下一个可用的NPC
      */
     private fun hireNextAvailableNpc(configs: List<NpcSmartConfig>, records: Map<String, NpcHireRecord>) {
+        var animals = getFarmAnimals()
+        var animalCount = animals.length()
+        
+//        if (animalCount >= 3) {
+//            Log.farm(TAG, "智能调度🤖[当前小鸡数已满 ($animalCount)，尝试赶走别人的小鸡释放位置]")
+//            trySendBackGuestChickens(animals)
+//            // 赶走之后重新获取
+//            animals = getFarmAnimals()
+//            animalCount = animals.length()
+//        }
+        
+        if (animalCount >= 3) {
+            Log.farm(TAG, "智能调度🤖[庄园无小鸡位置，先不雇佣]")
+            return
+        }
+
         // 按优先级查找第一个不在冷却期的NPC
         for (config in configs) {
             val record = records[config.nickName]
@@ -580,7 +596,7 @@ class NpcChicken {
                     Log.farm("智能调度🤖[成功雇佣${config.nickName}]")
                     return
                 } else {
-                    Log.runtime(TAG, "智能调度🤖[雇佣${config.nickName}失败，尝试下一个]")
+                    Log.runtime(TAG, "智能调度🤖[雇佣${config.nickName}失败]")
                 }
             } else {
                 val remainingHours = record.getRemainingCoolDownHours()
@@ -668,6 +684,54 @@ class NpcChicken {
             Log.runtime(TAG, "智能调度🤖[记录${config.nickName}遣返时间，冷却${config.coolDownDays}天]")
         } catch (e: Exception) {
             Log.error("$TAG.saveNpcRecord异常:$e")
+        }
+    }
+
+    /**
+     * 获取庄园里的小鸡列表
+     */
+    private fun getFarmAnimals(): JSONArray {
+        try {
+            val syncRes = syncAnimalStatus(ownerFarmId, "SYNC_RESUME", "QUERY_ALL")
+            val joSync = JSONObject(syncRes)
+            if (joSync.optBoolean("success")) {
+                val subFarmVO = joSync.optJSONObject("subFarmVO")
+                return subFarmVO?.optJSONArray("animals") ?: JSONArray()
+            }
+        } catch (e: Exception) {
+            Log.error("$TAG.getFarmAnimals异常:$e")
+        }
+        return JSONArray()
+    }
+
+    /**
+     * 驱赶别的窃食小鸡
+     */
+    private fun trySendBackGuestChickens(animals: JSONArray) {
+        for (i in 0 until animals.length()) {
+            val animal = animals.getJSONObject(i)
+            val subAnimalType = animal.optString("subAnimalType")
+            val masterFarmId = animal.optString("masterFarmId")
+
+            // 别人的小鸡：masterFarmId 不等于我们，且 subAnimalType 不是 NPC
+            if (masterFarmId.isNotEmpty() && masterFarmId != ownerFarmId && subAnimalType != "NPC") {
+                val animalId = animal.optString("animalId")
+                val currentFarmId = animal.optString("currentFarmId")
+                val nickname = animal.optString("name", "别人的小鸡")
+                Log.farm("$TAG 庄园位置不足，尝试驱赶: $nickname ($animalId)")
+                try {
+                    // 使用常规驱赶
+                    val s = AntFarmRpcCall.sendBackAnimal("常规", animalId, currentFarmId, masterFarmId)
+                    val result = JSONObject(s)
+                    if (result.optBoolean("success")) {
+                        Log.farm("$TAG 成功赶走小鸡: $nickname")
+                    } else {
+                        Log.runtime(TAG, "赶小鸡失败: ${result.optString("memo")}")
+                    }
+                } catch (e: Exception) {
+                    Log.error("$TAG 赶小鸡异常: $e")
+                }
+            }
         }
     }
 }

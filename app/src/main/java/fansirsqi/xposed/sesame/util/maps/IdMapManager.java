@@ -76,10 +76,13 @@ public abstract class IdMapManager {
      */
     public synchronized void load(String userId) {
         idMap.clear();
+        if (userId == null || userId.isEmpty()) {
+            return;
+        }
         try {
             File file = Files.getTargetFileofUser(userId, thisFileName());
             String body = Files.readFromFile(file);
-            if (!body.isEmpty()) {
+            if (body != null && !body.isEmpty()) {
                 ObjectMapper objectMapper = new ObjectMapper();
                 Map<String, String> newMap = objectMapper.readValue(body, new TypeReference<>() {});
                 idMap.putAll(newMap);
@@ -108,6 +111,9 @@ public abstract class IdMapManager {
      * @return 如果保存成功返回true，否则返回false。
      */
     public synchronized boolean save(String userId) {
+        if (userId == null || userId.isEmpty()) {
+            return false;
+        }
         try {
             ObjectMapper objectMapper = new ObjectMapper();
             String json = JsonUtil.formatJson(idMap);

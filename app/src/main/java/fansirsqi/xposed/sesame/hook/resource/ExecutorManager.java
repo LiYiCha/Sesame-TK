@@ -23,16 +23,16 @@ public class ExecutorManager {
      * 注册 ExecutorService（用于泄漏检测）
      */
     public static void registerExecutor() {
-        long count = activeExecutors.incrementAndGet();
-        Log.runtime(TAG, "ExecutorService 已注册，当前活跃数: " + count);
+        activeExecutors.incrementAndGet();
+        // Log.runtime(TAG, "ExecutorService 已注册，当前活跃数: " + count);
     }
 
     /**
      * 注册 ScheduledExecutorService（用于泄漏检测）
      */
     public static void registerScheduler() {
-        long count = activeSchedulers.incrementAndGet();
-        Log.runtime(TAG, "ScheduledExecutorService 已注册，当前活跃数: " + count);
+        activeSchedulers.incrementAndGet();
+        // Log.runtime(TAG, "ScheduledExecutorService 已注册，当前活跃数: " + count);
     }
 
     /**
@@ -160,6 +160,7 @@ public class ExecutorManager {
      * 如果有未关闭的执行器，记录警告
      */
     public static void checkLeak() {
+        /*
         long executorCount = activeExecutors.get();
         long schedulerCount = activeSchedulers.get();
 
@@ -174,6 +175,7 @@ public class ExecutorManager {
         if (executorCount == 0 && schedulerCount == 0) {
             Log.runtime(TAG, "✓ 未检测到 ExecutorService 资源泄漏");
         }
+        */
     }
 
     /**

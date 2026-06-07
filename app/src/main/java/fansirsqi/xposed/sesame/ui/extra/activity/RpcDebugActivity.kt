@@ -32,6 +32,7 @@ class RpcDebugActivity : AppCompatActivity() {
 
     override fun onCreate(@Nullable savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        fansirsqi.xposed.sesame.data.ViewAppInfo.init(applicationContext)
 
         vm = ViewModelProvider(this).get(RpcDebugViewModel::class.java)
 
@@ -90,6 +91,28 @@ class RpcDebugActivity : AppCompatActivity() {
 
     private fun sendRequest(method: String, data: String) {
         try {
+            val trimmed = data.trim()
+            if (trimmed.isNotEmpty()) {
+                val repaired = repairJson(trimmed)
+                val isValid = try {
+                    if (repaired.startsWith("[")) {
+                        org.json.JSONArray(repaired)
+                        true
+                    } else if (repaired.startsWith("{")) {
+                        org.json.JSONObject(repaired)
+                        true
+                    } else {
+                        false
+                    }
+                } catch (e: Exception) {
+                    false
+                }
+                if (!isValid) {
+                    ToastUtil.makeText(this, "数据非合法 JSON 格式 (必须以 [ 或 { 开头且语法正确)！", Toast.LENGTH_LONG).show()
+                    return
+                }
+            }
+
             val intent = Intent("com.eg.android.AlipayGphone.sesame.rpctest")
             intent.putExtra("method", method)
             intent.putExtra("data", data)
@@ -99,6 +122,25 @@ class RpcDebugActivity : AppCompatActivity() {
         } catch (e: Exception) {
             vm.updateResult("发送请求错误")
             Log.other("发送请求错误:" + e)
+        }
+    }
+
+    private fun repairJson(s: String): String {
+        try {
+            val pattern = java.util.regex.Pattern.compile("\"([^\"]+)\"\\s*:\\s*\"(\\{.*?\\})\"")
+            val matcher = pattern.matcher(s)
+            val sb = java.lang.StringBuffer()
+            while (matcher.find()) {
+                val key = matcher.group(1)
+                val inner = matcher.group(2)
+                val innerUnescaped = inner.replace("\\\"", "\"")
+                val innerEscaped = innerUnescaped.replace("\"", "\\\"")
+                matcher.appendReplacement(sb, java.util.regex.Matcher.quoteReplacement("\"$key\":\"$innerEscaped\""))
+            }
+            matcher.appendTail(sb)
+            return sb.toString()
+        } catch (e: Exception) {
+            return s
         }
     }
 

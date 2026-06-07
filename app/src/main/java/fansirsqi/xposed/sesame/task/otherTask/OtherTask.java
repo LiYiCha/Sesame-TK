@@ -88,7 +88,7 @@ public class OtherTask extends ModelTask {
 
     @Override
     public String getName() {
-        return "其他任务";
+        return "其他任务1";
     }
 
     @Override

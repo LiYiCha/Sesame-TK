@@ -315,8 +315,8 @@ object Files {
     }
 
     @JvmStatic
-    fun readFromFile(f: File): String {
-        if (!f.exists()) return ""
+    fun readFromFile(f: File?): String {
+        if (f == null || !f.exists()) return ""
         if (!f.canRead()) {
             ToastUtil.showToast("${f.name}没有读取权限！")
             return ""
@@ -331,7 +331,8 @@ object Files {
     }
 
     @JvmStatic
-    fun beforWrite(f: File): Boolean {
+    fun beforWrite(f: File?): Boolean {
+        if (f == null) return true
         if (f.exists()) {
             if (!f.canWrite()) {
                 ToastUtil.showToast("${f.absoluteFile}没有写入权限！")
@@ -355,7 +356,8 @@ object Files {
 
     @JvmStatic
     @Synchronized
-    fun write2File(s: String, f: File): Boolean {
+    fun write2File(s: String, f: File?): Boolean {
+        if (f == null) return false
         if (beforWrite(f)) return false
         var fw: FileWriter? = null
         try {

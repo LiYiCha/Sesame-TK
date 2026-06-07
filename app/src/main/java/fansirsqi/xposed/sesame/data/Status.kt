@@ -539,19 +539,7 @@ class Status {
             val isDayChanged = updateDay(nowCalendar)
             INSTANCE.saveTime = System.currentTimeMillis()
             
-            if (isDayChanged || immediate) {
-                saveJob?.cancel()
-                saveJob = null
-                writeStatusToFile(currentUid, isDayChanged, lastSaveTime)
-            } else {
-                saveJob?.cancel()
-                saveJob = statusScope.launch {
-                    delay(2000)
-                    synchronized(Status::class.java) {
-                        writeStatusToFile(currentUid, false, lastSaveTime)
-                    }
-                }
-            }
+            writeStatusToFile(currentUid, isDayChanged, lastSaveTime)
         }
 
         private fun writeStatusToFile(currentUid: String, isDayChanged: Boolean, lastSaveTime: Long) {
@@ -559,7 +547,7 @@ class Status {
                 if (isDayChanged) {
                     Log.runtime(TAG, "重置 statistics.json")
                 } else {
-                    Log.runtime(TAG, "保存 status.json (防抖异步)")
+                    Log.runtime(TAG, "保存 status.json")
                 }
                 Files.write2File(JsonUtil.formatJson(INSTANCE), Files.getStatusFile(currentUid)!!)
             } catch (e: Exception) {

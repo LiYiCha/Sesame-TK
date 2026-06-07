@@ -279,9 +279,8 @@ class MainActivity : BaseActivity() {
 //        val isEnabled = state != PackageManager.COMPONENT_ENABLED_STATE_DISABLED
 //        menu.add(0, 1, 1, R.string.hide_the_application_icon).setCheckable(true).isChecked = !isEnabled
             menu.add(0, 2, 2, R.string.view_error_log_file)    // 异常日志
-            menu.add(0, 3, 3, R.string.view_all_log_file)      // 全部日志
             menu.add(0, 4, 4, R.string.view_runtim_log_file)   // 运行日志
-            menu.add(0, 5, 5, R.string.view_capture)           // 抓包记录 (旧版)
+            menu.add(0, 5, 5, R.string.view_capture)           // 抓包记录 (rpc)
             menu.add(0, 6, 6, R.string.extend)                 // 扩展功能
             menu.add(0, 7, 7, R.string.settings)               // 设置
             menu.add(0, 8, 8, R.string.test_post)              // 模拟请求(RpcDebugActivity)

@@ -207,7 +207,7 @@ private fun RpcDebugScreen(vm: RpcDebugViewModel, callbacks: Callbacks) {
                         OutlinedTextField(
                             value = editMethod,
                             onValueChange = {
-                                editMethod = if (vm.shouldAutoUnescape(it)) vm.unescapeString(it) else it
+                                editMethod = it
                             },
                             label = { Text("Method") }
                         )
@@ -228,7 +228,7 @@ private fun RpcDebugScreen(vm: RpcDebugViewModel, callbacks: Callbacks) {
                         OutlinedTextField(
                             value = editData,
                             onValueChange = {
-                                editData = if (vm.shouldAutoUnescape(it)) vm.unescapeString(it) else it
+                                editData = it
                             },
                             modifier = Modifier.fillMaxWidth().heightIn(min = 100.dp)
                         )

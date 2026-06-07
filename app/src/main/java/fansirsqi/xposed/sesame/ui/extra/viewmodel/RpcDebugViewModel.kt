@@ -128,11 +128,7 @@ class RpcDebugViewModel : ViewModel() {
     fun updateResult(text: String) { _result.value = text }
     fun updateTitle(text: String) { _title.value = text }
     fun updateMethod(text: String) {
-        if (shouldAutoUnescape(text)) {
-            _method.value = unescapeString(text)
-        } else {
-            _method.value = text
-        }
+        _method.value = text
     }
     fun unescapeString(str: String): String {
         var s = str.trim()
@@ -183,11 +179,7 @@ class RpcDebugViewModel : ViewModel() {
     }
 
     fun updateData(text: String) {
-        if (shouldAutoUnescape(text)) {
-            _data.value = unescapeString(text)
-        } else {
-            _data.value = text
-        }
+        _data.value = text
     }
 
     fun triggerManualUnescape() {

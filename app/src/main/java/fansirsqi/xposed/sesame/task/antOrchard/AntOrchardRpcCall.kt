@@ -112,6 +112,53 @@ object AntOrchardRpcCall {
         )
     }
 
+    fun queryOptionalPlay(): String {
+        val data = """
+            [{
+                "bizType":"ANTORCHARD",
+                "commonDegradeFilterRequest":{
+                    "deviceLevel":"high",
+                    "platform":"Android",
+                    "unityDeviceLevel":"high"
+                },
+                "playTypeList":["TOP_UP_COUPON","TASK_TRIGGER"],
+                "requestType":"RPC",
+                "sceneCode":"ORCHARD",
+                "source":"H5",
+                "version":"10.8.50"
+            }]
+        """.trimIndent()
+        return RequestManager.requestString("com.alipay.charitygamecenter.queryOptionalPlay", data)
+    }
+
+    fun finishTaskLeyuan(taskType: String, sceneCode: String, outBizNo: String): String {
+        val data = """
+            [{
+                "outBizNo": "$outBizNo",
+                "requestType": "RPC",
+                "sceneCode": "$sceneCode",
+                "source": "ADBASICLIB",
+                "taskType": "$taskType"
+            }]
+        """.trimIndent()
+        return RequestManager.requestString("com.alipay.antiep.finishTask", data)
+    }
+
+    fun receiveTaskAwardantorchard(taskType: String, awardCount: Int): String {
+        val data = """
+            [{
+                "awardCountForReceive": $awardCount,
+                "ignoreLimit": true,
+                "requestType": "RPC",
+                "sceneCode": "ANTORCHARD_LEYUAN_DAILY_TASK",
+                "source": "antorchard",
+                "taskType": "$taskType"
+            }]
+        """.trimIndent()
+        return RequestManager.requestString("com.alipay.antieptask.receiveTaskAwardantorchard", data)
+    }
+
+
     fun triggerTbTask(taskId: String, taskPlantType: String): String {
         return RequestManager.requestString(
             "com.alipay.antfarm.triggerTbTask",
@@ -217,5 +264,39 @@ object AntOrchardRpcCall {
         val method = "com.alipay.antorchard.queryGameCenter";
         val params = "[{\"queryGameCenterTheme\":true,\"requestType\":\"NORMAL\",\"sceneCode\":\"ORCHARD\",\"source\":\"ch_appcenter__chsub_9patch\",\"version\":\""+VERSION+"\"}]";
         return RequestManager.requestString(method, params);
+    }
+
+    fun queryCallAppSchema(sceneCode: String): String {
+        return RequestManager.requestString(
+            "alipay.antmember.callApp.queryCallAppSchema",
+            "[{\"direct\":\"OUT\",\"sceneCode\":\"$sceneCode\"}]"
+        )
+    }
+
+    fun rouseRuleCheck(
+        appIdSource: String,
+        extInfo: String,
+        operate: String,
+        originalUrl: String,
+        targetUrl: String,
+        urlSource: String
+    ): String {
+        try {
+            val ja = org.json.JSONArray()
+            val jo = org.json.JSONObject()
+            jo.put("appIdSource", appIdSource)
+            jo.put("extInfo", extInfo)
+            jo.put("operate", operate)
+            jo.put("originalUrl", originalUrl)
+            jo.put("targetUrl", targetUrl)
+            jo.put("urlSource", urlSource)
+            ja.put(jo)
+            return RequestManager.requestString(
+                "alipay.antstarship.appdownload.rouse.rule.check",
+                ja.toString()
+            )
+        } catch (e: Exception) {
+            return ""
+        }
     }
 }
