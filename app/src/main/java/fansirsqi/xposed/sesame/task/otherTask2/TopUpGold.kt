@@ -44,10 +44,25 @@ class TopUpGold {
                 return
             }
 
-            // 1. 每日签到
+            // 1. 每日签到：先查询状态，未签到且功能可用时才执行
             if (!Status.hasFlagToday("topUpGold_signed_in")) {
-                if (executeSignIn(token, userId)) {
-                    Status.setFlagToday("topUpGold_signed_in")
+                val signInData = querySignInStatus(token, userId)
+                when {
+                    signInData == null -> {
+                        // 查询失败（可能已下架），设置 flag 跳过
+                        Log.other(TAG, "查询签到无结果（可能已下架），跳过今日签到")
+                        Status.setFlagToday("topUpGold_signed_in")
+                    }
+                    signInData.optBoolean("signinToday", false) -> {
+                        // 今日已签到
+                        Log.other(TAG, "查询到今日已签到")
+                        Status.setFlagToday("topUpGold_signed_in")
+                    }
+                    else -> {
+                        // 未签到，执行签到
+                        executeSignIn(token, userId)
+                        Status.setFlagToday("topUpGold_signed_in")
+                    }
                 }
                 Thread.sleep(RandomUtil.nextGaussianLong(1500, 3000))
             }
@@ -244,6 +259,44 @@ class TopUpGold {
         }
     }
 
+    /**
+     * 查询签到状态，返回 data 对象；失败或不可用时返回 null
+     */
+    private fun querySignInStatus(token: String, userId: String): JSONObject? {
+        try {
+            val miniMark = AlipayMiniMarkHelper.getAlipayMiniMark(APP_ID, VERSION)
+            val url = "https://gdbizweb.alipay-eco.com/gdbizweb/task/signin/query?channelSource=self&token=$token&version=3"
+            val mediaType = "application/json".toMediaType()
+            val body = "{\"channelSource\":\"self\"}".toRequestBody(mediaType)
+
+            val request = Request.Builder()
+                .url(url)
+                .post(body)
+                .addHeader("Accept-Charset", "UTF-8")
+                .addHeader("Referer", REFERER)
+                .addHeader("x-release-type", "ONLINE")
+                .addHeader("userid", userId)
+                .addHeader("alipayminimark", miniMark)
+                .addHeader("User-Agent", getUA())
+                .addHeader("Accept", "*/*")
+                .addHeader("x-allow-afts-limit", "true")
+                .build()
+
+            client.newCall(request).execute().use { response ->
+                if (response.isSuccessful) {
+                    val bodyText = response.body.string()
+                    val json = JSONObject(bodyText)
+                    if (json.optBoolean("success", false)) {
+                        return json.optJSONObject("data")
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            Log.error(TAG, "查询签到状态异常: ${e.message}")
+        }
+        return null
+    }
+
     private fun executeSignIn(token: String, userId: String): Boolean {
         try {
             val miniMark = AlipayMiniMarkHelper.getAlipayMiniMark(APP_ID, VERSION)
@@ -266,7 +319,7 @@ class TopUpGold {
 
             client.newCall(request).execute().use { response ->
                 if (response.isSuccessful) {
-                    val bodyText = response.body?.string() ?: ""
+                    val bodyText = response.body.string()
                     val json = JSONObject(bodyText)
                     if (json.optBoolean("success", false)) {
                         Log.other(TAG, "✅ 每日签到成功!")

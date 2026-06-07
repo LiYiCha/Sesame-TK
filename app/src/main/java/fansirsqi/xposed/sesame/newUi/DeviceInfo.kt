@@ -622,8 +622,9 @@ object DeviceInfoUtil {
     fun showInfo(vid: String): Map<String, String> {
         fun getProp(prop: String): String {
             return try {
-                val p = Runtime.getRuntime().exec("getprop $prop")
-                p.inputStream.bufferedReader().readLine().orEmpty()
+                val clazz = Class.forName("android.os.SystemProperties")
+                val getMethod = clazz.getMethod("get", String::class.java)
+                getMethod.invoke(null, prop) as? String ?: ""
             } catch (_: Exception) {
                 ""
             }

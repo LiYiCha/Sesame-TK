@@ -512,59 +512,6 @@ class AntOrchard : ModelTask() {
                     continue
                 }
 
-                if (task.has("taskDisplayConfig")) {
-                    val targetUrl = task.getJSONObject("taskDisplayConfig").optString("targetUrl", "")
-                    if (targetUrl.contains("jumpAction=userGrowth") &&
-                        (targetUrl.contains("alipayAppdonwlaodPlanId") || targetUrl.contains("alipayAppdownloadPlanId"))) {
-
-                        Log.runtime(TAG, "检测到外部应用跳转任务: $title")
-
-                        val planIdKey = if (targetUrl.contains("alipayAppdonwlaodPlanId")) "alipayAppdonwlaodPlanId" else "alipayAppdownloadPlanId"
-                        val planId = getQueryParameter(targetUrl, planIdKey)
-                        val rouseSceneCode = getQueryParameter(targetUrl, "sceneCode")
-
-                        if (planId.isNotEmpty() && rouseSceneCode.isNotEmpty()) {
-                            try {
-                                val schemaResponse = AntOrchardRpcCall.queryCallAppSchema(rouseSceneCode)
-                                val schemaJson = JSONObject(schemaResponse)
-                                if (schemaJson.optBoolean("success", false) && schemaJson.has("schemaConfigList")) {
-                                    val schemaConfigList = schemaJson.getJSONArray("schemaConfigList")
-                                    if (schemaConfigList.length() > 0) {
-                                        val firstConfig = schemaConfigList.getJSONObject(0)
-                                        val channelDeepLink = firstConfig.optString("channelDeepLink", "")
-
-                                        if (channelDeepLink.isNotEmpty()) {
-                                            val extInfo = "{\"actionSource\":\"odl-biz-user-growth\"}"
-                                            val rouseResponse = AntOrchardRpcCall.rouseRuleCheck(
-                                                appIdSource = "68687599",
-                                                extInfo = extInfo,
-                                                operate = "checkInfo",
-                                                originalUrl = targetUrl,
-                                                targetUrl = channelDeepLink,
-                                                urlSource = ""
-                                            )
-                                            val rouseJson = JSONObject(rouseResponse)
-                                            if (rouseJson.optBoolean("success", false)) {
-                                                Log.farm("农场跳转外部APP任务完成: $title")
-                                                CoroutineUtils.sleepCompat(5000)
-                                            } else {
-                                                Log.error(TAG, "rouseRuleCheck 校验失败: ${rouseJson.optString("errorMessage", "未知错误")}")
-                                            }
-                                        } else {
-                                            Log.error(TAG, "未获取到有效的 channelDeepLink")
-                                        }
-                                    }
-                                } else {
-                                    Log.error(TAG, "queryCallAppSchema 失败: ${schemaJson.optString("resultDesc", "未知错误")}")
-                                }
-                            } catch (e: Exception) {
-                                Log.printStackTrace(TAG, "执行跳转任务异常: $title", e)
-                            }
-                        }
-                        continue
-                    }
-                }
-
                 if (actionType == "VISIT" || actionType == "XLIGHT") {
                     val rightsTimes = task.optInt("rightsTimes", 0)
                     var rightsTimesLimit = task.optInt("rightsTimesLimit", 0)
@@ -974,22 +921,6 @@ class AntOrchard : ModelTask() {
         } catch (t: Throwable) {
             Log.printStackTrace(TAG, "orchardAssistFriend err:", t)
         }
-    }
-
-    private fun getQueryParameter(url: String, key: String): String {
-        try {
-            val uri = android.net.Uri.parse(url)
-            val value = uri.getQueryParameter(key)
-            if (value != null) return value
-            val nestedUrl = uri.getQueryParameter("url")
-            if (nestedUrl != null && nestedUrl.isNotEmpty()) {
-                val nestedUri = android.net.Uri.parse(nestedUrl)
-                val nestedValue = nestedUri.getQueryParameter(key)
-                if (nestedValue != null) return nestedValue
-            }
-        } catch (ignored: Throwable) {
-        }
-        return ""
     }
 
     object PlantModeType {

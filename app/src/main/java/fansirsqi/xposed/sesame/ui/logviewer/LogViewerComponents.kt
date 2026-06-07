@@ -36,6 +36,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChanged
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
@@ -46,6 +47,15 @@ import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
+import android.widget.TextView
+import android.util.TypedValue
+import android.graphics.Typeface
+import android.text.SpannableString
+import android.text.style.ForegroundColorSpan
+import android.text.style.BackgroundColorSpan
+import android.text.style.StyleSpan
+import androidx.compose.ui.viewinterop.AndroidView
+import androidx.compose.ui.graphics.toArgb
 
 /**
  * 搜索面板（紧凑设计）
@@ -476,6 +486,43 @@ fun StatusBar(
 }
 
 /**
+ * 转换 Compose AnnotatedString 到 Android 原生 SpannableString
+ */
+fun AnnotatedString.toSpannableString(): SpannableString {
+    val spannable = SpannableString(this.text)
+    this.spanStyles.forEach { range ->
+        val start = range.start
+        val end = range.end
+        val style = range.item
+        if (style.color != Color.Unspecified) {
+            spannable.setSpan(
+                ForegroundColorSpan(style.color.toArgb()),
+                start,
+                end,
+                SpannableString.SPAN_EXCLUSIVE_EXCLUSIVE
+            )
+        }
+        if (style.background != Color.Unspecified) {
+            spannable.setSpan(
+                BackgroundColorSpan(style.background.toArgb()),
+                start,
+                end,
+                SpannableString.SPAN_EXCLUSIVE_EXCLUSIVE
+            )
+        }
+        if (style.fontWeight == FontWeight.Bold) {
+            spannable.setSpan(
+                StyleSpan(Typeface.BOLD),
+                start,
+                end,
+                SpannableString.SPAN_EXCLUSIVE_EXCLUSIVE
+            )
+        }
+    }
+    return spannable
+}
+
+/**
  * 日志内容显示（支持双指缩放、快速滚动条、搜索结果自动滚动和文本选择）
  */
 @OptIn(ExperimentalFoundationApi::class)
@@ -574,6 +621,10 @@ fun LogContent(
         }
     }
 
+    val spannableString = remember(annotatedString) {
+        annotatedString.toSpannableString()
+    }
+
     // 自动滚动到底部
     LaunchedEffect(scrollState.maxValue, uiState.autoScroll) {
         if (uiState.autoScroll) {
@@ -614,49 +665,51 @@ fun LogContent(
     Box(
         modifier = Modifier.fillMaxSize()
     ) {
-        androidx.compose.foundation.text.selection.SelectionContainer {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(MaterialTheme.colorScheme.background)
-                    .verticalScroll(scrollState)
-                    .padding(start = 8.dp, end = 24.dp, top = 8.dp, bottom = 8.dp)
-                    .pointerInput(Unit) {
-                        awaitEachGesture {
-                            awaitFirstDown(requireUnconsumed = false)
-                            var prevDistance = 0f
-                            do {
-                                val event = awaitPointerEvent()
-                                if (event.changes.size >= 2) {
-                                    val p1 = event.changes[0]
-                                    val p2 = event.changes[1]
-                                    val curDist = (p1.position - p2.position).getDistance()
-                                    if (prevDistance > 0f && curDist > 0f) {
-                                        val change = curDist / prevDistance
-                                        zoomScale = (zoomScale * change).coerceIn(0.5f, 4f)
-                                        event.changes.forEach {
-                                            if (it.positionChanged()) it.consume()
-                                        }
+        val textColor = MaterialTheme.colorScheme.onBackground
+        AndroidView(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(MaterialTheme.colorScheme.background)
+                .verticalScroll(scrollState)
+                .padding(start = 8.dp, end = 24.dp, top = 8.dp, bottom = 8.dp)
+                .pointerInput(Unit) {
+                    awaitEachGesture {
+                        awaitFirstDown(requireUnconsumed = false)
+                        var prevDistance = 0f
+                        do {
+                            val event = awaitPointerEvent()
+                            if (event.changes.size >= 2) {
+                                val p1 = event.changes[0]
+                                val p2 = event.changes[1]
+                                val curDist = (p1.position - p2.position).getDistance()
+                                if (prevDistance > 0f && curDist > 0f) {
+                                    val change = curDist / prevDistance
+                                    zoomScale = (zoomScale * change).coerceIn(0.5f, 4f)
+                                    event.changes.forEach {
+                                        if (it.positionChanged()) it.consume()
                                     }
-                                    prevDistance = curDist
-                                } else {
-                                    prevDistance = 0f
                                 }
-                            } while (event.changes.any { it.pressed })
-                        }
+                                prevDistance = curDist
+                            } else {
+                                prevDistance = 0f
+                            }
+                        } while (event.changes.any { it.pressed })
                     }
-            ) {
-                Text(
-                    text = annotatedString,
-                    style = MaterialTheme.typography.bodySmall.copy(
-                        fontFamily = FontFamily.Monospace,
-                        fontSize = effectiveFontSize.sp,
-                        lineHeight = (effectiveFontSize + 5).sp
-                    ),
-                    modifier = Modifier.fillMaxWidth()
-                )
+                },
+            factory = { context ->
+                TextView(context).apply {
+                    setTextIsSelectable(true)
+                    typeface = Typeface.MONOSPACE
+                }
+            },
+            update = { textView ->
+                textView.text = spannableString
+                textView.setTextSize(TypedValue.COMPLEX_UNIT_SP, effectiveFontSize.toFloat())
+                textView.setTextColor(textColor.toArgb())
+                val spacingExtra = with(density) { 5.dp.toPx() }
+                textView.setLineSpacing(spacingExtra, 1.0f)
             }
-        }
+        )
 
         // 快速滚动条
         FastScrollbar(

@@ -147,7 +147,7 @@ public class ApplicationHook implements IXposedHookLoadPackage {
     @Override
     public void handleLoadPackage(XC_LoadPackage.LoadPackageParam lpparam) {
         registerModules();
-        if (General.PACKAGE_NAME.equals(lpparam.packageName) && lpparam.processName.startsWith(General.PACKAGE_NAME)) {
+        if (General.PACKAGE_NAME.equals(lpparam.packageName) && General.PACKAGE_NAME.equals(lpparam.processName)) {
             if (hooked) return;
             AppContext.setClassLoader(lpparam.classLoader);
             

@@ -447,6 +447,8 @@ class GameCenterGold : BaseCommTask() {
 
     /**
      * 处理游戏中心金币签到
+     * 先通过 queryHomePage 返回的 signUpModuleVO 查询签到状态，确认未签到且参数齐全后才执行签到
+     * 签到功能下架、参数缺失等情况直接标记跳过，避免反复无效重试
      */
     private fun handleSignIn(homeData: JSONObject) {
         try {
@@ -454,34 +456,62 @@ class GameCenterGold : BaseCommTask() {
                 return
             }
 
-            val signUpModuleVO = homeData.optJSONObject("signUpModuleVO") ?: return
-            val popupStatus = signUpModuleVO.optString("popupStatus")
-            
-            // 如果已签到，跳过
-            if (popupStatus == "COMPLETED" || popupStatus == "SIGNED") {
+            // 1. 查询签到模块，判断签到功能是否可用
+            val signUpModuleVO = homeData.optJSONObject("signUpModuleVO")
+            if (signUpModuleVO == null) {
+                Log.other("$displayName: 签到模块不存在（可能已下架），跳过今日签到")
                 Status.setFlagToday("GameCenterGold_SignIn_Completed")
                 return
             }
 
+            // 2. 检查 popupStatus（在 signUpPopupModuleVO 子对象里，不是 signUpModuleVO 顶层）
+            val popupStatus = signUpModuleVO.optJSONObject("signUpPopupModuleVO")?.optString("popupStatus") ?: ""
+            if (popupStatus == "COMPLETE_TODAY_RECORD" || popupStatus == "RECEIVED_TODAY_RECORD") {
+                Log.other("$displayName: 查询到今日已签到(popupStatus=$popupStatus)")
+                Status.setFlagToday("GameCenterGold_SignIn_Completed")
+                return
+            }
+
+            // 2b. 额外检查 signRecordVOList，找到今天已签到的记录
+            val signRecordList = signUpModuleVO.optJSONArray("signRecordVOList")
+            if (signRecordList != null) {
+                for (i in 0 until signRecordList.length()) {
+                    val record = signRecordList.optJSONObject(i) ?: continue
+                    if (record.optBoolean("isToday", false) && record.optString("signUpStatus") == "SIGNED") {
+                        Log.other("$displayName: signRecord 显示今日已签到")
+                        Status.setFlagToday("GameCenterGold_SignIn_Completed")
+                        return
+                    }
+                }
+            }
+
+            // 3. 检查签到参数是否齐全
             val date = signUpModuleVO.optString("date")
             val index = signUpModuleVO.optInt("index", -1)
             val signSequenceId = signUpModuleVO.optString("signSequenceId")
 
-            if (date.isNotEmpty() && index != -1 && signSequenceId.isNotEmpty()) {
-                Log.runtime(TAG, "开始游戏中心签到: date=$date, index=$index")
-                val res = signIn(date, index, signSequenceId)
-                if (!res.isNullOrEmpty()) {
-                    val resJson = JSONObject(res)
-                    if (resJson.optBoolean("success")) {
-                        Log.other("$displayName: 签到成功✅")
-                        Status.setFlagToday("GameCenterGold_SignIn_Completed")
-                    } else {
-                        Log.error(TAG, "签到失败: $res")
-                    }
+            if (date.isEmpty() || index == -1 || signSequenceId.isEmpty()) {
+                Log.other("$displayName: 签到参数不完整（签到暂不可用），跳过今日签到")
+                Status.setFlagToday("GameCenterGold_SignIn_Completed")
+                return
+            }
+
+            // 4. 参数齐全，执行签到
+            Log.runtime(TAG, "开始游戏中心签到: date=$date, index=$index")
+            val res = signIn(date, index, signSequenceId)
+            if (!res.isNullOrEmpty()) {
+                val resJson = JSONObject(res)
+                if (resJson.optBoolean("success")) {
+                    Log.other("$displayName: 签到成功✅")
+                } else {
+                    Log.error(TAG, "签到失败: $res")
                 }
             }
+            // 无论执行结果如何，标记已处理，避免反复重试
+            Status.setFlagToday("GameCenterGold_SignIn_Completed")
         } catch (e: Exception) {
             Log.error(TAG, "签到异常: ${e.message}")
+            Status.setFlagToday("GameCenterGold_SignIn_Completed")
         }
     }
 

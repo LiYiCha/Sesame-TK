@@ -49,6 +49,8 @@ import fansirsqi.xposed.sesame.util.Log
 import fansirsqi.xposed.sesame.util.ToastUtil
 import fansirsqi.xposed.sesame.util.maps.UserMap
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import java.util.concurrent.CountDownLatch
 
 
@@ -165,41 +167,47 @@ class MainActivity : BaseActivity() {
                 }
             }
 
-            try {
-                //打开设置前需要确认设置了哪个UI
-                UIConfig.load()
-            } catch (e: Exception) {
-                Log.printStackTrace(e)
-            }
+            lifecycleScope.launch(Dispatchers.IO) {
+                try {
+                    //打开设置前需要确认设置了哪个UI
+                    UIConfig.load()
+                } catch (e: Exception) {
+                    Log.printStackTrace(e)
+                }
 
-            try {
-                val userNameList: MutableList<String> = ArrayList()
-                val userEntityList: MutableList<UserEntity?> = ArrayList()
-                val configFiles = Files.CONFIG_DIR.listFiles()
-                if (configFiles != null) {
-                    for (configDir in configFiles) {
-                        if (configDir.isDirectory) {
-                            val userId = configDir.name
-                            UserMap.loadSelf(userId)
-                            val userEntity = UserMap.get(userId)
-                            val userName = if (userEntity == null) {
-                                userId
-                            } else {
-                                userEntity.showName + ": " + userEntity.account
+                try {
+                    val userNameList: MutableList<String> = ArrayList()
+                    val userEntityList: MutableList<UserEntity?> = ArrayList()
+                    val configFiles = Files.CONFIG_DIR.listFiles()
+                    if (configFiles != null) {
+                        for (configDir in configFiles) {
+                            if (configDir.isDirectory) {
+                                val userId = configDir.name
+                                UserMap.loadSelf(userId)
+                                val userEntity = UserMap.get(userId)
+                                val userName = if (userEntity == null) {
+                                    userId
+                                } else {
+                                    userEntity.showName + ": " + userEntity.account
+                                }
+                                userNameList.add(userName)
+                                userEntityList.add(userEntity)
                             }
-                            userNameList.add(userName)
-                            userEntityList.add(userEntity)
                         }
                     }
+                    userNameList.add(0, "默认")
+                    userEntityList.add(0, null)
+                    withContext(Dispatchers.Main) {
+                        userNameArray = userNameList.toTypedArray<String>()
+                        userEntityArray = userEntityList.toTypedArray<UserEntity?>()
+                    }
+                } catch (e: Exception) {
+                    Log.printStackTrace(e)
+                    withContext(Dispatchers.Main) {
+                        userNameArray = arrayOf("默认")
+                        userEntityArray = arrayOf(null)
+                    }
                 }
-                userNameList.add(0, "默认")
-                userEntityList.add(0, null)
-                userNameArray = userNameList.toTypedArray<String>()
-                userEntityArray = userEntityList.toTypedArray<UserEntity?>()
-            } catch (e: Exception) {
-                userNameArray = arrayOf("默认")
-                userEntityArray = arrayOf(null)
-                Log.printStackTrace(e)
             }
 
         }
