@@ -409,7 +409,7 @@ abstract class BaseFlashSaleTask : ModelTask() {
                 }
             } catch (e: Exception) {
                 // 检查是否是中断导致的异常（包括被包装的InterruptedException）
-                if (e.cause is InterruptedException || Thread.currentThread().isInterrupted) {
+                if (e is InterruptedException || e.cause is InterruptedException || Thread.currentThread().isInterrupted) {
                     Thread.currentThread().interrupt()
                     break
                 }

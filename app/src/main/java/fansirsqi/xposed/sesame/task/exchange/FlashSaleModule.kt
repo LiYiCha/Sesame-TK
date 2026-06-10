@@ -36,6 +36,13 @@ class FlashSaleModule : BaseFlashSaleTask() {
         linkedSetOf(),
         PrivilegeEX::getExchangeItemListForUI
     )
+    private val enablePackageExchange = BooleanModelField("enablePackageExchange", "包裹兑换", false)
+    private val packageExchangeList = SelectModelField(
+        "packageExchangeList",
+        "包裹兑换 | 商品列表",
+        linkedSetOf(),
+        PackageExchangeEX::getExchangeItemListForUI
+    )
     private val wakeUpMinuteBefore = IntegerModelField("wakeUpMinuteBefore", "唤醒提前时间(分钟)", 2, 1, 30)
     private val enableConcurrent = BooleanModelField("enableConcurrent", "启用并发兑换", false)
 
@@ -48,6 +55,7 @@ class FlashSaleModule : BaseFlashSaleTask() {
     // 大额和小额各用独立实例，避免并发执行时共享 AtomicBoolean/AtomicReference 状态相互干扰
     protected val privilegeEX = PrivilegeEX()       // 青春特权大额（10点）
     protected val privilegeSmallEX = PrivilegeEX()  // 青春特权小额（0点）
+    protected val packageExchangeEX = PackageExchangeEX()
 
     // 每个子任务的执行状态控制
     @Volatile
@@ -56,16 +64,20 @@ class FlashSaleModule : BaseFlashSaleTask() {
     private var privilegeSmallTaskFuture: Future<*>? = null
     @Volatile
     private var neverLandTaskFuture: Future<*>? = null
+    @Volatile
+    private var packageExchangeTaskFuture: Future<*>? = null
 
     companion object {
         private val TASK_EXECUTOR: ExecutorService = Executors.newFixedThreadPool(10)
 
         private const val FLASH_SALE_LIST = "flash_sale_list"
         private const val NEVERLAND_LIST = "neverland_list"
+        private const val BAOGUO_LIST = "baoguo_list"
 
         // 防止重复提交预加载任务
         private val isPreloading = AtomicBoolean(false)
         private val isNeverLandPreloading = AtomicBoolean(false)
+        private val isBaoguoPreloading = AtomicBoolean(false)
     }
 
     override fun getWakeUpConfigField(): IntegerModelField? {
@@ -105,6 +117,11 @@ class FlashSaleModule : BaseFlashSaleTask() {
         privilegeSmallEX.wakeUpMinuteBefore = wakeUpMinuteBefore
         privilegeSmallEX.enablePrivilegeList = enablePrivilegeList
         privilegeSmallEX.youthPrivilegeList = youthPrivilegeList
+
+        // 包裹兑换
+        packageExchangeEX.enablePackageExchange = enablePackageExchange
+        packageExchangeEX.wakeUpMinuteBefore = wakeUpMinuteBefore
+        packageExchangeEX.packageExchangeList = packageExchangeList
     }
 
     /**
@@ -139,6 +156,24 @@ class FlashSaleModule : BaseFlashSaleTask() {
                     }
                 } finally {
                     isNeverLandPreloading.set(false)
+                }
+            }
+        }
+        // 包裹兑换商品列表预加载
+        if (enablePackageExchange.value &&
+            !Status.hasFlagToday(BAOGUO_LIST) &&
+            isBaoguoPreloading.compareAndSet(false, true)) {
+            TASK_EXECUTOR.submit {
+                try {
+                    val items = PackageExchangeEX.refreshItemsFromAPI()
+                    if (items.isNotEmpty()) {
+                        Log.other("$TAG 包裹兑换列表预加载成功: ${items.size} 项")
+                        Status.setFlagToday(BAOGUO_LIST)
+                    } else {
+                        Log.other("$TAG 包裹兑换列表预加载结果为空，下次运行时重试")
+                    }
+                } finally {
+                    isBaoguoPreloading.set(false)
                 }
             }
         }
@@ -185,6 +220,8 @@ class FlashSaleModule : BaseFlashSaleTask() {
         fields.addField(enablePrivilegeSmall)
         fields.addField(enablePrivilegeList)
         fields.addField(youthPrivilegeList)
+        fields.addField(enablePackageExchange)
+        fields.addField(packageExchangeList)
         fields.addField(wakeUpMinuteBefore)
         fields.addField(enableConcurrent)
         return fields
@@ -203,11 +240,13 @@ class FlashSaleModule : BaseFlashSaleTask() {
         privilegeEX.enablePrivilegeList = enablePrivilegeList
         privilegeSmallEX.youthPrivilegeList = youthPrivilegeList
         privilegeSmallEX.enablePrivilegeList = enablePrivilegeList
+        packageExchangeEX.packageExchangeList = packageExchangeList
         schedulePreloadIfNeeded()
 
         if (enablePrivilege.value) submitPrivilegeTask()
         if (enablePrivilegeSmall.value) submitPrivilegeSmallTask()
         if (enableNeverLand.value) submitNeverLandTask()
+        if (enablePackageExchange.value) submitPackageExchangeTask()
     }
 
     /**
@@ -290,6 +329,31 @@ class FlashSaleModule : BaseFlashSaleTask() {
             }
         } catch (e: Exception) {
             Log.error("[FlashSaleModule🚀]健康岛任务提交异常", e.message)
+        }
+    }
+
+    /**
+     * 提交包裹兑换任务（0点, 10点, 18点）
+     */
+    private fun submitPackageExchangeTask() {
+        if (isTaskRunning(packageExchangeTaskFuture)) {
+            Log.runtime("[FlashSaleModule🚀]包裹兑换任务已在运行中，跳过重复提交")
+            return
+        }
+
+        try {
+            packageExchangeTaskFuture = TASK_EXECUTOR.submit {
+                try {
+                    packageExchangeEX.prepare()
+                    packageExchangeEX.asyncRun()
+                } catch (e: Exception) {
+                    Log.error("[FlashSaleModule🚀]包裹兑换任务异常", e.message)
+                } finally {
+                    packageExchangeTaskFuture = null
+                }
+            }
+        } catch (e: Exception) {
+            Log.error("[FlashSaleModule🚀]包裹兑换任务提交异常", e.message)
         }
     }
 

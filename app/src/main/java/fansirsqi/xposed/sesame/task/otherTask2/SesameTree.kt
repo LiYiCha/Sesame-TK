@@ -14,6 +14,11 @@ class SesameTree {
 
     private var blackList = hashSetOf<String>("邀请","下单","开通") // 黑名单
 
+
+    init {
+        // 获取错误缓存
+        blackList = DataStore.get("sesameTree_blackList", Set::class.java) as HashSet<String>
+    }
     fun handle() {
         try {
             // 首页
@@ -77,11 +82,6 @@ class SesameTree {
 
     // 查询任务列表
     private fun queryTaskList() {
-        // 获取错误缓存
-        var blackCache = DataStore.get("sesameTree_blackList", Set::class.java)
-        if (blackCache == null) {
-            blackCache = blackList
-        }
 
         // 获取任务列表
         val taskLists = CommonRequest().sesameTaskList()
@@ -91,7 +91,7 @@ class SesameTree {
             val taskDetailLists = extractTaskDetailLists(taskLists)
 
             // 处理每个任务
-            processTasks(taskDetailLists, blackCache as Set<String>)
+            processTasks(taskDetailLists, blackList as Set<String>)
 
         } catch (e: Exception) {
             Log.error(TAG, "处理任务列表异常:${e}")
@@ -99,7 +99,7 @@ class SesameTree {
     }
 
     // 提取任务详情列表
-    private fun extractTaskDetailLists(response: JSONObject): org.json.JSONArray? {
+    private fun extractTaskDetailLists(response: JSONObject): JSONArray? {
         return when {
             response.has("success") && response.optBoolean("success") -> {
                 val extInfo = response.optJSONObject("extInfo")
@@ -123,7 +123,7 @@ class SesameTree {
     }
 
     // 处理任务列表
-    private fun processTasks(taskDetailLists: org.json.JSONArray?, blackCache: Set<String>) {
+    private fun processTasks(taskDetailLists: JSONArray?, blackCache: Set<String>) {
         if (taskDetailLists == null) return
 
         for (i in 0 until taskDetailLists.length()) {
@@ -137,7 +137,7 @@ class SesameTree {
                 if (taskId.isEmpty()) {
                     taskId = task.optString("taskId") ?: ""
                 }
-                if (taskId.isEmpty()) {
+                if (taskId.isEmpty()||taskId==null) {
                     continue
                 }
                 val taskProcessStatus = task.optString("taskProcessStatus")

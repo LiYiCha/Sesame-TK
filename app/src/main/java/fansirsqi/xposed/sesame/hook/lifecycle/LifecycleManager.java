@@ -257,6 +257,15 @@ public class LifecycleManager {
                     } catch (Exception e) {
                         Log.printStackTrace(e);
                     }
+                    rpcRequestUnhook = null;
+                }
+                if (rpcInvocationUnhook != null) {
+                    try {
+                        rpcInvocationUnhook.unhook();
+                    } catch (Exception e) {
+                        Log.printStackTrace(e);
+                    }
+                    rpcInvocationUnhook = null;
                 }
                 // 释放 WakeLock（使用 WakeLockManager 自动管理）
                 WakeLockManager.release();
@@ -423,6 +432,9 @@ public class LifecycleManager {
     }
 
     public static void writeCaptureLog(String logMessage) {
+        if (LifecycleManager.isUselessRpcLog(logMessage)) {
+            return;
+        }
         android.content.Context context = AppContext.getAppContext();
         if (context == null) {
             Log.capture(logMessage);
@@ -438,6 +450,42 @@ public class LifecycleManager {
             } catch (Throwable t) {
                 Log.capture(logMessage);
             }
+        }
+    }
+
+    private static String resolveRpcOperation(String opType, String paramsJson) {
+        if (opType == null) return "";
+        String resolved = opType;
+        if ("alipay.client.executerpc".equalsIgnoreCase(opType) && paramsJson != null) {
+            try {
+                java.util.regex.Matcher matcher = java.util.regex.Pattern
+                        .compile("\\[\\s*\\\"([^\\\"]+)\\\"")
+                        .matcher(paramsJson);
+                if (matcher.find()) {
+                    resolved = matcher.group(1);
+                }
+            } catch (Throwable ignored) {
+                // Ignore
+            }
+        }
+        return resolved == null ? "" : resolved;
+    }
+
+    private static boolean isUselessRpcLog(String logMessage) {
+        if (logMessage == null || logMessage.isEmpty()) return false;
+        try {
+            String method = "";
+            String params = "";
+            for (String line : logMessage.split("\\n")) {
+                if (line.startsWith("Method: ")) {
+                    method = line.substring("Method: ".length()).trim();
+                } else if (line.startsWith("Params: ")) {
+                    params = line.substring("Params: ".length()).trim();
+                }
+            }
+            return isUselessRpc(method, params);
+        } catch (Throwable ignored) {
+            return false;
         }
     }
 
@@ -542,10 +590,21 @@ public class LifecycleManager {
                             if (opType == null || opType.isEmpty()) {
                                 opType = method.getName();
                             }
-                            XposedHelpers.setAdditionalInstanceField(param, "opType", opType);
+                            String realOpType = opType;
+                            if ("alipay.client.executerpc".equalsIgnoreCase(opType)) {
+                                try {
+                                    Object[] rpcArgs = (Object[]) param.args[2];
+                                    if (rpcArgs != null && rpcArgs.length > 0 && rpcArgs[0] != null) {
+                                        realOpType = String.valueOf(rpcArgs[0]);
+                                    }
+                                } catch (Throwable ignored) {
+                                    // Ignore
+                                }
+                            }
+                            XposedHelpers.setAdditionalInstanceField(param, "opType", realOpType);
                             XposedHelpers.setAdditionalInstanceField(param, "startTime", System.currentTimeMillis());
                             
-                            if (LifecycleManager.isUselessRpc(opType)) {
+                            if (LifecycleManager.isUselessRpc(opType) || LifecycleManager.isUselessRpc(realOpType)) {
                                 return;
                             }
                             
@@ -609,6 +668,10 @@ public class LifecycleManager {
         }
     }
 
+    private static boolean isUselessRpc(String opType, String paramsJson) {
+        return isUselessRpc(resolveRpcOperation(opType, paramsJson));
+    }
+
     private static boolean isUselessRpc(String opType) {
         if (opType == null || opType.isEmpty()) return false;
         String lower = opType.toLowerCase();
@@ -637,6 +700,7 @@ public class LifecycleManager {
                 || lower.contains("diagnose")
                 || lower.contains("reportactive")
                 || lower.contains("monitor")
+                || lower.contains("alipay.client.executerpc")
                 || lower.contains("telemetry");
     }
 

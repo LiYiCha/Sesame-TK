@@ -309,14 +309,16 @@ class PrivilegeEX : BaseFlashSaleTask(), YouthPrivilegeSupport {
                     Log.other("$TAG 按用户选择顺序构建兑换项: ${result.size} 项")
                     return result
                 } else {
-                    Log.other("$TAG 用户选择的兑换项均不可用，回退到默认小额/大额模式")
+                    Log.other("$TAG 用户选择的具体权益在今日列表中均不可用，抢兑任务终止")
+                    return emptyList()
                 }
             } else {
-                Log.other("$TAG 未选择具体权益，回退到默认小额/大额模式")
+                Log.other("$TAG 当前时段（${if (isSmallExchange) "小额" else "大额"}）未选定具体权益，本抢兑不执行")
+                return emptyList()
             }
         }
 
-        // 条件2：未启用权益列表模式或回退情况，按小额/大额模式过滤
+        // 条件2：未启用权益列表模式，按小额/大额模式过滤默认商品
         return filterItemsByMode(availableItems)
     }
 
