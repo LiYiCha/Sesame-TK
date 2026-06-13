@@ -129,6 +129,9 @@ class FlashSaleModule : BaseFlashSaleTask() {
      * enablePrivilegeList 默认 false，此检查同时防止 init{} 阶段 Status 未就绪导致崩溃
      */
     private fun schedulePreloadIfNeeded() {
+        if (fansirsqi.xposed.sesame.hook.lifecycle.LifecycleManager.getRpcBridge() == null) {
+            return
+        }
         // 青春特权列表预加载
         if (enablePrivilegeList.value &&
             !Status.hasFlagToday(FLASH_SALE_LIST) &&

@@ -29,7 +29,7 @@ import androidx.core.util.Consumer
 import androidx.lifecycle.lifecycleScope
 import fansirsqi.xposed.sesame.BuildConfig
 import fansirsqi.xposed.sesame.R
-import fansirsqi.xposed.sesame.ui.logviewer.LogViewerComposeActivity
+import fansirsqi.xposed.sesame.ui.logviewer.HtmlViewerActivity
 import fansirsqi.xposed.sesame.data.General
 import fansirsqi.xposed.sesame.data.RunType
 import fansirsqi.xposed.sesame.data.UIConfig
@@ -42,6 +42,7 @@ import fansirsqi.xposed.sesame.newui.WatermarkView
 import fansirsqi.xposed.sesame.ui.extension.ExtensionListActivity
 import fansirsqi.xposed.sesame.ui.extra.activity.HelpActivity
 import fansirsqi.xposed.sesame.ui.extra.activity.RpcDebugActivity
+import fansirsqi.xposed.sesame.ui.logviewer.LogViewerComposeActivity
 import fansirsqi.xposed.sesame.ui.network.CaptureListActivity
 import fansirsqi.xposed.sesame.util.FansirsqiUtil
 import fansirsqi.xposed.sesame.util.Files

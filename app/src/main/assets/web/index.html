@@ -724,6 +724,10 @@
                   let _index = 0;
                   person_list.value.len = array.length;
                   const refreshFrameCount = () => {
+                    if (result.length === 0) {
+                      person_list.value.isLoading = false;
+                      return;
+                    }
                     requestAnimationFrame(() => {
                       if (_index === result.length - 1) {
                         person_list.value.isLoading = false;

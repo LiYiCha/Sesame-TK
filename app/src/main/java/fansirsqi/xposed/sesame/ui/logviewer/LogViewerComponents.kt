@@ -6,6 +6,7 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
@@ -21,6 +22,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.rounded.*
@@ -44,8 +47,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.unit.IntOffset
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.Job
 import kotlin.math.roundToInt
 import android.widget.TextView
 import android.util.TypedValue
@@ -523,15 +528,15 @@ fun AnnotatedString.toSpannableString(): SpannableString {
 }
 
 /**
- * 日志内容显示（支持双指缩放、快速滚动条、搜索结果自动滚动和文本选择）
+ * 日志内容显示（支持双指缩放、快速滚动条、搜索结果自动滚动和多选复制）
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun LogContent(
     viewModel: LogViewerViewModel,
-    uiState: LogViewerViewModel.UiState
+    uiState: LogViewerViewModel.UiState,
+    lazyListState: LazyListState
 ) {
-    val scrollState = rememberScrollState()
     val coroutineScope = rememberCoroutineScope()
     val density = LocalDensity.current
 
@@ -539,101 +544,23 @@ fun LogContent(
     var zoomScale by remember { mutableFloatStateOf(1f) }
     val effectiveFontSize = (uiState.fontSize * zoomScale).roundToInt().coerceIn(6, 36)
 
-    // 整篇日志的 AnnotatedString，只在数据变动时重构，保证极大性能
-    val annotatedString = remember(uiState.displayedLines, uiState.searchResults, uiState.currentSearchIndex, uiState.searchKeyword) {
-        buildAnnotatedString {
-            val lines = uiState.displayedLines
-            val indices = uiState.displayedLineIndices
-            val results = uiState.searchResults
-            val currentIndex = uiState.currentSearchIndex
-            val keyword = uiState.searchKeyword
-
-            val resultsByLine = if (results.isNotEmpty() && keyword.isNotEmpty()) {
-                results.groupBy { it.lineIndex }
-            } else {
-                null
-            }
-
-            lines.forEachIndexed { index, line ->
-                val originalIndex = indices.getOrNull(index) ?: index
-                val lineResults = resultsByLine?.get(originalIndex)
-
-                // 区分日志级别配色
-                val levelColor = when {
-                    line.contains("ERROR", ignoreCase = true) || line.contains("SEVERE", ignoreCase = true) || line.contains("FATAL", ignoreCase = true) -> Color(0xFFEF5350)
-                    line.contains("WARN", ignoreCase = true) || line.contains("WARNING", ignoreCase = true) -> Color(0xFFFFB74D)
-                    line.contains("DEBUG", ignoreCase = true) || line.contains("TRACE", ignoreCase = true) -> Color(0xFF90A4AE)
-                    line.contains("INFO", ignoreCase = true) -> Color(0xFF81C784)
-                    else -> Color.Unspecified
-                }
-
-                if (lineResults != null && lineResults.isNotEmpty()) {
-                    var lastCharIndex = 0
-                    lineResults.sortedBy { it.charIndex }.forEach { result ->
-                        val preText = line.substring(lastCharIndex, result.charIndex)
-                        if (preText.isNotEmpty()) {
-                            if (levelColor != Color.Unspecified) {
-                                withStyle(style = SpanStyle(color = levelColor)) {
-                                    append(preText)
-                                }
-                            } else {
-                                append(preText)
-                            }
-                        }
-
-                        val isCurrent = results.indexOf(result) == currentIndex
-                        withStyle(
-                            style = SpanStyle(
-                                background = if (isCurrent) Color.Yellow else Color(0x4DFFFF00),
-                                color = if (isCurrent) Color.Red else Color.Unspecified,
-                                fontWeight = if (isCurrent) FontWeight.Bold else FontWeight.Normal
-                            )
-                        ) {
-                            append(line.substring(result.charIndex, result.charIndex + result.length))
-                        }
-                        lastCharIndex = result.charIndex + result.length
-                    }
-
-                    if (lastCharIndex < line.length) {
-                        val postText = line.substring(lastCharIndex)
-                        if (levelColor != Color.Unspecified) {
-                            withStyle(style = SpanStyle(color = levelColor)) {
-                                append(postText)
-                            }
-                        } else {
-                            append(postText)
-                        }
-                    }
-                } else {
-                    if (levelColor != Color.Unspecified) {
-                        withStyle(style = SpanStyle(color = levelColor)) {
-                            append(line)
-                        }
-                    } else {
-                        append(line)
-                    }
-                }
-
-                if (index < lines.size - 1) {
-                    append("\n")
-                }
-            }
-        }
-    }
-
-    val spannableString = remember(annotatedString) {
-        annotatedString.toSpannableString()
-    }
+    // 行详情弹窗状态
+    var activeDetailLine by remember { mutableStateOf<String?>(null) }
+    var activeDetailBlock by remember { mutableStateOf<RpcBlock?>(null) }
 
     // 自动滚动到底部
-    LaunchedEffect(scrollState.maxValue, uiState.autoScroll) {
-        if (uiState.autoScroll) {
-            scrollState.scrollTo(scrollState.maxValue)
+    LaunchedEffect(uiState.displayedLines.size, uiState.autoScroll) {
+        if (uiState.autoScroll && uiState.displayedLines.isNotEmpty()) {
+            try {
+                lazyListState.scrollToItem(uiState.displayedLines.size - 1)
+            } catch (e: Exception) {
+                // 忽略异常
+            }
         }
     }
 
     // 自动滚动到当前搜索结果
-    LaunchedEffect(uiState.currentSearchIndex) {
+    LaunchedEffect(uiState.currentSearchIndex, uiState.searchResults) {
         if (uiState.currentSearchIndex >= 0 && uiState.searchResults.isNotEmpty()) {
             val currentResult = uiState.searchResults[uiState.currentSearchIndex]
             val targetLineIndex = currentResult.lineIndex
@@ -642,10 +569,13 @@ fun LogContent(
             val displayIndex = uiState.displayedLineIndices.indexOf(targetLineIndex)
 
             if (displayIndex >= 0) {
-                val lineSpacingPx = with(density) { (effectiveFontSize + 5).sp.toPx() }
-                val targetScrollValue = (displayIndex * lineSpacingPx).roundToInt()
-                val scrollOffset = (targetScrollValue - with(density) { 200.dp.toPx() }).roundToInt().coerceIn(0, scrollState.maxValue)
-                scrollState.animateScrollTo(scrollOffset)
+                coroutineScope.launch {
+                    try {
+                        lazyListState.animateScrollToItem(displayIndex)
+                    } catch (e: Exception) {
+                        // 忽略滚动异常
+                    }
+                }
             }
         }
     }
@@ -665,13 +595,11 @@ fun LogContent(
     Box(
         modifier = Modifier.fillMaxSize()
     ) {
-        val textColor = MaterialTheme.colorScheme.onBackground
-        AndroidView(
+        LazyColumn(
+            state = lazyListState,
             modifier = Modifier
                 .fillMaxSize()
                 .background(MaterialTheme.colorScheme.background)
-                .verticalScroll(scrollState)
-                .padding(start = 8.dp, end = 24.dp, top = 8.dp, bottom = 8.dp)
                 .pointerInput(Unit) {
                     awaitEachGesture {
                         awaitFirstDown(requireUnconsumed = false)
@@ -695,29 +623,318 @@ fun LogContent(
                             }
                         } while (event.changes.any { it.pressed })
                     }
-                },
-            factory = { context ->
-                TextView(context).apply {
-                    setTextIsSelectable(true)
-                    typeface = Typeface.MONOSPACE
                 }
-            },
-            update = { textView ->
-                textView.text = spannableString
-                textView.setTextSize(TypedValue.COMPLEX_UNIT_SP, effectiveFontSize.toFloat())
-                textView.setTextColor(textColor.toArgb())
-                val spacingExtra = with(density) { 5.dp.toPx() }
-                textView.setLineSpacing(spacingExtra, 1.0f)
+                .padding(start = 8.dp, end = 24.dp, top = 8.dp, bottom = 8.dp)
+        ) {
+            itemsIndexed(
+                items = uiState.displayedLines,
+                key = { index, _ -> index }
+            ) { index, line ->
+                val isSelected = index in uiState.selectedIndices
+                val originalIndex = uiState.displayedLineIndices.getOrNull(index) ?: index
+
+                val lineAnnotatedString = remember(line, uiState.searchResults, uiState.currentSearchIndex, uiState.searchKeyword) {
+                    buildAnnotatedString {
+                        val keyword = uiState.searchKeyword
+                        val results = uiState.searchResults
+                        val currentIndex = uiState.currentSearchIndex
+                        val currentResult = if (currentIndex in results.indices) results[currentIndex] else null
+
+                        val lineResults = if (results.isNotEmpty() && keyword.isNotEmpty()) {
+                            results.filter { it.lineIndex == originalIndex }
+                        } else {
+                            emptyList()
+                        }
+
+                        val levelColor = when {
+                            line.contains("ERROR", ignoreCase = true) || line.contains("SEVERE", ignoreCase = true) || line.contains("FATAL", ignoreCase = true) -> Color(0xFFEF5350)
+                            line.contains("WARN", ignoreCase = true) || line.contains("WARNING", ignoreCase = true) -> Color(0xFFFFB74D)
+                            line.contains("DEBUG", ignoreCase = true) || line.contains("TRACE", ignoreCase = true) -> Color(0xFF90A4AE)
+                            line.contains("INFO", ignoreCase = true) -> Color(0xFF81C784)
+                            else -> Color.Unspecified
+                        }
+
+                        if (lineResults.isNotEmpty()) {
+                            var lastCharIndex = 0
+                            lineResults.sortedBy { it.charIndex }.forEach { result ->
+                                val preText = line.substring(lastCharIndex, result.charIndex)
+                                if (preText.isNotEmpty()) {
+                                    if (levelColor != Color.Unspecified) {
+                                        withStyle(style = SpanStyle(color = levelColor)) {
+                                            append(preText)
+                                        }
+                                    } else {
+                                        append(preText)
+                                    }
+                                }
+
+                                val isCurrent = currentResult?.let {
+                                    it.lineIndex == result.lineIndex &&
+                                            it.charIndex == result.charIndex &&
+                                            it.length == result.length
+                                } == true
+                                withStyle(
+                                    style = SpanStyle(
+                                        background = if (isCurrent) Color.Yellow else Color(0x4DFFFF00),
+                                        color = if (isCurrent) Color.Red else Color.Unspecified,
+                                        fontWeight = if (isCurrent) FontWeight.Bold else FontWeight.Normal
+                                    )
+                                ) {
+                                    append(line.substring(result.charIndex, result.charIndex + result.length))
+                                }
+                                lastCharIndex = result.charIndex + result.length
+                            }
+
+                            if (lastCharIndex < line.length) {
+                                val postText = line.substring(lastCharIndex)
+                                if (levelColor != Color.Unspecified) {
+                                    withStyle(style = SpanStyle(color = levelColor)) {
+                                        append(postText)
+                                    }
+                                } else {
+                                    append(postText)
+                                }
+                            }
+                        } else {
+                            if (levelColor != Color.Unspecified) {
+                                withStyle(style = SpanStyle(color = levelColor)) {
+                                    append(line)
+                                }
+                            } else {
+                                append(line)
+                            }
+                        }
+                    }
+                }
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(
+                            if (isSelected) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f)
+                            else Color.Transparent
+                        )
+                        .combinedClickable(
+                            onClick = {
+                                if (uiState.isSelectionMode) {
+                                    viewModel.toggleLineSelection(index)
+                                } else {
+                                    // 正常模式下单击显示详情弹窗，一键复制 Method/Params/Data
+                                    activeDetailLine = line
+                                    activeDetailBlock = findRpcBlockAround(uiState.displayedLines, index)
+                                }
+                            },
+                            onLongClick = {
+                                if (!uiState.isSelectionMode) {
+                                    viewModel.toggleSelectionMode(true)
+                                    viewModel.toggleLineSelection(index)
+                                } else {
+                                    val last = uiState.lastSelectedIndex
+                                    if (last != null) {
+                                        viewModel.selectRange(last, index)
+                                    } else {
+                                        viewModel.toggleLineSelection(index)
+                                    }
+                                }
+                            }
+                        )
+                        .padding(vertical = 2.dp, horizontal = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    if (uiState.isSelectionMode) {
+                        Checkbox(
+                            checked = isSelected,
+                            onCheckedChange = { viewModel.toggleLineSelection(index) },
+                            modifier = Modifier
+                                .padding(end = 4.dp)
+                                .size(20.dp)
+                                .scale(0.8f)
+                        )
+                    }
+
+                    Text(
+                        text = lineAnnotatedString,
+                        fontFamily = FontFamily.Monospace,
+                        fontSize = effectiveFontSize.sp,
+                        lineHeight = (effectiveFontSize + 4).sp,
+                        color = MaterialTheme.colorScheme.onBackground,
+                        softWrap = true
+                    )
+                }
             }
-        )
+        }
 
         // 快速滚动条
         FastScrollbar(
-            scrollState = scrollState,
+            lazyListState = lazyListState,
+            totalItems = uiState.displayedLines.size,
             modifier = Modifier
                 .align(Alignment.CenterEnd)
                 .fillMaxHeight()
                 .padding(vertical = 8.dp, horizontal = 2.dp)
+        )
+    }
+
+    // 详情对话框
+    val detailLine = activeDetailLine
+    if (detailLine != null) {
+        LineDetailDialog(
+            viewModel = viewModel,
+            line = detailLine,
+            block = activeDetailBlock,
+            onDismiss = {
+                activeDetailLine = null
+                activeDetailBlock = null
+            }
+        )
+    }
+}
+
+/**
+ * 快速滚动条组件（基于 LazyListState + Custom PointerInput Tracker）
+ */
+@Composable
+fun FastScrollbar(
+    lazyListState: LazyListState,
+    totalItems: Int,
+    modifier: Modifier = Modifier
+) {
+    if (totalItems <= 0) return
+    val coroutineScope = rememberCoroutineScope()
+    var trackHeightPx by remember { mutableIntStateOf(0) }
+
+    val firstVisibleIndex = lazyListState.firstVisibleItemIndex
+    val visibleItemsCount = lazyListState.layoutInfo.visibleItemsInfo.size
+
+    if (visibleItemsCount >= totalItems) return
+
+    val scrollFraction = (firstVisibleIndex.toFloat() / (totalItems - visibleItemsCount)).coerceIn(0f, 1f)
+
+    var isDragging by remember { mutableStateOf(false) }
+    var showScrollbar by remember { mutableStateOf(true) }
+
+    LaunchedEffect(lazyListState.isScrollInProgress, isDragging) {
+        if (lazyListState.isScrollInProgress || isDragging) {
+            showScrollbar = true
+        } else {
+            delay(2000L)
+            showScrollbar = false
+        }
+    }
+
+    val alpha by animateFloatAsState(
+        targetValue = if (showScrollbar || isDragging) 0.85f else 0f,
+        animationSpec = tween(durationMillis = if (showScrollbar || isDragging) 150 else 600),
+        label = "scrollbar_alpha"
+    )
+
+    val minThumbHeightPx = 40f
+    val thumbHeightPx = ((visibleItemsCount.toFloat() / totalItems) * trackHeightPx).coerceAtLeast(minThumbHeightPx)
+    val maxThumbOffset = (trackHeightPx - thumbHeightPx).coerceAtLeast(0f)
+
+    var localDragOffset by remember { mutableFloatStateOf(0f) }
+
+    val thumbOffset = if (isDragging) {
+        localDragOffset.coerceIn(0f, maxThumbOffset)
+    } else {
+        scrollFraction * maxThumbOffset
+    }
+
+    LaunchedEffect(scrollFraction, maxThumbOffset, isDragging) {
+        if (!isDragging) {
+            localDragOffset = scrollFraction * maxThumbOffset
+        }
+    }
+
+    var scrollJob by remember { mutableStateOf<Job?>(null) }
+
+    Box(
+        modifier = modifier
+            .width(24.dp)
+            .fillMaxHeight()
+            .onSizeChanged { trackHeightPx = it.height }
+            .alpha(alpha)
+            .pointerInput(totalItems, trackHeightPx, visibleItemsCount, maxThumbOffset) {
+                awaitEachGesture {
+                    try {
+                        val down = awaitFirstDown(requireUnconsumed = false)
+                        isDragging = true
+                        showScrollbar = true
+                        
+                        val initialY = down.position.y
+                        val halfThumb = thumbHeightPx / 2
+                        var currentY = (initialY - halfThumb).coerceIn(0f, maxThumbOffset)
+                        localDragOffset = currentY
+                        
+                        val fraction = if (maxThumbOffset > 0) currentY / maxThumbOffset else 0f
+                        val targetIndex = (fraction * (totalItems - visibleItemsCount)).roundToInt().coerceIn(0, totalItems - 1)
+                        
+                        scrollJob?.cancel()
+                        scrollJob = coroutineScope.launch {
+                            lazyListState.scrollToItem(targetIndex)
+                        }
+                        down.consume()
+                        
+                        var dragEvent = down
+                        while (true) {
+                            val event = awaitPointerEvent()
+                            val anyPressed = event.changes.any { it.pressed }
+                            if (!anyPressed) break
+                            
+                            val pointerChange = event.changes.firstOrNull { it.id == dragEvent.id } ?: event.changes.first()
+                            if (pointerChange.pressed) {
+                                if (pointerChange.positionChanged()) {
+                                    pointerChange.consume()
+                                    val diffY = pointerChange.position.y - dragEvent.position.y
+                                    currentY = (currentY + diffY).coerceIn(0f, maxThumbOffset)
+                                    localDragOffset = currentY
+                                    
+                                    val currentFraction = if (maxThumbOffset > 0) currentY / maxThumbOffset else 0f
+                                    val targetIdx = (currentFraction * (totalItems - visibleItemsCount)).roundToInt().coerceIn(0, totalItems - 1)
+                                    
+                                    scrollJob?.cancel()
+                                    scrollJob = coroutineScope.launch {
+                                        lazyListState.scrollToItem(targetIdx)
+                                    }
+                                }
+                                dragEvent = pointerChange
+                            } else {
+                                break
+                            }
+                        }
+                    } finally {
+                        isDragging = false
+                    }
+                }
+            }
+    ) {
+        // 轨道背景
+        Box(
+            modifier = Modifier
+                .width(3.dp)
+                .fillMaxHeight()
+                .align(Alignment.Center)
+                .background(
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f),
+                    shape = RoundedCornerShape(1.5.dp)
+                )
+        )
+
+        // 滑块
+        val density = androidx.compose.ui.platform.LocalDensity.current
+
+        Box(
+            modifier = Modifier
+                .width(if (isDragging) 8.dp else 4.dp)
+                .height(with(density) { thumbHeightPx.toDp() })
+                .offset(y = with(density) { thumbOffset.toDp() })
+                .align(Alignment.TopCenter)
+                .background(
+                    color = MaterialTheme.colorScheme.primary.copy(
+                        alpha = if (isDragging) 0.95f else 0.6f
+                    ),
+                    shape = RoundedCornerShape(4.dp)
+                )
         )
     }
 }
@@ -876,5 +1093,483 @@ fun FastScrollbar(
                     shape = RoundedCornerShape(thumbWidthDp / 2)
                 )
         )
+    }
+}
+
+/**
+ * RPC 抓包结构与解析助手
+ */
+data class RpcBlock(
+    val method: String?,
+    val params: String?,
+    val data: String?,
+    val rawText: String
+)
+
+fun findRpcBlockAround(lines: List<String>, clickedIndex: Int): RpcBlock? {
+    var start = -1
+    // 向上扫描最多 50 行寻找请求起点
+    for (i in clickedIndex downTo (clickedIndex - 50).coerceAtLeast(0)) {
+        if (lines[i].contains("========================>")) {
+            start = i
+            break
+        }
+        if (i < clickedIndex && lines[i].contains("<========================")) {
+            break
+        }
+    }
+    if (start == -1) return null
+
+    var end = -1
+    // 向下扫描最多 100 行寻找请求终点
+    for (i in clickedIndex until (clickedIndex + 100).coerceAtMost(lines.size)) {
+        if (lines[i].contains("<========================")) {
+            end = i
+            break
+        }
+        if (i > clickedIndex && lines[i].contains("========================>")) {
+            break
+        }
+    }
+    if (end == -1) return null
+
+    val blockLines = lines.subList(start, end + 1)
+    val rawText = blockLines.joinToString("\n")
+
+    var method: String? = null
+    var params: String? = null
+    var data: String? = null
+
+    blockLines.forEach { line ->
+        val trimmed = line.trim()
+        if (trimmed.startsWith("Method:")) {
+            method = trimmed.substring("Method:".length).trim()
+        } else if (trimmed.startsWith("Params:")) {
+            params = trimmed.substring("Params:".length).trim()
+        } else if (trimmed.startsWith("Data:")) {
+            data = trimmed.substring("Data:".length).trim()
+        }
+    }
+
+    return RpcBlock(method, params, data, rawText)
+}
+
+@Composable
+fun LineDetailDialog(
+    viewModel: LogViewerViewModel,
+    line: String,
+    block: RpcBlock?,
+    onDismiss: () -> Unit
+) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text(if (block != null) "RPC 抓包详情" else "日志行详情")
+        },
+        text = {
+            SelectionContainer {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    if (block != null) {
+                        if (!block.method.isNullOrEmpty()) {
+                            Text("Method:", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
+                            Text(block.method, style = MaterialTheme.typography.bodySmall, fontFamily = FontFamily.Monospace)
+                        }
+                        if (!block.params.isNullOrEmpty()) {
+                            Text("Params:", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
+                            Text(block.params, style = MaterialTheme.typography.bodySmall, fontFamily = FontFamily.Monospace)
+                        }
+                        if (!block.data.isNullOrEmpty()) {
+                            Text("Data (Response):", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
+                            Text(block.data, style = MaterialTheme.typography.bodySmall, fontFamily = FontFamily.Monospace)
+                        }
+                    } else {
+                        Text(line, style = MaterialTheme.typography.bodyMedium, fontFamily = FontFamily.Monospace)
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                if (block != null) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        if (!block.method.isNullOrEmpty()) {
+                            Button(
+                                onClick = {
+                                    copyToClipboard(context, block.method)
+                                    onDismiss()
+                                },
+                                modifier = Modifier.weight(1f),
+                                contentPadding = PaddingValues(horizontal = 4.dp, vertical = 2.dp)
+                            ) {
+                                Text("复制 Method", fontSize = 10.sp)
+                            }
+                        }
+                        if (!block.params.isNullOrEmpty()) {
+                            Button(
+                                onClick = {
+                                    copyToClipboard(context, block.params)
+                                    onDismiss()
+                                },
+                                modifier = Modifier.weight(1f),
+                                contentPadding = PaddingValues(horizontal = 4.dp, vertical = 2.dp)
+                            ) {
+                                Text("复制 Params", fontSize = 10.sp)
+                            }
+                        }
+                    }
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        if (!block.data.isNullOrEmpty()) {
+                            Button(
+                                onClick = {
+                                    copyToClipboard(context, block.data)
+                                    onDismiss()
+                                },
+                                modifier = Modifier.weight(1f),
+                                contentPadding = PaddingValues(horizontal = 4.dp, vertical = 2.dp)
+                            ) {
+                                Text("复制 Data", fontSize = 10.sp)
+                            }
+                        }
+                        Button(
+                            onClick = {
+                                copyToClipboard(context, block.rawText)
+                                onDismiss()
+                            },
+                            modifier = Modifier.weight(1f),
+                            contentPadding = PaddingValues(horizontal = 4.dp, vertical = 2.dp)
+                        ) {
+                            Text("复制全文", fontSize = 10.sp)
+                        }
+                    }
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        if (!block.method.isNullOrEmpty()) {
+                            Button(
+                                onClick = {
+                                    viewModel.setSearchKeyword(block.method)
+                                    viewModel.performSearch()
+                                    onDismiss()
+                                },
+                                modifier = Modifier.weight(1f),
+                                contentPadding = PaddingValues(horizontal = 4.dp, vertical = 2.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary)
+                            ) {
+                                Text("搜索 Method", fontSize = 10.sp)
+                            }
+                        }
+                        if (!block.params.isNullOrEmpty()) {
+                            Button(
+                                onClick = {
+                                    val searchKey = if (block.params.length > 50) block.params.take(50) else block.params
+                                    viewModel.setSearchKeyword(searchKey)
+                                    viewModel.performSearch()
+                                    onDismiss()
+                                },
+                                modifier = Modifier.weight(1f),
+                                contentPadding = PaddingValues(horizontal = 4.dp, vertical = 2.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary)
+                            ) {
+                                Text("搜索 Params", fontSize = 10.sp)
+                            }
+                        }
+                    }
+                } else {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Button(
+                            onClick = {
+                                copyToClipboard(context, line)
+                                onDismiss()
+                            },
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text("复制整行")
+                        }
+                        Button(
+                            onClick = {
+                                val searchKey = if (line.length > 50) line.take(50) else line
+                                viewModel.setSearchKeyword(searchKey)
+                                viewModel.performSearch()
+                                onDismiss()
+                            },
+                            modifier = Modifier.weight(1f),
+                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary)
+                        ) {
+                            Text("搜索整行")
+                        }
+                    }
+                }
+                TextButton(
+                    onClick = onDismiss,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("关闭")
+                }
+            }
+        }
+    )
+}
+
+private fun copyToClipboard(context: android.content.Context, text: String) {
+    try {
+        val cm = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+        cm.setPrimaryClip(android.content.ClipData.newPlainText("copied_text", text))
+        fansirsqi.xposed.sesame.util.ToastUtil.showToast(context, "已复制到剪贴板")
+    } catch (e: Exception) {
+        // ignore
+    }
+}
+
+/**
+ * 上下一个请求与响应导航浮动组件
+ */
+@Composable
+fun RequestNavigator(
+    viewModel: LogViewerViewModel,
+    uiState: LogViewerViewModel.UiState,
+    lazyListState: LazyListState,
+    modifier: Modifier = Modifier
+) {
+    val coroutineScope = rememberCoroutineScope()
+    val boundaryIndices = remember(uiState.displayedLines) {
+        viewModel.findBoundaryIndices()
+    }
+    
+    if (boundaryIndices.isEmpty()) return
+    
+    val firstVisibleIndex = lazyListState.firstVisibleItemIndex
+    val currentIndex = boundaryIndices.indexOfLast { it <= firstVisibleIndex }.coerceAtLeast(0)
+    
+    var offsetX by remember { mutableFloatStateOf(0f) }
+    var offsetY by remember { mutableFloatStateOf(0f) }
+    var showOutlineDialog by remember { mutableStateOf(false) }
+
+    Card(
+        modifier = modifier
+            .offset { IntOffset(offsetX.roundToInt(), offsetY.roundToInt()) }
+            .pointerInput(Unit) {
+                detectTransformGestures { _, pan, _, _ ->
+                    offsetX += pan.x
+                    offsetY += pan.y
+                }
+            }
+            .padding(8.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.9f)),
+        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
+        shape = RoundedCornerShape(24.dp)
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
+        ) {
+            IconButton(
+                onClick = {
+                    val prevIndex = boundaryIndices.indexOfLast { it < firstVisibleIndex }
+                    if (prevIndex >= 0) {
+                        coroutineScope.launch {
+                            lazyListState.animateScrollToItem(boundaryIndices[prevIndex])
+                        }
+                    }
+                },
+                enabled = boundaryIndices.any { it < firstVisibleIndex }
+            ) {
+                Icon(Icons.Default.KeyboardArrowUp, contentDescription = "上一个请求")
+            }
+            
+            Text(
+                text = "${if (firstVisibleIndex >= boundaryIndices.first()) currentIndex + 1 else 0}/${boundaryIndices.size}",
+                style = MaterialTheme.typography.labelMedium,
+                modifier = Modifier
+                    .clickable { showOutlineDialog = true }
+                    .padding(horizontal = 4.dp)
+            )
+            
+            IconButton(
+                onClick = {
+                    val nextIndex = boundaryIndices.indexOfFirst { it > firstVisibleIndex }
+                    if (nextIndex >= 0) {
+                        coroutineScope.launch {
+                            lazyListState.animateScrollToItem(boundaryIndices[nextIndex])
+                        }
+                    }
+                },
+                enabled = boundaryIndices.any { it > firstVisibleIndex }
+            ) {
+                Icon(Icons.Default.KeyboardArrowDown, contentDescription = "下一个请求")
+            }
+        }
+    }
+
+    if (showOutlineDialog) {
+        RequestOutlineDialog(
+            boundaryIndices = boundaryIndices,
+            displayedLines = uiState.displayedLines,
+            lazyListState = lazyListState,
+            currentIndex = currentIndex,
+            onDismiss = { showOutlineDialog = false }
+        )
+    }
+}
+
+@Composable
+fun RequestOutlineDialog(
+    boundaryIndices: List<Int>,
+    displayedLines: List<String>,
+    lazyListState: LazyListState,
+    currentIndex: Int,
+    onDismiss: () -> Unit
+) {
+    val coroutineScope = rememberCoroutineScope()
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("RPC 请求大纲列表") },
+        text = {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 400.dp)
+            ) {
+                val dialogLazyListState = rememberLazyListState(initialFirstVisibleItemIndex = (currentIndex - 2).coerceAtLeast(0))
+                LazyColumn(
+                    state = dialogLazyListState,
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    itemsIndexed(boundaryIndices) { index, lineIndex ->
+                        val line = displayedLines.getOrNull(lineIndex) ?: ""
+                        var methodName = line
+                        // 寻找向后最多5行的Method行来获取方法名
+                        for (offset in 0..5) {
+                            val targetIdx = lineIndex + offset
+                            if (targetIdx < displayedLines.size) {
+                                val l = displayedLines[targetIdx].trim()
+                                if (l.startsWith("Method:")) {
+                                    methodName = l.substring("Method:".length).trim()
+                                    break
+                                }
+                            }
+                        }
+                        
+                        val isCurrent = index == currentIndex
+                        Card(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    coroutineScope.launch {
+                                        lazyListState.scrollToItem(lineIndex)
+                                    }
+                                    onDismiss()
+                                },
+                            colors = CardDefaults.cardColors(
+                                containerColor = if (isCurrent) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface
+                            ),
+                            border = if (isCurrent) BorderStroke(1.dp, MaterialTheme.colorScheme.primary) else null
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "[${index + 1}]",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (isCurrent) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = methodName,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    fontFamily = FontFamily.Monospace,
+                                    maxLines = 2,
+                                    color = if (isCurrent) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text("关闭")
+            }
+        }
+    )
+}
+
+/**
+ * 多选模式悬浮底栏
+ */
+@Composable
+fun SelectionActionBar(
+    viewModel: LogViewerViewModel,
+    uiState: LogViewerViewModel.UiState,
+    modifier: Modifier = Modifier
+) {
+    if (!uiState.isSelectionMode) return
+    val context = androidx.compose.ui.platform.LocalContext.current
+    
+    Surface(
+        modifier = modifier
+            .padding(16.dp)
+            .fillMaxWidth(0.9f),
+        color = MaterialTheme.colorScheme.primaryContainer,
+        tonalElevation = 6.dp,
+        shape = RoundedCornerShape(16.dp)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "已选择 ${uiState.selectedIndices.size} 行",
+                style = MaterialTheme.typography.titleSmall,
+                color = MaterialTheme.colorScheme.onPrimaryContainer
+            )
+            
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                TextButton(
+                    onClick = { viewModel.clearSelection() }
+                ) {
+                    Text("取消", color = MaterialTheme.colorScheme.onPrimaryContainer)
+                }
+                
+                Button(
+                    onClick = { viewModel.copySelectedLines(context) },
+                    enabled = uiState.selectedIndices.isNotEmpty()
+                ) {
+                    Icon(Icons.Default.ContentCopy, contentDescription = "复制", modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(4.dp))
+                    Text("复制")
+                }
+            }
+        }
     }
 }

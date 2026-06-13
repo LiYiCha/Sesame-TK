@@ -60,9 +60,7 @@ public class SesameReceiver extends BroadcastReceiver {
                 case "com.eg.android.AlipayGphone.sesame.restart":
                     String userId = intent.getStringExtra("userId");
                     if (StringUtil.isEmpty(userId) || Objects.equals(UserMap.getCurrentUid(), userId)) {
-                        if (callback != null) {
-                            callback.onInitHandler(true);
-                        }
+                        fansirsqi.xposed.sesame.hook.lifecycle.LifecycleManager.reloadConfig(userId);
                     }
                     break;
                 case "com.eg.android.AlipayGphone.sesame.execute":

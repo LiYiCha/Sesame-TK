@@ -49,7 +49,7 @@ class PackageExchangeEX : BaseFlashSaleTask() {
             } catch (e: Exception) {
                 Log.error(TAG, "从 DataStore 读取包裹兑换缓存异常: ${e.message}")
             }
-            return emptyList()
+            return listOf(MemberBenefit("", "暂无数据 (请确保已开启开关并进入支付宝以自动加载列表)"))
         }
 
         /**

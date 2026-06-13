@@ -38,6 +38,7 @@ import fansirsqi.xposed.sesame.util.Log
 import fansirsqi.xposed.sesame.util.ToastUtil
 import kotlinx.coroutines.launch
 import java.io.File
+import androidx.activity.compose.BackHandler
 
 /**
  * Compose 版本的日志查看器 Activity
@@ -93,6 +94,7 @@ class LogViewerComposeActivity : ComponentActivity() {
                     onExport = { exportFile() },
                     onClear = { clearFile() },
                     onOpenBrowser = { openWithBrowser() },
+                    onOpenLogDirectory = { openLogDirectory() },
                     onBack = { finish() }
                 )
             }
@@ -173,6 +175,40 @@ class LogViewerComposeActivity : ComponentActivity() {
         }
     }
 
+    /**
+     * 打开日志目录（仅定位目录，不读取文本）
+     */
+    private fun openLogDirectory() {
+        val logDir = Files.LOG_DIR
+        if (!logDir.exists()) {
+            ToastUtil.showToast(this, "日志目录不存在")
+            return
+        }
+
+        val candidates = listOf(
+            Intent(Intent.ACTION_VIEW).apply {
+                setDataAndType(Uri.fromFile(logDir), "inode/directory")
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            },
+            Intent(Intent.ACTION_VIEW).apply {
+                data = Uri.fromFile(logDir)
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+        )
+
+        val launched = candidates.firstOrNull { it.resolveActivity(packageManager) != null }
+        if (launched != null) {
+            try {
+                startActivity(launched)
+                return
+            } catch (e: Exception) {
+                Log.error(TAG, "打开日志目录失败: ${e.message}")
+            }
+        }
+
+        ToastUtil.showToast(this, "请手动打开目录: ${logDir.absolutePath}")
+    }
+
     override fun onDestroy() {
         super.onDestroy()
         viewModel.stopWatchingFile()
@@ -192,10 +228,19 @@ fun LogViewerScreen(
     onExport: () -> Unit,
     onClear: () -> Unit,
     onOpenBrowser: () -> Unit,
+    onOpenLogDirectory: () -> Unit,
     onBack: () -> Unit
 ) {
     val uiState by viewModel.uiState.collectAsState()
-    val context = androidx.compose.ui.platform.LocalContext.current
+    val lazyListState = rememberLazyListState()
+
+    // 拦截系统返回键：多选模式下返回先取消多选
+    if (uiState.isSelectionMode) {
+        BackHandler {
+            viewModel.clearSelection()
+        }
+    }
+
     var showMenu by remember { mutableStateOf(false) }
     var showSearchPanel by remember { mutableStateOf(false) }
     var showFilterPanel by remember { mutableStateOf(false) }
@@ -259,6 +304,13 @@ fun LogViewerScreen(
                                 viewModel.resetFontSize()
                             }
                         )
+                        DropdownMenuItem(
+                            text = { Text(if (uiState.isSelectionMode) "退出多选模式" else "开启多选模式") },
+                            onClick = {
+                                showMenu = false
+                                viewModel.toggleSelectionMode(!uiState.isSelectionMode)
+                            }
+                        )
                         Divider()
                         DropdownMenuItem(
                             text = { Text("导出文件") },
@@ -281,6 +333,13 @@ fun LogViewerScreen(
                             onClick = {
                                 showMenu = false
                                 onOpenBrowser()
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("打开日志文件夹") },
+                            onClick = {
+                                showMenu = false
+                                onOpenLogDirectory()
                             }
                         )
                     }
@@ -323,11 +382,33 @@ fun LogViewerScreen(
             // 状态栏
             StatusBar(uiState = uiState, viewModel = viewModel)
 
-            // 日志内容
-            LogContent(
-                viewModel = viewModel,
-                uiState = uiState
-            )
+            // 日志内容与悬浮组件
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth()
+            ) {
+                LogContent(
+                    viewModel = viewModel,
+                    uiState = uiState,
+                    lazyListState = lazyListState
+                )
+
+                RequestNavigator(
+                    viewModel = viewModel,
+                    uiState = uiState,
+                    lazyListState = lazyListState,
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .padding(bottom = 72.dp) // 避免遮挡底栏或底部按钮
+                )
+
+                SelectionActionBar(
+                    viewModel = viewModel,
+                    uiState = uiState,
+                    modifier = Modifier.align(Alignment.BottomCenter)
+                )
+            }
         }
     }
 }

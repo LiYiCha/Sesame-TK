@@ -196,7 +196,9 @@ class AntOrchard : ModelTask() {
             }
 
             // 助力
-            orchardAssistFriend()
+            if (assistFriendList.value.isNotEmpty()) {
+                orchardAssistFriend()
+            }
 
         } catch (t: Throwable) {
             Log.printStackTrace(TAG, "start.run err:", t)

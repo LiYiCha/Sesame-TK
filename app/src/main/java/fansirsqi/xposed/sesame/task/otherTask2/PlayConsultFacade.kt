@@ -18,10 +18,7 @@ class PlayConsultFacade {
     private var strategyId: String? = "202602270515234629"  //抽奖ID？
     private val method = "com.alipay.amic.biz.rpc.activity.h5.PlayConsultFacade.consult" //方法名
     // 黑名单
-    private var adIdBlackList: MutableList<String> = mutableListOf(
-        "20100019", "274076402", "275975947", "259674711", "263875506",
-        "20100019","267279189","271293135","27635615","32002001"
-    )
+    private var adIdBlackList: MutableList<String> = mutableListOf()
     @Volatile
     private var CERTNUM: Int? = 0 // 抽奖次数，使用volatile保证可见性
     private val lotteryMutex = Mutex() // 抽奖互斥锁，确保线程安全
@@ -336,15 +333,11 @@ class PlayConsultFacade {
         }
     }
 
-    // 查询任务列表
     private suspend fun queryConsult(blackList: List<String> = adIdBlackList): JSONObject {
-        val actualBlackList = blackList.ifEmpty {
-            // 从adIdBlackList中随机获取4个参数
-            if (adIdBlackList.size >= 4) {
-                adIdBlackList.shuffled().take(4)
-            } else {
-                adIdBlackList
-            }
+        val actualBlackList = if (blackList.size > 10) {
+            blackList.shuffled().take(10)
+        } else {
+            blackList
         }
 
         val paramsObj = if (actualBlackList.isEmpty()) {

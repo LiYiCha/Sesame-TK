@@ -68,12 +68,12 @@ android {
         }
 
 
-        // 生成随机英文和数字组合
-        val randomCode = generateRandomString(4) // 生成4位随机英文和数字组合
-//        versionCode = gitCommitCount
-        versionCode = 30
+        val versionNumber = "0.2.9"
+        val dateString = SimpleDateFormat("yyMMdd", Locale.CHINA).apply {
+            timeZone = TimeZone.getTimeZone("GMT+8")
+        }.format(Date())
         val buildTag = "beta"
-        versionName = "v0.2.9-$buildTag-$randomCode"
+        versionName = "$versionNumber-$dateString"
 
         buildConfigField("String", "BUILD_DATE", "\"$buildDate\"")
         buildConfigField("String", "BUILD_TIME", "\"$buildTime\"")

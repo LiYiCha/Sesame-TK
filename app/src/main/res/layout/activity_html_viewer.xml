@@ -14,7 +14,7 @@
         android:background="@color/background"
         android:paddingBottom="20dp">
 
-        <fansirsqi.xposed.sesame.ui.MyWebView
+        <fansirsqi.xposed.sesame.ui.logviewer.MyWebView
             android:id="@+id/mwv_webview"
             android:layout_width="match_parent"
             android:layout_height="match_parent"

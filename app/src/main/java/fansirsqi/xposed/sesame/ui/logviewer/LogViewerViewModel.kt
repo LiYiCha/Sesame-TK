@@ -33,6 +33,7 @@ class LogViewerViewModel : ViewModel() {
         private const val POLL_INTERVAL = 1000L // 文件轮询间隔（毫秒）
         private const val PREF_FONT_SIZE = "log_viewer_font_size"
         private const val DEFAULT_FONT_SIZE = 9 // 默认字体大小改为9sp
+        private const val MAX_RENDER_LINES = 150000
     }
 
     /**
@@ -65,7 +66,10 @@ class LogViewerViewModel : ViewModel() {
         val showH5: Boolean = true,
         val showBottom: Boolean = true,
         val isCaptureLog: Boolean = false,
-        val showLineCopyButton: Boolean = false
+        val showLineCopyButton: Boolean = false,
+        val isSelectionMode: Boolean = false,
+        val selectedIndices: Set<Int> = emptySet(),
+        val lastSelectedIndex: Int? = null
     )
 
     /**
@@ -81,6 +85,7 @@ class LogViewerViewModel : ViewModel() {
     val uiState: StateFlow<UiState> = _uiState.asStateFlow()
 
     private var watchJob: Job? = null
+    private var progressiveRenderJob: Job? = null
     private var raf: RandomAccessFile? = null
     private var watchingFile: File? = null
 
@@ -145,16 +150,7 @@ class LogViewerViewModel : ViewModel() {
                 if (line.contains("[BOTTOM] ========================>")) {
                     hasBottom = true
                 }
-                if (line.length > 200) {
-                    var start = 0
-                    while (start < line.length) {
-                        val end = (start + 200).coerceAtMost(line.length)
-                        lines.add(line.substring(start, end))
-                        start = end
-                    }
-                } else {
-                    lines.add(line)
-                }
+                lines.add(line)
             }
             synchronized(allLines) {
                 allLines.clear()
@@ -190,16 +186,7 @@ class LogViewerViewModel : ViewModel() {
                         if (line.contains("[BOTTOM] ========================>")) {
                             hasBottom = true
                         }
-                        if (line.length > 200) {
-                            var start = 0
-                            while (start < line.length) {
-                                val end = (start + 200).coerceAtMost(line.length)
-                                lines.add(line.substring(start, end))
-                                start = end
-                            }
-                        } else {
-                            lines.add(line)
-                        }
+                        lines.add(line)
                     }
                 }
 
@@ -246,18 +233,7 @@ class LogViewerViewModel : ViewModel() {
             var startIdx = 0
             if (!endsWithNewline && allLines.isNotEmpty()) {
                 val lastIdx = allLines.size - 1
-                val mergedLine = allLines[lastIdx] + rawLines[0]
-                if (mergedLine.length > 200) {
-                    allLines.removeAt(lastIdx)
-                    var start = 0
-                    while (start < mergedLine.length) {
-                        val end = (start + 200).coerceAtMost(mergedLine.length)
-                        allLines.add(mergedLine.substring(start, end))
-                        start = end
-                    }
-                } else {
-                    allLines[lastIdx] = mergedLine
-                }
+                allLines[lastIdx] = allLines[lastIdx] + rawLines[0]
                 startIdx = 1
             }
 
@@ -275,16 +251,7 @@ class LogViewerViewModel : ViewModel() {
                 if (line.contains("[BOTTOM] ========================>")) {
                     hasBottom = true
                 }
-                if (line.length > 200) {
-                    var start = 0
-                    while (start < line.length) {
-                        val end = (start + 200).coerceAtMost(line.length)
-                        allLines.add(line.substring(start, end))
-                        start = end
-                    }
-                } else {
-                    allLines.add(line)
-                }
+                allLines.add(line)
             }
 
             endsWithNewline = chunk.endsWith("\n")
@@ -550,8 +517,9 @@ class LogViewerViewModel : ViewModel() {
     }
 
     private fun applyFilters() {
+        progressiveRenderJob?.cancel()
         viewModelScope.launch(Dispatchers.Default) {
-            val state = _uiState.value
+            val stateSnapshot = _uiState.value
             val lines = synchronized(allLines) { allLines.toList() }
 
             val filteredLines = ArrayList<String>(lines.size)
@@ -566,8 +534,8 @@ class LogViewerViewModel : ViewModel() {
                     currentBlockType = 2
                 }
 
-                val skipBlock = (currentBlockType == 1 && !state.showH5) || 
-                                (currentBlockType == 2 && !state.showBottom)
+                val skipBlock = (currentBlockType == 1 && !stateSnapshot.showH5) ||
+                    (currentBlockType == 2 && !stateSnapshot.showBottom)
 
                 if (processedLine.startsWith("[H5] ")) {
                     processedLine = processedLine.substring(5)
@@ -583,15 +551,13 @@ class LogViewerViewModel : ViewModel() {
                     return@forEachIndexed
                 }
 
-                // 应用关键字筛选
-                val matchesFilter = state.filterKeyword.isEmpty() ||
-                                   processedLine.contains(state.filterKeyword, ignoreCase = true)
+                val matchesFilter = stateSnapshot.filterKeyword.isEmpty() ||
+                    processedLine.contains(stateSnapshot.filterKeyword, ignoreCase = true)
 
-                // 应用日志级别过滤
-                val matchesLevel = if (state.enabledLogLevels.size == LogLevel.entries.size) {
-                    true // 所有级别都启用，不需要过滤
+                val matchesLevel = if (stateSnapshot.enabledLogLevels.size == LogLevel.entries.size) {
+                    true
                 } else {
-                    state.enabledLogLevels.any { level ->
+                    stateSnapshot.enabledLogLevels.any { level ->
                         level.pattern.containsMatchIn(processedLine)
                     }
                 }
@@ -602,19 +568,47 @@ class LogViewerViewModel : ViewModel() {
                 }
             }
 
-            _uiState.update { state ->
-                val baseMsg = if (state.filterKeyword.isNotEmpty() ||
-                                  state.enabledLogLevels.size < LogLevel.entries.size ||
-                                  !state.showH5 || !state.showBottom) {
-                    "筛选结果: ${filteredLines.size}/${lines.size} 行"
-                } else {
-                    "共 ${lines.size} 行"
+            val baseMsg = if (stateSnapshot.filterKeyword.isNotEmpty() ||
+                stateSnapshot.enabledLogLevels.size < LogLevel.entries.size ||
+                !stateSnapshot.showH5 || !stateSnapshot.showBottom
+            ) {
+                "筛选结果: ${filteredLines.size}/${lines.size} 行"
+            } else {
+                "共 ${lines.size} 行"
+            }
+
+            val renderTotal = filteredLines.size.coerceAtMost(MAX_RENDER_LINES)
+            val droppedLines = filteredLines.size - renderTotal
+            val startIndex = (filteredLines.size - renderTotal).coerceAtLeast(0)
+            val renderSourceLines = filteredLines.subList(startIndex, filteredLines.size)
+            val renderSourceIndices = filteredIndices.subList(startIndex, filteredIndices.size)
+
+            withContext(Dispatchers.Main) {
+                progressiveRenderJob?.cancel()
+                if (renderTotal == 0) {
+                    _uiState.update {
+                        it.copy(
+                            displayedLines = emptyList(),
+                            displayedLineIndices = emptyList(),
+                            statusMessage = baseMsg
+                        )
+                    }
+                    return@withContext
                 }
-                state.copy(
-                    displayedLines = filteredLines,
-                    displayedLineIndices = filteredIndices,
-                    statusMessage = baseMsg
-                )
+
+                val truncateSuffix = if (droppedLines > 0) {
+                    " (为保证流畅已隐藏更早 ${droppedLines} 行)"
+                } else {
+                    ""
+                }
+
+                _uiState.update {
+                    it.copy(
+                        displayedLines = renderSourceLines.toList(),
+                        displayedLineIndices = renderSourceIndices.toList(),
+                        statusMessage = baseMsg + truncateSuffix
+                    )
+                }
             }
         }
     }
@@ -681,6 +675,8 @@ class LogViewerViewModel : ViewModel() {
     fun stopWatchingFile() {
         watchJob?.cancel()
         watchJob = null
+        progressiveRenderJob?.cancel()
+        progressiveRenderJob = null
 
         try {
             raf?.close()
@@ -689,6 +685,82 @@ class LogViewerViewModel : ViewModel() {
         }
         raf = null
         watchingFile = null
+    }
+
+    fun toggleSelectionMode(enabled: Boolean) {
+        _uiState.update { 
+            it.copy(
+                isSelectionMode = enabled,
+                selectedIndices = if (enabled) it.selectedIndices else emptySet(),
+                lastSelectedIndex = if (enabled) it.lastSelectedIndex else null
+            )
+        }
+    }
+
+    fun toggleLineSelection(index: Int) {
+        _uiState.update { state ->
+            val newSelected = if (index in state.selectedIndices) {
+                state.selectedIndices - index
+            } else {
+                state.selectedIndices + index
+            }
+            state.copy(
+                selectedIndices = newSelected,
+                lastSelectedIndex = index
+            )
+        }
+    }
+
+    fun selectRange(from: Int, to: Int) {
+        _uiState.update { state ->
+            val range = if (from <= to) from..to else to..from
+            val newSelected = state.selectedIndices + range.toSet()
+            state.copy(
+                selectedIndices = newSelected,
+                lastSelectedIndex = to
+            )
+        }
+    }
+
+    fun clearSelection() {
+        _uiState.update {
+            it.copy(
+                isSelectionMode = false,
+                selectedIndices = emptySet(),
+                lastSelectedIndex = null
+            )
+        }
+    }
+
+    fun copySelectedLines(context: android.content.Context) {
+        val state = _uiState.value
+        val indices = state.selectedIndices.sorted()
+        if (indices.isEmpty()) return
+        
+        val textToCopy = indices.mapNotNull { idx ->
+            state.displayedLines.getOrNull(idx)
+        }.joinToString("\n")
+        
+        try {
+            val cm = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+            cm.setPrimaryClip(android.content.ClipData.newPlainText("selected_logs", textToCopy))
+            fansirsqi.xposed.sesame.util.ToastUtil.showToast(context, "已复制选中的 ${indices.size} 行日志")
+        } catch (e: Exception) {
+            Log.error(TAG, "复制失败: ${e.message}")
+        }
+        
+        clearSelection()
+    }
+
+    fun findBoundaryIndices(): List<Int> {
+        val state = _uiState.value
+        val list = mutableListOf<Int>()
+        state.displayedLines.forEachIndexed { index, line ->
+            if (line.contains("========================>")) {
+                list.add(index)
+            }
+        }
+        return list
     }
 
     // formatLongLines has been removed as chunking is done on the fly

@@ -573,13 +573,13 @@ class NpcChicken {
         var animals = getFarmAnimals()
         var animalCount = animals.length()
         
-//        if (animalCount >= 3) {
-//            Log.farm(TAG, "智能调度🤖[当前小鸡数已满 ($animalCount)，尝试赶走别人的小鸡释放位置]")
-//            trySendBackGuestChickens(animals)
-//            // 赶走之后重新获取
-//            animals = getFarmAnimals()
-//            animalCount = animals.length()
-//        }
+        if (animalCount >= 3) {
+            Log.farm(TAG, "智能调度🤖[当前小鸡数已满 ($animalCount)，尝试赶走别人的小鸡释放位置]")
+            trySendBackGuestChickens(animals)
+            // 赶走之后重新获取
+            animals = getFarmAnimals()
+            animalCount = animals.length()
+        }
         
         if (animalCount >= 3) {
             Log.farm(TAG, "智能调度🤖[庄园无小鸡位置，先不雇佣]")
@@ -713,8 +713,8 @@ class NpcChicken {
             val subAnimalType = animal.optString("subAnimalType")
             val masterFarmId = animal.optString("masterFarmId")
 
-            // 别人的小鸡：masterFarmId 不等于我们，且 subAnimalType 不是 NPC
-            if (masterFarmId.isNotEmpty() && masterFarmId != ownerFarmId && subAnimalType != "NPC") {
+            // 别人的小鸡：masterFarmId 不等于我们，且 subAnimalType 是 GUEST (偷吃鸡)
+            if (masterFarmId.isNotEmpty() && masterFarmId != ownerFarmId && subAnimalType == "GUEST") {
                 val animalId = animal.optString("animalId")
                 val currentFarmId = animal.optString("currentFarmId")
                 val nickname = animal.optString("name", "别人的小鸡")

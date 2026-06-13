@@ -2581,30 +2581,75 @@ class AntMember : ModelTask() {
             try {
                 // 1. 查询进度球状态
                 val queryResp = AntMemberRpcCall.Zmxy.queryScoreProgress()
-                if (queryResp == null || queryResp.isEmpty()) return
+                if (queryResp == null || queryResp.isEmpty()) {
+                    Log.other(TAG, "查询信用进度失败: 响应为空")
+                    return
+                }
 
                 val json = JSONObject(queryResp)
 
                 // 检查 success
-                if (!ResChecker.checkRes(TAG, json)) return
+                if (!ResChecker.checkRes(TAG, json)) {
+                    Log.other(TAG, "查询信用进度失败: resultCode = ${json.optString("resultCode")}")
+                    return
+                }
 
-                val totalWait = json.optJSONObject("totalWaitProcessVO") ?: return
+                // 合并新老字段中的进度球ID
+                val idList = JSONArray()
+                val idSet = mutableSetOf<String>()
 
-                val idList = totalWait.optJSONArray("totalProgressIdList")
-                if (idList == null || idList.length() == 0) return
+                // 解析老字段
+                val totalWait = json.optJSONObject("totalWaitProcessVO")
+                if (totalWait != null) {
+                    val progressIds = totalWait.optJSONArray("totalProgressIdList")
+                    if (progressIds != null) {
+                        for (i in 0 until progressIds.length()) {
+                            val id = progressIds.optString(i)
+                            if (!id.isNullOrEmpty()) {
+                                idSet.add(id)
+                            }
+                        }
+                    }
+                }
+
+                // 解析新字段
+                val newProgressBallIds = json.optJSONArray("newProgressBallIds")
+                if (newProgressBallIds != null) {
+                    for (i in 0 until newProgressBallIds.length()) {
+                        val id = newProgressBallIds.optString(i)
+                        if (!id.isNullOrEmpty()) {
+                            idSet.add(id)
+                        }
+                    }
+                }
+
+                // 填充至 JSONArray
+                idSet.forEach { idList.put(it) }
+
+                if (idList.length() == 0) {
+                    Log.runtime(TAG, "暂无待领取的信用进度球")
+                    return
+                }
 
                 // 直接传 JSONArray
-                val collectResp = AntMemberRpcCall.Zmxy.collectProgressBall(idList) ?: return
+                val collectResp = AntMemberRpcCall.Zmxy.collectProgressBall(idList)
+                if (collectResp == null || collectResp.isEmpty()) {
+                    Log.error(TAG, "领取信用进度球失败: 响应为空")
+                    return
+                }
 
                 val collectJson = JSONObject(collectResp)
-
-                Log.other(
-                    TAG, String.format(
-                        "领取完成 → 本次加速进度: %d, 当前加速倍率: %.2f",
-                        collectJson.optInt("collectedAccelerateProgress", -1),
-                        collectJson.optDouble("currentAccelerateValue", -1.0)
+                if (collectJson.optBoolean("success")) {
+                    Log.other(
+                        TAG, String.format(
+                            "领取完成 → 本次加速进度: %d, 当前加速倍率: %.2f",
+                            collectJson.optInt("collectedAccelerateProgress", -1),
+                            collectJson.optDouble("currentAccelerateValue", -1.0)
+                        )
                     )
-                )
+                } else {
+                    Log.error(TAG, "领取信用进度球失败: result = $collectJson")
+                }
             } catch (e: Exception) {
                 Log.printStackTrace(TAG + "queryAndCollect err", e)
             }
@@ -2714,6 +2759,49 @@ class AntMember : ModelTask() {
                 if (isTaskInBlacklist(taskTitle)) {
                     //Log.runtime(TAG, "芝麻信用💳[跳过黑名单任务]#$taskTitle")
                     skippedCount++
+                    continue
+                }
+ 
+                val bizType = task.optString("bizType", "")
+                if ("AD_TASK" == bizType) {
+                    val bizId = task.optString("adTaskBizId", "")
+                        .ifEmpty { task.optJSONObject("logExtMap")?.optString("bizId", "") ?: "" }
+                    if (bizId.isEmpty()) {
+                        Log.runtime(TAG, "芝麻信用广告任务缺少bizId, 跳过: $taskTitle")
+                        skippedCount++
+                        continue
+                    }
+
+                    Log.runtime(TAG, "芝麻信用广告任务: $taskTitle 准备执行")
+
+                    var sleepTime = 16000L
+                    if (taskTitle.contains("15秒") || taskTitle.contains("15s") || taskTitle.contains("逛一逛")) {
+                        sleepTime = 16000L
+                    } else {
+                        sleepTime = 8000L
+                    }
+                    delay(sleepTime)
+
+                    try {
+                        val adFinishRes = AntMemberRpcCall.taskFinish(bizId)
+                        val adFinishJo = JSONObject(adFinishRes)
+                        if (ResChecker.checkRes(TAG, adFinishJo) || "0" == adFinishJo.optString("errCode")) {
+                            val reward = task.optInt("rewardAmount", 0)
+                            Log.other("芝麻信用💳[广告任务完成: " + taskTitle + "]#获得" + reward + "粒")
+                            completedCount++
+                        } else {
+                            Log.error(TAG, "芝麻信用广告任务上报失败: $taskTitle - $adFinishRes")
+                            val adErrMsg = adFinishJo.optString("errMsg", "")
+                            if (adErrMsg.contains("系统异常")) {
+                                val errCode = adFinishJo.optString("errCode", "")
+                                autoAddToBlacklist(taskTitle, taskTitle, errCode, adErrMsg)
+                            }
+                            skippedCount++
+                        }
+                    } catch (e: Throwable) {
+                        Log.printStackTrace("$TAG.doAllAvailableSesameTask.adTask", e)
+                        skippedCount++
+                    }
                     continue
                 }
 
