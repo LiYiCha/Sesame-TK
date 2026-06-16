@@ -69,7 +69,8 @@ class LogViewerViewModel : ViewModel() {
         val showLineCopyButton: Boolean = false,
         val isSelectionMode: Boolean = false,
         val selectedIndices: Set<Int> = emptySet(),
-        val lastSelectedIndex: Int? = null
+        val lastSelectedIndex: Int? = null,
+        val showSearchPanel: Boolean = false
     )
 
     /**
@@ -311,12 +312,22 @@ class LogViewerViewModel : ViewModel() {
     }
 
     /**
+     * 设置搜索面板可见性
+     */
+    fun setSearchPanelVisible(visible: Boolean) {
+        _uiState.update { it.copy(showSearchPanel = visible) }
+    }
+
+    /**
      * 执行搜索
      */
     fun performSearch() {
         val state = _uiState.value
         val keyword = state.searchKeyword.trim()
         if (keyword.isEmpty()) return
+
+        // 确保搜索时面板处于展开状态
+        _uiState.update { it.copy(showSearchPanel = true) }
 
         viewModelScope.launch(Dispatchers.Default) {
             try {
@@ -376,7 +387,8 @@ class LogViewerViewModel : ViewModel() {
                             "找到 ${results.size} 个结果"
                         } else {
                             "未找到结果"
-                        }
+                        },
+                        showSearchPanel = true
                     )
                 }
             } catch (e: Exception) {

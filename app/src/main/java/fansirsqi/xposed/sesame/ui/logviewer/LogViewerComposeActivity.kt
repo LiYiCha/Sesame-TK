@@ -242,7 +242,6 @@ fun LogViewerScreen(
     }
 
     var showMenu by remember { mutableStateOf(false) }
-    var showSearchPanel by remember { mutableStateOf(false) }
     var showFilterPanel by remember { mutableStateOf(false) }
     var showLevelFilter by remember { mutableStateOf(false) }
 
@@ -264,7 +263,7 @@ fun LogViewerScreen(
                 ),
                 actions = {
                     // 搜索按钮
-                    IconButton(onClick = { showSearchPanel = !showSearchPanel }) {
+                    IconButton(onClick = { viewModel.setSearchPanelVisible(!uiState.showSearchPanel) }) {
                         Icon(Icons.Rounded.Search, "搜索", tint = topBarContent)
                     }
                     // 筛选按钮
@@ -353,11 +352,11 @@ fun LogViewerScreen(
                 .padding(paddingValues)
         ) {
             // 搜索面板
-            if (showSearchPanel) {
+            if (uiState.showSearchPanel) {
                 SearchPanel(
                     viewModel = viewModel,
                     uiState = uiState,
-                    onDismiss = { showSearchPanel = false }
+                    onDismiss = { viewModel.setSearchPanelVisible(false) }
                 )
             }
 

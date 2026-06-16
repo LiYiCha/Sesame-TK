@@ -528,6 +528,143 @@ fun AnnotatedString.toSpannableString(): SpannableString {
 }
 
 /**
+ * 搜索高亮状态数据类
+ */
+@Stable
+data class SearchHighlightState(
+    val keyword: String,
+    val results: List<LogViewerViewModel.SearchResult>,
+    val currentIndex: Int
+)
+
+/**
+ * 单行日志行组件 (提取为独立 Composable 以支持 Compose 跳过机制，防止重复重组)
+ */
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+fun LogLineRow(
+    index: Int,
+    line: String,
+    isSelected: Boolean,
+    originalIndex: Int,
+    effectiveFontSize: Int,
+    isSelectionMode: Boolean,
+    searchHighlightState: SearchHighlightState,
+    onLineClick: () -> Unit,
+    onLineLongClick: () -> Unit,
+    onCheckedChange: (Boolean) -> Unit
+) {
+    val lineAnnotatedString = remember(line, searchHighlightState) {
+        buildAnnotatedString {
+            val keyword = searchHighlightState.keyword
+            val results = searchHighlightState.results
+            val currentIndex = searchHighlightState.currentIndex
+            val currentResult = if (currentIndex in results.indices) results[currentIndex] else null
+
+            val lineResults = if (results.isNotEmpty() && keyword.isNotEmpty()) {
+                results.filter { it.lineIndex == originalIndex }
+            } else {
+                emptyList()
+            }
+
+            val levelColor = when {
+                line.contains("ERROR", ignoreCase = true) || line.contains("SEVERE", ignoreCase = true) || line.contains("FATAL", ignoreCase = true) -> Color(0xFFEF5350)
+                line.contains("WARN", ignoreCase = true) || line.contains("WARNING", ignoreCase = true) -> Color(0xFFFFB74D)
+                line.contains("DEBUG", ignoreCase = true) || line.contains("TRACE", ignoreCase = true) -> Color(0xFF90A4AE)
+                line.contains("INFO", ignoreCase = true) -> Color(0xFF81C784)
+                else -> Color.Unspecified
+            }
+
+            if (lineResults.isNotEmpty()) {
+                var lastCharIndex = 0
+                lineResults.sortedBy { it.charIndex }.forEach { result ->
+                    val preText = line.substring(lastCharIndex, result.charIndex)
+                    if (preText.isNotEmpty()) {
+                        if (levelColor != Color.Unspecified) {
+                            withStyle(style = SpanStyle(color = levelColor)) {
+                                append(preText)
+                            }
+                        } else {
+                            append(preText)
+                        }
+                    }
+
+                    val isCurrent = currentResult?.let {
+                        it.lineIndex == result.lineIndex &&
+                                it.charIndex == result.charIndex &&
+                                it.length == result.length
+                    } == true
+                    withStyle(
+                        style = SpanStyle(
+                            background = if (isCurrent) Color.Yellow else Color(0x4DFFFF00),
+                            color = if (isCurrent) Color.Red else Color.Unspecified,
+                            fontWeight = if (isCurrent) FontWeight.Bold else FontWeight.Normal
+                        )
+                    ) {
+                        append(line.substring(result.charIndex, result.charIndex + result.length))
+                    }
+                    lastCharIndex = result.charIndex + result.length
+                }
+
+                if (lastCharIndex < line.length) {
+                    val postText = line.substring(lastCharIndex)
+                    if (levelColor != Color.Unspecified) {
+                        withStyle(style = SpanStyle(color = levelColor)) {
+                            append(postText)
+                        }
+                    } else {
+                        append(postText)
+                    }
+                }
+            } else {
+                if (levelColor != Color.Unspecified) {
+                    withStyle(style = SpanStyle(color = levelColor)) {
+                        append(line)
+                    }
+                } else {
+                    append(line)
+                }
+            }
+        }
+    }
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(
+                if (isSelected) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f)
+                else Color.Transparent
+            )
+            .combinedClickable(
+                onClick = onLineClick,
+                onLongClick = onLineLongClick
+            )
+            .padding(vertical = 2.dp, horizontal = 4.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        if (isSelectionMode) {
+            Checkbox(
+                checked = isSelected,
+                onCheckedChange = onCheckedChange,
+                modifier = Modifier
+                    .padding(end = 4.dp)
+                    .size(20.dp)
+                    .scale(0.8f)
+            )
+        }
+
+        Text(
+            text = lineAnnotatedString,
+            fontFamily = FontFamily.Monospace,
+            fontSize = effectiveFontSize.sp,
+            lineHeight = (effectiveFontSize + 4).sp,
+            color = MaterialTheme.colorScheme.onBackground,
+            softWrap = true
+        )
+    }
+}
+
+/**
  * 日志内容显示（支持双指缩放、快速滚动条、搜索结果自动滚动和多选复制）
  */
 @OptIn(ExperimentalFoundationApi::class)
@@ -628,139 +765,65 @@ fun LogContent(
         ) {
             itemsIndexed(
                 items = uiState.displayedLines,
-                key = { index, _ -> index }
+                key = { index, _ -> uiState.displayedLineIndices.getOrNull(index) ?: index }
             ) { index, line ->
                 val isSelected = index in uiState.selectedIndices
                 val originalIndex = uiState.displayedLineIndices.getOrNull(index) ?: index
 
-                val lineAnnotatedString = remember(line, uiState.searchResults, uiState.currentSearchIndex, uiState.searchKeyword) {
-                    buildAnnotatedString {
-                        val keyword = uiState.searchKeyword
-                        val results = uiState.searchResults
-                        val currentIndex = uiState.currentSearchIndex
-                        val currentResult = if (currentIndex in results.indices) results[currentIndex] else null
-
-                        val lineResults = if (results.isNotEmpty() && keyword.isNotEmpty()) {
-                            results.filter { it.lineIndex == originalIndex }
-                        } else {
-                            emptyList()
-                        }
-
-                        val levelColor = when {
-                            line.contains("ERROR", ignoreCase = true) || line.contains("SEVERE", ignoreCase = true) || line.contains("FATAL", ignoreCase = true) -> Color(0xFFEF5350)
-                            line.contains("WARN", ignoreCase = true) || line.contains("WARNING", ignoreCase = true) -> Color(0xFFFFB74D)
-                            line.contains("DEBUG", ignoreCase = true) || line.contains("TRACE", ignoreCase = true) -> Color(0xFF90A4AE)
-                            line.contains("INFO", ignoreCase = true) -> Color(0xFF81C784)
-                            else -> Color.Unspecified
-                        }
-
-                        if (lineResults.isNotEmpty()) {
-                            var lastCharIndex = 0
-                            lineResults.sortedBy { it.charIndex }.forEach { result ->
-                                val preText = line.substring(lastCharIndex, result.charIndex)
-                                if (preText.isNotEmpty()) {
-                                    if (levelColor != Color.Unspecified) {
-                                        withStyle(style = SpanStyle(color = levelColor)) {
-                                            append(preText)
-                                        }
-                                    } else {
-                                        append(preText)
-                                    }
-                                }
-
-                                val isCurrent = currentResult?.let {
-                                    it.lineIndex == result.lineIndex &&
-                                            it.charIndex == result.charIndex &&
-                                            it.length == result.length
-                                } == true
-                                withStyle(
-                                    style = SpanStyle(
-                                        background = if (isCurrent) Color.Yellow else Color(0x4DFFFF00),
-                                        color = if (isCurrent) Color.Red else Color.Unspecified,
-                                        fontWeight = if (isCurrent) FontWeight.Bold else FontWeight.Normal
-                                    )
-                                ) {
-                                    append(line.substring(result.charIndex, result.charIndex + result.length))
-                                }
-                                lastCharIndex = result.charIndex + result.length
-                            }
-
-                            if (lastCharIndex < line.length) {
-                                val postText = line.substring(lastCharIndex)
-                                if (levelColor != Color.Unspecified) {
-                                    withStyle(style = SpanStyle(color = levelColor)) {
-                                        append(postText)
-                                    }
-                                } else {
-                                    append(postText)
-                                }
-                            }
-                        } else {
-                            if (levelColor != Color.Unspecified) {
-                                withStyle(style = SpanStyle(color = levelColor)) {
-                                    append(line)
-                                }
-                            } else {
-                                append(line)
-                            }
-                        }
-                    }
-                }
-
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .background(
-                            if (isSelected) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f)
-                            else Color.Transparent
-                        )
-                        .combinedClickable(
-                            onClick = {
-                                if (uiState.isSelectionMode) {
-                                    viewModel.toggleLineSelection(index)
-                                } else {
-                                    // 正常模式下单击显示详情弹窗，一键复制 Method/Params/Data
-                                    activeDetailLine = line
-                                    activeDetailBlock = findRpcBlockAround(uiState.displayedLines, index)
-                                }
-                            },
-                            onLongClick = {
-                                if (!uiState.isSelectionMode) {
-                                    viewModel.toggleSelectionMode(true)
-                                    viewModel.toggleLineSelection(index)
-                                } else {
-                                    val last = uiState.lastSelectedIndex
-                                    if (last != null) {
-                                        viewModel.selectRange(last, index)
-                                    } else {
-                                        viewModel.toggleLineSelection(index)
-                                    }
-                                }
-                            }
-                        )
-                        .padding(vertical = 2.dp, horizontal = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    if (uiState.isSelectionMode) {
-                        Checkbox(
-                            checked = isSelected,
-                            onCheckedChange = { viewModel.toggleLineSelection(index) },
-                            modifier = Modifier
-                                .padding(end = 4.dp)
-                                .size(20.dp)
-                                .scale(0.8f)
-                        )
-                    }
-
-                    Text(
-                        text = lineAnnotatedString,
-                        fontFamily = FontFamily.Monospace,
-                        fontSize = effectiveFontSize.sp,
-                        lineHeight = (effectiveFontSize + 4).sp,
-                        color = MaterialTheme.colorScheme.onBackground,
-                        softWrap = true
+                val highlightState = remember(uiState.searchKeyword, uiState.searchResults, uiState.currentSearchIndex) {
+                    SearchHighlightState(
+                        keyword = uiState.searchKeyword,
+                        results = uiState.searchResults,
+                        currentIndex = uiState.currentSearchIndex
                     )
                 }
+
+                // 稳定回调 lambda 从而避免重组
+                val onLineClick = remember(index, line, uiState.isSelectionMode, uiState.displayedLines) {
+                    {
+                        if (uiState.isSelectionMode) {
+                            viewModel.toggleLineSelection(index)
+                        } else {
+                            activeDetailLine = line
+                            activeDetailBlock = findRpcBlockAround(uiState.displayedLines, index)
+                        }
+                    }
+                }
+
+                val onLineLongClick = remember(index, uiState.isSelectionMode, uiState.lastSelectedIndex) {
+                    {
+                        if (!uiState.isSelectionMode) {
+                            viewModel.toggleSelectionMode(true)
+                            viewModel.toggleLineSelection(index)
+                        } else {
+                            val last = uiState.lastSelectedIndex
+                            if (last != null) {
+                                viewModel.selectRange(last, index)
+                            } else {
+                                viewModel.toggleLineSelection(index)
+                            }
+                        }
+                    }
+                }
+
+                val onCheckedChange = remember(index) {
+                    { _: Boolean ->
+                        viewModel.toggleLineSelection(index)
+                    }
+                }
+
+                LogLineRow(
+                    index = index,
+                    line = line,
+                    isSelected = isSelected,
+                    originalIndex = originalIndex,
+                    effectiveFontSize = effectiveFontSize,
+                    isSelectionMode = uiState.isSelectionMode,
+                    searchHighlightState = highlightState,
+                    onLineClick = onLineClick,
+                    onLineLongClick = onLineLongClick,
+                    onCheckedChange = onCheckedChange
+                )
             }
         }
 
@@ -848,13 +911,18 @@ fun FastScrollbar(
 
     var scrollJob by remember { mutableStateOf<Job?>(null) }
 
+    val currentTotalItems by rememberUpdatedState(totalItems)
+    val currentVisibleItemsCount by rememberUpdatedState(visibleItemsCount)
+    val currentMaxThumbOffset by rememberUpdatedState(maxThumbOffset)
+    val currentThumbHeightPx by rememberUpdatedState(thumbHeightPx)
+
     Box(
         modifier = modifier
             .width(24.dp)
             .fillMaxHeight()
             .onSizeChanged { trackHeightPx = it.height }
             .alpha(alpha)
-            .pointerInput(totalItems, trackHeightPx, visibleItemsCount, maxThumbOffset) {
+            .pointerInput(Unit) {
                 awaitEachGesture {
                     try {
                         val down = awaitFirstDown(requireUnconsumed = false)
@@ -862,12 +930,12 @@ fun FastScrollbar(
                         showScrollbar = true
                         
                         val initialY = down.position.y
-                        val halfThumb = thumbHeightPx / 2
-                        var currentY = (initialY - halfThumb).coerceIn(0f, maxThumbOffset)
+                        val halfThumb = currentThumbHeightPx / 2
+                        var currentY = (initialY - halfThumb).coerceIn(0f, currentMaxThumbOffset)
                         localDragOffset = currentY
                         
-                        val fraction = if (maxThumbOffset > 0) currentY / maxThumbOffset else 0f
-                        val targetIndex = (fraction * (totalItems - visibleItemsCount)).roundToInt().coerceIn(0, totalItems - 1)
+                        val fraction = if (currentMaxThumbOffset > 0) currentY / currentMaxThumbOffset else 0f
+                        val targetIndex = (fraction * (currentTotalItems - currentVisibleItemsCount)).roundToInt().coerceIn(0, currentTotalItems - 1)
                         
                         scrollJob?.cancel()
                         scrollJob = coroutineScope.launch {
@@ -886,11 +954,11 @@ fun FastScrollbar(
                                 if (pointerChange.positionChanged()) {
                                     pointerChange.consume()
                                     val diffY = pointerChange.position.y - dragEvent.position.y
-                                    currentY = (currentY + diffY).coerceIn(0f, maxThumbOffset)
+                                    currentY = (currentY + diffY).coerceIn(0f, currentMaxThumbOffset)
                                     localDragOffset = currentY
                                     
-                                    val currentFraction = if (maxThumbOffset > 0) currentY / maxThumbOffset else 0f
-                                    val targetIdx = (currentFraction * (totalItems - visibleItemsCount)).roundToInt().coerceIn(0, totalItems - 1)
+                                    val currentFraction = if (currentMaxThumbOffset > 0) currentY / currentMaxThumbOffset else 0f
+                                    val targetIdx = (currentFraction * (currentTotalItems - currentVisibleItemsCount)).roundToInt().coerceIn(0, currentTotalItems - 1)
                                     
                                     scrollJob?.cancel()
                                     scrollJob = coroutineScope.launch {

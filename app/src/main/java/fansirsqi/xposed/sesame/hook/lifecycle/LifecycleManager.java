@@ -114,6 +114,13 @@ public class LifecycleManager {
                 if (baseModel != null) {
                     baseModel.boot(classLoader);
                 }
+
+                // 软重载时，如果开启了网络抓包，动态注册抓包 Hook（内部有防重复 Hook 保护）
+                if (BaseModel.enableHttpCapture.getValue()) {
+                    fansirsqi.xposed.sesame.hook.network.HttpCaptureHook.setup(classLoader);
+                    fansirsqi.xposed.sesame.hook.network.NetworkHook.setupHooks(classLoader);
+                    Log.runtime(TAG, "⚡ 动态注册网络抓包 Hook 成功");
+                }
             }
 
             Log.runtime(TAG, "✅ 配置软重载完成");

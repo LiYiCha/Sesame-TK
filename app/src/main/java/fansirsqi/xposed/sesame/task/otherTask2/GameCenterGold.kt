@@ -87,6 +87,9 @@ class GameCenterGold : BaseCommTask() {
                 processPlay60sTasks()
             }
 
+            // 5. 领取阶段奖励里程碑
+            handleMilestoneRewards()
+
         } catch (e: Exception) {
             Log.error(TAG, "执行异常: ${e.message}")
             Log.printStackTrace(e)
@@ -147,7 +150,7 @@ class GameCenterGold : BaseCommTask() {
      */
     private fun platformTaskComplete(taskId: String, taskToken: String, actionChannel: String): String? {
         val method = "com.alipay.gamecenteruprod.biz.rpc.platformTaskComplete"
-        val params = "[{\"actionChannel\":\"$actionChannel\",\"activityId\":\"P2E_PLATFORM_TASK\",\"taskId\":\"$taskId\",\"taskToken\":\"$taskToken\"}]"
+        val params = "[{\"actionChannel\":\"$actionChannel\",\"activityId\":\"P2E_PLATFORM_TASK\",\"source\":\"ch_appcenter__chsub_9patch\",\"taskId\":\"$taskId\",\"taskToken\":\"$taskToken\"}]"
         return RequestManager.requestString(method, params)
     }
 
@@ -157,6 +160,15 @@ class GameCenterGold : BaseCommTask() {
     private fun gameP2eTaskReceive(taskId: String, taskToken: String): String? {
         val method = "com.alipay.gamecenteruprod.biz.rpc.p2e.gameP2eTaskReceive"
         val params = "[{\"actionChannel\":\"taskList\",\"activityId\":\"P2E_PLATFORM_TASK\",\"oriChInfo\":\"ch_appcenter__chsub_9patch\",\"source\":\"ch_appcenter__chsub_9patch\",\"taskId\":\"$taskId\",\"taskToken\":\"$taskToken\",\"taskType\":\"PLATFORM_TRAN_TASK\"}]"
+        return RequestManager.requestString(method, params)
+    }
+
+    /**
+     * 6b. 领取阶段里程碑任务奖励
+     */
+    private fun receiveTaskMileStoneReward(taskMileStoneId: String, outBizNo: String, sign: String): String? {
+        val method = "com.alipay.gamecenteruprod.biz.rpc.p2e.receiveTaskMileStoneReward"
+        val params = "[{\"__git\":\"9e159d58cce04c13a\",\"oriChInfo\":\"ch_appcenter__chsub_9patch\",\"outBizNo\":\"$outBizNo\",\"sign\":\"$sign\",\"source\":\"ch_appcenter__chsub_9patch\",\"taskMileStoneId\":\"$taskMileStoneId\"}]"
         return RequestManager.requestString(method, params)
     }
 
@@ -558,5 +570,47 @@ class GameCenterGold : BaseCommTask() {
         val method = "com.alipay.gamecenteruprod.biz.rpc.p2e.gameP2eFloatingBallComplete"
         val params = "[{\"floatingBallTypeList\":[\"P2E_GAME_BROWSE_TASK_FLOATING_BALL\"],\"gameId\":\"$gameId\",\"gameModuleId\":\"$gameModuleId\",\"oriChInfo\":\"ch_appcenter__chsub_9patch\",\"source\":\"ch_appcenter__chsub_9patch\",\"trafficDriverId\":\"\"}]"
         return RequestManager.requestString(method, params)
+    }
+
+    /**
+     * 获取最新任务列表并领取可领取的阶段里程碑奖励
+     */
+    private fun handleMilestoneRewards() {
+        try {
+            val listRes = queryTaskList()
+            if (listRes.isNullOrEmpty()) return
+            val listJson = JSONObject(listRes)
+            if (!listJson.optBoolean("success")) return
+            val data = listJson.optJSONObject("data") ?: return
+
+            val taskMileStoneRewardVO = data.optJSONObject("taskMileStoneRewardVO") ?: return
+            val taskMileStoneList = taskMileStoneRewardVO.optJSONArray("taskMileStoneList") ?: return
+
+            for (i in 0 until taskMileStoneList.length()) {
+                val milestone = taskMileStoneList.getJSONObject(i)
+                val status = milestone.optString("status")
+                if (status == "COMPLETED") {
+                    val taskMileStoneId = milestone.optString("taskMileStoneId")
+                    val outBizNo = milestone.optString("outBizNo")
+                    val sign = milestone.optString("sign")
+                    val goldCoinAmount = milestone.optInt("goldCoinAmount", 0)
+                    if (taskMileStoneId.isNotEmpty() && outBizNo.isNotEmpty() && sign.isNotEmpty()) {
+                        Log.other("$displayName: 发现可领取的阶段奖励[$taskMileStoneId]")
+                        val rewardRes = receiveTaskMileStoneReward(taskMileStoneId, outBizNo, sign)
+                        if (rewardRes != null) {
+                            val resJson = JSONObject(rewardRes)
+                            if (resJson.optBoolean("success")) {
+                                Log.other("$displayName: 阶段奖励[$taskMileStoneId]领取成功✅, 获得金币🪙: $goldCoinAmount")
+                            } else {
+                                Log.error(TAG, "阶段奖励[$taskMileStoneId]领取失败: $rewardRes")
+                            }
+                        }
+                        TimeUtil.sleep(RandomUtil.nextLong(1500, 2500))
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            Log.error(TAG, "处理阶段里程碑奖励异常: ${e.message}")
+        }
     }
 }
