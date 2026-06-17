@@ -56,6 +56,12 @@ public class ExtendActivity extends BaseActivity {
         //继续运行
         Button continueRun = findViewById(R.id.keep_run);
         continueRun.setOnClickListener(new ContinueRun());
+        //暂停运行
+        Button pauseRun = findViewById(R.id.pause_run);
+        pauseRun.setOnClickListener(new PauseRun());
+        //停止运行
+        Button stopRun = findViewById(R.id.stop_run);
+        stopRun.setOnClickListener(new StopRun());
         //重新登录
         Button relogin = findViewById(R.id.relogin);
         relogin.setOnClickListener(new ReLogin());
@@ -136,6 +142,46 @@ public class ExtendActivity extends BaseActivity {
             intent.putExtra("actionType", "continue"); // 指定为继续运行
             sendBroadcast(intent);
             ToastUtil.makeText(ExtendActivity.this, "已发送继续执行任务请求", Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    /**
+     * 暂停运行任务
+     */
+    private class PauseRun implements View.OnClickListener {
+        @Override
+        public void onClick(View v) {
+            long currentTime = System.currentTimeMillis();
+            if (currentTime - lastReRunClickTime < CLICK_INTERVAL_THRESHOLD) {
+                long remainingTime = (CLICK_INTERVAL_THRESHOLD - (currentTime - lastReRunClickTime)) / 1000;
+                ToastUtil.makeText(ExtendActivity.this, "操作过于频繁，请" + remainingTime + "秒后再试", Toast.LENGTH_SHORT).show();
+                return;
+            }
+            lastReRunClickTime = currentTime;
+            Intent intent = new Intent("com.eg.android.AlipayGphone.sesame.rerun");
+            intent.putExtra("actionType", "pause");
+            sendBroadcast(intent);
+            ToastUtil.makeText(ExtendActivity.this, "已发送暂停任务请求", Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    /**
+     * 停止/清除运行任务
+     */
+    private class StopRun implements View.OnClickListener {
+        @Override
+        public void onClick(View v) {
+            long currentTime = System.currentTimeMillis();
+            if (currentTime - lastReRunClickTime < CLICK_INTERVAL_THRESHOLD) {
+                long remainingTime = (CLICK_INTERVAL_THRESHOLD - (currentTime - lastReRunClickTime)) / 1000;
+                ToastUtil.makeText(ExtendActivity.this, "操作过于频繁，请" + remainingTime + "秒后再试", Toast.LENGTH_SHORT).show();
+                return;
+            }
+            lastReRunClickTime = currentTime;
+            Intent intent = new Intent("com.eg.android.AlipayGphone.sesame.rerun");
+            intent.putExtra("actionType", "stop");
+            sendBroadcast(intent);
+            ToastUtil.makeText(ExtendActivity.this, "已发送停止并清除任务请求", Toast.LENGTH_SHORT).show();
         }
     }
 

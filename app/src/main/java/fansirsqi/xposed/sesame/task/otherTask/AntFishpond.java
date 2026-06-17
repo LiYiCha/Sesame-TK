@@ -58,7 +58,7 @@ public class AntFishpond extends BaseCommTask {
     }
 
     private String getData(String str) {
-        return MessageFormat.format("\"requestType\": \"NORMAL\",\n\"sceneCode\": \"{0}\",\n\"source\": \"ch_alipaysearch__chsub_normal\",\n\"version\": \"20240722.01\"", str);
+        return MessageFormat.format("\"requestType\": \"NORMAL\",\n\"sceneCode\": \"{0}\",\n\"source\": \"ch_appcollect__chsub_my-myFavorite\",\n\"version\": \"20260211.01\"", str);
     }
 
     public AntFishpond() {
@@ -106,6 +106,7 @@ public class AntFishpond extends BaseCommTask {
             }
             
             JSONObject requestString = requestString("com.alipay.antfishpond.listTask", getData());
+            refinedOperation();
             if (requestString == null) {
                 return;
             }
@@ -130,7 +131,7 @@ public class AntFishpond extends BaseCommTask {
             final String EXTEND_RECEIVED_ROD_COUNT = "receivedRodCount";
 
             String result = RequestManager.requestString("com.alipay.antfishpond.querySubplotsActivity",
-                    "[{\"requestType\":\"NORMAL\",\"sceneCode\":\"GameCenter\",\"source\":\"ch_searchbox_qudiaoyu\",\"version\":\"20240722.01\"}]");
+                    "[{\"requestType\":\"NORMAL\",\"sceneCode\":\"GameCenter\",\"source\":\"ch_appcollect__chsub_my-myFavorite\",\"version\":\"20260211.01\"}]");
             JSONObject requestString = new JSONObject(result);
             if (requestString == null) return;
 
@@ -726,6 +727,7 @@ public class AntFishpond extends BaseCommTask {
         JSONObject requestString;
         try {
             JSONObject requestString2 = requestString("com.alipay.antfishpond.fishpondIndex", getData());
+            refinedOperation();
             if (requestString2 == null || !String.valueOf(true).equals(JsonUtil.getValueByPath(requestString2, "roundInfo.canExchange")) || (requestString = requestString("com.alipay.antfishpond.fishpondExchangeReward", getData())) == null) {
                 return;
             }
@@ -761,6 +763,15 @@ public class AntFishpond extends BaseCommTask {
             }
         } catch (Exception e) {
             Log.error(this.TAG, "finishExtraTask Error: " + e.getMessage());
+        }
+    }
+
+    private void refinedOperation() {
+        try {
+            String params = "[{\"actionId\":\"ENTER_FISHPOND_POP\",\"requestType\":\"NORMAL\",\"sceneCode\":\"GameCenter\",\"source\":\"ch_appcollect__chsub_my-myFavorite\",\"version\":\"20260211.01\"}]";
+            RequestManager.requestString("com.alipay.antfishpond.refinedOperation", params);
+        } catch (Exception e) {
+            Log.error(this.TAG, "refinedOperation Error: " + e.getMessage());
         }
     }
 }

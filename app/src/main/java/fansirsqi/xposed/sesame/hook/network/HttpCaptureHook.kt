@@ -413,7 +413,7 @@ object HttpCaptureHook {
             val host = try { java.net.URI(url).host ?: "" } catch (_: Throwable) { "" }
             val opType = reqHeadersMap["Operation-Type"] ?: reqHeadersMap["operation-type"] ?: ""
             
-            val filterKeywords = BaseModel.httpCaptureFilter.value
+            val filterKeywords = getFilterKeywords()
             if (!filterKeywords.isNullOrBlank()) {
                 val keywords = filterKeywords.split(",").map { it.trim() }.filter { it.isNotEmpty() }
                 val urlLower = url.lowercase()
@@ -490,7 +490,7 @@ object HttpCaptureHook {
             val headers = try { connection.requestProperties.mapValues { it.value.joinToString(", ") } } catch (_: Exception) { emptyMap() }
             val opType = headers["Operation-Type"] ?: headers["operation-type"] ?: ""
             
-            val filterKeywords = BaseModel.httpCaptureFilter.value
+            val filterKeywords = getFilterKeywords()
             if (!filterKeywords.isNullOrBlank()) {
                 val keywords = filterKeywords.split(",").map { it.trim() }.filter { it.isNotEmpty() }
                 val urlLower = url.lowercase()
@@ -544,7 +544,7 @@ object HttpCaptureHook {
             val host = try { java.net.URI(url).host ?: "" } catch (_: Throwable) { "" }
             val opType = reqHeaders["Operation-Type"] ?: reqHeaders["operation-type"] ?: ""
             
-            val filterKeywords = BaseModel.httpCaptureFilter.value
+            val filterKeywords = getFilterKeywords()
             if (!filterKeywords.isNullOrBlank()) {
                 val keywords = filterKeywords.split(",").map { it.trim() }.filter { it.isNotEmpty() }
                 val urlLower = url.lowercase()
@@ -719,9 +719,18 @@ object HttpCaptureHook {
         }
     }
 
+    private fun getFilterKeywords(): String {
+        return try {
+            val filter = DataStore.get("httpCaptureFilter", String::class.java)
+            if (!filter.isNullOrBlank()) filter else BaseModel.httpCaptureFilter.value
+        } catch (_: Throwable) {
+            BaseModel.httpCaptureFilter.value
+        }
+    }
+
     private fun isBlacklisted(record: CaptureRecord): Boolean {
         try {
-            val filterKeywords = BaseModel.httpCaptureFilter.value
+            val filterKeywords = getFilterKeywords()
             if (!filterKeywords.isNullOrBlank()) {
                 val keywords = filterKeywords.split(",").map { it.trim() }.filter { it.isNotEmpty() }
                 val urlLower = record.url.lowercase()

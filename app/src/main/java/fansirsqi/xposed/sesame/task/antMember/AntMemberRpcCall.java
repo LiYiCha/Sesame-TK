@@ -1040,7 +1040,9 @@ public class AntMemberRpcCall {
         public static String collectProgressBall(JSONArray ballIdList) {
             try {
                 JSONObject args = new JSONObject();
-                args.put("ballIdList", ballIdList); // 直接用 JSONArray
+                args.put("newProgressBallIds", ballIdList);
+                args.put("ballIdList", new JSONArray()); // ballIdList passed as []
+                args.put("hitExperiment", true);
 
                 return RequestManager.requestString(
                         "com.antgroup.zmxy.zmcustprod.biz.rpc.growthbehavior.apiGrowthBehaviorRpcManager.collectProgressBall",

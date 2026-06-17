@@ -86,6 +86,22 @@
                 style="@style/Widget.App.Button.Main" />
 
             <Button
+                android:id="@+id/pause_run"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="暂停运行"
+                android:layout_marginBottom="8dp"
+                style="@style/Widget.App.Button.Main" />
+
+            <Button
+                android:id="@+id/stop_run"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="停止/清除运行"
+                android:layout_marginBottom="8dp"
+                style="@style/Widget.App.Button.Main" />
+
+            <Button
                 android:id="@+id/relogin"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"

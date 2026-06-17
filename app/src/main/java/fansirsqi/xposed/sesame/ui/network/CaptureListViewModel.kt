@@ -178,9 +178,11 @@ class CaptureListViewModel : ViewModel() {
     }
 
     fun toggleBlacklist(domain: String) {
-        val current = _blacklist.value.toMutableList()
-        if (current.contains(domain)) current.remove(domain) else current.add(domain)
-        saveBlacklist(current)
+        viewModelScope.launch(Dispatchers.Default) {
+            val current = _blacklist.value.toMutableList()
+            if (current.contains(domain)) current.remove(domain) else current.add(domain)
+            saveBlacklist(current)
+        }
     }
 
     private fun saveBlacklist(list: List<String>) {

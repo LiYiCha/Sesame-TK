@@ -42,6 +42,15 @@ public class TaskScheduler {
     private static final AtomicBoolean isExecuting = new AtomicBoolean(false);
     private static final AtomicBoolean isScheduled = new AtomicBoolean(false);
     private static final AtomicBoolean isShuttingDown = new AtomicBoolean(false);
+    private static final AtomicBoolean isPaused = new AtomicBoolean(false);
+
+    public static void setPaused(boolean paused) {
+        isPaused.set(paused);
+    }
+
+    public static boolean isPaused() {
+        return isPaused.get();
+    }
 
     // 最小执行间隔（毫秒）
     private static final long MIN_EXECUTION_INTERVAL = 2000L;
@@ -148,6 +157,12 @@ public class TaskScheduler {
     private static void executeMainTask() {
         try {
             if (isShuttingDown.get()) {
+                return;
+            }
+
+            if (isPaused.get()) {
+                Log.runtime("⏸ 任务已暂停，跳过本次执行");
+                scheduleNextExecution(System.currentTimeMillis());
                 return;
             }
 

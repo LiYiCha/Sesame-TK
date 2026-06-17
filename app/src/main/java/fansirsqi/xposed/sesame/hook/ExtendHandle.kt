@@ -12,6 +12,8 @@ class ExtendHandle {
     companion object {
         private const val ACTION_RERUN = "rerun" // 重新运行
         private const val ACTION_CONTINUE = "continue" // 继续运行
+        private const val ACTION_PAUSE = "pause" // 暂停运行
+        private const val ACTION_STOP = "stop" // 停止运行
 
         /**
          * 处理重新运行或继续运行逻辑
@@ -21,12 +23,14 @@ class ExtendHandle {
             try {
                 when (actionType) {
                     ACTION_RERUN -> {
+                        TaskScheduler.setPaused(false)
                         // 重新运行：强制启动任务
                         TaskScheduler.executeTask()
                         Log.runtime("[ReRunReceiver]任务已重新启动✅")
                         Toast.show("任务已重新执行", true)
                     }
                     ACTION_CONTINUE -> {
+                        TaskScheduler.setPaused(false)
                         // 继续运行：检查任务是否正在运行
                         if (!TaskScheduler.isExecuting()) {
                             TaskScheduler.executeTask()
@@ -36,6 +40,17 @@ class ExtendHandle {
                             Log.runtime("[ContinueRunReceiver]任务已在运行中")
                             Toast.show("任务已在运行中", true)
                         }
+                    }
+                    ACTION_PAUSE -> {
+                        TaskScheduler.setPaused(true)
+                        Log.runtime("[PauseRunReceiver]任务已暂停⏸")
+                        Toast.show("任务已暂停", true)
+                    }
+                    ACTION_STOP -> {
+                        TaskScheduler.setPaused(false)
+                        TaskScheduler.shutdownExecutors()
+                        Log.runtime("[StopRunReceiver]任务已停止运行🛑")
+                        Toast.show("任务已停止并清除", true)
                     }
                 }
             } catch (e: Exception) {

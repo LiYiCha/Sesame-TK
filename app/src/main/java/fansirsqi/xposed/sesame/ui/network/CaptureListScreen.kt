@@ -619,7 +619,18 @@ private fun BlacklistSheet(
                             selected = false,
                             onClick = {},
                             label = { Text(domain) },
-                            trailingIcon = { Icon(Icons.Rounded.Close, "删除", modifier = Modifier.size(16.dp).clickable { onRemove(domain) }) }
+                            trailingIcon = {
+                                IconButton(
+                                    onClick = { onRemove(domain) },
+                                    modifier = Modifier.size(18.dp)
+                                ) {
+                                    Icon(
+                                        Icons.Rounded.Close,
+                                        "删除",
+                                        modifier = Modifier.size(14.dp)
+                                    )
+                                }
+                            }
                         )
                     }
                 }

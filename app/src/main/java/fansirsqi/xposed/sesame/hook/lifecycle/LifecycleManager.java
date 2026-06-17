@@ -96,37 +96,11 @@ public class LifecycleManager {
      */
     public static synchronized void reloadConfig(String userId) {
         try {
-            Log.runtime(TAG, "⚡ 收到配置更新，开始软重载配置");
-            Config.load(userId);
-
-            Service service = AppContext.getService();
-            if (service != null) {
-                if (BaseModel.getStayAwake().getValue()) {
-                    WakeLockManager.acquire(service, service.getClass().getName());
-                } else {
-                    WakeLockManager.release();
-                }
-            }
-
-            ClassLoader classLoader = AppContext.getClassLoader();
-            if (classLoader != null) {
-                Model baseModel = Model.getModel(BaseModel.class);
-                if (baseModel != null) {
-                    baseModel.boot(classLoader);
-                }
-
-                // 软重载时，如果开启了网络抓包，动态注册抓包 Hook（内部有防重复 Hook 保护）
-                if (BaseModel.enableHttpCapture.getValue()) {
-                    fansirsqi.xposed.sesame.hook.network.HttpCaptureHook.setup(classLoader);
-                    fansirsqi.xposed.sesame.hook.network.NetworkHook.setupHooks(classLoader);
-                    Log.runtime(TAG, "⚡ 动态注册网络抓包 Hook 成功");
-                }
-            }
-
-            Log.runtime(TAG, "✅ 配置软重载完成");
-            Toast.show("⚙️ 配置已热生效");
+            Log.runtime(TAG, "⚡ 收到配置更新，开始软重启配置");
+            initHandler(true);
+            Log.runtime(TAG, "✅ 配置软重启完成");
         } catch (Throwable t) {
-            Log.runtime(TAG, "❌ 软重载配置失败: " + t.getMessage());
+            Log.runtime(TAG, "❌ 软重启配置失败: " + t.getMessage());
             Log.printStackTrace(TAG, t);
         }
     }
