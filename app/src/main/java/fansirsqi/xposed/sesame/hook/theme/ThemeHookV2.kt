@@ -56,13 +56,13 @@ object ThemeHookV2 {
         }
 
         if (!enabled) {
-            Log.runtime(TAG, "⛔ 主题Hook已关闭")
+            //Log.runtime(TAG, "⛔ 主题Hook已关闭")
             isHooked = false
             return
         }
 
         if (isHooked) {
-            Log.runtime(TAG, "⚠️ 主题Hook已经应用")
+            //Log.runtime(TAG, "⚠️ 主题Hook已经应用")
             return
         }
 
@@ -88,7 +88,7 @@ object ThemeHookV2 {
             hookResourceLoad(classLoader)
 
             isHooked = true
-            Log.runtime(TAG, "✅ 主题Hook应用成功")
+            //Log.runtime(TAG, "✅ 主题Hook应用成功")
 
         } catch (e: Exception) {
             Log.runtime(TAG, "❌ 主题Hook应用失败: ${e.message}")

@@ -348,11 +348,19 @@ class AntOrchard : ModelTask() {
     }
 
     private fun receiveMoneyTreeReward() {
+        if (plantModeField.value == PlantModeType.MAIN) {
+            return
+        }
         try {
             val cal = Calendar.getInstance()
             val hour = cal.get(Calendar.HOUR_OF_DAY)
             // 每天7点后尝试领取
             if (hour >= 7 && !Status.hasFlagToday(STATUS_MONEY_TREE_COLLECTED)) {
+                try {
+                    AntOrchardRpcCall.switchPlantScene("yeb")
+                    CoroutineUtils.sleepCompat(500)
+                } catch (ignore: Throwable) {}
+
                 Log.runtime(TAG, "检测到7点已过，尝试领取摇钱树余额奖励...")
                 val res = AntOrchardRpcCall.moneyTreeTrigger()
                 val json = JSONObject(res)
@@ -370,6 +378,11 @@ class AntOrchard : ModelTask() {
                 } else {
                     Log.runtime(TAG, "摇钱树奖励领取失败: ${json.toString()}")
                 }
+
+                try {
+                    AntOrchardRpcCall.switchPlantScene("main")
+                    CoroutineUtils.sleepCompat(500)
+                } catch (ignore: Throwable) {}
             }
         } catch (t: Throwable) {
             Log.printStackTrace(TAG, "receiveMoneyTreeReward err:", t)

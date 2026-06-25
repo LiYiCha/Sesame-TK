@@ -712,9 +712,12 @@ class NpcChicken {
             val animal = animals.getJSONObject(i)
             val subAnimalType = animal.optString("subAnimalType")
             val masterFarmId = animal.optString("masterFarmId")
+            val animalInteractStatus = animal.optString("animalInteractStatus")
 
-            // 别人的小鸡：masterFarmId 不等于我们，且 subAnimalType 是 GUEST (偷吃鸡)
-            if (masterFarmId.isNotEmpty() && masterFarmId != ownerFarmId && subAnimalType == "GUEST") {
+            // 别人的小鸡：masterFarmId 不等于我们，且当前状态是偷吃，且不是 NPC 和工作小鸡
+            if (masterFarmId.isNotEmpty() && masterFarmId != ownerFarmId && 
+                subAnimalType != "NPC" && subAnimalType != "WORK" && 
+                animalInteractStatus == "STEALING") {
                 val animalId = animal.optString("animalId")
                 val currentFarmId = animal.optString("currentFarmId")
                 val nickname = animal.optString("name", "别人的小鸡")

@@ -660,12 +660,16 @@ class LogViewerViewModel : ViewModel() {
                             }
 
                             if (newLen > currentRaf.filePointer) {
-                                val chunk = ByteArray((newLen - currentRaf.filePointer).toInt())
-                                currentRaf.readFully(chunk)
-                                val text = String(chunk, Charsets.UTF_8)
-
-                                withContext(Dispatchers.Main) {
-                                    appendLog(text)
+                                val size = (newLen - currentRaf.filePointer).toInt()
+                                if (size > 0) {
+                                    val chunk = ByteArray(size)
+                                    val readBytes = currentRaf.read(chunk)
+                                    if (readBytes > 0) {
+                                        val text = String(chunk, 0, readBytes, Charsets.UTF_8)
+                                        withContext(Dispatchers.Main) {
+                                            appendLog(text)
+                                        }
+                                    }
                                 }
                             }
                         } catch (e: Exception) {

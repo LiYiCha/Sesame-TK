@@ -39,6 +39,7 @@ import fansirsqi.xposed.sesame.util.ToastUtil
 import kotlinx.coroutines.launch
 import java.io.File
 import androidx.activity.compose.BackHandler
+import androidx.compose.material3.HorizontalDivider
 
 /**
  * Compose 版本的日志查看器 Activity
@@ -310,7 +311,7 @@ fun LogViewerScreen(
                                 viewModel.toggleSelectionMode(!uiState.isSelectionMode)
                             }
                         )
-                        Divider()
+                        HorizontalDivider()
                         DropdownMenuItem(
                             text = { Text("导出文件") },
                             onClick = {

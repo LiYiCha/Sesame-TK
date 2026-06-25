@@ -40,6 +40,8 @@ object CoroutineUtils {
             runBlocking {
                 delay(millis)
             }
+        } catch (ce: kotlinx.coroutines.CancellationException) {
+            throw ce
         } catch (e: Exception) {
             // 降级到传统的 Thread.sleep()
             try {

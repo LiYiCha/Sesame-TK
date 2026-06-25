@@ -45,6 +45,36 @@ public class MemberNew extends BaseCommTask {
     public MemberNew() {
         this.displayName = "会员积分💎";
     }
+    private boolean checkResponseError1009(JSONObject response) {
+        if (response == null) return false;
+        String errorMessage = response.optString("errorMessage", "");
+        String resultDesc = response.optString("resultDesc", "");
+        String errorTip = response.optString("errorTip", "");
+        if (errorMessage.contains("人气太旺") || errorMessage.contains("请稍后再试") ||
+            resultDesc.contains("人气太旺") || resultDesc.contains("请稍后再试") ||
+            response.optInt("error", 0) == 1009 || "1009".equals(errorTip)) {
+            hasError1009 = true;
+            Log.error(TAG, "服务器限流，停止重试");
+            return true;
+        }
+        return false;
+    }
+
+    private boolean checkBoxError1009(JSONObject response) {
+        if (response == null) return false;
+        String errorMessage = response.optString("errorMessage", "");
+        String resultDesc = response.optString("resultDesc", "");
+        String errorTip = response.optString("errorTip", "");
+        if (errorMessage.contains("人气太旺") || errorMessage.contains("请稍后再试") ||
+            resultDesc.contains("人气太旺") || resultDesc.contains("请稍后再试") ||
+            response.optInt("error", 0) == 1009 || "1009".equals(errorTip)) {
+            Log.error(TAG, "宝箱服务器限流，设置宝箱冷却2小时");
+            Status.setTemporaryStatusWithExpiry("MemberNew_Box_1009", 2 * 60 * 60 * 1000);
+            return true;
+        }
+        return false;
+    }
+
     @SuppressLint("SimpleDateFormat")
     @Override
     protected void handle() {
@@ -70,27 +100,26 @@ public class MemberNew extends BaseCommTask {
             hasError1009 = false;
             hasEmptyTask = true;
             
+            boolean initSuccess = false;
             // 1. 初始化会员中心
-            if (!initMemberCenterSafe()) {
-                return;
+            if (initMemberCenterSafe() && !hasError1009) {
+                initSuccess = true;
+                // 2. 处理签到
+                if (handleSignInSafe() && !hasError1009) {
+                    // 3. 处理任务列表
+                    handleTaskListsSafe();
+                }
             }
             
-            // 2. 处理签到
-            if (!handleSignInSafe()) {
-                return;
-            }
-            
-            // 3. 处理任务列表
-            handleTaskListsSafe();
-
-            // 处理宝箱任务（如果完成了就得等大概四小时）
+            // 宝箱任务独立运行，不受 hasError1009 控制
             handBox();
             
-            // 4. 处理累积奖励
-            handleTaskSuccessSafe();
-            
-            // 5. 查询积分
-            queryPointCertSafe(1, 8, false);
+            if (initSuccess && !hasError1009) {
+                // 4. 处理累积奖励
+                handleTaskSuccessSafe();
+                // 5. 查询积分
+                queryPointCertSafe(1, 8, false);
+            }
             
             // 根据执行结果设置不同的冷却时间
             long cooldownTime;
@@ -181,6 +210,7 @@ public class MemberNew extends BaseCommTask {
                     Status.setFlagToday(CompletedKeyEnum.MemberSignIn.name());
                 } else {
                     Log.error(TAG, "签到失败: " + response.optString("resultDesc"));
+                    checkResponseError1009(response);
                     TimeUtil.sleep((long) this.executeIntervalInt);
                     return false;
                 }
@@ -663,13 +693,8 @@ public class MemberNew extends BaseCommTask {
                     
                 } else {
                     Log.error(TAG, "签到页任务列表请求失败: " + response);
-                    // 检查是否是服务器限流错误
-                    String errorMessage = response.optString("errorMessage", "");
-                    if (errorMessage.contains("人气太旺") || errorMessage.contains("请稍后再试") || 
-                        response.optInt("error", 0) == 1009) {
-                        Log.error(TAG, "服务器限流，停止重试");
-                        hasError1009 = true; // 标记1009错误
-                        break; // 服务器限流，直接退出循环
+                    if (checkResponseError1009(response)) {
+                        break;
                     }
                     retryCount++;
                 }
@@ -832,6 +857,7 @@ public class MemberNew extends BaseCommTask {
                 }
             } else {
                 Log.error(TAG, "查询全部状态任务列表失败: " + response);
+                checkResponseError1009(response);
                 // 失败时不设置今日已完成标记，以便下次重新尝试
             }
             sleepRandomTime();
@@ -925,11 +951,18 @@ public class MemberNew extends BaseCommTask {
      * 处理宝箱任务（开宝箱 + 广告任务）
      */
     private void handBox() {
+        if (Status.hasTemporaryStatusValid("MemberNew_Box_1009")) {
+            Log.runtime(TAG, "宝箱限流冷却中，跳过宝箱任务");
+            return;
+        }
         try {
             // 1. 查询宝箱状态
             String queryResponse = AntMemberRpcCall.querySignFloatingBall();
             JSONObject json = new JSONObject(queryResponse);
             
+            if (checkBoxError1009(json)) {
+                return;
+            }
             if (!json.optBoolean("success")) {
                 Log.error(TAG, "查询宝箱状态失败: " + json.optString("resultDesc"));
                 return;
@@ -952,8 +985,7 @@ public class MemberNew extends BaseCommTask {
                 JSONObject triggerResult = new JSONObject(AntMemberRpcCall.triggerSignFloatingBall(taskBizNo));
                 
                 // 检查1009错误
-                if (triggerResult.optInt("error", 0) == 1009) {
-                    hasError1009 = true;
+                if (checkBoxError1009(triggerResult)) {
                     Log.error(TAG, "开宝箱触发1009错误");
                     return;
                 }
@@ -991,6 +1023,9 @@ public class MemberNew extends BaseCommTask {
             while (currentBizNo != null && !currentBizNo.isEmpty()) {
                 // 查询广告任务情况
                 JSONObject queryResult = new JSONObject(AntMemberRpcCall.querySignFloatingBallAdTask(currentBizNo));
+                if (checkBoxError1009(queryResult)) {
+                    break;
+                }
                 if (!queryResult.optBoolean("success")) {
                     Log.error(TAG, "查询宝箱广告任务失败: " + queryResult);
                     break;
@@ -1019,8 +1054,7 @@ public class MemberNew extends BaseCommTask {
                 JSONObject triggerResult = new JSONObject(AntMemberRpcCall.triggerAdTask(taskBizNo));
                 
                 // 检查1009错误
-                if (triggerResult.optInt("error", 0) == 1009) {
-                    hasError1009 = true;
+                if (checkBoxError1009(triggerResult)) {
                     Log.error(TAG, "宝箱广告任务触发1009错误");
                     break;
                 }

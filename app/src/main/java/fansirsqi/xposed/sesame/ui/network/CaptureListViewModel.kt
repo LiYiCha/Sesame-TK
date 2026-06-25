@@ -178,18 +178,16 @@ class CaptureListViewModel : ViewModel() {
     }
 
     fun toggleBlacklist(domain: String) {
-        viewModelScope.launch(Dispatchers.Default) {
-            val current = _blacklist.value.toMutableList()
-            if (current.contains(domain)) current.remove(domain) else current.add(domain)
-            saveBlacklist(current)
-        }
-    }
-
-    private fun saveBlacklist(list: List<String>) {
-        val str = list.distinct().joinToString(",")
+        val current = _blacklist.value.toMutableList()
+        if (current.contains(domain)) current.remove(domain) else current.add(domain)
+        
+        val str = current.distinct().joinToString(",")
         BaseModel.httpCaptureFilter.value = str
-        fansirsqi.xposed.sesame.util.DataStore.put(BaseModel.httpCaptureFilter.code, str)
-        _blacklist.value = list
+        _blacklist.value = current
+        
+        viewModelScope.launch(Dispatchers.IO) {
+            fansirsqi.xposed.sesame.util.DataStore.put(BaseModel.httpCaptureFilter.code, str)
+        }
     }
 
     // ── 数据加载 ───────────────────────────

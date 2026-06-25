@@ -130,8 +130,10 @@ abstract class ModelTask : Model() {
      * Kotlin子类应该覆盖此方法
      */
     protected open suspend fun runSuspend() {
-        // 默认调用Java兼容的run方法
-        runJava()
+        // 使用 runInterruptibly 运行 Java 兼容的 run 方法，以保证协程取消时能自动中断阻塞线程中的 Thread.sleep()
+        runInterruptible {
+            runJava()
+        }
     }
 
     /**

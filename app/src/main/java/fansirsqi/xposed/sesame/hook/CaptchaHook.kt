@@ -54,8 +54,8 @@ object CaptchaHook {
         savedClassLoader = classLoader
         if (hasSetup) return
         hasSetup = true
-        Log.runtime(TAG, "验证码Hook系统初始化完成")
-        Log.runtime(TAG, "⚠️ Hook配置将在配置文件加载后同步")
+        // Log.runtime(TAG, "验证码Hook系统初始化完成")
+        // Log.runtime(TAG, "⚠️ Hook配置将在配置文件加载后同步")
 
         // 注意：此时配置文件还未加载，不能立即应用Hook
         // 实际的Hook应用会在BaseModel.boot()中进行
@@ -74,7 +74,7 @@ object CaptchaHook {
         }
 
         //Log.runtime(TAG, "📝 更新验证码Hook状态:")
-        Log.runtime(TAG, "  UI层拦截: ${if (enableUI) "✅ 开启" else "⛔ 关闭"}")
+        //Log.runtime(TAG, "  UI层拦截: ${if (enableUI) "✅ 开启" else "⛔ 关闭"}")
 
         // 先卸载所有现有Hook
         unhookAll()
@@ -84,7 +84,7 @@ object CaptchaHook {
             //Log.runtime(TAG, "  🔧 设置UI层拦截...")
             uiHookUnhook = hookCaptchaDialogShow(classLoader)
         } else {
-            Log.runtime(TAG, "  ⚠️ 验证码拦截已关闭")
+            //Log.runtime(TAG, "  ⚠️ 验证码拦截已关闭")
         }
 
         //Log.runtime(TAG, "验证码Hook更新完成 ✅")

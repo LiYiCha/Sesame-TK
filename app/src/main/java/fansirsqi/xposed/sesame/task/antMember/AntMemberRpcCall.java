@@ -151,6 +151,24 @@ public class AntMemberRpcCall {
     }
 
     /**
+     * 游戏中心金币抽奖主页查询
+     * 对应: com.alipay.gamecenteruprod.biz.rpc.p2e.queryHomePage
+     */
+    public static String queryGameCenterHomePage() {
+        return RequestManager.requestString("com.alipay.gamecenteruprod.biz.rpc.p2e.queryHomePage",
+                "[{\"canAddHome\":false,\"deviceLevel\":\"high\",\"screenType\":10,\"source\":\"ch_appcenter__chsub_9patch\",\"unityDeviceLevel\":\"high\"}]");
+    }
+
+    /**
+     * 游戏中心金币抽奖
+     * 对应: com.alipay.gamecenteruprod.biz.rpc.p2e.drawGold
+     */
+    public static String drawGold() {
+        return RequestManager.requestString("com.alipay.gamecenteruprod.biz.rpc.p2e.drawGold",
+                "[{\"canAddHome\":false,\"deviceLevel\":\"high\",\"screenType\":10,\"source\":\"ch_appcenter__chsub_9patch\",\"unityDeviceLevel\":\"high\"}]");
+    }
+
+    /**
      * 游戏中心普通平台任务完成（如貔貅任务）
      * 对应: com.alipay.gamecenteruprod.biz.rpc.v3.doTaskSend
      */
@@ -1041,7 +1059,7 @@ public class AntMemberRpcCall {
             try {
                 JSONObject args = new JSONObject();
                 args.put("newProgressBallIds", ballIdList);
-                args.put("ballIdList", new JSONArray()); // ballIdList passed as []
+                args.put("ballIdList", ballIdList); // Populate both fields to support all ball versions
                 args.put("hitExperiment", true);
 
                 return RequestManager.requestString(

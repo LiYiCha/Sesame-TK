@@ -51,7 +51,8 @@ public class Reserve extends ModelTask {
             return true;
         }
     }
-    public void run() {
+    @Override
+    public void runJava() {
         try {
             Log.runtime("开始保护地任务");
             animalReserve();

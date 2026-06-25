@@ -200,7 +200,6 @@ public class BaseModel extends Model {
             fansirsqi.xposed.sesame.hook.CaptchaHook.INSTANCE.updateHooks(
                     enableCaptchaUIHook.getValue()
             );
-            Log.runtime(TAG, "✅ 验证码Hook配置已同步");
         } catch (Throwable t) {
             Log.error(TAG, "❌ 验证码Hook配置同步失败");
             Log.printStackTrace(TAG, t);

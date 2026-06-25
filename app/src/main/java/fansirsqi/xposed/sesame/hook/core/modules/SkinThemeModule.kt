@@ -19,34 +19,12 @@ class SkinThemeModule : HookModule {
     }
 
     override fun onPostAppAttach(context: Context, classLoader: ClassLoader) {
-        // 初始化皮肤模块 hooks
+        // 初始化皮肤和主题模块 ClassLoader
         try {
             SkinHook.setupHooks(classLoader)
-            SkinHook.updateHooks(BaseModel.enableSkinModule.value)
-        } catch (t: Throwable) {
-            Log.runtime(TAG, "皮肤模块初始化异常:$t")
-            Log.printStackTrace(TAG, t)
-        }
-
-        // 初始化主题Hook模块（动态版本）
-        try {
             ThemeHookV2.setupHooks(classLoader)
-            ThemeHookV2.applyHooks(BaseModel.enableSkinModule.value)
         } catch (t: Throwable) {
-            Log.runtime(TAG, "主题Hook模块初始化异常:$t")
-            Log.printStackTrace(TAG, t)
-        }
-
-        // 处理主题操作
-        try {
-            ThemeManager.handleThemeOperations()
-            // 如果启用了主题模块，启动监控
-            if (BaseModel.enableMonitorSkinModule.value) {
-                ThemeManager.startOperationMonitor()
-            }
-        } catch (t: Throwable) {
-            Log.runtime(TAG, "主题操作处理异常")
-            Log.printStackTrace(TAG, t)
+            Log.runtime(TAG, "SkinThemeModule setupHooks 异常: $t")
         }
     }
 }

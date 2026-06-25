@@ -64,6 +64,7 @@ class MainActivity : BaseActivity() {
     private var userNameArray = arrayOf("默认")
     private var userEntityArray = arrayOf<UserEntity?>(null)
     private val oneWordText = mutableStateOf("正在获取随机一言...")
+    private val deviceInfoState = mutableStateOf<Map<String, String>>(emptyMap())
     private var hasPermissions = false
     private var isClick = false
     private val viewHandler = Handler(Looper.getMainLooper())
@@ -87,10 +88,11 @@ class MainActivity : BaseActivity() {
         setContentView(R.layout.activity_main)
         val deviceInfo: ComposeView = findViewById(R.id.device_info)
         //val v = WatermarkView.install(this)
+        deviceInfoState.value = DeviceInfoUtil.showInfo(verifyId, "未登录")
         deviceInfo.setContent {
             SesameTheme {
                 DeviceInfoCard(
-                    info = DeviceInfoUtil.showInfo(verifyId),
+                    info = deviceInfoState.value,
                     oneWord = oneWordText.value
                 )
             }
@@ -177,6 +179,18 @@ class MainActivity : BaseActivity() {
                 }
 
                 try {
+                    val activeUserId = Files.getActiveUser()
+                    var activeUserShow = "未登录"
+                    if (!activeUserId.isNullOrEmpty()) {
+                        UserMap.loadSelf(activeUserId)
+                        val activeUserEntity = UserMap.get(activeUserId)
+                        activeUserShow = if (activeUserEntity == null) {
+                            activeUserId
+                        } else {
+                            activeUserEntity.showName + " (" + activeUserEntity.account + ")"
+                        }
+                    }
+
                     val userNameList: MutableList<String> = ArrayList()
                     val userEntityList: MutableList<UserEntity?> = ArrayList()
                     val configFiles = Files.CONFIG_DIR.listFiles()
@@ -186,27 +200,39 @@ class MainActivity : BaseActivity() {
                                 val userId = configDir.name
                                 UserMap.loadSelf(userId)
                                 val userEntity = UserMap.get(userId)
-                                val userName = if (userEntity == null) {
+                                var userName = if (userEntity == null) {
                                     userId
                                 } else {
                                     userEntity.showName + ": " + userEntity.account
+                                }
+                                if (!activeUserId.isNullOrEmpty() && userId == activeUserId) {
+                                    userName += " (当前)"
                                 }
                                 userNameList.add(userName)
                                 userEntityList.add(userEntity)
                             }
                         }
                     }
-                    userNameList.add(0, "默认")
+                    var defaultName = "默认"
+                    if (activeUserId.isNullOrEmpty() || activeUserId == "默认" || activeUserId == "default") {
+                        defaultName += " (当前)"
+                    }
+                    userNameList.add(0, defaultName)
                     userEntityList.add(0, null)
+
+                    val newInfo = DeviceInfoUtil.showInfo(verifyId, activeUserShow)
+
                     withContext(Dispatchers.Main) {
                         userNameArray = userNameList.toTypedArray<String>()
                         userEntityArray = userEntityList.toTypedArray<UserEntity?>()
+                        deviceInfoState.value = newInfo
                     }
                 } catch (e: Exception) {
                     Log.printStackTrace(e)
                     withContext(Dispatchers.Main) {
                         userNameArray = arrayOf("默认")
                         userEntityArray = arrayOf(null)
+                        deviceInfoState.value = DeviceInfoUtil.showInfo(verifyId, "未登录")
                     }
                 }
             }

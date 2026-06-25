@@ -29,8 +29,8 @@ object RpcIntervalLimit {
     fun addIntervalLimit(method: String, intervalLimit: IntervalLimit) {
         synchronized(intervalLimitMap) {
             if (intervalLimitMap.containsKey(method)) {
-                Log.runtime(TAG, "方法：$method 间隔限制已存在")
-                throw IllegalArgumentException("方法：$method 间隔限制已存在")
+                Log.runtime(TAG, "方法：$method 间隔限制已存在，跳过重复添加")
+                return
             }
             intervalLimitMap[method] = intervalLimit
         }

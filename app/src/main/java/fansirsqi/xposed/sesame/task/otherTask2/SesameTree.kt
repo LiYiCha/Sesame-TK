@@ -148,12 +148,15 @@ class SesameTree {
                 val taskType = taskMaterial?.optString("taskType") ?: ""
 
                 // 跳过任务判断
-                if (shouldSkipTask(needSignUp, taskProcessStatus, taskType, title, blackCache)) {
+                val canAccess = task.optBoolean("canAccess", true)
+                if (shouldSkipTask(needSignUp, taskProcessStatus, taskType, title, blackCache, canAccess)) {
                     continue
                 }
 
+                val needReceive = task.optBoolean("needManuallyReceiveAward", true)
+
                 // 执行任务
-                executeTask(taskId, title)
+                executeTask(taskId, title, needReceive)
 
             } catch (e: Exception) {
                 Log.error(TAG, "处理单个任务异常:${e}")
@@ -167,8 +170,13 @@ class SesameTree {
         taskProcessStatus: String,
         taskType: String,
         title: String,
-        blackCache: Set<String>
+        blackCache: Set<String>,
+        canAccess: Boolean
     ): Boolean {
+        // 如果受中奖限制/频次限制，则跳过
+        if (!canAccess) {
+            return true
+        }
         // 如果需要报名、已完成或不是浏览器任务，则跳过
         if (needSignUp ||
             taskProcessStatus != "NOT_DONE") {
@@ -199,16 +207,20 @@ class SesameTree {
     }
 
     // 执行任务
-    private fun executeTask(taskId: String, title: String) {
+    private fun executeTask(taskId: String, title: String, needReceive: Boolean = true) {
         try {
             // 延迟15-16s
             TimeUtil.sleep(RandomUtil.nextLong(15000, 16000))
 
             // 完成任务 - 发送
             val sendSuccess = completeTask(taskId, "send")
-            TimeUtil.sleep(RandomUtil.nextLong(1500, 1600))
 
             if (sendSuccess) {
+                if (!needReceive) {
+                    Log.other(TAG, "完成[${title}]")
+                    return
+                }
+                TimeUtil.sleep(RandomUtil.nextLong(1500, 1600))
                 // 完成任务 - 领取
                 val receiveSuccess = completeTask(taskId, "receive")
                 if (receiveSuccess) {
@@ -325,6 +337,12 @@ class SesameTree {
             val taskBaseInfo = task.optJSONObject("taskBaseInfo")
             if (taskBaseInfo == null) return
 
+            // 过滤受中奖限制/频次限制等无法访问的任务
+            val canAccess = task.optBoolean("canAccess", true)
+            if (!canAccess) {
+                return
+            }
+
             var taskId = taskBaseInfo.optString("appletId")
             // 有些任务ID在taskId字段，有些在appletId，做个兼容
             if (taskId.isNullOrEmpty()) {
@@ -342,14 +360,27 @@ class SesameTree {
                 return
             }
 
+            // 过滤非浏览器/非关注等任务类型 (如小游戏转化任务 COMP_TRANS / TRANSFORMER 等)
+            val taskMaterial = task.optJSONObject("taskMaterial")
+            val taskType = task.optString("taskType").takeIf { it.isNotEmpty() }
+                ?: taskMaterial?.optString("taskType")
+                ?: taskBaseInfo.optString("appletType")
+                ?: ""
+
+            val allowedTypes = setOf("BROWSER", "DIVERSION", "CONTINUE_SIGN_TASK")
+            if (taskType.isNotEmpty() && taskType !in allowedTypes) {
+                return
+            }
+
             // 解析奖励信息
             val prizeName = getPrizeName(task)
+            val needReceive = task.optBoolean("needManuallyReceiveAward", true)
 
             when (status) {
                 "NOT_DONE", "SIGNUP_COMPLETE" -> {
                     // SIGNUP_COMPLETE 通常表示已报名但未做，或者对于复访任务表示可以去完成
                     Log.runtime("芝麻树🌳[开始任务] $title${if (prizeName.isNotEmpty()) " ($prizeName)" else ""}")
-                    if (performTask(taskId, title, prizeName)) {
+                    if (performTask(taskId, title, prizeName, needReceive)) {
                         // 任务完成
                     }
                 }
@@ -400,7 +431,7 @@ class SesameTree {
     /**
      * 执行任务动作：去完成 -> 等待 -> 领取
      */
-    private fun performTask(taskId: String, title: String, prizeName: String): Boolean {
+    private fun performTask(taskId: String, title: String, prizeName: String, needReceive: Boolean): Boolean {
         try {
             if (title.contains("复访")) {
                 // 复访任务直接领取即可，无需发送 "send"
@@ -414,6 +445,12 @@ class SesameTree {
 
             // 发送"去完成"指令
             if (doTaskAction(taskId, "send", title)) {
+                if (!needReceive) {
+                    val logMsg = "芝麻树🌳[完成任务] $title #${if (prizeName.isNotEmpty()) prizeName else "已完成"}"
+                    Log.forest(logMsg)
+                    return true
+                }
+
                 var waitTime = 16000 // 默认等待16秒，覆盖大多数浏览任务
                 try {
                     Thread.sleep(waitTime.toLong())

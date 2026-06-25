@@ -686,8 +686,8 @@ fun LogContent(
     var activeDetailBlock by remember { mutableStateOf<RpcBlock?>(null) }
 
     // 自动滚动到底部
-    LaunchedEffect(uiState.displayedLines.size, uiState.autoScroll) {
-        if (uiState.autoScroll && uiState.displayedLines.isNotEmpty()) {
+    LaunchedEffect(uiState.displayedLines.size, uiState.autoScroll, uiState.searchKeyword) {
+        if (uiState.autoScroll && uiState.displayedLines.isNotEmpty() && uiState.searchKeyword.isEmpty()) {
             try {
                 lazyListState.scrollToItem(uiState.displayedLines.size - 1)
             } catch (e: Exception) {
@@ -697,7 +697,7 @@ fun LogContent(
     }
 
     // 自动滚动到当前搜索结果
-    LaunchedEffect(uiState.currentSearchIndex, uiState.searchResults) {
+    LaunchedEffect(uiState.currentSearchIndex, uiState.searchResults, uiState.displayedLineIndices) {
         if (uiState.currentSearchIndex >= 0 && uiState.searchResults.isNotEmpty()) {
             val currentResult = uiState.searchResults[uiState.currentSearchIndex]
             val targetLineIndex = currentResult.lineIndex

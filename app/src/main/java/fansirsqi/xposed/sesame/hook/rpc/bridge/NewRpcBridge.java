@@ -27,7 +27,7 @@ public class NewRpcBridge implements RpcBridge {
         return RpcVersion.NEW;
     }
     @Override
-    public void load() throws Exception {
+    public synchronized void load() throws Exception {
         loader = ApplicationHook.getClassLoader();
         try {
             Object service = XposedHelpers.callStaticMethod(XposedHelpers.findClass("com.alipay.mobile.nebulacore.Nebula", loader), "getService");
@@ -83,7 +83,7 @@ public class NewRpcBridge implements RpcBridge {
         }
     }
     @Override
-    public void unload() {
+    public synchronized void unload() {
         newRpcCallMethod = null;
         bridgeCallbackClazzArray = null;
         parseObjectMethod = null;
@@ -97,9 +97,33 @@ public class NewRpcBridge implements RpcBridge {
         }
         return null;
     }
+    private long lastLoadTime = 0;
+
+    private synchronized void checkInit() throws Exception {
+        if (newRpcCallMethod == null || newRpcInstance == null || parseObjectMethod == null || loader == null) {
+            long now = System.currentTimeMillis();
+            if (now - lastLoadTime > 10000) {
+                lastLoadTime = now;
+                try {
+                    load();
+                } catch (Throwable t) {
+                    Log.error(TAG, "Lazy load NewRpcBridge failed: " + t.getMessage());
+                    throw t;
+                }
+            } else {
+                throw new RuntimeException("NewRpcBridge not initialized (retry backoff)");
+            }
+        }
+    }
+
     @Override
     public RpcEntity requestObject(RpcEntity rpcEntity, int tryCount, int retryInterval) {
         if (ApplicationHook.isOffline()) {
+            return null;
+        }
+        try {
+            checkInit();
+        } catch (Throwable t) {
             return null;
         }
         try {

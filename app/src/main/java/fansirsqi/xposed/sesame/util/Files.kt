@@ -476,4 +476,33 @@ object Files {
         Log.error(TAG, "删除失败: ${file.absolutePath}")
         return false
     }
+
+    @JvmStatic
+    fun getActiveUserFile(): File {
+        return File(CONFIG_DIR, "active_user.txt")
+    }
+
+    @JvmStatic
+    fun saveActiveUser(userId: String) {
+        try {
+            write2File(userId, getActiveUserFile())
+        } catch (e: Exception) {
+            Log.printStackTrace(TAG, "saveActiveUser 错误", e)
+        }
+    }
+
+    @JvmStatic
+    fun getActiveUser(): String? {
+        return try {
+            val file = getActiveUserFile()
+            if (file.exists()) {
+                val content = readFromFile(file)?.trim()
+                if (!content.isNullOrEmpty()) content else null
+            } else {
+                null
+            }
+        } catch (e: Exception) {
+            null
+        }
+    }
 }

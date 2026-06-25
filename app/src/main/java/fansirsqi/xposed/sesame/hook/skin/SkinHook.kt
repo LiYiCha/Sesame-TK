@@ -71,7 +71,7 @@ object SkinHook {
         }
 
         //Log.runtime(TAG, "📝 更新皮肤模块Hook状态:")
-        Log.runtime(TAG, "  皮肤模块: ${if (enabled) "✅ 开启" else "⛔ 关闭"}")
+        //Log.runtime(TAG, "  皮肤模块: ${if (enabled) "✅ 开启" else "⛔ 关闭"}")
 
         // 先卸载所有现有Hook
         unhook()
@@ -98,7 +98,7 @@ object SkinHook {
                 Log.printStackTrace(TAG, t)
             }
         } else {
-            Log.runtime(TAG, "  ⚠️ 皮肤模块已关闭")
+            //Log.runtime(TAG, "  ⚠️ 皮肤模块已关闭")
         }
     }
 

@@ -43,12 +43,14 @@ class ExtendHandle {
                     }
                     ACTION_PAUSE -> {
                         TaskScheduler.setPaused(true)
+                        fansirsqi.xposed.sesame.task.ModelTask.stopAllTask()
                         Log.runtime("[PauseRunReceiver]任务已暂停⏸")
                         Toast.show("任务已暂停", true)
                     }
                     ACTION_STOP -> {
                         TaskScheduler.setPaused(false)
                         TaskScheduler.shutdownExecutors()
+                        fansirsqi.xposed.sesame.task.ModelTask.stopAllTask()
                         Log.runtime("[StopRunReceiver]任务已停止运行🛑")
                         Toast.show("任务已停止并清除", true)
                     }

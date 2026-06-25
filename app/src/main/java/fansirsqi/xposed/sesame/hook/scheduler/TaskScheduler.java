@@ -191,8 +191,12 @@ public class TaskScheduler {
 
             String currentUid = UserMap.getCurrentUid();
             String targetUid = AppContext.getUserId();
-            if (targetUid == null || !targetUid.equals(currentUid)) {
-                Log.runtime("用户切换或为空，重新登录");
+            if (targetUid == null) {
+                Log.runtime("当前无登录用户，跳过自动登录");
+                return;
+            }
+            if (!targetUid.equals(currentUid)) {
+                Log.runtime("用户已切换，重新登录");
                 LifecycleManager.reLogin();
                 return;
             }

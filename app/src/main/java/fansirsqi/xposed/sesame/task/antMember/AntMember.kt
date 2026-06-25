@@ -1779,6 +1779,46 @@ class AntMember : ModelTask() {
             } catch (th: Throwable) {
                 Log.printStackTrace(TAG, "enableGameCenter.point err:", th)
             }
+
+            // 4. 游戏中心金币抽奖
+            try {
+                val resp = AntMemberRpcCall.queryGameCenterHomePage()
+                val root = JSONObject(resp)
+                if (!ResChecker.checkRes(TAG, root)) {
+                    val msg = root.optString("errorMsg", root.optString("resultView", resp))
+                    Log.error("$TAG.enableGameCenter.draw", "游戏中心🎮[金币抽奖主页查询失败]#$msg")
+                } else {
+                    val data = root.optJSONObject("data")
+                    val drawGoldCoinModule = data?.optJSONObject("drawGoldCoinModuleVO")
+                    if (drawGoldCoinModule != null) {
+                        val status = drawGoldCoinModule.optString("status")
+                        if ("DRAWN".equals(status, ignoreCase = true)) {
+                            Log.runtime("$TAG.enableGameCenter.draw", "游戏中心🎮[金币抽奖今日已抽过]")
+                        } else {
+                            val drawResp = AntMemberRpcCall.drawGold()
+                            delay(300)
+                            val drawJo = JSONObject(drawResp)
+                            if (ResChecker.checkRes(TAG, drawJo)) {
+                                val drawData = drawJo.optJSONObject("data")
+                                val popupInfo = drawData?.optJSONObject("popupInfoVO")
+                                val mainTitle = popupInfo?.optString("mainTitle")
+                                if (!mainTitle.isNullOrEmpty()) {
+                                    Log.other("游戏中心🎮[金币抽奖成功]#$mainTitle")
+                                } else {
+                                    Log.other("游戏中心🎮[金币抽奖成功]#未返回具体奖励描述")
+                                }
+                            } else {
+                                val msg = drawJo.optString("errorMsg", drawJo.optString("resultView", drawResp))
+                                Log.error("$TAG.enableGameCenter.draw", "游戏中心🎮[金币抽奖失败]#$msg")
+                            }
+                        }
+                    } else {
+                        Log.error("$TAG.enableGameCenter.draw", "游戏中心🎮[获取金币抽奖模块失败]")
+                    }
+                }
+            } catch (th: Throwable) {
+                Log.printStackTrace(TAG, "enableGameCenter.draw err:", th)
+            }
         } catch (t: Throwable) {
             Log.printStackTrace(TAG, t)
         }
@@ -2594,11 +2634,13 @@ class AntMember : ModelTask() {
                     return
                 }
 
+                val score = json.optInt("score", 0)
+
                 // 合并新老字段中的进度球ID
                 val idList = JSONArray()
                 val idSet = mutableSetOf<String>()
 
-                // 解析老字段
+                // 1. 解析老字段 totalWaitProcessVO
                 val totalWait = json.optJSONObject("totalWaitProcessVO")
                 if (totalWait != null) {
                     val progressIds = totalWait.optJSONArray("totalProgressIdList")
@@ -2612,7 +2654,7 @@ class AntMember : ModelTask() {
                     }
                 }
 
-                // 解析新字段
+                // 2. 解析新字段 newProgressBallIds (root级)
                 val newProgressBallIds = json.optJSONArray("newProgressBallIds")
                 if (newProgressBallIds != null) {
                     for (i in 0 until newProgressBallIds.length()) {
@@ -2623,33 +2665,96 @@ class AntMember : ModelTask() {
                     }
                 }
 
+                // 3. 解析新字段 newProgressAggregateMap (嵌套的维度数组)
+                val aggregateMap = json.optJSONObject("newProgressAggregateMap")
+                if (aggregateMap != null) {
+                    val keys = aggregateMap.keys()
+                    while (keys.hasNext()) {
+                        val key = keys.next()
+                        val list = aggregateMap.optJSONArray(key)
+                        if (list != null) {
+                            for (i in 0 until list.length()) {
+                                val item = list.optJSONObject(i)
+                                val ballIds = item?.optJSONArray("newProgressBallIds")
+                                if (ballIds != null) {
+                                    for (j in 0 until ballIds.length()) {
+                                        val id = ballIds.optString(j)
+                                        if (!id.isNullOrEmpty()) {
+                                            idSet.add(id)
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
                 // 填充至 JSONArray
                 idSet.forEach { idList.put(it) }
 
-                if (idList.length() == 0) {
-                    Log.runtime(TAG, "暂无待领取的信用进度球")
-                    return
-                }
+                var finalEco = json.optJSONObject("economicDimension")
+                var finalSoc = json.optJSONObject("socialDimension")
 
-                // 直接传 JSONArray
-                val collectResp = AntMemberRpcCall.Zmxy.collectProgressBall(idList)
-                if (collectResp == null || collectResp.isEmpty()) {
-                    Log.error(TAG, "领取信用进度球失败: 响应为空")
-                    return
-                }
+                if (idList.length() > 0) {
+                    // 直接传 JSONArray 领取
+                    val collectResp = AntMemberRpcCall.Zmxy.collectProgressBall(idList)
+                    if (collectResp != null && !collectResp.isEmpty()) {
+                        val collectJson = JSONObject(collectResp)
+                        if (collectJson.optBoolean("success")) {
+                            // 领取成功，更新维度信息以反映最新状态
+                            val ecoObj = collectJson.optJSONObject("economicDimension")
+                            if (ecoObj != null) finalEco = ecoObj
+                            
+                            val socObj = collectJson.optJSONObject("socialDimension")
+                            if (socObj != null) finalSoc = socObj
 
-                val collectJson = JSONObject(collectResp)
-                if (collectJson.optBoolean("success")) {
-                    Log.other(
-                        TAG, String.format(
-                            "领取完成 → 本次加速进度: %d, 当前加速倍率: %.2f",
-                            collectJson.optInt("collectedAccelerateProgress", -1),
-                            collectJson.optDouble("currentAccelerateValue", -1.0)
-                        )
-                    )
+                            val ecoProgress = collectJson.optInt("collectedEconomicProgress", 0)
+                            val socProgress = collectJson.optInt("collectedSocialProgress", 0)
+                            val totalProgress = collectJson.optInt("collectedProgress", 0)
+                            val accelProgress = collectJson.optDouble("collectedAccelerateProgress", 0.0)
+                            val rate = collectJson.optDouble("currentAccelerateValue", -1.0)
+
+                            val progressDetail = StringBuilder()
+                            if (ecoProgress > 0) progressDetail.append("经济维度: +$ecoProgress ")
+                            if (socProgress > 0) progressDetail.append("社交维度: +$socProgress ")
+                            if (totalProgress > 0) progressDetail.append("总加速进度: +$totalProgress ")
+                            if (accelProgress > 0.0) progressDetail.append("本次加速进度: +$accelProgress ")
+
+                            if (progressDetail.isEmpty()) {
+                                progressDetail.append("加速进度: 0")
+                            }
+
+                            Log.other(
+                                TAG, String.format(
+                                    "领取完成 → %s, 当前加速倍率: %.2f",
+                                    progressDetail.toString().trim(),
+                                    rate
+                                )
+                            )
+                        } else {
+                            Log.error(TAG, "领取信用进度球失败: result = $collectJson")
+                        }
+                    } else {
+                        Log.error(TAG, "领取信用进度球失败: 响应为空")
+                    }
                 } else {
-                    Log.error(TAG, "领取信用进度球失败: result = $collectJson")
+                    Log.runtime(TAG, "暂无待领取的信用进度球")
                 }
+
+                // 打印每日一次的信用/守约进度（在领取完成后打印）
+                if (!hasFlagToday("Flag_AntMember_PrintScoreProgress")) {
+                    val ecoCur = finalEco?.optInt("currentProgress", 0) ?: 0
+                    val ecoTar = finalEco?.optInt("targetProgress", 0) ?: 0
+                    val ecoName = finalEco?.optString("dimensionName", "经济表现") ?: "经济表现"
+
+                    val socCur = finalSoc?.optInt("currentProgress", 0) ?: 0
+                    val socTar = finalSoc?.optInt("targetProgress", 0) ?: 0
+                    val socName = finalSoc?.optString("dimensionName", "社会表现") ?: "社会表现"
+
+                    Log.other(TAG, "📊 今日芝麻信用进度: 分数 $score | $ecoName: $ecoCur/$ecoTar | $socName: $socCur/$socTar")
+                    setFlagToday("Flag_AntMember_PrintScoreProgress")
+                }
+
             } catch (e: Exception) {
                 Log.printStackTrace(TAG + "queryAndCollect err", e)
             }

@@ -30,7 +30,8 @@ public class OldRpcBridge implements RpcBridge {
     /**
      * 加载 RPC 所需的类和方法。
      */
-    public void load() throws Exception {
+    @Override
+    public synchronized void load() throws Exception {
         loader = ApplicationHook.getClassLoader();
         try {
             h5PageClazz = loader.loadClass(General.H5PAGE_NAME);
@@ -49,24 +50,19 @@ public class OldRpcBridge implements RpcBridge {
     /**
      * 使用反射加载 RPC 方法。
      */
-    private void loadRpcMethods() {
+    private void loadRpcMethods() throws Exception {
         if (rpcCallMethod == null) {
-            try {
-                Class<?> rpcUtilClass = loader.loadClass("com.alipay.mobile.nebulaappproxy.api.rpc.H5RpcUtil");
-                Class<?> responseClass = loader.loadClass("com.alipay.mobile.nebulaappproxy.api.rpc.H5Response");
-                rpcCallMethod = rpcUtilClass.getMethod("rpcCall", String.class, String.class, String.class,
-                        boolean.class, loader.loadClass(General.JSON_OBJECT_NAME), String.class,
-                        boolean.class, h5PageClazz, int.class, String.class, boolean.class, int.class, String.class);
-                getResponseMethod = responseClass.getMethod("getResponse");
-                Log.runtime(TAG, "RPC 调用方法加载成功");
-            } catch (Exception e) {
-                Log.runtime(TAG, "加载 RPC 调用方法时出错：");
-                Log.printStackTrace(TAG, e);
-            }
+            Class<?> rpcUtilClass = loader.loadClass("com.alipay.mobile.nebulaappproxy.api.rpc.H5RpcUtil");
+            Class<?> responseClass = loader.loadClass("com.alipay.mobile.nebulaappproxy.api.rpc.H5Response");
+            rpcCallMethod = rpcUtilClass.getMethod("rpcCall", String.class, String.class, String.class,
+                    boolean.class, loader.loadClass(General.JSON_OBJECT_NAME), String.class,
+                    boolean.class, h5PageClazz, int.class, String.class, boolean.class, int.class, String.class);
+            getResponseMethod = responseClass.getMethod("getResponse");
+            Log.runtime(TAG, "RPC 调用方法加载成功");
         }
     }
     @Override
-    public void unload() {
+    public synchronized void unload() {
         getResponseMethod = null; // 清空响应方法
         rpcCallMethod = null; // 清空调用方法
         h5PageClazz = null; // 清空 H5 页面类
@@ -84,10 +80,34 @@ public class OldRpcBridge implements RpcBridge {
         RpcEntity responseEntity = requestObject(rpcEntity, tryCount, retryInterval);
         return responseEntity != null ? responseEntity.getResponseString() : null; // 返回响应字符串或 null
     }
+    private long lastLoadTime = 0;
+
+    private synchronized void checkInit() throws Exception {
+        if (rpcCallMethod == null || getResponseMethod == null || h5PageClazz == null || loader == null) {
+            long now = System.currentTimeMillis();
+            if (now - lastLoadTime > 10000) {
+                lastLoadTime = now;
+                try {
+                    load();
+                } catch (Throwable t) {
+                    Log.error(TAG, "Lazy load OldRpcBridge failed: " + t.getMessage());
+                    throw t;
+                }
+            } else {
+                throw new RuntimeException("OldRpcBridge not initialized (retry backoff)");
+            }
+        }
+    }
+
     @Override
     public RpcEntity requestObject(RpcEntity rpcEntity, int tryCount, int retryInterval) {
         if (ApplicationHook.isOffline()) {
             return null; // 如果离线，直接返回 null
+        }
+        try {
+            checkInit();
+        } catch (Throwable t) {
+            return null;
         }
         int id = rpcEntity.hashCode(); // 获取请求 ID
         String method = rpcEntity.getRequestMethod(); // 获取请求方法

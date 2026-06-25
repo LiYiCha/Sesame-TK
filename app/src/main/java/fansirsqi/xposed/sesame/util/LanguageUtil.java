@@ -13,17 +13,18 @@ public class LanguageUtil {
      *
      * @param context 应用程序上下文，用于访问资源和配置。
      */
+    @SuppressWarnings("deprecation")
     public static void setLocale(Context context) {
         // 检查是否设置了简体中文
         if (BaseModel.getLanguageSimplifiedChinese().getValue()) {
-            // 创建简体中文的Locale对象
-            Locale locale = new Locale("zh", "CN");
+            // 获取简体中文的Locale对象
+            Locale locale = Locale.SIMPLIFIED_CHINESE;
             // 设置默认的Locale
             Locale.setDefault(locale);
             // 获取当前的配置信息
             Configuration config = new Configuration(context.getResources().getConfiguration());
             // 更新配置信息中的Locale
-            config.locale = locale;
+            config.setLocale(locale);
             // 更新资源的配置信息，以应用新的Locale设置
             context.getResources().updateConfiguration(config, context.getResources().getDisplayMetrics());
         }

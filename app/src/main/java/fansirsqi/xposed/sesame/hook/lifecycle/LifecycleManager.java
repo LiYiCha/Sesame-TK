@@ -69,6 +69,7 @@ public class LifecycleManager {
     private static final java.util.Map<Object, Object[]> rpcHookMap = new java.util.concurrent.ConcurrentHashMap<>();
 
     private static final String modelVersion = fansirsqi.xposed.sesame.BuildConfig.VERSION_NAME;
+    private static int retryCount = 0;
 
     /**
      * 设置离线状态
@@ -131,10 +132,23 @@ public class LifecycleManager {
             if (force) {
                 String userId = AppContext.getUserId();
                 if (userId == null) {
-                    Log.runtime("用户未登录");
-                    Toast.show("用户未登录");
+                    String activeUser = fansirsqi.xposed.sesame.util.Files.getActiveUser();
+                    if (activeUser != null && retryCount < 5) {
+                        retryCount++;
+                        Log.runtime("有已保存的活跃用户(" + activeUser + ")，但当前获取为null，可能是服务未就绪，将在5秒后重试(" + retryCount + "/5)...");
+                        AppContext.getMainHandler().postDelayed(() -> {
+                            if (!init) {
+                                initHandler(force);
+                            }
+                        }, 5000);
+                    } else {
+                        Log.runtime("用户未登录");
+                        Toast.show("用户未登录");
+                    }
                     return false;
                 }
+                retryCount = 0; // 重置重试计数器
+                fansirsqi.xposed.sesame.util.Files.saveActiveUser(userId);
 
                 // 在确保支付宝相关类加载后再初始化 UserMap
                 try {
@@ -209,6 +223,12 @@ public class LifecycleManager {
                 if (BaseModel.enableHttpCapture.getValue()) {
                     fansirsqi.xposed.sesame.hook.network.HttpCaptureHook.setup(AppContext.getClassLoader());
                     fansirsqi.xposed.sesame.hook.network.NetworkHook.setupHooks(AppContext.getClassLoader());
+                }
+                // 延迟注册动态 bundle 及登录界面 Hook
+                try {
+                    fansirsqi.xposed.sesame.hook.core.modules.MiscHookModule.delayRegisterBundleHooks(AppContext.getClassLoader());
+                } catch (Throwable t) {
+                    Log.runtime(TAG, "delayRegisterBundleHooks 失败: " + t.getMessage());
                 }
                 // 启动所有模型
                 Model.bootAllModel(AppContext.getClassLoader());
@@ -370,19 +390,43 @@ public class LifecycleManager {
         }
     }
 
+    private static volatile boolean isAlipayLoginActive = false;
+    private static long lastReLoginTime = 0;
+
+    public static void setAlipayLoginActive(boolean active) {
+        isAlipayLoginActive = active;
+        Log.runtime("LifecycleManager", "AlipayLogin 活跃状态变更为: " + active);
+    }
+
     /**
      * 重新登录
      */
     public static void reLogin() {
+        if (isAlipayLoginActive) {
+            Log.runtime("LifecycleManager", "AlipayLogin 登录页面已处于活跃状态，忽略重复拉起请求");
+            return;
+        }
+
+        long currentTime = System.currentTimeMillis();
+        if (currentTime - lastReLoginTime < 30000) {
+            Log.runtime("LifecycleManager", "重新登录请求过于频繁，忽略本次拉起");
+            return;
+        }
+        lastReLoginTime = currentTime;
+
         Handler mainHandler = AppContext.getMainHandler();
         mainHandler.post(
                 () -> {
-                    execDelayedHandler(Math.max(BaseModel.getCheckInterval().getValue(), 180_000));
-                    android.content.Intent intent = new android.content.Intent(android.content.Intent.ACTION_VIEW);
-                    intent.setClassName(General.PACKAGE_NAME, General.CURRENT_USING_ACTIVITY);
-                    intent.setFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK);
-                    offline = true;
-                    AppContext.getContext().startActivity(intent);
+                    try {
+                        execDelayedHandler(Math.max(BaseModel.getCheckInterval().getValue(), 180_000));
+                        android.content.Intent intent = new android.content.Intent(android.content.Intent.ACTION_VIEW);
+                        intent.setClassName(General.PACKAGE_NAME, General.CURRENT_USING_ACTIVITY);
+                        intent.setFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK);
+                        offline = true;
+                        AppContext.getContext().startActivity(intent);
+                    } catch (Throwable t) {
+                        Log.runtime("LifecycleManager", "拉起登录页面异常: " + t.getMessage());
+                    }
                 });
     }
 

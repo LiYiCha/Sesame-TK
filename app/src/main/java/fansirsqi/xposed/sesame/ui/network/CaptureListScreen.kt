@@ -66,6 +66,7 @@ fun CaptureListScreen(
     var showHistory by remember { mutableStateOf(false) }
     var showBlacklist by remember { mutableStateOf(false) }
     var showClassifierDialog by remember { mutableStateOf(false) }
+    val listState = rememberLazyListState()
     
     val context = LocalContext.current
     var pendingExportJson by remember { mutableStateOf("") }
@@ -255,8 +256,6 @@ fun CaptureListScreen(
                 } else if (displayList.isEmpty()) {
                     EmptyState()
                 } else {
-                    val listState = rememberLazyListState()
-
                     var firstItemId by remember { mutableStateOf<String?>(null) }
                     LaunchedEffect(displayList) {
                         val firstItem = displayList.firstOrNull()

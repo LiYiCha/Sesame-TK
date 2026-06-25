@@ -53,7 +53,8 @@ public class ConsumeGold extends ModelTask {
         return modelFields;
     }
 
-    public void run() {
+    @Override
+    public void runJava() {
         try {
             Log.runtime("执行开始-" + getName());
             RuntimeInfo.getInstance().put("consumeGold", System.currentTimeMillis());

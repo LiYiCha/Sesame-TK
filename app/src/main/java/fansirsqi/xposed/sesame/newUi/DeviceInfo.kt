@@ -619,7 +619,7 @@ private fun DeviceInfoRow(label: String, value: String, accentColor: Color) {
 
 object DeviceInfoUtil {
 
-    fun showInfo(vid: String): Map<String, String> {
+    fun showInfo(vid: String, activeUser: String = "未登录"): Map<String, String> {
         fun getProp(prop: String): String {
             return try {
                 val clazz = Class.forName("android.os.SystemProperties")
@@ -647,14 +647,15 @@ object DeviceInfoUtil {
             return "${Build.BRAND} ${Build.MODEL}"
         }
 
-        return mapOf(
-            "Product" to "${Build.MANUFACTURER} ${Build.PRODUCT}",
-            "Device" to getDeviceName(),
-            "Android Version" to "${Build.VERSION.RELEASE} SDK (${Build.VERSION.SDK_INT})",
-            "OS Build" to "${Build.DISPLAY}",
-            "Verify ID" to vid,
-            "Module Version" to "${BuildConfig.VERSION}.${BuildConfig.BUILD_TYPE} 📦",
-            "Module Build" to "${BuildConfig.BUILD_DATE} ${BuildConfig.BUILD_TIME} ⏰"
-        )
+        val infoMap = LinkedHashMap<String, String>()
+        infoMap["当前账号"] = activeUser
+        infoMap["Product"] = "${Build.MANUFACTURER} ${Build.PRODUCT}"
+        infoMap["Device"] = getDeviceName()
+        infoMap["Android Version"] = "${Build.VERSION.RELEASE} SDK (${Build.VERSION.SDK_INT})"
+        infoMap["OS Build"] = "${Build.DISPLAY}"
+        infoMap["Verify ID"] = vid
+        infoMap["Module Version"] = "${BuildConfig.VERSION}.${BuildConfig.BUILD_TYPE} 📦"
+        infoMap["Module Build"] = "${BuildConfig.BUILD_DATE} ${BuildConfig.BUILD_TIME} ⏰"
+        return infoMap
     }
 }

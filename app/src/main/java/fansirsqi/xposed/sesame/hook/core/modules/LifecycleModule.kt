@@ -85,6 +85,7 @@ class LifecycleModule : HookModule {
                 Toast.show("用户未登录")
                 return
             }
+            fansirsqi.xposed.sesame.util.Files.saveActiveUser(targetUid)
             if (!LifecycleManager.isInit()) {
                 LifecycleManager.initHandler(true)
                 return

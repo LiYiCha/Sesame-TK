@@ -114,7 +114,8 @@ public class OmegakoiTown extends ModelTask {
         }
     }
 
-    public void run() {
+    @Override
+    public void runJava() {
         try {
             Log.other("开始执行-" + getName());
             RuntimeInfo.getInstance().put("omegakoiTown", System.currentTimeMillis());
