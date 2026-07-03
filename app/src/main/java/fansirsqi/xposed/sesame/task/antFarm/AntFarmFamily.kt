@@ -178,12 +178,13 @@ data object AntFarmFamily {
      */
     fun assignFamilyMember(jsonObject: JSONObject, userIds: MutableList<String>) {
         try {
-            userIds.remove(UserMap.currentUid)
+            val members = userIds.toMutableList()
+            members.remove(UserMap.currentUid)
             //随机选一个家庭成员
-            if (userIds.isEmpty()) {
+            if (members.isEmpty()) {
                 return
             }
-            val beAssignUser = userIds[RandomUtil.nextInt(0, userIds.size - 1)]
+            val beAssignUser = members[RandomUtil.nextInt(0, members.size - 1)]
             //随机获取一个任务类型
             val assignConfigList = jsonObject.getJSONArray("assignConfigList")
             val assignConfig = assignConfigList.getJSONObject(RandomUtil.nextInt(0, assignConfigList.length() - 1))
@@ -461,14 +462,15 @@ data object AntFarmFamily {
 
             // 3. 构建好友 userId 列表（去掉自己）
             // 先移除当前用户自己的 ID，否则 DeliverMsgSend 等接口会因为参数不合法而报错
-            familyUserIds.remove(UserMap.currentUid)
-            if (familyUserIds.isEmpty()) {
+            val members = familyUserIds.toMutableList()
+            members.remove(UserMap.currentUid)
+            if (members.isEmpty()) {
                 Log.runtime(TAG, "家庭任务🏠道早安#家庭成员仅自己一人，跳过")
                 return
             }
 
             val userIds = JSONArray().apply {
-                for (userId in familyUserIds) {
+                for (userId in members) {
                     put(userId)
                 }
             }

@@ -16,6 +16,8 @@ package fansirsqi.xposed.sesame.newutil
  */
 val defaultBlacklist = setOf(
     // 芝麻信用任务
+    "开通淘宝先用后付",          // 生活记录模板不存在
+    "去鲸探祈福喂鱼攒好运",      // 参数错误：promoprod不允许完成事件规则任务
     "每日施肥领水果",           // 需要淘宝操作
     "坚持种水果",              // 需要淘宝操作
     "坚持去玩休闲小游戏",       // 需要游戏操作

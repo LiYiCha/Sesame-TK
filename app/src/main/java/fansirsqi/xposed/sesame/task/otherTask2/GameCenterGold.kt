@@ -51,6 +51,10 @@ class GameCenterGold : BaseCommTask() {
                 TimeUtil.sleep(RandomUtil.nextLong(2000, 3000))
             }
 
+            // 处理金币抽奖与重新抽奖
+            handleDrawGoldCoin(homeData)
+            TimeUtil.sleep(RandomUtil.nextLong(2000, 3000))
+
             // 2. 获取任务列表 - queryTaskList
             val taskListRes = queryTaskList()
             if (taskListRes.isNullOrEmpty()) {
@@ -534,6 +538,43 @@ class GameCenterGold : BaseCommTask() {
         val method = "com.alipay.gamecenteruprod.biz.rpc.p2e.signIn"
         val params = "[{\"__git\":\"9e159d58cce04c13a\",\"date\":\"$date\",\"index\":$index,\"signSequenceId\":\"$signSequenceId\",\"source\":\"ch_appcenter__chsub_9patch\"}]"
         return RequestManager.requestString(method, params)
+    }
+
+    /**
+     * 8b. 金币抽奖/重新抽奖 RPC
+     */
+    private fun drawGold(): String? {
+        val method = "com.alipay.gamecenteruprod.biz.rpc.p2e.drawGold"
+        val params = "[{\"__git\":\"9e159d58cce04c13a\"}]"
+        return RequestManager.requestString(method, params)
+    }
+
+    /**
+     * 处理金币抽奖与重新抽奖
+     */
+    private fun handleDrawGoldCoin(homeData: JSONObject) {
+        try {
+            val drawGoldCoinModuleVO = homeData.optJSONObject("drawGoldCoinModuleVO") ?: return
+            val status = drawGoldCoinModuleVO.optString("status") ?: ""
+            if (status == "INIT" || status == "NOT_DRAWN" || status == "FULFILL_FAILED") {
+                Log.other("$displayName: 开始金币抽奖/重新抽奖, 当前状态: $status")
+                val res = drawGold()
+                if (!res.isNullOrEmpty()) {
+                    val resJson = JSONObject(res)
+                    if (resJson.optBoolean("success")) {
+                        val dataObj = resJson.optJSONObject("data")
+                        val mainTitle = dataObj?.optJSONObject("popupInfoVO")?.optString("mainTitle") ?: ""
+                        Log.other("$displayName: 金币抽奖成功🎉 $mainTitle")
+                    } else {
+                        Log.error(TAG, "金币抽奖失败: $res")
+                    }
+                }
+            } else {
+                Log.runtime(TAG, "金币抽奖跳过，当前状态为: $status")
+            }
+        } catch (e: Exception) {
+            Log.error(TAG, "金币抽奖异常: ${e.message}")
+        }
     }
 
     /**

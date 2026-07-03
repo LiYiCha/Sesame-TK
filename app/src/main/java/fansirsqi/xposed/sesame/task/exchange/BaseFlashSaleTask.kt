@@ -14,7 +14,9 @@ import fansirsqi.xposed.sesame.model.modelFieldExt.IntegerModelField
 import fansirsqi.xposed.sesame.task.ModelTask
 import fansirsqi.xposed.sesame.task.TaskCommon
 import fansirsqi.xposed.sesame.hook.ApplicationHook
+import fansirsqi.xposed.sesame.hook.context.AppContext
 import fansirsqi.xposed.sesame.hook.resource.ForegroundHelper
+import fansirsqi.xposed.sesame.hook.resource.WakeLockManager
 import fansirsqi.xposed.sesame.util.Log
 import fansirsqi.xposed.sesame.util.RandomUtil
 import fansirsqi.xposed.sesame.util.TimeUtil
@@ -138,6 +140,13 @@ abstract class BaseFlashSaleTask : ModelTask() {
             // ── 前台保活：防止系统在等待期间杀死进程 ──────────────────
             name?.let { ForegroundHelper.startForeground(it, targetTime) }
 
+            // ── 保持唤醒锁：确保在等待和兑换期间 CPU 不休眠 ──────────────────
+            val service = AppContext.getService()
+            if (service != null) {
+                val context = service.applicationContext ?: service
+                WakeLockManager.acquire(context, "FlashSale_${javaClass.simpleName}")
+            }
+
             try {
                 // 如果满足上述条件，就退出主线程，等待唤醒
                 if (shouldWaitForWakeUp) {
@@ -186,6 +195,8 @@ abstract class BaseFlashSaleTask : ModelTask() {
             } finally {
                 // ── 无论成功、失败、超时，都确保停止前台保活 ────────────
                 ForegroundHelper.stopForeground()
+                // ── 释放唤醒锁 ──────────────────────────────────
+                WakeLockManager.release()
             }
 
         } catch (e: Exception) {
@@ -334,30 +345,30 @@ abstract class BaseFlashSaleTask : ModelTask() {
         val successFlag = AtomicBoolean(false)
         val futures = mutableListOf<Future<*>>()
 
-        // 重构：为每一个兑换项创建 5 个并行的抢兑线程，实现真正的高并发多播秒杀
-        val concurrentThreadCount = 5
-        for (item in items) {
-            for (t in 0 until concurrentThreadCount) {
-                val future = ThreadPoolManager.NETWORK_EXECUTOR.submit {
-                    if (successFlag.get() || taskCancelled.get()) {
-                        return@submit // 如果已经成功兑换或任务被取消，直接返回
-                    }
+        // 为每个兑换项创建独立的执行线程
+        for (i in items.indices) {
+            val item = items[i]
 
-                    // 错峰发送：子线程之间微调间隔 (每个错开20ms)，使请求均匀排入服务器接收队列
-                    if (t > 0) {
-                        try {
-                            Thread.sleep((t * 20).toLong())
-                        } catch (e: InterruptedException) {
-                            Thread.currentThread().interrupt()
-                            return@submit
-                        }
-                    }
-
-                    // 持续重复请求直到成功或超时
-                    performExchangeAsync(item, successFlag, deadline)
+            val future = ThreadPoolManager.NETWORK_EXECUTOR.submit {
+                if (successFlag.get() || taskCancelled.get()) {
+                    return@submit // 如果已经成功兑换或任务被取消，直接返回
                 }
-                futures.add(future)
+
+                // 错峰发送：第一个立即执行，后续每个间隔10-50ms（优化：增加间隔避免请求集中）
+                if (i > 0) {
+                    try {
+                        Thread.sleep(RandomUtil.nextInt(10, 50).toLong())
+                    } catch (e: InterruptedException) {
+                        Thread.currentThread().interrupt()
+                        return@submit
+                    }
+                }
+
+                // 持续重复请求直到成功或超时
+                performExchangeAsync(item, successFlag, deadline)
             }
+
+            futures.add(future)
         }
 
         // 等待所有任务完成或超时（确保每个 Future 都被正确处理）

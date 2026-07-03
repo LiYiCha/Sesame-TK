@@ -2,6 +2,7 @@ package fansirsqi.xposed.sesame.task.otherTask2.logisticsinteraction
 
 import fansirsqi.xposed.sesame.data.Status
 import fansirsqi.xposed.sesame.util.Log
+import fansirsqi.xposed.sesame.util.TaskBlacklist
 import kotlinx.coroutines.*
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -84,6 +85,10 @@ object baoguo {
                     continue
                 }
 
+                if (TaskBlacklist.isTaskInBlacklist(title) || TaskBlacklist.isTaskInBlacklist(taskId)) {
+                    continue
+                }
+
                 // Step A: 报名 (如果需要)
                 if (needSignUp && status == "NONE_SIGNUP") {
                     val signupRes = baoguoRpcCall.handleTask(taskId, "signup", taskCenInfo)
@@ -98,6 +103,9 @@ object baoguo {
                     Log.other(TAG, "完成[$title]")
                 } else {
                     Log.error(TAG, "任务[$title]触发失败: $triggerRes")
+                    val errorCode = triggerJo.optString("errorCode")
+                    val errorMsg = triggerJo.optString("errorMsg")
+                    TaskBlacklist.autoAddToBlacklist(taskId, title, errorCode, errorMsg)
                 }
 
                 // 随机延迟 2-4 秒，模仿人工

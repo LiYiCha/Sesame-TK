@@ -8,6 +8,7 @@ import org.json.JSONObject;
 
 import java.text.SimpleDateFormat;
 import java.util.Locale;
+import java.util.function.Supplier;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.locks.ReentrantLock;
 
@@ -45,6 +46,22 @@ public class MemberNew extends BaseCommTask {
     public MemberNew() {
         this.displayName = "会员积分💎";
     }
+    private boolean isResponseError1009(String resStr) {
+        if (resStr == null || resStr.isEmpty()) return false;
+        try {
+            JSONObject response = new JSONObject(resStr);
+            String errorMessage = response.optString("errorMessage", "");
+            String resultDesc = response.optString("resultDesc", "");
+            String errorTip = response.optString("errorTip", "");
+            if (errorMessage.contains("人气太旺") || errorMessage.contains("请稍后再试") ||
+                resultDesc.contains("人气太旺") || resultDesc.contains("请稍后再试") ||
+                response.optInt("error", 0) == 1009 || "1009".equals(errorTip)) {
+                return true;
+            }
+        } catch (Exception ignored) {}
+        return false;
+    }
+
     private boolean checkResponseError1009(JSONObject response) {
         if (response == null) return false;
         String errorMessage = response.optString("errorMessage", "");
@@ -54,7 +71,8 @@ public class MemberNew extends BaseCommTask {
             resultDesc.contains("人气太旺") || resultDesc.contains("请稍后再试") ||
             response.optInt("error", 0) == 1009 || "1009".equals(errorTip)) {
             hasError1009 = true;
-            Log.error(TAG, "服务器限流，停止重试");
+            Log.error(TAG, "服务器限流，设置会员冷却2小时");
+            Status.setTemporaryStatusWithExpiry("MemberNew_1009", 2 * 60 * 60 * 1000);
             return true;
         }
         return false;
@@ -102,7 +120,7 @@ public class MemberNew extends BaseCommTask {
             
             boolean initSuccess = false;
             // 1. 初始化会员中心
-            if (initMemberCenterSafe() && !hasError1009) {
+            if (!Status.hasTemporaryStatusValid("MemberNew_1009") && initMemberCenterSafe() && !hasError1009) {
                 initSuccess = true;
                 // 2. 处理签到
                 if (handleSignInSafe() && !hasError1009) {
@@ -111,7 +129,7 @@ public class MemberNew extends BaseCommTask {
                 }
             }
             
-            // 宝箱任务独立运行，不受 hasError1009 控制
+            // 宝箱任务独立运行，不受会员任务限流影响
             handBox();
             
             if (initSuccess && !hasError1009) {
@@ -163,7 +181,8 @@ public class MemberNew extends BaseCommTask {
     private boolean initMemberCenterSafe() {
         try {
             // 使用数组存储初始化方法，便于维护
-            Runnable[] initTasks = {
+            @SuppressWarnings("unchecked")
+            Supplier<String>[] initTasks = new Supplier[] {
                 () -> AntMemberRpcCall.PlayConsultFacadeConsult(), // 1. 签到页初始化
                 () -> AntMemberRpcCall.queryVajraPositionCarouselMessage(), // 2. 轮播消息
                 () -> AntMemberRpcCall.queryVajraPositionCarouselMessageNew(), // 3. 金刚位信息
@@ -182,9 +201,18 @@ public class MemberNew extends BaseCommTask {
                 () -> AntMemberRpcCall.queryPayActivity() // 16. 支付活动咨询2
             };
             
-            for (Runnable task : initTasks) {
+            for (Supplier<String> task : initTasks) {
                 try {
-                    task.run();
+                    if (hasError1009) {
+                        break;
+                    }
+                    String result = task.get();
+                    if (isResponseError1009(result)) {
+                        hasError1009 = true;
+                        Log.error(TAG, "初始化步骤触发1009限流，设置会员冷却2小时");
+                        Status.setTemporaryStatusWithExpiry("MemberNew_1009", 2 * 60 * 60 * 1000);
+                        break;
+                    }
                     TimeUtil.sleep(RandomUtil.nextInt(1500, 3000)); // 随机延迟，模拟真实行为
                 } catch (Exception e) {
                     Log.error(TAG, "初始化步骤失败: " + e.getMessage());
@@ -201,6 +229,7 @@ public class MemberNew extends BaseCommTask {
      * 安全处理签到
      */
     private boolean handleSignInSafe() {
+        if (hasError1009) return false;
         try {
             if (!Status.hasFlagToday(CompletedKeyEnum.MemberSignIn.name())) {
                 JSONObject response = new JSONObject(AntMemberRpcCall.queryMemberSigninCalendar());
@@ -231,6 +260,8 @@ public class MemberNew extends BaseCommTask {
             // 签到页任务列表
             signPageTaskListSafe();
             
+            if (hasError1009) return;
+            
             TimeUtil.sleep(RandomUtil.nextInt(4000, 7000));
             
             // 全部状态任务列表
@@ -253,6 +284,7 @@ public class MemberNew extends BaseCommTask {
      * 安全处理累积任务奖励
      */
     private void handleTaskSuccessSafe() {
+        if (hasError1009) return;
         try {
             JSONObject response = new JSONObject(AntMemberRpcCall.queryAccumulateTask());
             if (response.optBoolean("success")) {
@@ -270,6 +302,7 @@ public class MemberNew extends BaseCommTask {
                 if (stageProcessList != null) {
                     for (int i = 0; i < stageProcessList.length(); i++) {
                         try {
+                            if (hasError1009) break;
                             JSONObject stageProcess = stageProcessList.getJSONObject(i);
                             String stageStatus = stageProcess.optString("stageStatus");
                             
@@ -310,6 +343,7 @@ public class MemberNew extends BaseCommTask {
 
         for (int i = 0; i < taskList.length(); i++) {
             try {
+                if (hasError1009) break;
                 JSONObject taskItem = taskList.getJSONObject(i);
                 if (taskItem == null) continue;
 
@@ -325,6 +359,7 @@ public class MemberNew extends BaseCommTask {
                 
                 // 执行任务
                 for (int attempt = 0; attempt < Math.min(taskInfo.retryCount, MAX_EXECUTE_ATTEMPTS); attempt++) {
+                    if (hasError1009) break;
                     if (executeSingleTaskSafe(taskInfo, attempt)) {
                         hasCompletedAnyTask = true;
                     }
@@ -346,6 +381,7 @@ public class MemberNew extends BaseCommTask {
      * 安全处理广告任务
      */
     private void doAdTaskSafe(JSONObject taskItem) {
+        if (hasError1009) return;
         try {
             String bizId = JsonUtil.getValueByPath(taskItem, "lightsAdExtMap.bizId");
             String entityType = JsonUtil.getValueByPath(taskItem, "lightsAdExtMap.entityType");
@@ -367,7 +403,8 @@ public class MemberNew extends BaseCommTask {
                 // 检查1009错误
                 if (response.optInt("error", 0) == 1009) {
                     hasError1009 = true;
-                    Log.error(TAG, "广告任务触发1009错误");
+                    Log.error(TAG, "广告任务触发1009错误，设置会员冷却2小时");
+                    Status.setTemporaryStatusWithExpiry("MemberNew_1009", 2 * 60 * 60 * 1000);
                     return;
                 }
                 
@@ -457,6 +494,7 @@ public class MemberNew extends BaseCommTask {
      * 安全执行单个任务
      */
     private boolean executeSingleTaskSafe(TaskInfo taskInfo, int attempt) {
+        if (hasError1009) return false;
         try {
             if (taskInfo == null) return false;
             
@@ -466,7 +504,8 @@ public class MemberNew extends BaseCommTask {
             // 检查1009错误
             if (applyResult.optInt("error", 0) == 1009) {
                 hasError1009 = true;
-                Log.error(TAG, "申请任务触发1009错误");
+                Log.error(TAG, "申请任务触发1009错误，设置会员冷却2小时");
+                Status.setTemporaryStatusWithExpiry("MemberNew_1009", 2 * 60 * 60 * 1000);
                 return false;
             }
             
@@ -482,7 +521,8 @@ public class MemberNew extends BaseCommTask {
             // 检查1009错误
             if (executeResult.optInt("error", 0) == 1009) {
                 hasError1009 = true;
-                Log.error(TAG, "执行任务触发1009错误");
+                Log.error(TAG, "执行任务触发1009错误，设置会员冷却2小时");
+                Status.setTemporaryStatusWithExpiry("MemberNew_1009", 2 * 60 * 60 * 1000);
                 return false;
             }
             
@@ -514,6 +554,7 @@ public class MemberNew extends BaseCommTask {
 
         for (int i = 0; i < taskList.length(); i++) {
             try {
+                if (hasError1009) break;
                 JSONObject taskItem = taskList.optJSONObject(i);
                 if (taskItem == null) continue;
 
@@ -600,6 +641,7 @@ public class MemberNew extends BaseCommTask {
      * 安全处理游戏任务
      */
     private void handleGameTaskSafe(String taskName, Long taskId, String awardPoint, JSONArray targetBusinessArray) {
+        if (hasError1009) return;
         try {
             if (targetBusinessArray == null || targetBusinessArray.length() == 0) {
                 Log.error(TAG, "游戏任务目标业务数组为空");
@@ -611,20 +653,41 @@ public class MemberNew extends BaseCommTask {
             
             for (int i = 0; i < Math.min(1, MAX_EXECUTE_ATTEMPTS); i++) {
                 try {
+                    if (hasError1009) break;
                     // 申请任务
-                    JSONObject applyResult = new JSONObject(AntMemberRpcCall.applyTask(taskName, taskId));
+                    String applyRes = AntMemberRpcCall.applyTask(taskName, taskId);
+                    if (isResponseError1009(applyRes)) {
+                        hasError1009 = true;
+                        Log.error(TAG, "申请游戏任务触发1009错误");
+                        break;
+                    }
+                    JSONObject applyResult = new JSONObject(applyRes);
                     TimeUtil.sleep(this.executeIntervalInt);
 
                     if (!SUCCESS.equalsIgnoreCase(applyResult.optString("resultCode"))) {
                         Log.error(TAG, "游戏任务申请失败: " + applyResult.optString("resultDesc"));
                     } else {
+                        if (hasError1009) break;
                         Log.runtime(TAG, "使用applyTask2申请游戏任务");
-                        JSONObject applyResult2 = new JSONObject(AntMemberRpcCall.applyTask2(taskId));
+                        String applyRes2 = AntMemberRpcCall.applyTask2(taskId);
+                        if (isResponseError1009(applyRes2)) {
+                            hasError1009 = true;
+                            Log.error(TAG, "申请2游戏任务触发1009错误");
+                            break;
+                        }
+                        JSONObject applyResult2 = new JSONObject(applyRes2);
                         TimeUtil.sleep(this.executeIntervalInt);
                     }
 
+                    if (hasError1009) break;
                     // 执行NGFE更新
-                    JSONObject executeResult = new JSONObject(AntMemberRpcCall.ngfeUpdate(ngfeKey));
+                    String executeRes = AntMemberRpcCall.ngfeUpdate(ngfeKey);
+                    if (isResponseError1009(executeRes)) {
+                        hasError1009 = true;
+                        Log.error(TAG, "执行游戏任务触发1009错误");
+                        break;
+                    }
+                    JSONObject executeResult = new JSONObject(executeRes);
                     TimeUtil.sleep(this.executeIntervalInt);
 
                     if (executeResult.optBoolean("success")) {
@@ -721,6 +784,7 @@ public class MemberNew extends BaseCommTask {
      * 安全查询积分证书
      */
     public void queryPointCertSafe(int page, int pageSize, boolean isRecursive) {
+        if (hasError1009) return;
         try {
             JSONObject response = new JSONObject(AntMemberRpcCall.queryPointCert(page, pageSize));
             TimeUtil.sleep(RandomUtil.nextInt(3000, 5000));
@@ -732,6 +796,7 @@ public class MemberNew extends BaseCommTask {
                 if (certList != null) {
                     for (int i = 0; i < certList.length(); i++) {
                         try {
+                            if (hasError1009) break;
                             JSONObject cert = certList.getJSONObject(i);
                             String bizTitle = cert.optString("bizTitle");
                             String certId = cert.optString("id");
