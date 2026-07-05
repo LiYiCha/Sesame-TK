@@ -186,6 +186,19 @@ object Files {
     }
 
     @JvmStatic
+    fun getMemberGoodsListFile(): File {
+        val file = File(CONFIG_DIR, "member_goods_list.json")
+        if (!file.exists()) {
+            try {
+                file.createNewFile()
+            } catch (e: Exception) {
+                Log.printStackTrace(TAG, "Failed to create member_goods_list.json", e)
+            }
+        }
+        return file
+    }
+
+    @JvmStatic
     fun getFriendIdMapFile(userId: String?): File? {
         return getTargetFileofUser(userId, "friend.json")
     }

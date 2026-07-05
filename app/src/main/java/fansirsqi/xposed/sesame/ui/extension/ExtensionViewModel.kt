@@ -60,6 +60,14 @@ class ExtensionViewModel : ViewModel() {
                 description = "自定义支付宝整体外观主题",
                 prefKey = null,  // 无开关，仅提供入口
                 activityClass = ThemeActivity::class.java
+            ),
+            // 会员抢兑直链模块
+            ExtensionModule(
+                id = "seckill",
+                name = "会员抢兑直链",
+                description = "自动获取会员抢兑商品并生成秒杀直链",
+                prefKey = null,  // 无开关，仅提供入口
+                activityClass = SeckillActivity::class.java
             )
             // 未来可以在这里添加更多扩展模块
         )

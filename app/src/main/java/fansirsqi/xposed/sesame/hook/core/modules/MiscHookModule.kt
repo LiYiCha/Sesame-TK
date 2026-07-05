@@ -50,57 +50,94 @@ class MiscHookModule : HookModule {
         }
 
         // hook findServiceByInterface (在 main dex 中，可立即 hook)
-        try {
-            val contextImplClass = classLoader.loadClass("com.alipay.mobile.core.impl.MicroApplicationContextImpl")
-            XposedBridge.hookAllMethods(contextImplClass, "findServiceByInterface", object : XC_MethodHook() {
-                override fun afterHookedMethod(param: MethodHookParam) {
-                    if (param.result == null && param.args != null && param.args.isNotEmpty()) {
-                        val arg = param.args[0]
-                        val interfaceName = when (arg) {
-                            is String -> arg
-                            is Class<*> -> arg.name
-                            else -> null
+        val findServiceHook = object : XC_MethodHook() {
+            private val isResolving = object : ThreadLocal<Boolean>() {
+                override fun initialValue(): Boolean {
+                    return false
+                }
+            }
+
+            override fun afterHookedMethod(param: MethodHookParam) {
+                if (param.result == null && param.args != null && param.args.isNotEmpty()) {
+                    val arg = param.args[0]
+                    val interfaceName = when (arg) {
+                        is String -> arg
+                        is Class<*> -> arg.name
+                        else -> null
+                    }
+                    if (interfaceName == "com.alipay.android.phone.businesscommon.advertisement.AdvertisementService") {
+                        if (isResolving.get()) {
+                            // 避免循环重入
+                            return
                         }
-                        if (interfaceName == "com.alipay.android.phone.businesscommon.advertisement.AdvertisementService") {
-                            Log.runtime(TAG, "🔍 AdvertisementService 尚未就绪，返回动态代理以防 NPE 闪退")
-                            try {
-                                val hostClassLoader = param.thisObject.javaClass.classLoader
-                                val serviceClass = hostClassLoader.loadClass(interfaceName)
-                                val proxy = java.lang.reflect.Proxy.newProxyInstance(
-                                    hostClassLoader,
-                                    arrayOf(serviceClass),
-                                    object : java.lang.reflect.InvocationHandler {
-                                        override fun invoke(proxy: Any, method: java.lang.reflect.Method, args: Array<out Any>?): Any? {
-                                            val returnType = method.returnType
-                                            if (returnType.isPrimitive) {
-                                                return when (returnType) {
-                                                    java.lang.Boolean.TYPE -> false
-                                                    java.lang.Void.TYPE -> null
-                                                    java.lang.Long.TYPE -> 0L
-                                                    java.lang.Double.TYPE -> 0.0
-                                                    java.lang.Float.TYPE -> 0.0f
-                                                    java.lang.Integer.TYPE -> 0
-                                                    java.lang.Byte.TYPE -> 0.toByte()
-                                                    java.lang.Short.TYPE -> 0.toShort()
-                                                    java.lang.Character.TYPE -> '\u0000'
-                                                    else -> 0
-                                                }
-                                            }
-                                            return null
-                                        }
-                                    }
-                                )
-                                param.result = proxy
-                            } catch (ex: Throwable) {
-                                Log.runtime(TAG, "创建 AdvertisementService 代理失败: ${ex.message}")
+                        isResolving.set(true)
+                        try {
+                            Log.runtime(TAG, "🔍 AdvertisementService 尚未就绪，尝试强制加载广告 Bundle (android-phone-wallet-advertisement)")
+                            val microContext = fansirsqi.xposed.sesame.hook.context.AppContext.getMicroApplicationContext()
+                            if (microContext != null) {
+                                de.robv.android.xposed.XposedHelpers.callMethod(microContext, "loadBundle", "android-phone-wallet-advertisement")
+                                val realService = de.robv.android.xposed.XposedHelpers.callMethod(microContext, "findServiceByInterface", interfaceName)
+                                if (realService != null) {
+                                    Log.runtime(TAG, "✅ 成功通过强制加载 Bundle 恢复了 AdvertisementService 实例")
+                                    param.result = realService
+                                    return
+                                }
                             }
+                            Log.runtime(TAG, "⚠️ 强制加载 Bundle 后，AdvertisementService 仍为 null")
+                        } catch (ex: Throwable) {
+                            Log.runtime(TAG, "❌ 强制加载广告 Bundle 失败: ${ex.message}")
+                        } finally {
+                            isResolving.set(false)
                         }
                     }
                 }
-            })
-            Log.runtime(TAG, "✅ Hook findServiceByInterface 成功")
+            }
+        }
+
+        try {
+            val contextImplClass = classLoader.loadClass("com.alipay.mobile.core.impl.MicroApplicationContextImpl")
+            XposedBridge.hookAllMethods(contextImplClass, "findServiceByInterface", findServiceHook)
+            Log.runtime(TAG, "✅ Hook MicroApplicationContextImpl.findServiceByInterface 成功")
         } catch (t: Throwable) {
-            Log.runtime(TAG, "❌ Hook findServiceByInterface 失败: ${t.message}")
+            Log.runtime(TAG, "❌ Hook MicroApplicationContextImpl.findServiceByInterface 失败: ${t.message}")
+        }
+
+        try {
+            val serviceManagerImplClass = classLoader.loadClass("com.alipay.mobile.core.service.impl.ServiceManagerImpl")
+            XposedBridge.hookAllMethods(serviceManagerImplClass, "findServiceByInterface", findServiceHook)
+            Log.runtime(TAG, "✅ Hook ServiceManagerImpl.findServiceByInterface 成功")
+        } catch (t: Throwable) {
+            Log.runtime(TAG, "❌ Hook ServiceManagerImpl.findServiceByInterface 失败: ${t.message}")
+        }
+
+        // Hook system WebViewClient for Tmall Seckill Auto-Submit
+        try {
+            val systemClientClass = Class.forName("android.webkit.WebViewClient")
+            XposedBridge.hookAllMethods(systemClientClass, "onPageFinished", object : XC_MethodHook() {
+                override fun afterHookedMethod(param: MethodHookParam) {
+                    val view = param.args[0]
+                    val url = param.args[1] as? String ?: return
+                    handleWebPageFinished(view, url)
+                }
+            })
+            Log.runtime(TAG, "✅ Hook android.webkit.WebViewClient.onPageFinished 成功")
+        } catch (t: Throwable) {
+            Log.runtime(TAG, "❌ Hook android.webkit.WebViewClient 失败: ${t.message}")
+        }
+
+        // Hook UC WebViewClient for Tmall Seckill Auto-Submit
+        try {
+            val ucClientClass = classLoader.loadClass("com.uc.webview.export.WebViewClient")
+            XposedBridge.hookAllMethods(ucClientClass, "onPageFinished", object : XC_MethodHook() {
+                override fun afterHookedMethod(param: MethodHookParam) {
+                    val view = param.args[0]
+                    val url = param.args[1] as? String ?: return
+                    handleWebPageFinished(view, url)
+                }
+            })
+            Log.runtime(TAG, "✅ Hook UC WebViewClient.onPageFinished 成功")
+        } catch (t: Throwable) {
+            Log.runtime(TAG, "❌ Hook UC WebViewClient 失败: ${t.message}")
         }
     }
 
@@ -108,6 +145,12 @@ class MiscHookModule : HookModule {
         private const val TAG = "MiscHookModule"
         private val bundleHooksRegistered = java.util.concurrent.atomic.AtomicBoolean(false)
         private val failedSoSet: MutableSet<String> = java.util.Collections.synchronizedSet(HashSet<String>())
+
+        private val threadLoadingSet = object : ThreadLocal<MutableSet<String>>() {
+            override fun initialValue(): MutableSet<String> {
+                return HashSet<String>()
+            }
+        }
 
         private val load0Method: java.lang.reflect.Method? by lazy {
             try {
@@ -225,81 +268,133 @@ class MiscHookModule : HookModule {
             } catch (t: Throwable) {
                 Log.runtime(TAG, "❌ Hook Runtime.loadLibrary0 失败: ${t.message}")
             }
+
+            // 5. Hook Runtime.load0 防止 System.load 导致的 UnsatisfiedLinkError 崩溃
+            try {
+                XposedHelpers.findAndHookMethod(
+                    java.lang.Runtime::class.java, "load0",
+                    ClassLoader::class.java, String::class.java,
+                    object : XC_MethodHook() {
+                        override fun afterHookedMethod(param: MethodHookParam) {
+                            if (param.hasThrowable() && param.throwable is UnsatisfiedLinkError) {
+                                val path = param.args[1] as? String ?: return
+                                val t = param.throwable
+                                Log.runtime(TAG, "捕获到 Runtime.load0 异常 ($path): ${t.message}")
+                                try {
+                                    val file = java.io.File(path)
+                                    val soName = file.name
+                                    val loader = param.args[0] as? ClassLoader
+                                    val context = fansirsqi.xposed.sesame.hook.context.AppContext.getAppContext()
+                                    if (context != null) {
+                                        var loaded = false
+                                        val needRetry = shouldRetryLibrary(soName)
+                                        val maxRetries = if (needRetry) 5 else 1
+                                        val sleepMs = if (needRetry) 200L else 0L
+
+                                        for (retry in 1..maxRetries) {
+                                            if (loadSoWithDependencies(context, soName, loader, null)) {
+                                                loaded = true
+                                                break
+                                            }
+                                            if (retry < maxRetries && sleepMs > 0) {
+                                                try {
+                                                    Thread.sleep(sleepMs)
+                                                } catch (e: InterruptedException) {
+                                                    break
+                                                }
+                                            }
+                                        }
+                                        if (loaded) {
+                                            param.throwable = null
+                                            return
+                                        }
+                                    }
+                                } catch (ex: Throwable) {
+                                    Log.runtime(TAG, "手动载入 JNI 库及依赖失败: ${ex.message}")
+                                }
+                            }
+                        }
+                    }
+                )
+                Log.runtime(TAG, "✅ Hook Runtime.load0 成功")
+            } catch (t: Throwable) {
+                Log.runtime(TAG, "❌ Hook Runtime.load0 失败: ${t.message}")
+            }
         }
 
         private fun loadSoWithDependencies(
             context: Context,
             soName: String,
             loader: ClassLoader?,
-            referencingSoPath: String? = null,
-            loadingSet: MutableSet<String> = mutableSetOf()
+            referencingSoPath: String? = null
         ): Boolean {
             if (failedSoSet.contains(soName)) {
                 return false
             }
+            val loadingSet = threadLoadingSet.get()
             if (loadingSet.contains(soName)) {
-                Log.runtime(TAG, "⚠️ 发现循环依赖: $soName, 终止加载")
+                Log.runtime(TAG, "⚠️ 发现循环依赖/重入: $soName, 终止加载")
                 return false
             }
             loadingSet.add(soName)
-            val soFile = findSoFile(context, soName, referencingSoPath)
-            if (soFile == null) {
-                Log.runtime(TAG, "未找到 JNI 库: $soName")
-                failedSoSet.add(soName)
-                loadingSet.remove(soName)
-                return false
-            }
             try {
-                loadNativeLib(loader, soFile.absolutePath)
-                Log.runtime(TAG, "✅ 手动成功载入 JNI 库: ${soFile.absolutePath}")
-                loadingSet.remove(soName)
-                return true
-            } catch (t: UnsatisfiedLinkError) {
-                val msg = t.message
-                Log.runtime(TAG, "载入 JNI 库 $soName 失败: $msg")
-                if (msg != null) {
-                    var neededSo: String? = null
-                    var parsedRefPath: String? = null
+                val soFile = findSoFile(context, soName, referencingSoPath)
+                if (soFile == null) {
+                    Log.runtime(TAG, "未找到 JNI 库: $soName")
+                    failedSoSet.add(soName)
+                    return false
+                }
+                try {
+                    loadNativeLib(loader, soFile.absolutePath)
+                    Log.runtime(TAG, "✅ 手动成功载入 JNI 库: ${soFile.absolutePath}")
+                    return true
+                } catch (t: UnsatisfiedLinkError) {
+                    val msg = t.message
+                    Log.runtime(TAG, "载入 JNI 库 $soName 失败: $msg")
+                    if (msg != null) {
+                        var neededSo: String? = null
+                        var parsedRefPath: String? = null
 
-                    val libStart = msg.indexOf("library \"")
-                    if (libStart != -1) {
-                        val libEnd = msg.indexOf("\"", libStart + 9)
-                        if (libEnd != -1) {
-                            neededSo = msg.substring(libStart + 9, libEnd)
+                        val libStart = msg.indexOf("library \"")
+                        if (libStart != -1) {
+                            val libEnd = msg.indexOf("\"", libStart + 9)
+                            if (libEnd != -1) {
+                                neededSo = msg.substring(libStart + 9, libEnd)
+                            }
                         }
-                    }
 
-                    val neededByStart = msg.indexOf("needed by ")
-                    if (neededByStart != -1) {
-                        val pathStart = neededByStart + 10
-                        val namespaceStart = msg.indexOf(" in namespace", pathStart)
-                        parsedRefPath = if (namespaceStart != -1) {
-                            msg.substring(pathStart, namespaceStart).trim()
-                        } else {
-                            msg.substring(pathStart).trim()
+                        val neededByStart = msg.indexOf("needed by ")
+                        if (neededByStart != -1) {
+                            val pathStart = neededByStart + 10
+                            val namespaceStart = msg.indexOf(" in namespace", pathStart)
+                            parsedRefPath = if (namespaceStart != -1) {
+                                msg.substring(pathStart, namespaceStart).trim()
+                            } else {
+                                msg.substring(pathStart).trim()
+                            }
                         }
-                    }
 
-                    if (neededSo != null && neededSo != soName) {
-                        Log.runtime(TAG, "🔍 发现依赖项: $neededSo (由 $parsedRefPath 发起), 尝试先加载依赖项...")
-                        if (loadSoWithDependencies(context, neededSo, loader, parsedRefPath, loadingSet)) {
-                            try {
-                                loadNativeLib(loader, soFile.absolutePath)
-                                Log.runtime(TAG, "✅ 依赖加载后成功载入 JNI 库: ${soFile.absolutePath}")
-                                loadingSet.remove(soName)
-                                return true
-                            } catch (retryErr: Throwable) {
-                                Log.runtime(TAG, "重试载入 JNI 库 $soName 失败: ${retryErr.message}")
+                        if (neededSo != null && neededSo != soName) {
+                            Log.runtime(TAG, "🔍 发现依赖项: $neededSo (由 $parsedRefPath 发起), 尝试先加载依赖项...")
+                            if (loadSoWithDependencies(context, neededSo, loader, parsedRefPath)) {
+                                try {
+                                    loadNativeLib(loader, soFile.absolutePath)
+                                    Log.runtime(TAG, "✅ 依赖加载后成功载入 JNI 库: ${soFile.absolutePath}")
+                                    return true
+                                } catch (retryErr: Throwable) {
+                                    Log.runtime(TAG, "重试载入 JNI 库 $soName 失败: ${retryErr.message}")
+                                }
                             }
                         }
                     }
+                } catch (t: Throwable) {
+                    Log.runtime(TAG, "载入 JNI 库 $soName 异常: ${t.message}")
                 }
-            } catch (t: Throwable) {
-                Log.runtime(TAG, "载入 JNI 库 $soName 异常: ${t.message}")
+                failedSoSet.add(soName)
+                return false
+            } finally {
+                loadingSet.remove(soName)
             }
-            failedSoSet.add(soName)
-            loadingSet.remove(soName)
-            return false
         }
 
         private fun loadNativeLib(loader: ClassLoader?, path: String) {
@@ -403,6 +498,51 @@ class MiscHookModule : HookModule {
         private fun shouldRetryLibrary(libName: String): Boolean {
             val name = libName.lowercase(Locale.US)
             return name.contains("bundle2h") || name.contains("homegridbase") || name.contains("crosser")
+        }
+
+        @JvmStatic
+        private fun handleWebPageFinished(view: Any, url: String) {
+            if (url.contains("pages.tmall.com/wow/wt/act/lm-pages")) {
+                Log.runtime(TAG, "🚀 检测到进入天猫提单页: ${'$'}url，准备注入自动提交订单脚本")
+                
+                val jsCode = """
+                    (function() {
+                        var count = 0;
+                        var timer = setInterval(function() {
+                            count++;
+                            if (count > 600) {
+                                clearInterval(timer);
+                                return;
+                            }
+                            var btn = document.querySelector('.submit-btn') || 
+                                      document.querySelector('.submitBtn') ||
+                                      document.querySelector('[class*="submit"]') ||
+                                      Array.from(document.querySelectorAll('button, div, span')).find(el => {
+                                          return el.textContent && el.textContent.includes('提交订单');
+                                      });
+                            if (btn) {
+                                if (btn.disabled || btn.getAttribute('disabled') !== null || btn.classList.contains('disabled')) {
+                                    return;
+                                }
+                                if (typeof btn.click === 'function') {
+                                    btn.click();
+                                } else {
+                                    var event = new MouseEvent('click', { bubbles: true, cancelable: true });
+                                    btn.dispatchEvent(event);
+                                }
+                                clearInterval(timer);
+                            }
+                        }, 50);
+                    })()
+                """.trimIndent()
+                
+                try {
+                    XposedHelpers.callMethod(view, "loadUrl", "javascript:${'$'}jsCode")
+                    Log.runtime(TAG, "✅ 自动提交订单脚本已成功注入 WebView")
+                } catch (e: Exception) {
+                    Log.runtime(TAG, "❌ 注入自动提交订单脚本失败: ${e.message}")
+                }
+            }
         }
     }
 }

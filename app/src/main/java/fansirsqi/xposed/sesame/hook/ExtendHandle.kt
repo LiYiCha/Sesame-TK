@@ -4,7 +4,10 @@ import android.content.Context
 import fansirsqi.xposed.sesame.hook.context.AppContext
 import fansirsqi.xposed.sesame.hook.lifecycle.LifecycleManager
 import fansirsqi.xposed.sesame.hook.scheduler.TaskScheduler
+import android.content.Intent
 import fansirsqi.xposed.sesame.util.Log
+import fansirsqi.xposed.sesame.util.Files
+import fansirsqi.xposed.sesame.util.GlobalThreadPools
 import fansirsqi.xposed.sesame.util.maps.UserMap
 
 class ExtendHandle {
@@ -143,6 +146,35 @@ class ExtendHandle {
                 Log.runtime("状态检查失败: ${e.message}")
                 Log.printStackTrace("ExtendHandle", e)
                 Toast.show("状态检查失败: ${e.message}", false)
+            }
+        }
+
+        @JvmStatic
+        fun handleFetchMemberGoodsList(context: Context) {
+            GlobalThreadPools.execute {
+                try {
+                    Log.runtime("开始获取会员商品列表...")
+                    val params = "[{\"blackIds\":[],\"deliveryIdList\":[\"94000SR2025120515775004\"],\"filterCityCode\":false,\"filterExchangeTime\":true,\"filterPointNoEnough\":false,\"filterStockNoEnough\":false,\"filterTimesLimit\":true,\"filterTimesLimitForPromo\":true,\"pageNum\":1,\"pageSize\":18,\"point\":21264,\"previewCopyDbId\":\"\",\"queryType\":\"DELIVERY_ID_LIST\",\"shandieComponentId\":\"\",\"source\":\"手端\",\"sourcePassMap\":{\"innerSource\":\"\",\"source\":\"\",\"unid\":\"\"},\"topIds\":[],\"uniqueId\":\"\"}]"
+                    val response = RequestManager.requestString(
+                        "com.alipay.alipaymember.biz.rpc.config.h5.queryShandieEntityList",
+                        params
+                    )
+                    
+                    if (response.isNullOrEmpty()) {
+                        Log.error("获取会员商品列表失败：返回为空")
+                        context.sendBroadcast(Intent("fansirsqi.xposed.sesame.fetchMemberGoodsList.failed"))
+                        return@execute
+                    }
+                    
+                    val goodsFile = Files.getMemberGoodsListFile()
+                    Files.write2File(response, goodsFile)
+                    Log.runtime("会员商品列表已保存到本地: ${goodsFile.absolutePath}")
+                    context.sendBroadcast(Intent("fansirsqi.xposed.sesame.fetchMemberGoodsList.success"))
+                } catch (e: Exception) {
+                    Log.error("获取会员商品列表异常: ${e.message}")
+                    Log.printStackTrace("ExtendHandle.handleFetchMemberGoodsList", e)
+                    context.sendBroadcast(Intent("fansirsqi.xposed.sesame.fetchMemberGoodsList.failed"))
+                }
             }
         }
     }

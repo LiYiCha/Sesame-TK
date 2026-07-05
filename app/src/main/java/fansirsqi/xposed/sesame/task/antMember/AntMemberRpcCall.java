@@ -1169,8 +1169,27 @@ public class AntMemberRpcCall {
             }
         }
 
+        public static class Pigeon {
+            /**
+             * 芝麻大表鸽/七日挑战 首页查询
+             */
+            public static String queryHome() {
+                return RequestManager.requestString(
+                        "com.antgroup.zmxy.zmmemberop.biz.rpc.pigeon.PigeonActivityRpcManager.queryHome",
+                        "[{}]"
+                );
+            }
 
-
+            /**
+             * 芝麻大表鸽/七日挑战 喂食
+             */
+            public static String feed() {
+                return RequestManager.requestString(
+                        "com.antgroup.zmxy.zmmemberop.biz.rpc.pigeon.PigeonActivityRpcManager.feed",
+                        "[{}]"
+                );
+            }
+        }
 
 
 

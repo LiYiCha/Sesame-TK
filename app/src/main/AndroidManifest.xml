@@ -120,6 +120,11 @@
             android:exported="true"
             android:resizeableActivity="true" />
 
+        <activity
+            android:name="fansirsqi.xposed.sesame.ui.extension.SeckillActivity"
+            android:exported="true"
+            android:resizeableActivity="true" />
+
         <!-- FileProvider 用于安装 APK -->
         <provider
             android:name="androidx.core.content.FileProvider"

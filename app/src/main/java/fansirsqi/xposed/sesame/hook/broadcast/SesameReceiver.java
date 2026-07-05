@@ -105,6 +105,9 @@ public class SesameReceiver extends BroadcastReceiver {
                     // 处理状态检测逻辑
                     ExtendHandle.handleCheckStatus(context);
                     break;
+                case "com.eg.android.AlipayGphone.sesame.fetchMemberGoodsList":
+                    ExtendHandle.handleFetchMemberGoodsList(context);
+                    break;
                 case "com.eg.android.AlipayGphone.sesame.exactAlarm":
                     // 处理精确唤醒任务
                     String taskId = intent.getStringExtra("taskId");
@@ -164,6 +167,7 @@ public class SesameReceiver extends BroadcastReceiver {
         intentFilter.addAction("com.eg.android.AlipayGphone.sesame.rerun"); // 重新执行任务
         intentFilter.addAction("com.eg.android.AlipayGphone.sesame.checkStatus"); // 状态检测
         intentFilter.addAction("com.eg.android.AlipayGphone.sesame.exactAlarm"); // 精确唤醒任务
+        intentFilter.addAction("com.eg.android.AlipayGphone.sesame.fetchMemberGoodsList"); // 同步会员商品列表
         return intentFilter;
     }
 }
