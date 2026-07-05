@@ -359,12 +359,19 @@ class SeckillActivity : ComponentActivity() {
                                 price = "0.00"
                             }
                             
-                            var actionUrl = obj.optString("actionUrl", "")
-                            if (actionUrl.isEmpty()) {
-                                val linkInfo = obj.optJSONObject("linkInfo")
-                                if (linkInfo != null) {
+                            val linkInfo = obj.optJSONObject("linkInfo")
+                            var actionUrl = ""
+                            if (linkInfo != null) {
+                                actionUrl = linkInfo.optString("detailUrl", "")
+                                if (actionUrl.isEmpty()) {
+                                    actionUrl = linkInfo.optString("officialDetailUrl", "")
+                                }
+                                if (actionUrl.isEmpty()) {
                                     actionUrl = linkInfo.optString("jumpUrl", "")
                                 }
+                            }
+                            if (actionUrl.isEmpty()) {
+                                actionUrl = obj.optString("actionUrl", "")
                             }
                             
                             var skuId = "-1"
@@ -462,8 +469,8 @@ fun SeckillScreen(
     onBack: () -> Unit
 ) {
     val categories = listOf(
-        "精选日常" to "94000SR2025110615412003",
-        "万分好物" to "94000SR2025110615412004",
+        "日常抢兑" to "94000SR2025120515775004",
+        "万分好物" to "94000SR2025120515776001",
         "联名周边" to "94000SR2025120515776002",
         "全部商品" to "94000SR2023102305988003"
     )
@@ -1120,6 +1127,7 @@ fun SeckillScreen(
 
                                     val numVal = quantityNumber.toIntOrNull() ?: 1
                                     val newTask = JSONObject().apply {
+                                        put("benefitId", activeBenefitId)
                                         put("itemId", scheduleItemId)
                                         put("skuId", scheduleSkuId)
                                         put("points", schedulePoints.toIntOrNull() ?: 0)

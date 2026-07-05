@@ -106,6 +106,7 @@ object SeckillScheduler {
             }
 
             if (targetTask != null) {
+                val benefitId = targetTask.optString("benefitId", "")
                 val itemId = targetTask.optString("itemId")
                 val skuId = targetTask.optString("skuId", "-1")
                 val points = targetTask.optInt("points")
@@ -115,7 +116,7 @@ object SeckillScheduler {
                 val number = targetTask.optInt("number", 1)
 
                 // Execute the seckill task
-                executeSeckill(context, itemId, skuId, points, type, name, timeMillis, number)
+                executeSeckill(context, benefitId, itemId, skuId, points, type, name, timeMillis, number)
 
                 // Delete executed task from config
                 val newList = mutableListOf<JSONObject>()
@@ -139,6 +140,7 @@ object SeckillScheduler {
 
     private fun executeSeckill(
         context: Context,
+        benefitId: String,
         itemId: String,
         skuId: String,
         points: Int,
@@ -178,12 +180,17 @@ object SeckillScheduler {
                     Log.runtime(TAG, "📡 后台 RPC 秒杀已保活唤醒，发包校准目标时间: ${TimeUtil.getCommonDate(fireTime)}")
 
                     // High precision polling wait
-                    while (System.currentTimeMillis() < fireTime) {
+                    while (true) {
                         val remain = fireTime - System.currentTimeMillis()
-                        when {
-                            remain > 1000L -> Thread.sleep(100)
-                            remain > 100L -> Thread.sleep(10)
-                            remain > 10L -> Thread.sleep(1)
+                        if (remain <= 0) break
+                        if (remain > 1000) {
+                            Thread.sleep(100)
+                        } else if (remain > 100) {
+                            Thread.sleep(10)
+                        } else if (remain > 10) {
+                            Thread.sleep(1)
+                        } else {
+                            // Spin-lock (busy wait) for the last 10 milliseconds
                         }
                     }
 
@@ -191,7 +198,7 @@ object SeckillScheduler {
                     
                     for (i in 1..5) {
                         val requestUnid = UUID.randomUUID().toString()
-                        val params = "[{\"bizType\":\"MEMBER\",\"sourceId\":\"$itemId\",\"sourcePassMap\":{\"innerSource\":\"兑换\",\"source\":\"\",\"unid\":\"$requestUnid\"},\"sourceType\":\"ALIYUN\"}]"
+                        val params = "[{\"bizType\":\"MEMBER\",\"sourceId\":\"$benefitId\",\"sourcePassMap\":{\"innerSource\":\"\",\"source\":\"myTab\",\"unid\":\"$requestUnid\"},\"sourceType\":\"ALIYUN\"}]"
                         GlobalThreadPools.execute {
                             try {
                                 val res = RequestManager.requestString(
@@ -205,7 +212,7 @@ object SeckillScheduler {
                         }
                     }
                 } catch (e: Exception) {
-                    Log.error(TAG, "后台 RPC 秒杀发包执行异常: ${e.message}")
+                    Log.error(TAG, "后台 RPC 秒杀异常: ${e.message}")
                 } finally {
                     WakeLockManager.release()
                 }

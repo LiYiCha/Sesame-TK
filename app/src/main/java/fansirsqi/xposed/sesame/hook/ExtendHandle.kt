@@ -9,6 +9,7 @@ import fansirsqi.xposed.sesame.util.Log
 import fansirsqi.xposed.sesame.util.Files
 import fansirsqi.xposed.sesame.util.GlobalThreadPools
 import fansirsqi.xposed.sesame.util.maps.UserMap
+import java.util.Locale
 
 class ExtendHandle {
 
@@ -246,7 +247,7 @@ class ExtendHandle {
             GlobalThreadPools.execute {
                 try {
                     Log.runtime("开始查询商品详情规格, benefitId: $benefitId")
-                    val params = "[{\"benefitId\":\"$benefitId\",\"cityCode\":\"450300\",\"miniAppId\":\"\",\"requestSourceInfo\":\"来源\",\"sourcePassMap\":{\"innerSource\":\"来源\",\"source\":\"\",\"unid\":\"\"}}]"
+                    val params = "[{\"benefitId\":\"$benefitId\",\"cityCode\":\"450300\",\"miniAppId\":\"\",\"requestSourceInfo\":\"myTab\",\"sourcePassMap\":{\"innerSource\":\"\",\"source\":\"myTab\",\"unid\":\"\"}}]"
                     val response = RequestManager.requestString(
                         "com.alipay.alipaymember.biz.rpc.config.h5.querySingleBenefitDetail",
                         params
@@ -260,6 +261,7 @@ class ExtendHandle {
                     val jo = org.json.JSONObject(response)
                     val benefitDetail = jo.optJSONObject("benefitDetail")
                     val skuInfoList = benefitDetail?.optJSONArray("skuInfoList")
+                    val simpleSkus = benefitDetail?.optJSONArray("simpleSkus")
                     
                     val skuIdsList = ArrayList<String>()
                     var fetchedSkuId = "-1"
@@ -288,6 +290,40 @@ class ExtendHandle {
                                     if (sPoints == 0) {
                                         val pricePresentation = benefitDetail.optJSONObject("pricePresentation")
                                         sPoints = pricePresentation?.optInt("point", 0) ?: 0
+                                    }
+                                    skuIdsList.add("$sId|$sPrice|$sPoints")
+                                }
+                            }
+                        }
+                    }
+                    
+                    if (fetchedSkuId == "-1" && simpleSkus != null && simpleSkus.length() > 0) {
+                        for (i in 0 until simpleSkus.length()) {
+                            val skuObj = simpleSkus.optJSONObject(i)
+                            if (skuObj != null) {
+                                val sId = skuObj.optString("sku_id", "").takeIf { it.isNotEmpty() }
+                                    ?: skuObj.optString("skuId", "-1")
+                                if (sId != "-1") {
+                                    if (fetchedSkuId == "-1") {
+                                        fetchedSkuId = sId
+                                    }
+                                    
+                                    val priceCent = skuObj.optDouble("price_cent", -1.0)
+                                    val sPrice = if (priceCent >= 0) {
+                                        String.format(Locale.US, "%.2f", priceCent / 100.0)
+                                    } else {
+                                        val p = skuObj.optString("price", "")
+                                        if (p.isNotEmpty()) p else benefitDetail.optString("priceYuan", "0.00")
+                                    }
+                                    
+                                    var sPoints = skuObj.optInt("points", 0)
+                                    if (sPoints == 0) {
+                                        val pricePresentation = benefitDetail.optJSONObject("pricePresentation")
+                                        sPoints = pricePresentation?.optInt("point", 0) ?: 0
+                                    }
+                                    if (sPoints == 0) {
+                                        val pointDisplay = benefitDetail.optJSONObject("pointPriceForDisplay")
+                                        sPoints = pointDisplay?.optInt("minPoint", 0) ?: 0
                                     }
                                     skuIdsList.add("$sId|$sPrice|$sPoints")
                                 }
