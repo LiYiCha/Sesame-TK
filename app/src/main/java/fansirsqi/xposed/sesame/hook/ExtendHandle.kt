@@ -150,30 +150,40 @@ class ExtendHandle {
         }
 
         @JvmStatic
-        fun handleFetchMemberGoodsList(context: Context) {
+        fun handleFetchMemberGoodsList(context: Context, deliveryId: String = "94000SR2025120515775004", pageNum: Int = 1) {
             GlobalThreadPools.execute {
                 try {
-                    Log.runtime("开始获取会员商品列表...")
-                    val params = "[{\"blackIds\":[],\"deliveryIdList\":[\"94000SR2025120515775004\"],\"filterCityCode\":false,\"filterExchangeTime\":true,\"filterPointNoEnough\":false,\"filterStockNoEnough\":false,\"filterTimesLimit\":true,\"filterTimesLimitForPromo\":true,\"pageNum\":1,\"pageSize\":18,\"point\":21264,\"previewCopyDbId\":\"\",\"queryType\":\"DELIVERY_ID_LIST\",\"shandieComponentId\":\"\",\"source\":\"手端\",\"sourcePassMap\":{\"innerSource\":\"\",\"source\":\"\",\"unid\":\"\"},\"topIds\":[],\"uniqueId\":\"\"}]"
+                    Log.runtime("开始获取会员商品列表, deliveryId: $deliveryId, page: $pageNum")
+                    val params = "[{\"blackIds\":[],\"deliveryIdList\":[\"$deliveryId\"],\"filterCityCode\":false,\"filterExchangeTime\":true,\"filterPointNoEnough\":false,\"filterStockNoEnough\":false,\"filterTimesLimit\":true,\"filterTimesLimitForPromo\":true,\"pageNum\":$pageNum,\"pageSize\":18,\"point\":21264,\"previewCopyDbId\":\"\",\"queryType\":\"DELIVERY_ID_LIST\",\"shandieComponentId\":\"\",\"source\":\"手端\",\"sourcePassMap\":{\"innerSource\":\"\",\"source\":\"\",\"unid\":\"\"},\"topIds\":[],\"uniqueId\":\"\"}]"
                     val response = RequestManager.requestString(
                         "com.alipay.alipaymember.biz.rpc.config.h5.queryShandieEntityList",
                         params
                     )
                     
                     if (response.isNullOrEmpty()) {
-                        Log.error("获取会员商品列表失败：返回为空")
-                        context.sendBroadcast(Intent("fansirsqi.xposed.sesame.fetchMemberGoodsList.failed"))
+                        Log.error("获取会员商品列表失败：返回为空, deliveryId: $deliveryId")
+                        val intent = Intent("fansirsqi.xposed.sesame.fetchMemberGoodsList.failed").apply {
+                            putExtra("deliveryId", deliveryId)
+                        }
+                        context.sendBroadcast(intent)
                         return@execute
                     }
                     
-                    val goodsFile = Files.getMemberGoodsListFile()
+                    val goodsFile = Files.getMemberGoodsListFile(deliveryId)
                     Files.write2File(response, goodsFile)
                     Log.runtime("会员商品列表已保存到本地: ${goodsFile.absolutePath}")
-                    context.sendBroadcast(Intent("fansirsqi.xposed.sesame.fetchMemberGoodsList.success"))
+                    
+                    val intent = Intent("fansirsqi.xposed.sesame.fetchMemberGoodsList.success").apply {
+                        putExtra("deliveryId", deliveryId)
+                    }
+                    context.sendBroadcast(intent)
                 } catch (e: Exception) {
                     Log.error("获取会员商品列表异常: ${e.message}")
                     Log.printStackTrace("ExtendHandle.handleFetchMemberGoodsList", e)
-                    context.sendBroadcast(Intent("fansirsqi.xposed.sesame.fetchMemberGoodsList.failed"))
+                    val intent = Intent("fansirsqi.xposed.sesame.fetchMemberGoodsList.failed").apply {
+                        putExtra("deliveryId", deliveryId)
+                    }
+                    context.sendBroadcast(intent)
                 }
             }
         }

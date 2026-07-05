@@ -14,11 +14,16 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -29,37 +34,45 @@ import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import fansirsqi.xposed.sesame.task.otherTask2.SeckillScheduler
 import fansirsqi.xposed.sesame.util.Files
-import fansirsqi.xposed.sesame.util.maps.UserMap
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
+import java.text.SimpleDateFormat
+import java.util.Calendar
+import java.util.Locale
 
 data class MemberGood(
     val benefitId: String,
     val name: String,
     val itemId: String,
     val points: Int,
-    val price: String
+    val price: String,
+    val skuId: String = "-1"
 )
 
 class SeckillActivity : ComponentActivity() {
 
     private val goodsList = mutableStateListOf<MemberGood>()
     private val isRefreshing = mutableStateOf(false)
+    private val currentCategory = mutableStateOf("94000SR2025120515775004")
 
     private val receiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             isRefreshing.value = false
             when (intent?.action) {
                 "fansirsqi.xposed.sesame.fetchMemberGoodsList.success" -> {
+                    val deliveryId = intent.getStringExtra("deliveryId") ?: "94000SR2025120515775004"
                     Toast.makeText(this@SeckillActivity, "同步商品列表成功！", Toast.LENGTH_SHORT).show()
-                    loadLocalGoods()
+                    loadLocalGoods(deliveryId)
                 }
                 "fansirsqi.xposed.sesame.fetchMemberGoodsList.failed" -> {
-                    Toast.makeText(this@SeckillActivity, "同步商品列表失败，请确保支付宝正在后台运行并且已登录", Toast.LENGTH_LONG).show()
+                    Toast.makeText(this@SeckillActivity, "同步商品列表失败，请确保支付宝在运行中", Toast.LENGTH_LONG).show()
                 }
             }
         }
@@ -68,7 +81,6 @@ class SeckillActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         
-        // Register receiver for broadcast
         val filter = IntentFilter().apply {
             addAction("fansirsqi.xposed.sesame.fetchMemberGoodsList.success")
             addAction("fansirsqi.xposed.sesame.fetchMemberGoodsList.failed")
@@ -79,7 +91,7 @@ class SeckillActivity : ComponentActivity() {
             registerReceiver(receiver, filter)
         }
 
-        loadLocalGoods()
+        loadLocalGoods(currentCategory.value)
 
         setContent {
             MaterialTheme {
@@ -90,10 +102,19 @@ class SeckillActivity : ComponentActivity() {
                     SeckillScreen(
                         goodsList = goodsList,
                         isRefreshing = isRefreshing.value,
-                        onRefresh = {
+                        onRefresh = { deliveryId, page ->
                             isRefreshing.value = true
-                            sendBroadcast(Intent("com.eg.android.AlipayGphone.sesame.fetchMemberGoodsList"))
-                            Toast.makeText(this, "正在请求支付宝同步商品列表...", Toast.LENGTH_SHORT).show()
+                            currentCategory.value = deliveryId
+                            val intent = Intent("com.eg.android.AlipayGphone.sesame.fetchMemberGoodsList").apply {
+                                putExtra("deliveryId", deliveryId)
+                                putExtra("pageNum", page)
+                            }
+                            sendBroadcast(intent)
+                            Toast.makeText(this, "正在请求同步商品列表...", Toast.LENGTH_SHORT).show()
+                        },
+                        onTabSelected = { deliveryId ->
+                            currentCategory.value = deliveryId
+                            loadLocalGoods(deliveryId)
                         },
                         onBack = { finish() }
                     )
@@ -106,21 +127,21 @@ class SeckillActivity : ComponentActivity() {
         super.onDestroy()
         try {
             unregisterReceiver(receiver)
-        } catch (e: Exception) {
-            // Ignored
-        }
+        } catch (e: Exception) {}
     }
 
-    private fun loadLocalGoods() {
-        val file = Files.getMemberGoodsListFile()
+    private fun loadLocalGoods(deliveryId: String) {
+        val file = Files.getMemberGoodsListFile(deliveryId)
         if (file.exists()) {
             val content = Files.readFromFile(file)
             if (!content.isNullOrEmpty()) {
                 val parsed = parseGoods(content)
                 goodsList.clear()
                 goodsList.addAll(parsed)
+                return
             }
         }
+        goodsList.clear()
     }
 
     private fun parseGoods(jsonStr: String): List<MemberGood> {
@@ -150,9 +171,28 @@ class SeckillActivity : ComponentActivity() {
                                 ?: obj.optString("priceCent").takeIf { it.isNotEmpty() }
                                 ?: "0.00"
                             
+                            var skuId = "-1"
+                            val simpleSkus = obj.optJSONArray("simpleSkus")
+                            if (simpleSkus != null && simpleSkus.length() > 0) {
+                                val firstSku = simpleSkus.optJSONObject(0)
+                                if (firstSku != null) {
+                                    skuId = firstSku.optString("sku_id", "").takeIf { it.isNotEmpty() }
+                                        ?: firstSku.optString("skuId", "-1")
+                                }
+                            }
+                            if (skuId == "-1") {
+                                val skuInfoList = obj.optJSONArray("skuInfoList")
+                                if (skuInfoList != null && skuInfoList.length() > 0) {
+                                    val firstSku = skuInfoList.optJSONObject(0)
+                                    if (firstSku != null) {
+                                        skuId = firstSku.optString("skuId", "-1")
+                                    }
+                                }
+                            }
+
                             if (itemId.isNotEmpty() && !seen.contains(benefitId)) {
                                 seen.add(benefitId)
-                                list.add(MemberGood(benefitId, name, itemId, points, price))
+                                list.add(MemberGood(benefitId, name, itemId, points, price, skuId))
                             }
                         }
                         obj.keys().forEach { key ->
@@ -179,19 +219,84 @@ class SeckillActivity : ComponentActivity() {
 fun SeckillScreen(
     goodsList: List<MemberGood>,
     isRefreshing: Boolean,
-    onRefresh: () -> Unit,
+    onRefresh: (deliveryId: String, page: Int) -> Unit,
+    onTabSelected: (deliveryId: String) -> Unit,
     onBack: () -> Unit
 ) {
+    val categories = listOf(
+        "日常抢兑" to "94000SR2025120515775004",
+        "万分好物" to "94000SR2025120515776001",
+        "联名周边" to "94000SR2025120515776002",
+        "全部商品" to "94000SR2023102305988003"
+    )
+
+    var selectedTabIndex by remember { mutableStateOf(0) }
     var itemId by remember { mutableStateOf("") }
     var verifyPoint by remember { mutableStateOf("") }
+    var skuId by remember { mutableStateOf("-1") }
     var generatedUrl by remember { mutableStateOf("") }
-    
+    var searchQuery by remember { mutableStateOf("") }
+    var currentPage by remember { mutableStateOf(1) }
+
+    // Dialog state
+    var showScheduleDialog by remember { mutableStateOf(false) }
+    var scheduleItemId by remember { mutableStateOf("") }
+    var scheduleSkuId by remember { mutableStateOf("-1") }
+    var schedulePoints by remember { mutableStateOf("") }
+    var scheduleName by remember { mutableStateOf("") }
+    var scheduleTimeStr by remember { mutableStateOf("") }
+    var scheduleType by remember { mutableStateOf("H5") } // "H5" or "RPC"
+
+    var seckillTasks by remember { mutableStateOf(listOf<JSONObject>()) }
+
     val clipboardManager = LocalClipboardManager.current
     val context = LocalContext.current
 
-    LaunchedEffect(itemId, verifyPoint) {
+    val loadTasks = {
+        val list = mutableListOf<JSONObject>()
+        try {
+            val file = SeckillScheduler.getSeckillTasksFile()
+            if (file.exists()) {
+                val content = Files.readFromFile(file)
+                if (!content.isNullOrEmpty()) {
+                    val ja = JSONArray(content)
+                    for (i in 0 until ja.length()) {
+                        val jo = ja.optJSONObject(i)
+                        if (jo != null) list.add(jo)
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+        seckillTasks = list
+    }
+
+    val saveTasks = { newTasks: List<JSONObject> ->
+        try {
+            val file = SeckillScheduler.getSeckillTasksFile()
+            val ja = JSONArray()
+            newTasks.forEach { ja.put(it) }
+            Files.write2File(ja.toString(), file)
+            seckillTasks = newTasks
+            context.sendBroadcast(Intent("com.eg.android.AlipayGphone.sesame.syncSeckillTasks"))
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
+    LaunchedEffect(Unit) {
+        loadTasks()
+    }
+
+    LaunchedEffect(selectedTabIndex) {
+        currentPage = 1
+        onTabSelected(categories[selectedTabIndex].second)
+    }
+
+    LaunchedEffect(itemId, verifyPoint, skuId) {
         if (itemId.isNotEmpty() && verifyPoint.isNotEmpty()) {
-            val orderItemsJson = "[{\"itemId\":\"$itemId\",\"skuId\":\"-1\",\"number\":1}]"
+            val orderItemsJson = "[{\"itemId\":\"$itemId\",\"skuId\":\"$skuId\",\"number\":1}]"
             val encodedOrderItems = Uri.encode(orderItemsJson)
             val extJson = "{\"requestSourceInfo\":\"来源\"}"
             val encodedExtJson = Uri.encode(extJson)
@@ -202,17 +307,29 @@ fun SeckillScreen(
         }
     }
 
+    // Filtered list
+    val filteredGoods = remember(goodsList, searchQuery) {
+        if (searchQuery.isEmpty()) {
+            goodsList
+        } else {
+            goodsList.filter { it.name.contains(searchQuery, ignoreCase = true) || it.itemId.contains(searchQuery) }
+        }
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("会员抢兑直链生成", fontWeight = FontWeight.Bold) },
+                title = { Text("会员抢兑直链与秒杀", fontWeight = FontWeight.Bold) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.Default.ArrowBack, contentDescription = "返回")
                     }
                 },
                 actions = {
-                    IconButton(onClick = onRefresh, enabled = !isRefreshing) {
+                    IconButton(
+                        onClick = { onRefresh(categories[selectedTabIndex].second, currentPage) },
+                        enabled = !isRefreshing
+                    ) {
                         Icon(Icons.Default.Refresh, contentDescription = "同步商品")
                     }
                 },
@@ -227,151 +344,465 @@ fun SeckillScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
-                .padding(16.dp)
         ) {
-            // 输入卡片
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(bottom = 16.dp),
-                shape = RoundedCornerShape(12.dp)
+            // Categories Tab
+            ScrollableTabRow(
+                selectedTabIndex = selectedTabIndex,
+                edgePadding = 16.dp,
+                modifier = Modifier.fillMaxWidth()
             ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Text("手动配置商品参数", fontWeight = FontWeight.Bold, fontSize = 16.sp)
-                    Spacer(modifier = Modifier.height(8.dp))
-                    OutlinedTextField(
-                        value = itemId,
-                        onValueChange = { itemId = it },
-                        label = { Text("天猫商品 ID (itemId)") },
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    OutlinedTextField(
-                        value = verifyPoint,
-                        onValueChange = { verifyPoint = it },
-                        label = { Text("所需积分 (verifyPoint)") },
-                        modifier = Modifier.fillMaxWidth()
+                categories.forEachIndexed { index, (name, _) ->
+                    Tab(
+                        selected = selectedTabIndex == index,
+                        onClick = { selectedTabIndex = index },
+                        text = { Text(name, fontSize = 14.sp) }
                     )
                 }
             }
 
-            // 直链输出卡片
-            if (generatedUrl.isNotEmpty()) {
+            // Outer Scrollable Layout
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = 16.dp, vertical = 8.dp)
+            ) {
+                // Manual input card
                 Card(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(bottom = 16.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
+                        .padding(vertical = 8.dp),
                     shape = RoundedCornerShape(12.dp)
                 ) {
                     Column(modifier = Modifier.padding(16.dp)) {
-                        Text("生成的免密抢兑直链：", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                        Text("手动配置商品参数", fontWeight = FontWeight.Bold, fontSize = 15.sp)
                         Spacer(modifier = Modifier.height(6.dp))
-                        Text(generatedUrl, fontSize = 12.sp, maxLines = 3)
-                        Spacer(modifier = Modifier.height(10.dp))
-                        Row(modifier = Modifier.align(Alignment.End)) {
-                            Button(
-                                onClick = {
-                                    val alipaySchemeUrl = "alipays://platformapi/startapp?appId=20000067&url=${Uri.encode(generatedUrl)}"
-                                    try {
-                                        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(alipaySchemeUrl)).apply {
-                                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        OutlinedTextField(
+                            value = itemId,
+                            onValueChange = { itemId = it },
+                            label = { Text("商品 ID / 权益 ID (itemId)") },
+                            modifier = Modifier.fillMaxWidth(),
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                        )
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            OutlinedTextField(
+                                value = verifyPoint,
+                                onValueChange = { verifyPoint = it },
+                                label = { Text("所需积分 (points)") },
+                                modifier = Modifier.weight(1f),
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                            )
+                            OutlinedTextField(
+                                value = skuId,
+                                onValueChange = { skuId = it },
+                                label = { Text("规格 ID (skuId)") },
+                                modifier = Modifier.weight(1f),
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                            )
+                        }
+                        
+                        if (verifyPoint.isNotEmpty() && itemId.isNotEmpty()) {
+                            Spacer(modifier = Modifier.height(10.dp))
+                            Text("快捷秒杀控制面板已就绪", color = MaterialTheme.colorScheme.primary, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Button(
+                                    onClick = {
+                                        val alipaySchemeUrl = "alipays://platformapi/startapp?appId=20000067&url=${Uri.encode(generatedUrl)}"
+                                        try {
+                                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(alipaySchemeUrl)).apply {
+                                                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                            }
+                                            context.startActivity(intent)
+                                        } catch (e: Exception) {
+                                            Toast.makeText(context, "无法唤起支付宝: ${e.message}", Toast.LENGTH_SHORT).show()
                                         }
-                                        context.startActivity(intent)
-                                    } catch (e: Exception) {
-                                        Toast.makeText(context, "无法唤起支付宝: ${e.message}", Toast.LENGTH_SHORT).show()
+                                    },
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Text("立即跳转", fontSize = 12.sp)
+                                }
+                                Button(
+                                    onClick = {
+                                        clipboardManager.setText(AnnotatedString(generatedUrl))
+                                        Toast.makeText(context, "直链已复制！", Toast.LENGTH_SHORT).show()
+                                    },
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Text("复制直链", fontSize = 12.sp)
+                                }
+                                Button(
+                                    onClick = {
+                                        scheduleItemId = itemId
+                                        scheduleSkuId = skuId
+                                        schedulePoints = verifyPoint
+                                        scheduleName = "自定义秒杀商品"
+                                        scheduleType = "H5"
+                                        val cal = Calendar.getInstance()
+                                        cal.set(Calendar.MINUTE, 0)
+                                        cal.set(Calendar.SECOND, 0)
+                                        scheduleTimeStr = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(cal.time)
+                                        showScheduleDialog = true
+                                    },
+                                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.tertiary),
+                                    modifier = Modifier.weight(1.2f)
+                                ) {
+                                    Text("定时秒杀", fontSize = 12.sp)
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Search Box
+                OutlinedTextField(
+                    value = searchQuery,
+                    onValueChange = { searchQuery = it },
+                    placeholder = { Text("搜索本地缓存的商品...") },
+                    leadingIcon = { Icon(Icons.Default.Search, contentDescription = "搜索") },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 4.dp),
+                    shape = RoundedCornerShape(8.dp)
+                )
+
+                // Goods List Container
+                Box(modifier = Modifier.weight(1f)) {
+                    if (filteredGoods.isEmpty()) {
+                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text(if (isRefreshing) "正在同步支付宝商品列表..." else "没有找到商品", color = Color.Gray, fontSize = 14.sp)
+                                Spacer(modifier = Modifier.height(10.dp))
+                                Button(
+                                    onClick = { onRefresh(categories[selectedTabIndex].second, currentPage) },
+                                    enabled = !isRefreshing
+                                ) {
+                                    Text("同步列表")
+                                }
+                            }
+                        }
+                    } else {
+                        LazyColumn(
+                            modifier = Modifier.fillMaxSize(),
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                            contentPadding = PaddingValues(vertical = 8.dp)
+                        ) {
+                            items(filteredGoods) { good ->
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .background(MaterialTheme.colorScheme.surfaceVariant)
+                                        .clickable {
+                                            itemId = good.itemId
+                                            verifyPoint = good.points.toString()
+                                            skuId = good.skuId
+                                        }
+                                        .padding(10.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(good.name, fontWeight = FontWeight.SemiBold, fontSize = 13.sp, maxLines = 1)
+                                        Spacer(modifier = Modifier.height(2.dp))
+                                        Row {
+                                            Text("ID: ${good.itemId}", fontSize = 10.sp, color = Color.Gray)
+                                            Spacer(modifier = Modifier.width(6.dp))
+                                            Text("积分: ${good.points}", fontSize = 10.sp, color = Color.Gray)
+                                            if (good.skuId != "-1") {
+                                                Spacer(modifier = Modifier.width(6.dp))
+                                                Text("SKU: ${good.skuId}", fontSize = 10.sp, color = Color.Gray)
+                                            }
+                                        }
+                                    }
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                        Button(
+                                            onClick = {
+                                                val orderItemsJson = "[{\"itemId\":\"${good.itemId}\",\"skuId\":\"${good.skuId}\",\"number\":1}]"
+                                                val encodedOrderItems = Uri.encode(orderItemsJson)
+                                                val extJson = "{\"requestSourceInfo\":\"来源\"}"
+                                                val encodedExtJson = Uri.encode(extJson)
+                                                val tmallUrl = "https://pages.tmall.com/wow/wt/act/lm-pages?env=&extJson=$encodedExtJson&orderItems=$encodedOrderItems&verifyPoint=${good.points}&wh_page=buy"
+                                                val finalUrl = "https://pages.tmall.com/wow/z/wt/act/alipay-login?goToUrl=${Uri.encode(tmallUrl)}"
+                                                val alipaySchemeUrl = "alipays://platformapi/startapp?appId=20000067&url=${Uri.encode(finalUrl)}"
+                                                try {
+                                                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(alipaySchemeUrl)).apply {
+                                                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                                    }
+                                                    context.startActivity(intent)
+                                                } catch (e: Exception) {
+                                                    Toast.makeText(context, "无法唤起支付宝: ${e.message}", Toast.LENGTH_SHORT).show()
+                                                }
+                                            },
+                                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                                            modifier = Modifier.height(28.dp),
+                                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary)
+                                        ) {
+                                            Text("直达", fontSize = 10.sp)
+                                        }
+                                        Button(
+                                            onClick = {
+                                                scheduleItemId = good.itemId
+                                                scheduleSkuId = good.skuId
+                                                schedulePoints = good.points.toString()
+                                                scheduleName = good.name
+                                                scheduleType = "H5"
+                                                val cal = Calendar.getInstance()
+                                                cal.set(Calendar.MINUTE, 0)
+                                                cal.set(Calendar.SECOND, 0)
+                                                scheduleTimeStr = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(cal.time)
+                                                showScheduleDialog = true
+                                            },
+                                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                                            modifier = Modifier.height(28.dp),
+                                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.tertiary)
+                                        ) {
+                                            Text("秒杀", fontSize = 10.sp)
+                                        }
                                     }
                                 }
-                            ) {
-                                Text("立即跳转")
                             }
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Button(
-                                onClick = {
-                                    clipboardManager.setText(AnnotatedString(generatedUrl))
-                                    Toast.makeText(context, "直链已复制到剪贴板，请发到支付宝聊天记录里点击", Toast.LENGTH_LONG).show()
+                        }
+                    }
+                }
+
+                // Pagination (For master list "全部商品")
+                if (selectedTabIndex == 3) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 4.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Button(
+                            onClick = {
+                                if (currentPage > 1) {
+                                    currentPage--
+                                    onRefresh(categories[selectedTabIndex].second, currentPage)
                                 }
-                            ) {
-                                Icon(Icons.Default.ContentCopy, contentDescription = "复制")
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text("复制直链")
+                            },
+                            enabled = currentPage > 1 && !isRefreshing,
+                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+                            modifier = Modifier.height(32.dp)
+                        ) {
+                            Text("上一页", fontSize = 11.sp)
+                        }
+                        Text("第 $currentPage 页", fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                        Button(
+                            onClick = {
+                                currentPage++
+                                onRefresh(categories[selectedTabIndex].second, currentPage)
+                            },
+                            enabled = !isRefreshing && goodsList.isNotEmpty(),
+                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+                            modifier = Modifier.height(32.dp)
+                        ) {
+                            Text("下一页", fontSize = 11.sp)
+                        }
+                    }
+                }
+
+                // Active Tasks List Card
+                if (seckillTasks.isNotEmpty()) {
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 8.dp)
+                            .heightIn(max = 180.dp),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Column(modifier = Modifier.padding(12.dp)) {
+                            Text("⏰ 计划中的秒杀任务：", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                            Spacer(modifier = Modifier.height(4.dp))
+                            LazyColumn(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                items(seckillTasks) { task ->
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clip(RoundedCornerShape(6.dp))
+                                            .background(MaterialTheme.colorScheme.surface)
+                                            .padding(8.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.SpaceBetween
+                                    ) {
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Text(task.optString("name", "未命名"), fontSize = 12.sp, maxLines = 1, fontWeight = FontWeight.SemiBold)
+                                            Text("时间: ${task.optString("seckillTime")} | 模式: ${task.optString("type")} | ID: ${task.optString("itemId")}", fontSize = 10.sp, color = Color.Gray)
+                                        }
+                                        IconButton(
+                                            onClick = {
+                                                val newTasks = seckillTasks.filter { it !== task }
+                                                saveTasks(newTasks)
+                                                Toast.makeText(context, "秒杀任务已取消", Toast.LENGTH_SHORT).show()
+                                            },
+                                            modifier = Modifier.size(24.dp)
+                                        ) {
+                                            Icon(Icons.Default.Delete, contentDescription = "取消任务", tint = Color.Red, modifier = Modifier.size(16.dp))
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
                 }
             }
+        }
+    }
 
-            // 本地商品列表
-            Text("可选的商品列表 (点击自动填充)：", fontWeight = FontWeight.Bold, fontSize = 16.sp, modifier = Modifier.padding(bottom = 8.dp))
-            if (goodsList.isEmpty()) {
-                Box(
+    // Schedule Config Dialog Overlay
+    if (showScheduleDialog) {
+        Dialog(onDismissRequest = { showScheduleDialog = false }) {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                shape = RoundedCornerShape(16.dp)
+            ) {
+                Column(
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .weight(1f),
-                    contentAlignment = Alignment.Center
+                        .padding(16.dp)
+                        .verticalScroll(rememberScrollState()),
+                    horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text("本地尚无商品列表", color = Color.Gray)
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Button(onClick = onRefresh, enabled = !isRefreshing) {
-                            Text("立即从支付宝同步")
+                    Text("设定秒杀定时任务", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text("商品: $scheduleName", fontSize = 13.sp, maxLines = 1)
+                    Text("ID: $scheduleItemId | SKU: $scheduleSkuId", fontSize = 11.sp, color = Color.Gray)
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    // Mode Selector Row
+                    Text("选择秒杀模式：", fontSize = 12.sp, fontWeight = FontWeight.Bold, modifier = Modifier.align(Alignment.Start))
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Button(
+                            onClick = { scheduleType = "H5" },
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = if (scheduleType == "H5") MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
+                                contentColor = if (scheduleType == "H5") MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
+                            ),
+                            modifier = Modifier.weight(1f).height(36.dp)
+                        ) {
+                            Text("前台 H5 (实物)", fontSize = 11.sp)
+                        }
+                        Button(
+                            onClick = { scheduleType = "RPC" },
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = if (scheduleType == "RPC") MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
+                                contentColor = if (scheduleType == "RPC") MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
+                            ),
+                            modifier = Modifier.weight(1f).height(36.dp)
+                        ) {
+                            Text("后台 RPC (虚拟)", fontSize = 11.sp)
                         }
                     }
-                }
-            } else {
-                LazyColumn(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    items(goodsList) { good ->
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clip(RoundedCornerShape(8.dp))
-                                .background(MaterialTheme.colorScheme.surfaceVariant)
-                                .clickable {
-                                    itemId = good.itemId
-                                    verifyPoint = good.points.toString()
-                                }
-                                .padding(12.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(good.name, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
-                                Spacer(modifier = Modifier.height(4.dp))
-                                Row {
-                                    Text("天猫ID: ${good.itemId}", fontSize = 11.sp, color = Color.Gray)
-                                    Spacer(modifier = Modifier.width(10.dp))
-                                    Text("积分: ${good.points}", fontSize = 11.sp, color = Color.Gray)
-                                }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    OutlinedTextField(
+                        value = scheduleTimeStr,
+                        onValueChange = { scheduleTimeStr = it },
+                        label = { Text("设定秒杀时间 (yyyy-MM-dd HH:mm:ss)") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true
+                    )
+                    Spacer(modifier = Modifier.height(10.dp))
+                    
+                    // Quick Time Presets Helper
+                    val presetTime = { offset: Int, hour: Int ->
+                        val cal = Calendar.getInstance()
+                        cal.add(Calendar.DAY_OF_YEAR, offset)
+                        cal.set(Calendar.HOUR_OF_DAY, hour)
+                        cal.set(Calendar.MINUTE, 0)
+                        cal.set(Calendar.SECOND, 0)
+                        scheduleTimeStr = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(cal.time)
+                    }
+
+                    Text("快速选择时间：", fontSize = 12.sp, fontWeight = FontWeight.Bold, modifier = Modifier.align(Alignment.Start))
+                    Spacer(modifier = Modifier.height(4.dp))
+                    
+                    // Presets Layout
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Button(onClick = { presetTime(0, 10) }, contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp), modifier = Modifier.weight(1f).height(28.dp)) {
+                                Text("今日 10:00", fontSize = 10.sp)
                             }
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Button(
-                                onClick = {
-                                    val orderItemsJson = "[{\"itemId\":\"${good.itemId}\",\"skuId\":\"-1\",\"number\":1}]"
-                                    val encodedOrderItems = Uri.encode(orderItemsJson)
-                                    val extJson = "{\"requestSourceInfo\":\"来源\"}"
-                                    val encodedExtJson = Uri.encode(extJson)
-                                    val tmallUrl = "https://pages.tmall.com/wow/wt/act/lm-pages?env=&extJson=$encodedExtJson&orderItems=$encodedOrderItems&verifyPoint=${good.points}&wh_page=buy"
-                                    val finalUrl = "https://pages.tmall.com/wow/z/wt/act/alipay-login?goToUrl=${Uri.encode(tmallUrl)}"
-                                    val alipaySchemeUrl = "alipays://platformapi/startapp?appId=20000067&url=${Uri.encode(finalUrl)}"
-                                    try {
-                                        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(alipaySchemeUrl)).apply {
-                                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                                        }
-                                        context.startActivity(intent)
-                                    } catch (e: Exception) {
-                                        Toast.makeText(context, "无法唤起支付宝: ${e.message}", Toast.LENGTH_SHORT).show()
+                            Button(onClick = { presetTime(0, 14) }, contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp), modifier = Modifier.weight(1f).height(28.dp)) {
+                                Text("今日 14:00", fontSize = 10.sp)
+                            }
+                            Button(onClick = { presetTime(0, 20) }, contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp), modifier = Modifier.weight(1f).height(28.dp)) {
+                                Text("今日 20:00", fontSize = 10.sp)
+                            }
+                        }
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Button(onClick = { presetTime(1, 10) }, contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp), modifier = Modifier.weight(1f).height(28.dp)) {
+                                Text("明日 10:00", fontSize = 10.sp)
+                            }
+                            Button(onClick = { presetTime(1, 14) }, contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp), modifier = Modifier.weight(1f).height(28.dp)) {
+                                Text("明日 14:00", fontSize = 10.sp)
+                            }
+                            Button(onClick = { presetTime(1, 20) }, contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp), modifier = Modifier.weight(1f).height(28.dp)) {
+                                Text("明日 20:00", fontSize = 10.sp)
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.End
+                    ) {
+                        TextButton(onClick = { showScheduleDialog = false }) {
+                            Text("取消")
+                        }
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Button(
+                            onClick = {
+                                try {
+                                    val sdf = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
+                                    val date = sdf.parse(scheduleTimeStr)
+                                    if (date == null) {
+                                        Toast.makeText(context, "日期格式错误", Toast.LENGTH_SHORT).show()
+                                        return@Button
                                     }
-                                },
-                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
-                                modifier = Modifier.height(32.dp),
-                                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary)
-                            ) {
-                                Text("立即跳转", fontSize = 11.sp)
+                                    val timeMillis = date.time
+                                    if (timeMillis <= System.currentTimeMillis()) {
+                                        Toast.makeText(context, "设定的时间不能早于当前时间", Toast.LENGTH_SHORT).show()
+                                        return@Button
+                                    }
+
+                                    val newTask = JSONObject().apply {
+                                        put("itemId", scheduleItemId)
+                                        put("skuId", scheduleSkuId)
+                                        put("points", schedulePoints.toIntOrNull() ?: 0)
+                                        put("name", scheduleName)
+                                        put("seckillTime", scheduleTimeStr)
+                                        put("timeMillis", timeMillis)
+                                        put("type", scheduleType)
+                                    }
+
+                                    val list = seckillTasks.toMutableList()
+                                    // Remove duplicates of same itemId and time
+                                    list.removeAll { it.optString("itemId") == scheduleItemId && it.optLong("timeMillis") == timeMillis }
+                                    list.add(newTask)
+                                    // Sort by time
+                                    list.sortBy { it.optLong("timeMillis") }
+                                    
+                                    saveTasks(list)
+                                    showScheduleDialog = false
+                                    Toast.makeText(context, "⏰ 秒杀任务排期成功！", Toast.LENGTH_SHORT).show()
+
+                                } catch (e: Exception) {
+                                    Toast.makeText(context, "解析错误: ${e.message}", Toast.LENGTH_SHORT).show()
+                                }
                             }
+                        ) {
+                            Text("确认排期")
                         }
                     }
                 }

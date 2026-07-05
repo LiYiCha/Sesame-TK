@@ -186,16 +186,22 @@ object Files {
     }
 
     @JvmStatic
-    fun getMemberGoodsListFile(): File {
-        val file = File(CONFIG_DIR, "member_goods_list.json")
+    fun getMemberGoodsListFile(deliveryId: String): File {
+        val fileName = if (deliveryId.isEmpty()) "member_goods_list.json" else "member_goods_list_$deliveryId.json"
+        val file = File(CONFIG_DIR, fileName)
         if (!file.exists()) {
             try {
                 file.createNewFile()
             } catch (e: Exception) {
-                Log.printStackTrace(TAG, "Failed to create member_goods_list.json", e)
+                Log.printStackTrace(TAG, "Failed to create member goods file: $fileName", e)
             }
         }
         return file
+    }
+
+    @JvmStatic
+    fun getMemberGoodsListFile(): File {
+        return getMemberGoodsListFile("")
     }
 
     @JvmStatic

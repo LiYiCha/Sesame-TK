@@ -106,13 +106,31 @@ public class SesameReceiver extends BroadcastReceiver {
                     ExtendHandle.handleCheckStatus(context);
                     break;
                 case "com.eg.android.AlipayGphone.sesame.fetchMemberGoodsList":
-                    ExtendHandle.handleFetchMemberGoodsList(context);
+                    String deliveryId = intent.getStringExtra("deliveryId");
+                    if (deliveryId == null || deliveryId.isEmpty()) {
+                        deliveryId = "94000SR2025120515775004";
+                    }
+                    int pageNum = intent.getIntExtra("pageNum", 1);
+                    ExtendHandle.handleFetchMemberGoodsList(context, deliveryId, pageNum);
+                    break;
+                case "com.eg.android.AlipayGphone.sesame.syncSeckillTasks":
+                    fansirsqi.xposed.sesame.task.otherTask2.SeckillScheduler.syncTasks(context);
                     break;
                 case "com.eg.android.AlipayGphone.sesame.exactAlarm":
                     // 处理精确唤醒任务
                     String taskId = intent.getStringExtra("taskId");
                     if (taskId != null) {
-                        AlarmScheduler.handleExactAlarmTrigger(taskId);
+                        if (taskId.startsWith("seckill_")) {
+                            fansirsqi.xposed.sesame.task.otherTask2.SeckillScheduler.INSTANCE.executeSeckillById(context, taskId);
+                        } else {
+                            AlarmScheduler.handleExactAlarmTrigger(taskId);
+                            if (taskId.startsWith("WAKEUP_")) {
+                                Log.runtime(TAG, "⏰ 检测到内置兑换任务精确唤醒，以防内存丢失启动全局任务...");
+                                if (callback != null) {
+                                    callback.onInitHandler(false);
+                                }
+                            }
+                        }
                     }
                     break;
                 default:
@@ -168,6 +186,7 @@ public class SesameReceiver extends BroadcastReceiver {
         intentFilter.addAction("com.eg.android.AlipayGphone.sesame.checkStatus"); // 状态检测
         intentFilter.addAction("com.eg.android.AlipayGphone.sesame.exactAlarm"); // 精确唤醒任务
         intentFilter.addAction("com.eg.android.AlipayGphone.sesame.fetchMemberGoodsList"); // 同步会员商品列表
+        intentFilter.addAction("com.eg.android.AlipayGphone.sesame.syncSeckillTasks"); // 同步定时秒杀任务
         return intentFilter;
     }
 }
