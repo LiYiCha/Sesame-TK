@@ -77,7 +77,6 @@ class MiscHookModule : HookModule {
                 override fun afterHookedMethod(param: MethodHookParam) {
                     val view = param.args[0]
                     val url = param.args[1] as? String ?: return
-                    handleWebPageFinished(view, url)
                 }
             })
             Log.runtime(TAG, "✅ Hook android.webkit.WebViewClient.onPageFinished 成功")
@@ -92,7 +91,6 @@ class MiscHookModule : HookModule {
                 override fun afterHookedMethod(param: MethodHookParam) {
                     val view = param.args[0]
                     val url = param.args[1] as? String ?: return
-                    handleWebPageFinished(view, url)
                 }
             })
             Log.runtime(TAG, "✅ Hook UC WebViewClient.onPageFinished 成功")
@@ -115,7 +113,8 @@ class MiscHookModule : HookModule {
 
             // 1. Hook H5AppRpcUpdate
             try {
-                val targetClass = classLoader.loadClass("com.alipay.mobile.nebulaappproxy.api.rpc.H5AppRpcUpdate")
+                val targetClass =
+                    classLoader.loadClass("com.alipay.mobile.nebulaappproxy.api.rpc.H5AppRpcUpdate")
                 val h5PageClass = classLoader.loadClass(General.H5PAGE_NAME)
                 XposedHelpers.findAndHookMethod(
                     targetClass, "matchVersion",
@@ -130,9 +129,13 @@ class MiscHookModule : HookModule {
             // 2. Hook CDPBService
             try {
                 val cdpbServiceClass = classLoader.loadClass("com.alipay.cdpb.api.CDPBService")
-                val is3PTSpacesMethod = XposedHelpers.findMethodExactIfExists(cdpbServiceClass, "is3PTSpaces")
+                val is3PTSpacesMethod =
+                    XposedHelpers.findMethodExactIfExists(cdpbServiceClass, "is3PTSpaces")
                 if (is3PTSpacesMethod != null) {
-                    XposedBridge.hookMethod(is3PTSpacesMethod, XC_MethodReplacement.returnConstant(false))
+                    XposedBridge.hookMethod(
+                        is3PTSpacesMethod,
+                        XC_MethodReplacement.returnConstant(false)
+                    )
                     Log.runtime(TAG, "✅ 延迟 Hook CDPBService 成功")
                 }
             } catch (t: Throwable) {
@@ -142,71 +145,30 @@ class MiscHookModule : HookModule {
             // 3. Hook AlipayLogin 生命周期（状态监控）
             try {
                 val loginActivityClass = classLoader.loadClass(General.CURRENT_USING_ACTIVITY)
-                XposedHelpers.findAndHookMethod(loginActivityClass, "onResume", object : XC_MethodHook() {
-                    override fun afterHookedMethod(param: MethodHookParam) {
-                        fansirsqi.xposed.sesame.hook.lifecycle.LifecycleManager.setAlipayLoginActive(true)
-                    }
-                })
-                XposedHelpers.findAndHookMethod(loginActivityClass, "onDestroy", object : XC_MethodHook() {
-                    override fun afterHookedMethod(param: MethodHookParam) {
-                        fansirsqi.xposed.sesame.hook.lifecycle.LifecycleManager.setAlipayLoginActive(false)
-                    }
-                })
+                XposedHelpers.findAndHookMethod(
+                    loginActivityClass,
+                    "onResume",
+                    object : XC_MethodHook() {
+                        override fun afterHookedMethod(param: MethodHookParam) {
+                            fansirsqi.xposed.sesame.hook.lifecycle.LifecycleManager.setAlipayLoginActive(
+                                true
+                            )
+                        }
+                    })
+                XposedHelpers.findAndHookMethod(
+                    loginActivityClass,
+                    "onDestroy",
+                    object : XC_MethodHook() {
+                        override fun afterHookedMethod(param: MethodHookParam) {
+                            fansirsqi.xposed.sesame.hook.lifecycle.LifecycleManager.setAlipayLoginActive(
+                                false
+                            )
+                        }
+                    })
                 Log.runtime(TAG, "✅ 延迟 Hook AlipayLogin 生命周期成功")
             } catch (t: Throwable) {
                 Log.runtime(TAG, "❌ 延迟 Hook AlipayLogin 生命周期失败: ${t.message}")
             }
-            
-            // 4. Hook LibraryLoadUtils.loadLibraryHasResult 防止 UnsatisfiedLinkError 崩溃
-            try {
-                val targetClass = classLoader.loadClass("com.alipay.mobile.common.utils.load.LibraryLoadUtils")
-                XposedHelpers.findAndHookMethod(
-                    targetClass, "loadLibraryHasResult",
-                    String::class.java, Boolean::class.javaPrimitiveType, ClassLoader::class.java, Boolean::class.javaPrimitiveType,
-                    object : XC_MethodHook() {
-                        override fun afterHookedMethod(param: MethodHookParam) {
-                            val result = param.result as? Boolean ?: return
-                            if (!result) {
-                                val libName = param.args[0] as? String ?: return
-                                if (shouldRetryLibrary(libName)) {
-                                    Log.runtime(TAG, "🔍 检测到 LibraryLoadUtils 加载 $libName 失败，启动延迟重试...")
-                                    val z = param.args[1] as Boolean
-                                    val cl = param.args[2] as? ClassLoader
-                                    val z2 = param.args[3] as Boolean
-                                    
-                                    val method = param.method as java.lang.reflect.Method
-                                    for (retry in 1..4) {
-                                        try {
-                                            Thread.sleep(200)
-                                        } catch (ignored: InterruptedException) {}
-                                        
-                                        try {
-                                            // 绕过所有 Xposed 拦截直接调用原始方法
-                                            val retryResult = XposedBridge.invokeOriginalMethod(method, null, arrayOf(libName, z, cl, z2)) as? Boolean
-                                            if (retryResult == true) {
-                                                Log.runtime(TAG, "✅ 重试加载 $libName 成功 (第 $retry 次重试)")
-                                                param.result = true
-                                                return
-                                            }
-                                        } catch (t: Throwable) {
-                                            Log.runtime(TAG, "重试加载 $libName 异常: ${t.message}")
-                                        }
-                                    }
-                                    Log.runtime(TAG, "❌ 重试加载 $libName 彻底失败")
-                                }
-                            }
-                        }
-                    }
-                )
-                Log.runtime(TAG, "✅ Hook LibraryLoadUtils.loadLibraryHasResult 成功")
-            } catch (t: Throwable) {
-                Log.runtime(TAG, "❌ Hook LibraryLoadUtils.loadLibraryHasResult 失败: ${t.message}")
-            }
-        }
-
-        private fun shouldRetryLibrary(libName: String): Boolean {
-            val name = libName.lowercase(Locale.US)
-            return name.contains("bundle2h") || name.contains("homegridbase") || name.contains("crosser")
         }
 
         @JvmStatic
