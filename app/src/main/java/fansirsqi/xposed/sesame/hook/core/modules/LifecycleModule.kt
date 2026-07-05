@@ -130,7 +130,7 @@ class LifecycleModule : HookModule {
             SmartSchedulerManager.initialize(appService.applicationContext)
             AlipayMiniMarkHelper.init(cl)
             AuthCodeHelper.init(cl)
-            AuthCodeHelper.getAuthCode("2021005114632037")
+//            AuthCodeHelper.getAuthCode("2021005114632037")
         }
 
         SesameReceiver.register(appService, object : SesameReceiver.BroadcastCallback {

@@ -86,17 +86,22 @@ class MiscHookModule : HookModule {
 
         // Hook UC WebViewClient for Tmall Seckill Auto-Submit
         try {
-            val ucClientClass = classLoader.loadClass("com.uc.webview.export.WebViewClient")
-            XposedBridge.hookAllMethods(ucClientClass, "onPageFinished", object : XC_MethodHook() {
-                override fun afterHookedMethod(param: MethodHookParam) {
-                    val view = param.args[0]
-                    val url = param.args[1] as? String ?: return
-                    handleWebPageFinished(view, url)
-                }
-            })
-            Log.runtime(TAG, "✅ Hook UC WebViewClient.onPageFinished 成功")
+            val ucClientClass = XposedHelpers.findClassIfExists("com.uc.webview.export.WebViewClient", classLoader)
+            if (ucClientClass != null) {
+                XposedBridge.hookAllMethods(ucClientClass, "onPageFinished", object : XC_MethodHook() {
+                    override fun afterHookedMethod(param: MethodHookParam) {
+                        val view = param.args[0]
+                        val url = param.args[1] as? String ?: return
+                        handleWebPageFinished(view, url)
+                    }
+                })
+                Log.runtime(TAG, "✅ Hook UC WebViewClient.onPageFinished 成功")
+            } else {
+//                精简日志
+//                Log.runtime(TAG, "ℹ️ UC WebView 尚未装载，跳过即时挂钩（UC浏览器服务动态加载属正常情况）")
+            }
         } catch (t: Throwable) {
-            Log.runtime(TAG, "❌ Hook UC WebViewClient 失败: ${t.message}")
+            // 静默忽略
         }
     }
 
