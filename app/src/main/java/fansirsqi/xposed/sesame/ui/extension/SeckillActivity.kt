@@ -20,7 +20,6 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
@@ -42,7 +41,6 @@ import fansirsqi.xposed.sesame.task.otherTask2.SeckillScheduler
 import fansirsqi.xposed.sesame.util.Files
 import org.json.JSONArray
 import org.json.JSONObject
-import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Locale
@@ -53,7 +51,8 @@ data class MemberGood(
     val itemId: String,
     val points: Int,
     val price: String,
-    val skuId: String = "-1"
+    val skuId: String = "-1",
+    val actionUrl: String = ""
 )
 
 class SeckillActivity : ComponentActivity() {
@@ -61,6 +60,23 @@ class SeckillActivity : ComponentActivity() {
     private val goodsList = mutableStateListOf<MemberGood>()
     private val isRefreshing = mutableStateOf(false)
     private val currentCategory = mutableStateOf("94000SR2025120515775004")
+    private val currentPage = mutableStateOf(1)
+
+    // Unified State at Activity Level
+    private val itemId = mutableStateOf("")
+    private val verifyPoint = mutableStateOf("")
+    private val skuId = mutableStateOf("-1")
+    private val quantityNumber = mutableStateOf("1")
+    private val activeBenefitId = mutableStateOf("")
+
+    // Dialog states
+    private val showScheduleDialog = mutableStateOf(false)
+    private val scheduleItemId = mutableStateOf("")
+    private val scheduleSkuId = mutableStateOf("-1")
+    private val schedulePoints = mutableStateOf("")
+    private val scheduleName = mutableStateOf("")
+    private val scheduleTimeStr = mutableStateOf("")
+    private val scheduleType = mutableStateOf("H5")
 
     private val receiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
@@ -72,7 +88,40 @@ class SeckillActivity : ComponentActivity() {
                     loadLocalGoods(deliveryId)
                 }
                 "fansirsqi.xposed.sesame.fetchMemberGoodsList.failed" -> {
-                    Toast.makeText(this@SeckillActivity, "同步商品列表失败，请确保支付宝在运行中", Toast.LENGTH_LONG).show()
+                    val reason = intent.getStringExtra("reason")
+                    if ("no_more" == reason) {
+                        Toast.makeText(this@SeckillActivity, "已是最后一页 / 没有更多商品了", Toast.LENGTH_SHORT).show()
+                        if (currentPage.value > 1) {
+                            currentPage.value--
+                        }
+                    } else {
+                        Toast.makeText(this@SeckillActivity, "同步商品列表失败，请确保支付宝在运行中", Toast.LENGTH_LONG).show()
+                    }
+                }
+                "fansirsqi.xposed.sesame.queryBenefitDetail.success" -> {
+                    val benefitId = intent.getStringExtra("benefitId")
+                    val fetchedSkuId = intent.getStringExtra("skuId")
+                    if (benefitId != null && fetchedSkuId != null) {
+                        Toast.makeText(this@SeckillActivity, "已自动获取规格 ID: $fetchedSkuId", Toast.LENGTH_SHORT).show()
+                        
+                        // Update active UI states directly
+                        if (activeBenefitId.value == benefitId) {
+                            skuId.value = fetchedSkuId
+                            scheduleSkuId.value = fetchedSkuId
+                        }
+
+                        var updated = false
+                        for (i in 0 until goodsList.size) {
+                            val good = goodsList[i]
+                            if (good.benefitId == benefitId) {
+                                goodsList[i] = good.copy(skuId = fetchedSkuId)
+                                updated = true
+                            }
+                        }
+                        if (updated) {
+                            saveLocalGoodsWithUpdatedSku(currentCategory.value)
+                        }
+                    }
                 }
             }
         }
@@ -84,6 +133,7 @@ class SeckillActivity : ComponentActivity() {
         val filter = IntentFilter().apply {
             addAction("fansirsqi.xposed.sesame.fetchMemberGoodsList.success")
             addAction("fansirsqi.xposed.sesame.fetchMemberGoodsList.failed")
+            addAction("fansirsqi.xposed.sesame.queryBenefitDetail.success")
         }
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
             registerReceiver(receiver, filter, Context.RECEIVER_EXPORTED)
@@ -102,6 +152,32 @@ class SeckillActivity : ComponentActivity() {
                     SeckillScreen(
                         goodsList = goodsList,
                         isRefreshing = isRefreshing.value,
+                        currentPage = currentPage.value,
+                        onPageChange = { currentPage.value = it },
+                        itemId = itemId.value,
+                        onItemIdChange = { itemId.value = it },
+                        verifyPoint = verifyPoint.value,
+                        onVerifyPointChange = { verifyPoint.value = it },
+                        skuId = skuId.value,
+                        onSkuIdChange = { skuId.value = it },
+                        quantityNumber = quantityNumber.value,
+                        onQuantityNumberChange = { quantityNumber.value = it },
+                        activeBenefitId = activeBenefitId.value,
+                        onActiveBenefitIdChange = { activeBenefitId.value = it },
+                        showScheduleDialog = showScheduleDialog.value,
+                        onShowScheduleDialogChange = { showScheduleDialog.value = it },
+                        scheduleItemId = scheduleItemId.value,
+                        onScheduleItemIdChange = { scheduleItemId.value = it },
+                        scheduleSkuId = scheduleSkuId.value,
+                        onScheduleSkuIdChange = { scheduleSkuId.value = it },
+                        schedulePoints = schedulePoints.value,
+                        onSchedulePointsChange = { schedulePoints.value = it },
+                        scheduleName = scheduleName.value,
+                        onScheduleNameChange = { scheduleName.value = it },
+                        scheduleTimeStr = scheduleTimeStr.value,
+                        onScheduleTimeStrChange = { scheduleTimeStr.value = it },
+                        scheduleType = scheduleType.value,
+                        onScheduleTypeChange = { scheduleType.value = it },
                         onRefresh = { deliveryId, page ->
                             isRefreshing.value = true
                             currentCategory.value = deliveryId
@@ -110,7 +186,7 @@ class SeckillActivity : ComponentActivity() {
                                 putExtra("pageNum", page)
                             }
                             sendBroadcast(intent)
-                            Toast.makeText(this, "正在请求同步商品列表...", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(this@SeckillActivity, "正在请求同步商品列表...", Toast.LENGTH_SHORT).show()
                         },
                         onTabSelected = { deliveryId ->
                             currentCategory.value = deliveryId
@@ -144,6 +220,35 @@ class SeckillActivity : ComponentActivity() {
         goodsList.clear()
     }
 
+    private fun saveLocalGoodsWithUpdatedSku(deliveryId: String) {
+        try {
+            val file = Files.getMemberGoodsListFile(deliveryId)
+            val root = JSONObject()
+            val ja = JSONArray()
+            goodsList.forEach { good ->
+                val jo = JSONObject().apply {
+                    put("benefitId", good.benefitId)
+                    put("name", good.name)
+                    put("itemId", good.itemId)
+                    put("pointPrice", good.points)
+                    put("priceYuan", good.price)
+                    put("actionUrl", good.actionUrl)
+                    val skus = JSONArray().apply {
+                        put(JSONObject().apply {
+                            put("skuId", good.skuId)
+                        })
+                    }
+                    put("skuInfoList", skus)
+                }
+                ja.put(jo)
+            }
+            root.put("benefits", ja)
+            Files.write2File(root.toString(), file)
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
     private fun parseGoods(jsonStr: String): List<MemberGood> {
         val list = mutableListOf<MemberGood>()
         val seen = mutableSetOf<String>()
@@ -158,18 +263,76 @@ class SeckillActivity : ComponentActivity() {
                                 ?: obj.optString("benefitIntro", "").takeIf { it.isNotEmpty() }
                                 ?: obj.optString("title", "")
                             val itemId = obj.optString("itemId", "")
+                            
+                            // Robust Multi-tier point extraction (fixing Elvis 0 bug)
+                            var points = 0
                             val pointDisplay = obj.optJSONObject("pointPriceForDisplay")
-                            var points = pointDisplay?.optInt("minPoint", 0) ?: obj.optInt("points", 0)
+                            if (pointDisplay != null) {
+                                points = pointDisplay.optInt("minPoint", 0)
+                                if (points == 0) {
+                                    points = pointDisplay.optInt("maxPoint", 0)
+                                }
+                            }
+                            if (points == 0) {
+                                points = obj.optInt("points", 0)
+                            }
                             if (points == 0) {
                                 points = obj.optInt("pointPrice", 0)
                             }
                             if (points == 0) {
-                                points = pointDisplay?.optInt("maxPoint", 0) ?: 0
+                                val pricePresentation = obj.optJSONObject("pricePresentation")
+                                if (pricePresentation != null) {
+                                    points = pricePresentation.optInt("point", 0)
+                                }
                             }
-                            var price = pointDisplay?.optString("minAmount") 
-                                ?: obj.optString("priceYuan").takeIf { it.isNotEmpty() }
-                                ?: obj.optString("priceCent").takeIf { it.isNotEmpty() }
-                                ?: "0.00"
+                            if (points == 0) {
+                                val purePoint = obj.optJSONObject("purePointForDisplay")
+                                if (purePoint != null) {
+                                    val levels = listOf("primary", "golden", "platinum", "diamond")
+                                    for (lvl in levels) {
+                                        val lvlObj = purePoint.optJSONObject(lvl)
+                                        if (lvlObj != null) {
+                                            points = lvlObj.optInt("minPoint", 0)
+                                            if (points == 0) {
+                                                points = lvlObj.optInt("maxPoint", 0)
+                                            }
+                                            if (points != 0) break
+                                        }
+                                    }
+                                }
+                            }
+
+                            // Robust Multi-tier price extraction
+                            var price = ""
+                            if (pointDisplay != null) {
+                                price = pointDisplay.optString("minAmount", "")
+                                if (price.isEmpty()) {
+                                    price = pointDisplay.optString("maxAmount", "")
+                                }
+                            }
+                            if (price.isEmpty()) {
+                                price = obj.optString("priceYuan", "")
+                            }
+                            if (price.isEmpty()) {
+                                price = obj.optString("channelPrice", "")
+                            }
+                            if (price.isEmpty()) {
+                                val pricePresentation = obj.optJSONObject("pricePresentation")
+                                if (pricePresentation != null) {
+                                    price = pricePresentation.optString("yuan", "")
+                                }
+                            }
+                            if (price.isEmpty()) {
+                                price = "0.00"
+                            }
+                            
+                            var actionUrl = obj.optString("actionUrl", "")
+                            if (actionUrl.isEmpty()) {
+                                val linkInfo = obj.optJSONObject("linkInfo")
+                                if (linkInfo != null) {
+                                    actionUrl = linkInfo.optString("jumpUrl", "")
+                                }
+                            }
                             
                             var skuId = "-1"
                             val simpleSkus = obj.optJSONArray("simpleSkus")
@@ -192,7 +355,7 @@ class SeckillActivity : ComponentActivity() {
 
                             if (itemId.isNotEmpty() && !seen.contains(benefitId)) {
                                 seen.add(benefitId)
-                                list.add(MemberGood(benefitId, name, itemId, points, price, skuId))
+                                list.add(MemberGood(benefitId, name, itemId, points, price, skuId, actionUrl))
                             }
                         }
                         obj.keys().forEach { key ->
@@ -219,6 +382,32 @@ class SeckillActivity : ComponentActivity() {
 fun SeckillScreen(
     goodsList: List<MemberGood>,
     isRefreshing: Boolean,
+    currentPage: Int,
+    onPageChange: (Int) -> Unit,
+    itemId: String,
+    onItemIdChange: (String) -> Unit,
+    verifyPoint: String,
+    onVerifyPointChange: (String) -> Unit,
+    skuId: String,
+    onSkuIdChange: (String) -> Unit,
+    quantityNumber: String,
+    onQuantityNumberChange: (String) -> Unit,
+    activeBenefitId: String,
+    onActiveBenefitIdChange: (String) -> Unit,
+    showScheduleDialog: Boolean,
+    onShowScheduleDialogChange: (Boolean) -> Unit,
+    scheduleItemId: String,
+    onScheduleItemIdChange: (String) -> Unit,
+    scheduleSkuId: String,
+    onScheduleSkuIdChange: (String) -> Unit,
+    schedulePoints: String,
+    onSchedulePointsChange: (String) -> Unit,
+    scheduleName: String,
+    onScheduleNameChange: (String) -> Unit,
+    scheduleTimeStr: String,
+    onScheduleTimeStrChange: (String) -> Unit,
+    scheduleType: String,
+    onScheduleTypeChange: (String) -> Unit,
     onRefresh: (deliveryId: String, page: Int) -> Unit,
     onTabSelected: (deliveryId: String) -> Unit,
     onBack: () -> Unit
@@ -231,21 +420,8 @@ fun SeckillScreen(
     )
 
     var selectedTabIndex by remember { mutableStateOf(0) }
-    var itemId by remember { mutableStateOf("") }
-    var verifyPoint by remember { mutableStateOf("") }
-    var skuId by remember { mutableStateOf("-1") }
     var generatedUrl by remember { mutableStateOf("") }
     var searchQuery by remember { mutableStateOf("") }
-    var currentPage by remember { mutableStateOf(1) }
-
-    // Dialog state
-    var showScheduleDialog by remember { mutableStateOf(false) }
-    var scheduleItemId by remember { mutableStateOf("") }
-    var scheduleSkuId by remember { mutableStateOf("-1") }
-    var schedulePoints by remember { mutableStateOf("") }
-    var scheduleName by remember { mutableStateOf("") }
-    var scheduleTimeStr by remember { mutableStateOf("") }
-    var scheduleType by remember { mutableStateOf("H5") } // "H5" or "RPC"
 
     var seckillTasks by remember { mutableStateOf(listOf<JSONObject>()) }
 
@@ -290,13 +466,14 @@ fun SeckillScreen(
     }
 
     LaunchedEffect(selectedTabIndex) {
-        currentPage = 1
+        onPageChange(1)
         onTabSelected(categories[selectedTabIndex].second)
     }
 
-    LaunchedEffect(itemId, verifyPoint, skuId) {
+    LaunchedEffect(itemId, verifyPoint, skuId, quantityNumber) {
         if (itemId.isNotEmpty() && verifyPoint.isNotEmpty()) {
-            val orderItemsJson = "[{\"itemId\":\"$itemId\",\"skuId\":\"$skuId\",\"number\":1}]"
+            val numVal = quantityNumber.toIntOrNull() ?: 1
+            val orderItemsJson = "[{\"itemId\":\"$itemId\",\"skuId\":\"$skuId\",\"number\":$numVal}]"
             val encodedOrderItems = Uri.encode(orderItemsJson)
             val extJson = "{\"requestSourceInfo\":\"来源\"}"
             val encodedExtJson = Uri.encode(extJson)
@@ -378,7 +555,7 @@ fun SeckillScreen(
                         Spacer(modifier = Modifier.height(6.dp))
                         OutlinedTextField(
                             value = itemId,
-                            onValueChange = { itemId = it },
+                            onValueChange = onItemIdChange,
                             label = { Text("商品 ID / 权益 ID (itemId)") },
                             modifier = Modifier.fillMaxWidth(),
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
@@ -387,16 +564,23 @@ fun SeckillScreen(
                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             OutlinedTextField(
                                 value = verifyPoint,
-                                onValueChange = { verifyPoint = it },
-                                label = { Text("所需积分 (points)") },
-                                modifier = Modifier.weight(1f),
+                                onValueChange = onVerifyPointChange,
+                                label = { Text("所需积分") },
+                                modifier = Modifier.weight(1.1f),
                                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
                             )
                             OutlinedTextField(
                                 value = skuId,
-                                onValueChange = { skuId = it },
-                                label = { Text("规格 ID (skuId)") },
-                                modifier = Modifier.weight(1f),
+                                onValueChange = onSkuIdChange,
+                                label = { Text("规格 ID") },
+                                modifier = Modifier.weight(1.1f),
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                            )
+                            OutlinedTextField(
+                                value = quantityNumber,
+                                onValueChange = onQuantityNumberChange,
+                                label = { Text("数量") },
+                                modifier = Modifier.weight(0.8f),
                                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
                             )
                         }
@@ -433,16 +617,16 @@ fun SeckillScreen(
                                 }
                                 Button(
                                     onClick = {
-                                        scheduleItemId = itemId
-                                        scheduleSkuId = skuId
-                                        schedulePoints = verifyPoint
-                                        scheduleName = "自定义秒杀商品"
-                                        scheduleType = "H5"
+                                        onScheduleItemIdChange(itemId)
+                                        onScheduleSkuIdChange(skuId)
+                                        onSchedulePointsChange(verifyPoint)
+                                        onScheduleNameChange("自定义秒杀商品")
+                                        onScheduleTypeChange("H5")
                                         val cal = Calendar.getInstance()
                                         cal.set(Calendar.MINUTE, 0)
                                         cal.set(Calendar.SECOND, 0)
-                                        scheduleTimeStr = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(cal.time)
-                                        showScheduleDialog = true
+                                        onScheduleTimeStrChange(SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(cal.time))
+                                        onShowScheduleDialogChange(true)
                                     },
                                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.tertiary),
                                     modifier = Modifier.weight(1.2f)
@@ -494,9 +678,19 @@ fun SeckillScreen(
                                         .clip(RoundedCornerShape(8.dp))
                                         .background(MaterialTheme.colorScheme.surfaceVariant)
                                         .clickable {
-                                            itemId = good.itemId
-                                            verifyPoint = good.points.toString()
-                                            skuId = good.skuId
+                                            onItemIdChange(good.itemId)
+                                            onVerifyPointChange(good.points.toString())
+                                            onSkuIdChange(good.skuId)
+                                            onActiveBenefitIdChange(good.benefitId)
+                                            
+                                            // Trigger automatic background SKU lookup
+                                            if (good.skuId == "-1") {
+                                                Toast.makeText(context, "正在查询规格...", Toast.LENGTH_SHORT).show()
+                                                val intent = Intent("com.eg.android.AlipayGphone.sesame.queryBenefitDetail").apply {
+                                                    putExtra("benefitId", good.benefitId)
+                                                }
+                                                context.sendBroadcast(intent)
+                                            }
                                         }
                                         .padding(10.dp),
                                     verticalAlignment = Alignment.CenterVertically
@@ -518,15 +712,27 @@ fun SeckillScreen(
                                     Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                                         Button(
                                             onClick = {
-                                                val orderItemsJson = "[{\"itemId\":\"${good.itemId}\",\"skuId\":\"${good.skuId}\",\"number\":1}]"
-                                                val encodedOrderItems = Uri.encode(orderItemsJson)
-                                                val extJson = "{\"requestSourceInfo\":\"来源\"}"
-                                                val encodedExtJson = Uri.encode(extJson)
-                                                val tmallUrl = "https://pages.tmall.com/wow/wt/act/lm-pages?env=&extJson=$encodedExtJson&orderItems=$encodedOrderItems&verifyPoint=${good.points}&wh_page=buy"
-                                                val finalUrl = "https://pages.tmall.com/wow/z/wt/act/alipay-login?goToUrl=${Uri.encode(tmallUrl)}"
-                                                val alipaySchemeUrl = "alipays://platformapi/startapp?appId=20000067&url=${Uri.encode(finalUrl)}"
+                                                // If actionUrl exists, launch native detail page directly
+                                                val targetUrl = if (good.actionUrl.isNotEmpty()) {
+                                                    good.actionUrl
+                                                } else {
+                                                    val numVal = quantityNumber.toIntOrNull() ?: 1
+                                                    val orderItemsJson = "[{\"itemId\":\"${good.itemId}\",\"skuId\":\"${good.skuId}\",\"number\":$numVal}]"
+                                                    val encodedOrderItems = Uri.encode(orderItemsJson)
+                                                    val extJson = "{\"requestSourceInfo\":\"来源\"}"
+                                                    val encodedExtJson = Uri.encode(extJson)
+                                                    val tmallUrl = "https://pages.tmall.com/wow/wt/act/lm-pages?env=&extJson=$encodedExtJson&orderItems=$encodedOrderItems&verifyPoint=${good.points}&wh_page=buy"
+                                                    "https://pages.tmall.com/wow/z/wt/act/alipay-login?goToUrl=${Uri.encode(tmallUrl)}"
+                                                }
+                                                
+                                                val scheme = if (targetUrl.startsWith("alipays://")) {
+                                                    targetUrl
+                                                } else {
+                                                    "alipays://platformapi/startapp?appId=20000067&url=${Uri.encode(targetUrl)}"
+                                                }
+                                                
                                                 try {
-                                                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(alipaySchemeUrl)).apply {
+                                                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(scheme)).apply {
                                                         addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                                                     }
                                                     context.startActivity(intent)
@@ -542,16 +748,26 @@ fun SeckillScreen(
                                         }
                                         Button(
                                             onClick = {
-                                                scheduleItemId = good.itemId
-                                                scheduleSkuId = good.skuId
-                                                schedulePoints = good.points.toString()
-                                                scheduleName = good.name
-                                                scheduleType = "H5"
+                                                onScheduleItemIdChange(good.itemId)
+                                                onScheduleSkuIdChange(good.skuId)
+                                                onSchedulePointsChange(good.points.toString())
+                                                onScheduleNameChange(good.name)
+                                                onScheduleTypeChange("H5")
+                                                onActiveBenefitIdChange(good.benefitId)
+                                                
+                                                // Trigger background SKU resolution
+                                                if (good.skuId == "-1") {
+                                                    val intent = Intent("com.eg.android.AlipayGphone.sesame.queryBenefitDetail").apply {
+                                                        putExtra("benefitId", good.benefitId)
+                                                    }
+                                                    context.sendBroadcast(intent)
+                                                }
+                                                
                                                 val cal = Calendar.getInstance()
                                                 cal.set(Calendar.MINUTE, 0)
                                                 cal.set(Calendar.SECOND, 0)
-                                                scheduleTimeStr = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(cal.time)
-                                                showScheduleDialog = true
+                                                onScheduleTimeStrChange(SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(cal.time))
+                                                onShowScheduleDialogChange(true)
                                             },
                                             contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
                                             modifier = Modifier.height(28.dp),
@@ -578,8 +794,9 @@ fun SeckillScreen(
                         Button(
                             onClick = {
                                 if (currentPage > 1) {
-                                    currentPage--
-                                    onRefresh(categories[selectedTabIndex].second, currentPage)
+                                    val prevPage = currentPage - 1
+                                    onPageChange(prevPage)
+                                    onRefresh(categories[selectedTabIndex].second, prevPage)
                                 }
                             },
                             enabled = currentPage > 1 && !isRefreshing,
@@ -591,8 +808,9 @@ fun SeckillScreen(
                         Text("第 $currentPage 页", fontSize = 13.sp, fontWeight = FontWeight.Bold)
                         Button(
                             onClick = {
-                                currentPage++
-                                onRefresh(categories[selectedTabIndex].second, currentPage)
+                                val nextPage = currentPage + 1
+                                onPageChange(nextPage)
+                                onRefresh(categories[selectedTabIndex].second, nextPage)
                             },
                             enabled = !isRefreshing && goodsList.isNotEmpty(),
                             contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
@@ -629,7 +847,7 @@ fun SeckillScreen(
                                     ) {
                                         Column(modifier = Modifier.weight(1f)) {
                                             Text(task.optString("name", "未命名"), fontSize = 12.sp, maxLines = 1, fontWeight = FontWeight.SemiBold)
-                                            Text("时间: ${task.optString("seckillTime")} | 模式: ${task.optString("type")} | ID: ${task.optString("itemId")}", fontSize = 10.sp, color = Color.Gray)
+                                            Text("时间: ${task.optString("seckillTime")} | 模式: ${task.optString("type")} | 数量: ${task.optInt("number", 1)} | ID: ${task.optString("itemId")}", fontSize = 10.sp, color = Color.Gray)
                                         }
                                         IconButton(
                                             onClick = {
@@ -653,7 +871,7 @@ fun SeckillScreen(
 
     // Schedule Config Dialog Overlay
     if (showScheduleDialog) {
-        Dialog(onDismissRequest = { showScheduleDialog = false }) {
+        Dialog(onDismissRequest = { onShowScheduleDialogChange(false) }) {
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -680,7 +898,7 @@ fun SeckillScreen(
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         Button(
-                            onClick = { scheduleType = "H5" },
+                            onClick = { onScheduleTypeChange("H5") },
                             colors = ButtonDefaults.buttonColors(
                                 containerColor = if (scheduleType == "H5") MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
                                 contentColor = if (scheduleType == "H5") MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
@@ -690,7 +908,7 @@ fun SeckillScreen(
                             Text("前台 H5 (实物)", fontSize = 11.sp)
                         }
                         Button(
-                            onClick = { scheduleType = "RPC" },
+                            onClick = { onScheduleTypeChange("RPC") },
                             colors = ButtonDefaults.buttonColors(
                                 containerColor = if (scheduleType == "RPC") MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
                                 contentColor = if (scheduleType == "RPC") MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
@@ -705,7 +923,7 @@ fun SeckillScreen(
 
                     OutlinedTextField(
                         value = scheduleTimeStr,
-                        onValueChange = { scheduleTimeStr = it },
+                        onValueChange = onScheduleTimeStrChange,
                         label = { Text("设定秒杀时间 (yyyy-MM-dd HH:mm:ss)") },
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true
@@ -719,7 +937,7 @@ fun SeckillScreen(
                         cal.set(Calendar.HOUR_OF_DAY, hour)
                         cal.set(Calendar.MINUTE, 0)
                         cal.set(Calendar.SECOND, 0)
-                        scheduleTimeStr = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(cal.time)
+                        onScheduleTimeStrChange(SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(cal.time))
                     }
 
                     Text("快速选择时间：", fontSize = 12.sp, fontWeight = FontWeight.Bold, modifier = Modifier.align(Alignment.Start))
@@ -757,7 +975,7 @@ fun SeckillScreen(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.End
                     ) {
-                        TextButton(onClick = { showScheduleDialog = false }) {
+                        TextButton(onClick = { onShowScheduleDialogChange(false) }) {
                             Text("取消")
                         }
                         Spacer(modifier = Modifier.width(8.dp))
@@ -776,6 +994,7 @@ fun SeckillScreen(
                                         return@Button
                                     }
 
+                                    val numVal = quantityNumber.toIntOrNull() ?: 1
                                     val newTask = JSONObject().apply {
                                         put("itemId", scheduleItemId)
                                         put("skuId", scheduleSkuId)
@@ -784,6 +1003,7 @@ fun SeckillScreen(
                                         put("seckillTime", scheduleTimeStr)
                                         put("timeMillis", timeMillis)
                                         put("type", scheduleType)
+                                        put("number", numVal)
                                     }
 
                                     val list = seckillTasks.toMutableList()
@@ -794,7 +1014,7 @@ fun SeckillScreen(
                                     list.sortBy { it.optLong("timeMillis") }
                                     
                                     saveTasks(list)
-                                    showScheduleDialog = false
+                                    onShowScheduleDialogChange(false)
                                     Toast.makeText(context, "⏰ 秒杀任务排期成功！", Toast.LENGTH_SHORT).show()
 
                                 } catch (e: Exception) {

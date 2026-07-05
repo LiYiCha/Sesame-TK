@@ -113,6 +113,16 @@ public class SesameReceiver extends BroadcastReceiver {
                     int pageNum = intent.getIntExtra("pageNum", 1);
                     ExtendHandle.handleFetchMemberGoodsList(context, deliveryId, pageNum);
                     break;
+                case "com.eg.android.AlipayGphone.sesame.queryBenefitDetail":
+                    try {
+                        String benefitId = intent.getStringExtra("benefitId");
+                        if (benefitId != null && !benefitId.isEmpty()) {
+                            ExtendHandle.handleQueryBenefitDetail(context, benefitId);
+                        }
+                    } catch (Throwable th) {
+                        Log.error(TAG, "查询规格详情异常: " + th.getMessage());
+                    }
+                    break;
                 case "com.eg.android.AlipayGphone.sesame.syncSeckillTasks":
                     fansirsqi.xposed.sesame.task.otherTask2.SeckillScheduler.syncTasks(context);
                     break;
@@ -187,6 +197,7 @@ public class SesameReceiver extends BroadcastReceiver {
         intentFilter.addAction("com.eg.android.AlipayGphone.sesame.exactAlarm"); // 精确唤醒任务
         intentFilter.addAction("com.eg.android.AlipayGphone.sesame.fetchMemberGoodsList"); // 同步会员商品列表
         intentFilter.addAction("com.eg.android.AlipayGphone.sesame.syncSeckillTasks"); // 同步定时秒杀任务
+        intentFilter.addAction("com.eg.android.AlipayGphone.sesame.queryBenefitDetail"); // 查询权益详情以捕获规格
         return intentFilter;
     }
 }

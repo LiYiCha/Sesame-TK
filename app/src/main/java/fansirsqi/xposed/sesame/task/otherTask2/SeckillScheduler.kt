@@ -23,7 +23,10 @@ object SeckillScheduler {
     fun getSeckillTasksFile(): File {
         val file = File(Files.CONFIG_DIR, CONFIG_FILE_NAME)
         if (!file.exists()) {
-            try { file.createNewFile() } catch (e: Exception) {}
+            try {
+                file.parentFile?.mkdirs()
+                file.createNewFile()
+            } catch (e: Exception) {}
         }
         return file
     }
@@ -38,6 +41,8 @@ object SeckillScheduler {
 
             val ja = JSONArray(content)
             val now = System.currentTimeMillis()
+            val activeTasks = JSONArray()
+            var hasExpired = false
 
             for (i in 0 until ja.length()) {
                 val jo = ja.optJSONObject(i) ?: continue
@@ -54,15 +59,22 @@ object SeckillScheduler {
                 val alarmTriggerTime = timeMillis - offset
 
                 if (alarmTriggerTime > now) {
+                    activeTasks.put(jo)
                     val taskId = "seckill_${itemId}_${timeMillis}"
                     
-                    // Register alarm in system.
-                    // Pass backup callback but also handle in SesameReceiver statically
+                    // Register alarm in system
                     AlarmScheduler.scheduleExactAlarm(taskId, alarmTriggerTime) {
                         executeSeckillById(context, taskId)
                     }
                     Log.runtime(TAG, "⏰ 已排期 [${type}] 秒杀任务:【$name】，将在 [${TimeUtil.getCommonDate(alarmTriggerTime)}] 唤醒")
+                } else {
+                    hasExpired = true
                 }
+            }
+
+            if (hasExpired) {
+                Files.write2File(activeTasks.toString(), file)
+                Log.runtime(TAG, "🧹 已自动清理过期秒杀任务")
             }
         } catch (e: Exception) {
             Log.error(TAG, "同步秒杀任务失败: ${e.message}")
@@ -100,9 +112,10 @@ object SeckillScheduler {
                 val type = targetTask.optString("type", "H5")
                 val name = targetTask.optString("name", "未知商品")
                 val timeMillis = targetTask.optLong("timeMillis")
+                val number = targetTask.optInt("number", 1)
 
                 // Execute the seckill task
-                executeSeckill(context, itemId, skuId, points, type, name, timeMillis)
+                executeSeckill(context, itemId, skuId, points, type, name, timeMillis, number)
 
                 // Delete executed task from config
                 val newList = mutableListOf<JSONObject>()
@@ -131,12 +144,13 @@ object SeckillScheduler {
         points: Int,
         type: String,
         name: String,
-        timeMillis: Long
+        timeMillis: Long,
+        number: Int = 1
     ) {
         Log.runtime(TAG, "🚀 秒杀唤醒成功！正在执行【$name】秒杀任务，类型: $type")
         if (type == "H5") {
             // Foreground H5 Mode: launch scheme directly
-            val orderItemsJson = "[{\"itemId\":\"$itemId\",\"skuId\":\"$skuId\",\"number\":1}]"
+            val orderItemsJson = "[{\"itemId\":\"$itemId\",\"skuId\":\"$skuId\",\"number\":$number}]"
             val encodedOrderItems = Uri.encode(orderItemsJson)
             val extJson = "{\"requestSourceInfo\":\"来源\"}"
             val encodedExtJson = Uri.encode(extJson)
@@ -175,9 +189,9 @@ object SeckillScheduler {
 
                     Log.runtime(TAG, "🎯 射击时间已到！并发发送 5 次原生兑换 RPC 请求...")
                     
-                    val params = "[{\"bizType\":\"MEMBER\",\"sourceId\":\"$itemId\",\"sourcePassMap\":{\"innerSource\":\"兑换\",\"source\":\"\",\"unid\":\"${UUID.randomUUID()}\"},\"sourceType\":\"ALIYUN\"}]"
-                    
                     for (i in 1..5) {
+                        val requestUnid = UUID.randomUUID().toString()
+                        val params = "[{\"bizType\":\"MEMBER\",\"sourceId\":\"$itemId\",\"sourcePassMap\":{\"innerSource\":\"兑换\",\"source\":\"\",\"unid\":\"$requestUnid\"},\"sourceType\":\"ALIYUN\"}]"
                         GlobalThreadPools.execute {
                             try {
                                 val res = RequestManager.requestString(

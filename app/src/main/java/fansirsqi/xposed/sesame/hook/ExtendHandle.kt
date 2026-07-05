@@ -154,7 +154,7 @@ class ExtendHandle {
             GlobalThreadPools.execute {
                 try {
                     Log.runtime("开始获取会员商品列表, deliveryId: $deliveryId, page: $pageNum")
-                    val params = "[{\"blackIds\":[],\"deliveryIdList\":[\"$deliveryId\"],\"filterCityCode\":false,\"filterExchangeTime\":true,\"filterPointNoEnough\":false,\"filterStockNoEnough\":false,\"filterTimesLimit\":true,\"filterTimesLimitForPromo\":true,\"pageNum\":$pageNum,\"pageSize\":18,\"point\":21264,\"previewCopyDbId\":\"\",\"queryType\":\"DELIVERY_ID_LIST\",\"shandieComponentId\":\"\",\"source\":\"手端\",\"sourcePassMap\":{\"innerSource\":\"\",\"source\":\"\",\"unid\":\"\"},\"topIds\":[],\"uniqueId\":\"\"}]"
+                    val params = "[{\"blackIds\":[],\"deliveryIdList\":[\"$deliveryId\"],\"filterCityCode\":false,\"filterExchangeTime\":true,\"filterPointNoEnough\":false,\"filterStockNoEnough\":false,\"filterTimesLimit\":true,\"filterTimesLimitForPromo\":true,\"pageNum\":$pageNum,\"pageSize\":100,\"point\":21264,\"previewCopyDbId\":\"\",\"queryType\":\"DELIVERY_ID_LIST\",\"shandieComponentId\":\"\",\"source\":\"手端\",\"sourcePassMap\":{\"innerSource\":\"\",\"source\":\"\",\"unid\":\"\"},\"topIds\":[],\"uniqueId\":\"\"}]"
                     val response = RequestManager.requestString(
                         "com.alipay.alipaymember.biz.rpc.config.h5.queryShandieEntityList",
                         params
@@ -167,6 +167,22 @@ class ExtendHandle {
                         }
                         context.sendBroadcast(intent)
                         return@execute
+                    }
+                    
+                    try {
+                        val jo = org.json.JSONObject(response)
+                        val benefits = jo.optJSONArray("benefits")
+                        if (benefits == null || benefits.length() == 0) {
+                            Log.runtime("获取的会员商品列表为空，不覆盖本地缓存, pageNum: $pageNum")
+                            val intent = Intent("fansirsqi.xposed.sesame.fetchMemberGoodsList.failed").apply {
+                                putExtra("deliveryId", deliveryId)
+                                putExtra("reason", "no_more")
+                            }
+                            context.sendBroadcast(intent)
+                            return@execute
+                        }
+                    } catch (ex: Exception) {
+                        Log.error("校验商品列表空包异常: ${ex.message}")
                     }
                     
                     val goodsFile = Files.getMemberGoodsListFile(deliveryId)
@@ -184,6 +200,48 @@ class ExtendHandle {
                         putExtra("deliveryId", deliveryId)
                     }
                     context.sendBroadcast(intent)
+                }
+            }
+        }
+
+        @JvmStatic
+        fun handleQueryBenefitDetail(context: Context, benefitId: String) {
+            GlobalThreadPools.execute {
+                try {
+                    Log.runtime("开始查询商品详情规格, benefitId: $benefitId")
+                    val params = "[{\"benefitId\":\"$benefitId\",\"cityCode\":\"450300\",\"miniAppId\":\"\",\"requestSourceInfo\":\"来源\",\"sourcePassMap\":{\"innerSource\":\"来源\",\"source\":\"\",\"unid\":\"\"}}]"
+                    val response = RequestManager.requestString(
+                        "com.alipay.alipaymember.biz.rpc.config.h5.querySingleBenefitDetail",
+                        params
+                    )
+                    
+                    if (response.isNullOrEmpty()) {
+                        Log.error("查询商品详情规格失败：返回为空")
+                        return@execute
+                    }
+                    
+                    val jo = org.json.JSONObject(response)
+                    val benefitDetail = jo.optJSONObject("benefitDetail")
+                    val skuInfoList = benefitDetail?.optJSONArray("skuInfoList")
+                    if (skuInfoList != null && skuInfoList.length() > 0) {
+                        val firstSku = skuInfoList.optJSONObject(0)
+                        if (firstSku != null) {
+                            val skuId = firstSku.optString("skuId", "-1")
+                            if (skuId != "-1") {
+                                Log.runtime("成功查询到规格 ID: $skuId")
+                                val intent = Intent("fansirsqi.xposed.sesame.queryBenefitDetail.success").apply {
+                                    putExtra("benefitId", benefitId)
+                                    putExtra("skuId", skuId)
+                                }
+                                context.sendBroadcast(intent)
+                                return@execute
+                            }
+                        }
+                    }
+                    Log.error("该商品详情中未包含规格列表")
+                } catch (e: Exception) {
+                    Log.error("查询商品详情规格异常: ${e.message}")
+                    Log.printStackTrace("ExtendHandle.handleQueryBenefitDetail", e)
                 }
             }
         }
