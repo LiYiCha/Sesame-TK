@@ -154,7 +154,15 @@ class ExtendHandle {
             GlobalThreadPools.execute {
                 try {
                     Log.runtime("开始获取会员商品列表, deliveryId: $deliveryId, page: $pageNum")
-                    val params = "[{\"blackIds\":[],\"deliveryIdList\":[\"$deliveryId\"],\"filterCityCode\":false,\"filterExchangeTime\":true,\"filterPointNoEnough\":false,\"filterStockNoEnough\":false,\"filterTimesLimit\":true,\"filterTimesLimitForPromo\":true,\"pageNum\":$pageNum,\"pageSize\":100,\"point\":21264,\"previewCopyDbId\":\"\",\"queryType\":\"DELIVERY_ID_LIST\",\"shandieComponentId\":\"\",\"source\":\"手端\",\"sourcePassMap\":{\"innerSource\":\"\",\"source\":\"\",\"unid\":\"\"},\"topIds\":[],\"uniqueId\":\"\"}]"
+                    
+                    // Expand All Goods ID to include both active campaign IDs
+                    val deliveryIds = if (deliveryId == "94000SR2023102305988003") {
+                        "\"94000SR2024110510425045\",\"94000SR2023102305988003\""
+                    } else {
+                        "\"$deliveryId\""
+                    }
+                    
+                    val params = "[{\"blackIds\":[],\"deliveryIdList\":[$deliveryIds],\"filterCityCode\":false,\"filterExchangeTime\":true,\"filterPointNoEnough\":false,\"filterStockNoEnough\":false,\"filterTimesLimit\":true,\"filterTimesLimitForPromo\":true,\"pageNum\":$pageNum,\"pageSize\":18,\"point\":21264,\"previewCopyDbId\":\"\",\"queryType\":\"DELIVERY_ID_LIST\",\"shandieComponentId\":\"\",\"source\":\"手端\",\"sourcePassMap\":{\"innerSource\":\"\",\"source\":\"\",\"unid\":\"\"},\"topIds\":[],\"uniqueId\":\"\"}]"
                     val response = RequestManager.requestString(
                         "com.alipay.alipaymember.biz.rpc.config.h5.queryShandieEntityList",
                         params
@@ -186,7 +194,36 @@ class ExtendHandle {
                     }
                     
                     val goodsFile = Files.getMemberGoodsListFile(deliveryId)
-                    Files.write2File(response, goodsFile)
+                    if (pageNum == 1) {
+                        Files.write2File(response, goodsFile)
+                    } else {
+                        try {
+                            if (goodsFile.exists()) {
+                                val existingContent = Files.readFromFile(goodsFile)
+                                if (!existingContent.isNullOrEmpty()) {
+                                    val existingJo = org.json.JSONObject(existingContent)
+                                    val existingBenefits = existingJo.optJSONArray("benefits") ?: org.json.JSONArray()
+                                    
+                                    val newJo = org.json.JSONObject(response)
+                                    val newBenefits = newJo.optJSONArray("benefits") ?: org.json.JSONArray()
+                                    
+                                    // Merge benefits
+                                    for (i in 0 until newBenefits.length()) {
+                                        existingBenefits.put(newBenefits.get(i))
+                                    }
+                                    existingJo.put("benefits", existingBenefits)
+                                    Files.write2File(existingJo.toString(), goodsFile)
+                                } else {
+                                    Files.write2File(response, goodsFile)
+                                }
+                            } else {
+                                Files.write2File(response, goodsFile)
+                            }
+                        } catch (ex: Exception) {
+                            Log.error("合并分页数据异常: ${ex.message}")
+                            Files.write2File(response, goodsFile)
+                        }
+                    }
                     Log.runtime("会员商品列表已保存到本地: ${goodsFile.absolutePath}")
                     
                     val intent = Intent("fansirsqi.xposed.sesame.fetchMemberGoodsList.success").apply {
@@ -223,22 +260,52 @@ class ExtendHandle {
                     val jo = org.json.JSONObject(response)
                     val benefitDetail = jo.optJSONObject("benefitDetail")
                     val skuInfoList = benefitDetail?.optJSONArray("skuInfoList")
+                    
+                    val skuIdsList = ArrayList<String>()
+                    var fetchedSkuId = "-1"
+                    
                     if (skuInfoList != null && skuInfoList.length() > 0) {
-                        val firstSku = skuInfoList.optJSONObject(0)
-                        if (firstSku != null) {
-                            val skuId = firstSku.optString("skuId", "-1")
-                            if (skuId != "-1") {
-                                Log.runtime("成功查询到规格 ID: $skuId")
-                                val intent = Intent("fansirsqi.xposed.sesame.queryBenefitDetail.success").apply {
-                                    putExtra("benefitId", benefitId)
-                                    putExtra("skuId", skuId)
+                        for (i in 0 until skuInfoList.length()) {
+                            val skuObj = skuInfoList.optJSONObject(i)
+                            if (skuObj != null) {
+                                val sId = skuObj.optString("skuId", "-1")
+                                if (sId != "-1") {
+                                    if (fetchedSkuId == "-1") {
+                                        fetchedSkuId = sId
+                                    }
+                                    var sPrice = skuObj.optString("price", "")
+                                    if (sPrice.isEmpty()) {
+                                        sPrice = skuObj.optString("priceYuan", "")
+                                    }
+                                    if (sPrice.isEmpty()) {
+                                        sPrice = benefitDetail.optString("priceYuan", "0.00")
+                                    }
+                                    
+                                    var sPoints = skuObj.optInt("pointPrice", 0)
+                                    if (sPoints == 0) {
+                                        sPoints = skuObj.optInt("points", 0)
+                                    }
+                                    if (sPoints == 0) {
+                                        val pricePresentation = benefitDetail.optJSONObject("pricePresentation")
+                                        sPoints = pricePresentation?.optInt("point", 0) ?: 0
+                                    }
+                                    skuIdsList.add("$sId|$sPrice|$sPoints")
                                 }
-                                context.sendBroadcast(intent)
-                                return@execute
                             }
                         }
                     }
-                    Log.error("该商品详情中未包含规格列表")
+                    
+                    if (fetchedSkuId != "-1") {
+                        Log.runtime("成功查询到规格列表: $skuIdsList")
+                        val intent = Intent("fansirsqi.xposed.sesame.queryBenefitDetail.success").apply {
+                            putExtra("benefitId", benefitId)
+                            putExtra("skuId", fetchedSkuId)
+                            putStringArrayListExtra("skuIds", skuIdsList)
+                        }
+                        context.sendBroadcast(intent)
+                    } else {
+                        Log.error("该商品详情中未包含规格列表")
+                    }
                 } catch (e: Exception) {
                     Log.error("查询商品详情规格异常: ${e.message}")
                     Log.printStackTrace("ExtendHandle.handleQueryBenefitDetail", e)

@@ -154,18 +154,8 @@ public class ApplicationHook implements IXposedHookLoadPackage {
             // 立即分发，初始化 ClassLoader 和 基础 Hook
             HookModuleManager.INSTANCE.dispatchHandleLoadPackage(lpparam);
 
-            String[] requiredClasses = {
-                    "com.alipay.mobile.nebulaappproxy.api.rpc.H5AppRpcUpdate",
-                    "com.alipay.mobile.quinox.LauncherActivity",
-                    "com.alipay.mobile.quinox.LauncherApplication",
-                    "com.alipay.mobile.common.fgbg.FgBgMonitorImpl",
-                    "com.alipay.mobile.common.transport.utils.MiscUtils"
-            };
-
-            ClassChecker.waitForClasses(lpparam.classLoader, requiredClasses, allClassesExist -> {
-                Log.runtime(TAG, "所有必需类已加载，开始执行核心hook");
-                performAlipayHook(lpparam);
-            });
+            // 立即挂载 Application.attach Hook，保证生命周期与 JNI 保护不被遗漏
+            performAlipayHook(lpparam);
         }
     }
 

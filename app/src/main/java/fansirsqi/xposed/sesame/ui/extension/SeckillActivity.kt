@@ -11,6 +11,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -52,7 +53,8 @@ data class MemberGood(
     val points: Int,
     val price: String,
     val skuId: String = "-1",
-    val actionUrl: String = ""
+    val actionUrl: String = "",
+    val skuIds: List<String> = emptyList() // Multi-specs support (formatted as "skuId|price|points")
 )
 
 class SeckillActivity : ComponentActivity() {
@@ -68,6 +70,7 @@ class SeckillActivity : ComponentActivity() {
     private val skuId = mutableStateOf("-1")
     private val quantityNumber = mutableStateOf("1")
     private val activeBenefitId = mutableStateOf("")
+    private val selectedSkuIds = mutableStateOf<List<String>>(emptyList())
 
     // Dialog states
     private val showScheduleDialog = mutableStateOf(false)
@@ -101,20 +104,29 @@ class SeckillActivity : ComponentActivity() {
                 "fansirsqi.xposed.sesame.queryBenefitDetail.success" -> {
                     val benefitId = intent.getStringExtra("benefitId")
                     val fetchedSkuId = intent.getStringExtra("skuId")
+                    val fetchedSkuIds = intent.getStringArrayListExtra("skuIds") ?: emptyList<String>()
                     if (benefitId != null && fetchedSkuId != null) {
-                        Toast.makeText(this@SeckillActivity, "已自动获取规格 ID: $fetchedSkuId", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(this@SeckillActivity, "已自动获取规格列表: 共有 ${fetchedSkuIds.size} 个规格", Toast.LENGTH_SHORT).show()
                         
                         // Update active UI states directly
                         if (activeBenefitId.value == benefitId) {
                             skuId.value = fetchedSkuId
                             scheduleSkuId.value = fetchedSkuId
+                            selectedSkuIds.value = fetchedSkuIds
+                            if (fetchedSkuIds.isNotEmpty()) {
+                                val parts = fetchedSkuIds[0].split("|")
+                                if (parts.size >= 3) {
+                                    verifyPoint.value = parts[2]
+                                    schedulePoints.value = parts[2]
+                                }
+                            }
                         }
 
                         var updated = false
                         for (i in 0 until goodsList.size) {
                             val good = goodsList[i]
                             if (good.benefitId == benefitId) {
-                                goodsList[i] = good.copy(skuId = fetchedSkuId)
+                                goodsList[i] = good.copy(skuId = fetchedSkuId, skuIds = fetchedSkuIds)
                                 updated = true
                             }
                         }
@@ -164,6 +176,8 @@ class SeckillActivity : ComponentActivity() {
                         onQuantityNumberChange = { quantityNumber.value = it },
                         activeBenefitId = activeBenefitId.value,
                         onActiveBenefitIdChange = { activeBenefitId.value = it },
+                        selectedSkuIds = selectedSkuIds.value,
+                        onSelectedSkuIdsChange = { selectedSkuIds.value = it },
                         showScheduleDialog = showScheduleDialog.value,
                         onShowScheduleDialogChange = { showScheduleDialog.value = it },
                         scheduleItemId = scheduleItemId.value,
@@ -191,6 +205,11 @@ class SeckillActivity : ComponentActivity() {
                         onTabSelected = { deliveryId ->
                             currentCategory.value = deliveryId
                             loadLocalGoods(deliveryId)
+                            // Reset selected spec list when switching tabs
+                            itemId.value = ""
+                            verifyPoint.value = ""
+                            skuId.value = "-1"
+                            selectedSkuIds.value = emptyList()
                         },
                         onBack = { finish() }
                     )
@@ -233,10 +252,24 @@ class SeckillActivity : ComponentActivity() {
                     put("pointPrice", good.points)
                     put("priceYuan", good.price)
                     put("actionUrl", good.actionUrl)
+                    
                     val skus = JSONArray().apply {
-                        put(JSONObject().apply {
-                            put("skuId", good.skuId)
-                        })
+                        if (good.skuIds.isNotEmpty()) {
+                            good.skuIds.forEach { specStr ->
+                                val parts = specStr.split("|")
+                                if (parts.size >= 3) {
+                                    put(JSONObject().apply {
+                                        put("skuId", parts[0])
+                                        put("price", parts[1])
+                                        put("points", parts[2])
+                                    })
+                                }
+                            }
+                        } else {
+                            put(JSONObject().apply {
+                                put("skuId", good.skuId)
+                            })
+                        }
                     }
                     put("skuInfoList", skus)
                 }
@@ -335,27 +368,41 @@ class SeckillActivity : ComponentActivity() {
                             }
                             
                             var skuId = "-1"
-                            val simpleSkus = obj.optJSONArray("simpleSkus")
-                            if (simpleSkus != null && simpleSkus.length() > 0) {
-                                val firstSku = simpleSkus.optJSONObject(0)
-                                if (firstSku != null) {
-                                    skuId = firstSku.optString("sku_id", "").takeIf { it.isNotEmpty() }
-                                        ?: firstSku.optString("skuId", "-1")
+                            val skuIdsList = mutableListOf<String>()
+                            
+                            val skuInfoList = obj.optJSONArray("skuInfoList")
+                            if (skuInfoList != null && skuInfoList.length() > 0) {
+                                for (k in 0 until skuInfoList.length()) {
+                                    val skuObj = skuInfoList.optJSONObject(k)
+                                    if (skuObj != null) {
+                                        val sId = skuObj.optString("skuId", "-1")
+                                        if (sId != "-1") {
+                                            if (skuId == "-1") {
+                                                skuId = sId
+                                            }
+                                            val sPrice = skuObj.optString("price", price)
+                                            val sPoints = skuObj.optString("points", points.toString())
+                                            skuIdsList.add("$sId|$sPrice|$sPoints")
+                                        }
+                                    }
                                 }
                             }
+                            
                             if (skuId == "-1") {
-                                val skuInfoList = obj.optJSONArray("skuInfoList")
-                                if (skuInfoList != null && skuInfoList.length() > 0) {
-                                    val firstSku = skuInfoList.optJSONObject(0)
+                                val simpleSkus = obj.optJSONArray("simpleSkus")
+                                if (simpleSkus != null && simpleSkus.length() > 0) {
+                                    val firstSku = simpleSkus.optJSONObject(0)
                                     if (firstSku != null) {
-                                        skuId = firstSku.optString("skuId", "-1")
+                                        skuId = firstSku.optString("sku_id", "").takeIf { it.isNotEmpty() }
+                                            ?: firstSku.optString("skuId", "-1")
+                                        skuIdsList.add("$skuId|$price|$points")
                                     }
                                 }
                             }
 
                             if (itemId.isNotEmpty() && !seen.contains(benefitId)) {
                                 seen.add(benefitId)
-                                list.add(MemberGood(benefitId, name, itemId, points, price, skuId, actionUrl))
+                                list.add(MemberGood(benefitId, name, itemId, points, price, skuId, actionUrl, skuIdsList))
                             }
                         }
                         obj.keys().forEach { key ->
@@ -394,6 +441,8 @@ fun SeckillScreen(
     onQuantityNumberChange: (String) -> Unit,
     activeBenefitId: String,
     onActiveBenefitIdChange: (String) -> Unit,
+    selectedSkuIds: List<String>,
+    onSelectedSkuIdsChange: (List<String>) -> Unit,
     showScheduleDialog: Boolean,
     onShowScheduleDialogChange: (Boolean) -> Unit,
     scheduleItemId: String,
@@ -413,8 +462,8 @@ fun SeckillScreen(
     onBack: () -> Unit
 ) {
     val categories = listOf(
-        "日常抢兑" to "94000SR2025120515775004",
-        "万分好物" to "94000SR2025120515776001",
+        "精选日常" to "94000SR2025110615412003",
+        "万分好物" to "94000SR2025110615412004",
         "联名周边" to "94000SR2025120515776002",
         "全部商品" to "94000SR2023102305988003"
     )
@@ -584,6 +633,43 @@ fun SeckillScreen(
                                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
                             )
                         }
+
+                        // Specification Chips Selector
+                        if (selectedSkuIds.size > 1) {
+                            Spacer(modifier = Modifier.height(10.dp))
+                            Text("已发现该商品有多个规格，点击快速选择：", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .horizontalScroll(rememberScrollState()),
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                selectedSkuIds.forEach { specStr ->
+                                    val parts = specStr.split("|")
+                                    if (parts.size >= 3) {
+                                        val sId = parts[0]
+                                        val sPrice = parts[1]
+                                        val sPoints = parts[2]
+                                        val isSelected = skuId == sId
+                                        
+                                        FilterChip(
+                                            selected = isSelected,
+                                            onClick = {
+                                                onSkuIdChange(sId)
+                                                onVerifyPointChange(sPoints)
+                                                // Sync to schedule dialog if visible
+                                                if (showScheduleDialog) {
+                                                    onScheduleSkuIdChange(sId)
+                                                    onSchedulePointsChange(sPoints)
+                                                }
+                                            },
+                                            label = { Text("${sPoints}分 + ${sPrice}元", fontSize = 11.sp) }
+                                        )
+                                    }
+                                }
+                            }
+                        }
                         
                         if (verifyPoint.isNotEmpty() && itemId.isNotEmpty()) {
                             Spacer(modifier = Modifier.height(10.dp))
@@ -682,6 +768,7 @@ fun SeckillScreen(
                                             onVerifyPointChange(good.points.toString())
                                             onSkuIdChange(good.skuId)
                                             onActiveBenefitIdChange(good.benefitId)
+                                            onSelectedSkuIdsChange(good.skuIds)
                                             
                                             // Trigger automatic background SKU lookup
                                             if (good.skuId == "-1") {
@@ -701,7 +788,7 @@ fun SeckillScreen(
                                         Row {
                                             Text("ID: ${good.itemId}", fontSize = 10.sp, color = Color.Gray)
                                             Spacer(modifier = Modifier.width(6.dp))
-                                            Text("积分: ${good.points}", fontSize = 10.sp, color = Color.Gray)
+                                            Text("积分: ${good.points} + ${good.price}元", fontSize = 10.sp, color = Color.Gray)
                                             if (good.skuId != "-1") {
                                                 Spacer(modifier = Modifier.width(6.dp))
                                                 Text("SKU: ${good.skuId}", fontSize = 10.sp, color = Color.Gray)
@@ -712,10 +799,8 @@ fun SeckillScreen(
                                     Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                                         Button(
                                             onClick = {
-                                                // If actionUrl exists, launch native detail page directly
-                                                val targetUrl = if (good.actionUrl.isNotEmpty()) {
-                                                    good.actionUrl
-                                                } else {
+                                                val isPhysical = good.itemId.all { it.isDigit() }
+                                                val targetUrl = if (isPhysical && good.skuId != "-1") {
                                                     val numVal = quantityNumber.toIntOrNull() ?: 1
                                                     val orderItemsJson = "[{\"itemId\":\"${good.itemId}\",\"skuId\":\"${good.skuId}\",\"number\":$numVal}]"
                                                     val encodedOrderItems = Uri.encode(orderItemsJson)
@@ -723,6 +808,8 @@ fun SeckillScreen(
                                                     val encodedExtJson = Uri.encode(extJson)
                                                     val tmallUrl = "https://pages.tmall.com/wow/wt/act/lm-pages?env=&extJson=$encodedExtJson&orderItems=$encodedOrderItems&verifyPoint=${good.points}&wh_page=buy"
                                                     "https://pages.tmall.com/wow/z/wt/act/alipay-login?goToUrl=${Uri.encode(tmallUrl)}"
+                                                } else {
+                                                    if (good.actionUrl.isNotEmpty()) good.actionUrl else ""
                                                 }
                                                 
                                                 val scheme = if (targetUrl.startsWith("alipays://")) {
@@ -754,6 +841,7 @@ fun SeckillScreen(
                                                 onScheduleNameChange(good.name)
                                                 onScheduleTypeChange("H5")
                                                 onActiveBenefitIdChange(good.benefitId)
+                                                onSelectedSkuIdsChange(good.skuIds)
                                                 
                                                 // Trigger background SKU resolution
                                                 if (good.skuId == "-1") {
@@ -928,6 +1016,42 @@ fun SeckillScreen(
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true
                     )
+                    
+                    // Specification Chips Selector inside Schedule Dialog
+                    if (selectedSkuIds.size > 1) {
+                        Spacer(modifier = Modifier.height(10.dp))
+                        Text("选择秒杀规格：", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary, modifier = Modifier.align(Alignment.Start))
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .horizontalScroll(rememberScrollState()),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            selectedSkuIds.forEach { specStr ->
+                                val parts = specStr.split("|")
+                                if (parts.size >= 3) {
+                                    val sId = parts[0]
+                                    val sPrice = parts[1]
+                                    val sPoints = parts[2]
+                                    val isSelected = scheduleSkuId == sId
+                                    
+                                    FilterChip(
+                                        selected = isSelected,
+                                        onClick = {
+                                            onScheduleSkuIdChange(sId)
+                                            onSchedulePointsChange(sPoints)
+                                            // Sync back to manual input fields
+                                            onSkuIdChange(sId)
+                                            onVerifyPointChange(sPoints)
+                                        },
+                                        label = { Text("${sPoints}分 + ${sPrice}元", fontSize = 11.sp) }
+                                    )
+                                }
+                            }
+                        }
+                    }
+
                     Spacer(modifier = Modifier.height(10.dp))
                     
                     // Quick Time Presets Helper
