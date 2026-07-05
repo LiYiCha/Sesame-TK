@@ -77,6 +77,7 @@ class MiscHookModule : HookModule {
                 override fun afterHookedMethod(param: MethodHookParam) {
                     val view = param.args[0]
                     val url = param.args[1] as? String ?: return
+                    handleWebPageFinished(view, url)
                 }
             })
             Log.runtime(TAG, "✅ Hook android.webkit.WebViewClient.onPageFinished 成功")
@@ -91,6 +92,7 @@ class MiscHookModule : HookModule {
                 override fun afterHookedMethod(param: MethodHookParam) {
                     val view = param.args[0]
                     val url = param.args[1] as? String ?: return
+                    handleWebPageFinished(view, url)
                 }
             })
             Log.runtime(TAG, "✅ Hook UC WebViewClient.onPageFinished 成功")
