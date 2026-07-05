@@ -9,7 +9,6 @@ import de.robv.android.xposed.callbacks.XC_LoadPackage
 import fansirsqi.xposed.sesame.data.General
 import fansirsqi.xposed.sesame.hook.core.HookModule
 import fansirsqi.xposed.sesame.util.Log
-import java.util.Locale
 
 class MiscHookModule : HookModule {
     private val TAG = "MiscHookModule"
