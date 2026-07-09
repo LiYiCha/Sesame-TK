@@ -147,15 +147,44 @@ public class ApplicationHook implements IXposedHookLoadPackage {
     @Override
     public void handleLoadPackage(XC_LoadPackage.LoadPackageParam lpparam) {
         registerModules();
-        if (General.PACKAGE_NAME.equals(lpparam.packageName) && General.PACKAGE_NAME.equals(lpparam.processName)) {
+        if ("fansirsqi.xposed.sesame".equals(lpparam.packageName)) {
+            try {
+                // 首先尝试使用目标应用的ClassLoader加载
+                Class<?> viewAppInfoClass = lpparam.classLoader.loadClass("fansirsqi.xposed.sesame.data.ViewAppInfo");
+                // 注意：ViewAppInfo.kt 中的方法是 setRunType，而不是 setRunTypeByCode
+                XposedHelpers.callStaticMethod(viewAppInfoClass, "setRunType", fansirsqi.xposed.sesame.data.RunType.ACTIVE);
+            } catch (ClassNotFoundException e) {
+                // 如果找不到类，直接使用当前模块的类
+                try {
+                    fansirsqi.xposed.sesame.data.ViewAppInfo.setRunType(fansirsqi.xposed.sesame.data.RunType.ACTIVE);
+                } catch (Exception ex) {
+                    Log.printStackTrace(ex);
+                }
+            } catch (Exception e) {
+                Log.printStackTrace(e);
+            }
+        } else if (General.PACKAGE_NAME.equals(lpparam.packageName) && General.PACKAGE_NAME.equals(lpparam.processName)) {
             if (hooked) return;
             AppContext.setClassLoader(lpparam.classLoader);
-            
-            // 立即分发，初始化 ClassLoader 和 基础 Hook
-            HookModuleManager.INSTANCE.dispatchHandleLoadPackage(lpparam);
 
-            // 立即挂载 Application.attach Hook，保证生命周期与 JNI 保护不被遗漏
-            performAlipayHook(lpparam);
+            String[] requiredClasses = {
+                    "com.alipay.mobile.nebulaappproxy.api.rpc.H5AppRpcUpdate",
+                    "com.alipay.mobile.quinox.LauncherActivity",
+                    "com.alipay.mobile.quinox.LauncherApplication",
+                    "com.alipay.mobile.common.fgbg.FgBgMonitorImpl",
+                    "com.alipay.mobile.common.transport.utils.MiscUtils"
+            };
+
+            ClassChecker.waitForClasses(lpparam.classLoader, requiredClasses, allClassesExist -> {
+                if (allClassesExist) {
+                    Log.runtime(TAG, "所有必需类已加载，开始执行hook");
+                } else {
+                    Log.runtime(TAG, "等待类加载超时或部分类未找到，仍然尝试执行hook");
+                }
+
+                HookModuleManager.INSTANCE.dispatchHandleLoadPackage(lpparam);
+                performAlipayHook(lpparam);
+            });
         }
     }
 

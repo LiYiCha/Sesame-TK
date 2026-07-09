@@ -13,56 +13,26 @@ import fansirsqi.xposed.sesame.util.Log
 class MiscHookModule : HookModule {
     private val TAG = "MiscHookModule"
 
-    private fun isCalledFromUI(): Boolean {
-        try {
-            val stack = Thread.currentThread().stackTrace
-            for (element in stack) {
-                val name = element.className ?: continue
-                if (name.contains("android.app.Activity") || 
-                    name.contains("androidx.fragment.app") || 
-                    name.contains("android.support.v4.app") || 
-                    name.contains("FragmentManager") ||
-                    name.contains("FragmentTransaction")) {
-                    return true
-                }
-            }
-        } catch (t: Throwable) {
-            // Ignore and safely default to false
-        }
-        return false
-    }
-
     override fun onHandleLoadPackage(lpparam: XC_LoadPackage.LoadPackageParam) {
         if (General.PACKAGE_NAME != lpparam.packageName) return
         val classLoader = lpparam.classLoader
 
-        // hook FgBgMonitorImpl (在 main dex 中，可立即 hook，增加 UI 调用栈保护)
+        // hook FgBgMonitorImpl (在 main dex 中，可立即 hook)
         val fgBgClass = "com.alipay.mobile.common.fgbg.FgBgMonitorImpl"
         try {
-            val fgBgHook = object : XC_MethodHook() {
-                override fun beforeHookedMethod(param: MethodHookParam) {
-                    if (isCalledFromUI()) return
-                    param.result = false
-                }
-            }
-            XposedHelpers.findAndHookMethod(fgBgClass, classLoader, "isInBackground", fgBgHook)
-            XposedHelpers.findAndHookMethod(fgBgClass, classLoader, "isInBackground", Boolean::class.javaPrimitiveType, fgBgHook)
-            XposedHelpers.findAndHookMethod(fgBgClass, classLoader, "isInBackgroundV2", fgBgHook)
-            Log.runtime(TAG, "hook FgBgMonitorImpl successfully with UI safety check")
+            XposedHelpers.findAndHookMethod(fgBgClass, classLoader, "isInBackground", XC_MethodReplacement.returnConstant(false))
+            XposedHelpers.findAndHookMethod(fgBgClass, classLoader, "isInBackground", Boolean::class.javaPrimitiveType, XC_MethodReplacement.returnConstant(false))
+            XposedHelpers.findAndHookMethod(fgBgClass, classLoader, "isInBackgroundV2", XC_MethodReplacement.returnConstant(false))
+            Log.runtime(TAG, "hook FgBgMonitorImpl successfully")
         } catch (t: Throwable) {
             Log.runtime(TAG, "hook FgBgMonitorImpl err: ${t.message}")
         }
 
-        // hook MiscUtils (在 main dex 中，可立即 hook，增加 UI 调用栈保护)
+        // hook MiscUtils (在 main dex 中，可立即 hook)
         try {
             XposedHelpers.findAndHookMethod("com.alipay.mobile.common.transport.utils.MiscUtils", classLoader, "isAtFrontDesk",
-                Context::class.java, object : XC_MethodHook() {
-                    override fun beforeHookedMethod(param: MethodHookParam) {
-                        if (isCalledFromUI()) return
-                        param.result = true
-                    }
-                })
-            Log.runtime(TAG, "hook MiscUtils successfully with UI safety check")
+                Context::class.java, XC_MethodReplacement.returnConstant(true))
+            Log.runtime(TAG, "hook MiscUtils successfully")
         } catch (t: Throwable) {
             Log.runtime(TAG, "hook MiscUtils err")
         }
@@ -148,33 +118,6 @@ class MiscHookModule : HookModule {
                 Log.runtime(TAG, "❌ 延迟 Hook CDPBService 失败: ${t.message}")
             }
 
-            // 3. Hook AlipayLogin 生命周期（状态监控）
-            try {
-                val loginActivityClass = classLoader.loadClass(General.CURRENT_USING_ACTIVITY)
-                XposedHelpers.findAndHookMethod(
-                    loginActivityClass,
-                    "onResume",
-                    object : XC_MethodHook() {
-                        override fun afterHookedMethod(param: MethodHookParam) {
-                            fansirsqi.xposed.sesame.hook.lifecycle.LifecycleManager.setAlipayLoginActive(
-                                true
-                            )
-                        }
-                    })
-                XposedHelpers.findAndHookMethod(
-                    loginActivityClass,
-                    "onDestroy",
-                    object : XC_MethodHook() {
-                        override fun afterHookedMethod(param: MethodHookParam) {
-                            fansirsqi.xposed.sesame.hook.lifecycle.LifecycleManager.setAlipayLoginActive(
-                                false
-                            )
-                        }
-                    })
-                Log.runtime(TAG, "✅ 延迟 Hook AlipayLogin 生命周期成功")
-            } catch (t: Throwable) {
-                Log.runtime(TAG, "❌ 延迟 Hook AlipayLogin 生命周期失败: ${t.message}")
-            }
         }
 
         @JvmStatic
@@ -220,6 +163,32 @@ class MiscHookModule : HookModule {
                     Log.runtime(TAG, "❌ 注入自动提交订单脚本失败: ${e.message}")
                 }
             }
+        }
+    }
+
+    override fun onPostAppAttach(context: Context, classLoader: ClassLoader) {
+        try {
+            val app = context.applicationContext as? android.app.Application
+            app?.registerActivityLifecycleCallbacks(object : android.app.Application.ActivityLifecycleCallbacks {
+                override fun onActivityResumed(activity: android.app.Activity) {
+                    if (activity.javaClass.name == General.CURRENT_USING_ACTIVITY) {
+                        fansirsqi.xposed.sesame.hook.lifecycle.LifecycleManager.setAlipayLoginActive(true)
+                    }
+                }
+                override fun onActivityDestroyed(activity: android.app.Activity) {
+                    if (activity.javaClass.name == General.CURRENT_USING_ACTIVITY) {
+                        fansirsqi.xposed.sesame.hook.lifecycle.LifecycleManager.setAlipayLoginActive(false)
+                    }
+                }
+                override fun onActivityCreated(activity: android.app.Activity, savedInstanceState: android.os.Bundle?) {}
+                override fun onActivityStarted(activity: android.app.Activity) {}
+                override fun onActivityPaused(activity: android.app.Activity) {}
+                override fun onActivityStopped(activity: android.app.Activity) {}
+                override fun onActivitySaveInstanceState(activity: android.app.Activity, outState: android.os.Bundle) {}
+            })
+            Log.runtime(TAG, "✅ 成功使用 ActivityLifecycleCallbacks 监听 AlipayLogin 生命周期")
+        } catch (t: Throwable) {
+            Log.runtime(TAG, "❌ 监听 AlipayLogin 生命周期失败: ${t.message}")
         }
     }
 }
