@@ -25,8 +25,8 @@ class AntFarmRankAward {
             val resultCode = jo.optString("resultCode")
             if (memo.contains("未开启") || memo.contains("功能未开启") || "FUNCTION_NOT_OPEN" == resultCode) {
                 Log.runtime(TAG, "排位奖励🏆[功能未开启，已自动关闭排位奖励开关]")
-                antFarmRankAwardField?.setValue(false)
-                Config.save(UserMap.getCurrentUid(), false)
+                antFarmRankAwardField?.setObjectValue(false)
+                Config.save(UserMap.currentUid, false)
                 return
             }
             if (!ResChecker.checkRes(TAG, jo)) {
