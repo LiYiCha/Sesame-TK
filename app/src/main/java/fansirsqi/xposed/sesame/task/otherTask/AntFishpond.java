@@ -39,8 +39,9 @@ public class AntFishpond extends BaseCommTask {
     private static final Pattern NC_GAME_PATTERN =Pattern.compile("FISHPOND_NCLY_GAME_.+_PLAY");
     private static final Pattern NC_GAME_PATTERN2 =Pattern.compile("FISHPOND_NCLY_GAME_.+_PLAYO");
     
-    // 失败任务缓存，避免重复尝试
+    // 失败/已处理任务缓存，避免重复尝试
     private final Set<String> failedTaskCache = new HashSet<>();
+    private final Set<String> inProgressTaskIds = java.util.Collections.synchronizedSet(new HashSet<>());
 
     private final List<String> notTaskIds = new ArrayList<>() {
         {
@@ -102,6 +103,7 @@ public class AntFishpond extends BaseCommTask {
             // 每天清理一次失败缓存
             if (!Status.hasFlagToday("antFishpond_clearFailedCache")) {
                 failedTaskCache.clear();
+                inProgressTaskIds.clear();
                 Status.setFlagToday("antFishpond_clearFailedCache");
             }
             
@@ -621,17 +623,19 @@ public class AntFishpond extends BaseCommTask {
             if (optJSONObject != null) {
                 String adBizNo = optJSONObject.optString("adBizNo");
                 String taskId = optJSONObject.optString("taskId");
-                if (!adBizNo.isEmpty() && !taskId.isEmpty()) {
-                    GlobalThreadPools.INSTANCE.execute(() -> {
-                        try {
-                            TimeUtil.sleep(RandomUtil.nextInt(2000, 3000));
-                            fishpondAdNotice(adBizNo);
-                            TimeUtil.sleep(RandomUtil.nextInt(2000, 3000));
-                            finishExtraTask(adBizNo, taskId);
-                        } catch (Exception e) {
-                            Log.error(this.TAG, "Extra reward task execution failed: " + e.getMessage());
-                        }
-                    });
+                if (!adBizNo.isEmpty() && !taskId.isEmpty() && !failedTaskCache.contains(taskId)) {
+                    if (inProgressTaskIds.add(taskId)) {
+                        GlobalThreadPools.INSTANCE.execute(() -> {
+                            try {
+                                TimeUtil.sleep(RandomUtil.nextInt(2000, 3000));
+                                fishpondAdNotice(adBizNo);
+                                TimeUtil.sleep(RandomUtil.nextInt(2000, 3000));
+                                finishExtraTask(adBizNo, taskId);
+                            } catch (Exception e) {
+                                Log.error(this.TAG, "Extra reward task execution failed: " + e.getMessage());
+                            }
+                        });
+                    }
                 }
             }
             String string = jSONObject2.getString("fishWeight");
@@ -758,8 +762,16 @@ public class AntFishpond extends BaseCommTask {
             JSONObject response = new JSONObject(RequestManager.requestString("com.alipay.antiep.finishTask", params));
             if (response.optBoolean("success")) {
                 Log.other(this.displayName + "额外奖励任务完成成功");
+                failedTaskCache.add(taskId);
             } else {
-                Log.error(this.displayName + "额外奖励任务完成失败: " + response.optString("desc"));
+                String desc = response.optString("desc", "");
+                String code = response.optString("code", "");
+                if (desc.contains("无状态转换") || desc.contains("不支持") || "400000030".equals(code) || "400000005".equals(code) || "200000006".equals(code)) {
+                    failedTaskCache.add(taskId);
+                    Log.runtime(this.displayName + "额外奖励任务[" + taskId + "]无需状态转换或不支持RPC: " + desc);
+                } else {
+                    Log.error(this.displayName + "额外奖励任务完成失败: " + desc);
+                }
             }
         } catch (Exception e) {
             Log.error(this.TAG, "finishExtraTask Error: " + e.getMessage());

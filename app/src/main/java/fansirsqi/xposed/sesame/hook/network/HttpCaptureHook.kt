@@ -73,7 +73,7 @@ object HttpCaptureHook {
         hookStandardHttpConnection(classLoader)
         hookOkHttpTraffic(classLoader)
         hookARiverTraffic(classLoader)
-        bypassBifrostAndForceProxy(classLoader)
+        // bypassBifrostAndForceProxy(classLoader) // 注释掉强行破坏协议与标记抓包的代码，使用无感被动抓包，防止触发全局风控
         hookDtnTraffic(classLoader)
     }
 

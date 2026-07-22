@@ -1,7 +1,10 @@
 package fansirsqi.xposed.sesame.task.antFarm
 
+import fansirsqi.xposed.sesame.data.Config
+import fansirsqi.xposed.sesame.model.modelFieldExt.BooleanModelField
 import fansirsqi.xposed.sesame.util.Log
 import fansirsqi.xposed.sesame.util.ResChecker
+import fansirsqi.xposed.sesame.util.maps.UserMap
 import org.json.JSONObject
 
 class AntFarmRankAward {
@@ -9,7 +12,7 @@ class AntFarmRankAward {
         private val TAG = AntFarmRankAward::class.java.simpleName
     }
 
-    fun run() {
+    fun run(antFarmRankAwardField: BooleanModelField? = null) {
         try {
             Log.runtime(TAG, "开始检查并领取排位奖励")
             val response = AntFarmRpcCall.enterCompetitionAwardPage()
@@ -18,8 +21,16 @@ class AntFarmRankAward {
                 return
             }
             val jo = JSONObject(response)
+            val memo = jo.optString("memo")
+            val resultCode = jo.optString("resultCode")
+            if (memo.contains("未开启") || memo.contains("功能未开启") || "FUNCTION_NOT_OPEN" == resultCode) {
+                Log.runtime(TAG, "排位奖励🏆[功能未开启，已自动关闭排位奖励开关]")
+                antFarmRankAwardField?.setValue(false)
+                Config.save(UserMap.getCurrentUid(), false)
+                return
+            }
             if (!ResChecker.checkRes(TAG, jo)) {
-                Log.error(TAG, "排位奖励🏆[获取奖励页面失败: ${jo.optString("memo")}]")
+                Log.error(TAG, "排位奖励🏆[获取奖励页面失败: $memo]")
                 return
             }
 

@@ -145,14 +145,14 @@ object EnergyWaitingPersistence {
                 val taskAge = currentTime - persistData.savedTime
                 if (taskAge > MAX_TASK_AGE_MS) {
                     tooOldCount++
-                    Log.runtime(TAG, "  跳过[${persistData.userName}]：保存时间超过${taskAge / 1000 / 60 / 60}小时")
+                   // Log.runtime(TAG, "  跳过[${persistData.userName}]：保存时间超过${taskAge / 1000 / 60 / 60}小时")
                     return@forEach
                 }
 
                 // 检查2：能量是否已经过期超过1小时
                 if (currentTime > persistData.produceTime + 60 * 60 * 1000L) {
                     expiredCount++
-                    Log.runtime(TAG, "  跳过[${persistData.userName}]：能量已过期超过1小时")
+                    //Log.runtime(TAG, "  跳过[${persistData.userName}]：能量已过期超过1小时")
                     return@forEach
                 }
 

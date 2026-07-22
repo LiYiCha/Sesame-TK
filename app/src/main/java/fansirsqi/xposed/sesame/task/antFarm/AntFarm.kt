@@ -861,7 +861,7 @@ class AntFarm : ModelTask() {
             if (antFarmRankAward?.value == true) {
                 if (!Status.hasFlagToday("farm::rankAwardFinished")) {
                     if (TaskTimeChecker.isTimeReached(antFarmRankAwardTime?.value, "2010")) {
-                        AntFarmRankAward().run()
+                        AntFarmRankAward().run(antFarmRankAward)
                         tc.countDebug("领取排位奖励")
                         Status.setFlagToday("farm::rankAwardFinished")
                     }

@@ -962,7 +962,7 @@ class AntMember : ModelTask() {
                         }
                         // 校验频率限制
                         if (!canMemberPointExchangeBenefitToday(benefitId)) {
-                            Log.runtime(TAG, "跳过[$name]: 今日已兑换过")
+                           // Log.runtime(TAG, "跳过[$name]: 今日已兑换过")
                             continue
                         }
                         // 5. 执行兑换

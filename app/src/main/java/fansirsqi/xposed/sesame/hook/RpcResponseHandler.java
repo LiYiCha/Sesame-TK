@@ -52,8 +52,7 @@ public class RpcResponseHandler {
         if (valueEnd > valueStart) {
             String riskToken = rawJson.substring(valueStart, valueEnd);
             OtherTask.getFishpondToken().setValue(riskToken);
-            //saveConfigWithLog("fishpondToken", riskToken);
-            Log.runtime("✅ 配置 fishpondToken 已保存 ");
+            saveConfigWithLog("fishpondToken", riskToken);
         }
     }
 

@@ -687,7 +687,7 @@ class AntForest : ModelTask(), EnergyCollectCallback {
         }
         try {
             val energyTimeStr = BaseModel.energyTime.value.toString()
-            Log.runtime(TAG, "⏸ 当前为只收能量时间【$energyTimeStr】，开始循环收取自己、好友和PK好友的能量")
+            //Log.runtime(TAG, "⏸ 当前为只收能量时间【$energyTimeStr】，开始循环收取自己、好友和PK好友的能量")
             runBlocking {
                 try {
                     while (true) {
@@ -2098,7 +2098,7 @@ class AntForest : ModelTask(), EnergyCollectCallback {
             "pk",
             JsonPredicate { pkObject: JSONObject? ->
                 if (pkObject!!.getString("rankMemberStatus") != "JOIN") {
-                    Log.runtime(TAG, "未加入PK排行榜,跳过,尝试关闭")
+                   // Log.runtime(TAG, "未加入PK排行榜,跳过,尝试关闭")
                     pkEnergy!!.value = false
                     return@JsonPredicate false
                 }
@@ -2499,10 +2499,10 @@ class AntForest : ModelTask(), EnergyCollectCallback {
         if (isPk) {
             val needCollectEnergy = collectEnergy!!.value && pkEnergy!!.value
             if (!needCollectEnergy) {
-                Log.runtime(TAG, "    PK好友: [$userName$userId], 不满足收取条件，跳过")
+                //Log.runtime(TAG, "    PK好友: [$userName$userId], 不满足收取条件，跳过")
                 return
             }
-            Log.runtime(TAG, "  正在查询PK好友 [$userName$userId] 的主页...")
+           // Log.runtime(TAG, "  正在查询PK好友 [$userName$userId] 的主页...")
             collectEnergy(userId, queryFriendHome(userId, "PKContest"), "pk")
         } else { // 普通好友
             val needCollectEnergy =
@@ -3350,9 +3350,10 @@ class AntForest : ModelTask(), EnergyCollectCallback {
                         useEnergyBombCard(bagObject)
                     }
                 }
-            } else {
-                Log.runtime(TAG, "没有需要使用的道具")
             }
+//            else {
+//                Log.runtime(TAG, "没有需要使用的道具")
+//            }
         } catch (e: Exception) {
             Log.printStackTrace(e)
         }
@@ -4249,7 +4250,7 @@ class AntForest : ModelTask(), EnergyCollectCallback {
 
                 // 特定条件检查1: 如果是普通的5分钟卡，需要检查是否在指定时间段内
                 if ("ENERGY_DOUBLE_CLICK" == propType && !hasDoubleCardTime()) {
-                    Log.runtime(TAG, "跳过[$propName]，当前不在指定使用时间段内")
+                    //Log.runtime(TAG, "跳过[$propName]，当前不在指定使用时间段内")
                     continue  // 跳过，尝试下一张
                 }
 
@@ -4257,7 +4258,7 @@ class AntForest : ModelTask(), EnergyCollectCallback {
                     val expireTime = propObj.optLong("recentExpireTime", 0)
                     // 修改：24 改为 48 小时，日志信息同步更新
                     if (expireTime > 0 && (expireTime - System.currentTimeMillis() > 2 * 24 * 60 * 60 * 1000L)) {
-                        Log.runtime(TAG, "跳过[$propName]，该卡有效期剩余超过2天 (仅限时模式)")
+                       // Log.runtime(TAG, "跳过[$propName]，该卡有效期剩余超过2天 (仅限时模式)")
                         continue  // 跳过，尝试下一张
                     }
                 }

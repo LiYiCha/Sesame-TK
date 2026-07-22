@@ -13,26 +13,56 @@ import fansirsqi.xposed.sesame.util.Log
 class MiscHookModule : HookModule {
     private val TAG = "MiscHookModule"
 
+    private fun isCalledFromUI(): Boolean {
+        try {
+            val stack = Thread.currentThread().stackTrace
+            for (element in stack) {
+                val name = element.className ?: continue
+                if (name.contains("android.app.Activity") || 
+                    name.contains("androidx.fragment.app") || 
+                    name.contains("android.support.v4.app") || 
+                    name.contains("FragmentManager") ||
+                    name.contains("FragmentTransaction")) {
+                    return true
+                }
+            }
+        } catch (t: Throwable) {
+            // Ignore
+        }
+        return false
+    }
+
     override fun onHandleLoadPackage(lpparam: XC_LoadPackage.LoadPackageParam) {
         if (General.PACKAGE_NAME != lpparam.packageName) return
         val classLoader = lpparam.classLoader
 
-        // hook FgBgMonitorImpl (在 main dex 中，可立即 hook)
+        // hook FgBgMonitorImpl (在 main dex 中，可立即 hook，增加 UI 调用栈保护)
         val fgBgClass = "com.alipay.mobile.common.fgbg.FgBgMonitorImpl"
         try {
-            XposedHelpers.findAndHookMethod(fgBgClass, classLoader, "isInBackground", XC_MethodReplacement.returnConstant(false))
-            XposedHelpers.findAndHookMethod(fgBgClass, classLoader, "isInBackground", Boolean::class.javaPrimitiveType, XC_MethodReplacement.returnConstant(false))
-            XposedHelpers.findAndHookMethod(fgBgClass, classLoader, "isInBackgroundV2", XC_MethodReplacement.returnConstant(false))
-            Log.runtime(TAG, "hook FgBgMonitorImpl successfully")
+            val fgBgHook = object : XC_MethodHook() {
+                override fun beforeHookedMethod(param: MethodHookParam) {
+                    if (isCalledFromUI()) return
+                    param.result = false
+                }
+            }
+            XposedHelpers.findAndHookMethod(fgBgClass, classLoader, "isInBackground", fgBgHook)
+            XposedHelpers.findAndHookMethod(fgBgClass, classLoader, "isInBackground", Boolean::class.javaPrimitiveType, fgBgHook)
+            XposedHelpers.findAndHookMethod(fgBgClass, classLoader, "isInBackgroundV2", fgBgHook)
+            Log.runtime(TAG, "hook FgBgMonitorImpl successfully with UI safety check")
         } catch (t: Throwable) {
             Log.runtime(TAG, "hook FgBgMonitorImpl err: ${t.message}")
         }
 
-        // hook MiscUtils (在 main dex 中，可立即 hook)
+        // hook MiscUtils (在 main dex 中，可立即 hook，增加 UI 调用栈保护)
         try {
             XposedHelpers.findAndHookMethod("com.alipay.mobile.common.transport.utils.MiscUtils", classLoader, "isAtFrontDesk",
-                Context::class.java, XC_MethodReplacement.returnConstant(true))
-            Log.runtime(TAG, "hook MiscUtils successfully")
+                Context::class.java, object : XC_MethodHook() {
+                    override fun beforeHookedMethod(param: MethodHookParam) {
+                        if (isCalledFromUI()) return
+                        param.result = true
+                    }
+                })
+            Log.runtime(TAG, "hook MiscUtils successfully with UI safety check")
         } catch (t: Throwable) {
             Log.runtime(TAG, "hook MiscUtils err")
         }

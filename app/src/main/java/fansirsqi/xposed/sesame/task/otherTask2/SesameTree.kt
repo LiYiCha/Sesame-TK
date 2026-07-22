@@ -17,7 +17,15 @@ class SesameTree {
 
     init {
         // 获取错误缓存
-        blackList = DataStore.get("sesameTree_blackList", Set::class.java) as HashSet<String>
+        try {
+            val saved = DataStore.get("sesameTree_blackList", Set::class.java)
+            if (saved != null) {
+                @Suppress("UNCHECKED_CAST")
+                (saved as? Set<*>)?.filterIsInstance<String>()?.let { blackList.addAll(it) }
+            }
+        } catch (e: Exception) {
+            Log.error(TAG, "初始化黑名单缓存异常: $e")
+        }
     }
     fun handle() {
         try {
