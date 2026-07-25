@@ -43,64 +43,6 @@ object ThemeManager {
     // 线程安全标志
     private val isOperationRunning = AtomicBoolean(false)
 
-    // 防抖：记录上次日志时间
-    private var lastSkipLogTime = 0L
-
-    // 后台监控线程
-    private var monitorThread: Thread? = null
-    private val isMonitorRunning = AtomicBoolean(false)
-
-    /**
-     * 检查监控线程是否正在运行
-     */
-    fun isMonitorRunning(): Boolean {
-        return isMonitorRunning.get()
-    }
-
-    /**
-     * 启动操作监控线程
-     *
-     * 在支付宝进程中启动后台线程，定期检查是否有导出请求
-     * 如果有，立即执行导出操作
-     */
-    fun startOperationMonitor() {
-        if (isMonitorRunning.compareAndSet(false, true)) {
-            monitorThread = Thread {
-                Log.runtime(TAG, "✓ 主题操作监控线程已启动")
-                try {
-                    while (isMonitorRunning.get()) {
-                        try {
-                            // 检查是否有操作请求
-                            handleThemeOperations()
-
-                            // 每2秒检查一次
-                            Thread.sleep(2000)
-                        } catch (e: InterruptedException) {
-                            break
-                        } catch (e: Exception) {
-                            Log.runtime(TAG, "监控线程异常: ${e.message}")
-                        }
-                    }
-                } finally {
-                    Log.runtime(TAG, "✓ 主题操作监控线程已停止")
-                }
-            }.apply {
-                name = "ThemeOperationMonitor"
-                isDaemon = true
-                start()
-            }
-        }
-    }
-
-    /**
-     * 停止操作监控线程
-     */
-    fun stopOperationMonitor() {
-        if (isMonitorRunning.compareAndSet(true, false)) {
-            monitorThread?.interrupt()
-            monitorThread = null
-        }
-    }
 
     /**
      * 获取当前用户ID
@@ -149,12 +91,6 @@ object ThemeManager {
     fun handleThemeOperations() {
         // 线程安全保护
         if (!isOperationRunning.compareAndSet(false, true)) {
-            // 防抖：只在距离上次日志超过10秒时才打印
-            val currentTime = System.currentTimeMillis()
-            if (currentTime - lastSkipLogTime > 10000) {
-                Log.runtime(TAG, "主题操作正在执行中，跳过")
-                lastSkipLogTime = currentTime
-            }
             return
         }
 
@@ -224,17 +160,38 @@ object ThemeManager {
     }
 
     /**
+     * 立即直接导出主题
+     *
+     * 响应 UI 层的导出按钮点击，无需等待特定页面或标记文件轮询
+     */
+    fun exportThemesDirectly(targetUserId: String? = null): Pair<Boolean, String> {
+        return try {
+            val userId = targetUserId ?: getCurrentUserId()
+            if (userId == null) {
+                return Pair(false, "无法获取用户ID")
+            }
+            val userThemeDir = File(INTERNAL_STORAGE_PATH, userId)
+            if (!userThemeDir.exists()) {
+                return Pair(false, "主题目录不存在: ${userThemeDir.absolutePath}")
+            }
+            executeExportOperation(userId, userThemeDir)
+        } catch (e: Exception) {
+            Pair(false, "导出失败: ${e.message}")
+        }
+    }
+
+    /**
      * 执行导出操作
      *
      * 将支付宝内部的主题导出到SD卡（追加模式）
      * 每个主题包含自己的 ltp 资源，形成独立的主题包
      */
-    private fun executeExportOperation(userId: String, userThemeDir: File) {
+    private fun executeExportOperation(userId: String, userThemeDir: File): Pair<Boolean, String> {
         try {
             if (!userThemeDir.exists()) {
                 Log.runtime(TAG, "✗ 主题导出失败: 目录不存在")
                 showToast("主题导出失败: 目录不存在")
-                return
+                return Pair(false, "目录不存在")
             }
 
             val exportDir = File(EXTERNAL_STORAGE_PATH, EXPORTED_THEMES_FOLDER)
@@ -251,14 +208,14 @@ object ThemeManager {
             if (!themeSourceDir.exists() || !themeSourceDir.isDirectory) {
                 Log.runtime(TAG, "✗ 主题导出失败: theme 目录不存在")
                 showToast("主题导出失败: theme 目录不存在")
-                return
+                return Pair(false, "theme 目录不存在")
             }
 
             val themeDirs = themeSourceDir.listFiles { file -> file.isDirectory }
             if (themeDirs == null || themeDirs.isEmpty()) {
                 Log.runtime(TAG, "✗ 主题导出失败: 未找到主题目录")
                 showToast("主题导出失败: 未找到主题目录")
-                return
+                return Pair(false, "未找到主题目录")
             }
 
             var exportedCount = 0
@@ -287,15 +244,18 @@ object ThemeManager {
                 val message = "✓ 主题导出成功\n已导出 $exportedCount 个主题"
                 Log.runtime(TAG, message)
                 showToast(message)
+                return Pair(true, message)
             } else {
                 val message = "✗ 主题导出失败: 没有成功导出任何主题"
                 Log.runtime(TAG, message)
                 showToast(message)
+                return Pair(false, message)
             }
         } catch (e: Exception) {
             val message = "✗ 主题导出失败: ${e.message}"
             Log.runtime(TAG, message)
             showToast(message)
+            return Pair(false, message)
         }
     }
 

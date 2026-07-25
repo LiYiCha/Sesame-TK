@@ -32,6 +32,7 @@ class LogViewerViewModel : ViewModel() {
         private const val TAG = "LogViewerViewModel"
         private const val POLL_INTERVAL = 1000L // 文件轮询间隔（毫秒）
         private const val PREF_FONT_SIZE = "log_viewer_font_size"
+        private const val PREF_IS_HTML_MODE = "log_viewer_is_html_mode"
         private const val DEFAULT_FONT_SIZE = 9 // 默认字体大小改为9sp
         private const val MAX_RENDER_LINES = 150000
     }
@@ -70,7 +71,8 @@ class LogViewerViewModel : ViewModel() {
         val isSelectionMode: Boolean = false,
         val selectedIndices: Set<Int> = emptySet(),
         val lastSelectedIndex: Int? = null,
-        val showSearchPanel: Boolean = false
+        val showSearchPanel: Boolean = false,
+        val isHtmlMode: Boolean = false
     )
 
     /**
@@ -121,6 +123,14 @@ class LogViewerViewModel : ViewModel() {
             fansirsqi.xposed.sesame.util.DataStore.put(PREF_FONT_SIZE, size)
         } catch (e: Exception) {
             Log.error(TAG, "保存字体大小失败: ${e.message}")
+        }
+    }
+
+    private fun saveHtmlMode(mode: Boolean) {
+        try {
+            fansirsqi.xposed.sesame.util.DataStore.put("PREF_HTML_MODE", mode)
+        } catch (e: Exception) {
+            Log.error(TAG, "保存 HTML 模式状态失败: ${e.message}")
         }
     }
 
@@ -332,7 +342,7 @@ class LogViewerViewModel : ViewModel() {
         viewModelScope.launch(Dispatchers.Default) {
             try {
                 val results = mutableListOf<SearchResult>()
-                val lines = synchronized(allLines) { allLines.toList() }
+                val lines = _uiState.value.displayedLines
 
                 if (state.isRegexSearch) {
                     // 正则表达式搜索
@@ -703,6 +713,12 @@ class LogViewerViewModel : ViewModel() {
         watchingFile = null
     }
 
+    fun toggleHtmlMode() {
+        val newMode = !_uiState.value.isHtmlMode
+        _uiState.update { it.copy(isHtmlMode = newMode) }
+        saveHtmlMode(newMode)
+    }
+
     fun toggleSelectionMode(enabled: Boolean) {
         _uiState.update { 
             it.copy(
@@ -766,6 +782,26 @@ class LogViewerViewModel : ViewModel() {
         }
         
         clearSelection()
+    }
+
+    fun copyAllLogsToClipboard(context: android.content.Context) {
+        val state = _uiState.value
+        val textToCopy = if (state.displayedLines.isNotEmpty()) {
+            state.displayedLines.joinToString("\n")
+        } else synchronized(allLines) {
+            allLines.joinToString("\n")
+        }
+        if (textToCopy.isEmpty()) {
+            fansirsqi.xposed.sesame.util.ToastUtil.showToast(context, "日志内容为空")
+            return
+        }
+        try {
+            val cm = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+            cm.setPrimaryClip(android.content.ClipData.newPlainText("all_logs", textToCopy))
+            fansirsqi.xposed.sesame.util.ToastUtil.showToast(context, "已复制全部日志到剪贴板")
+        } catch (e: Exception) {
+            Log.error(TAG, "复制全部日志失败: ${e.message}")
+        }
     }
 
     fun findBoundaryIndices(): List<Int> {

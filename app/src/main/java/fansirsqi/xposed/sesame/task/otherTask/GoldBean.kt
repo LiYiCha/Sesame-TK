@@ -205,4 +205,4 @@ class GoldBean {
                 "\"taskCenterId\":\"$taskCenterId\",\"taskId\":\"$appletId\"}]"
         return JSONObject(RequestManager.requestString(method, params))
     }
-}
+}

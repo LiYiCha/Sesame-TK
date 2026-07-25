@@ -38,6 +38,7 @@ import fansirsqi.xposed.sesame.util.Log
 import fansirsqi.xposed.sesame.util.ToastUtil
 import kotlinx.coroutines.launch
 import java.io.File
+import androidx.compose.ui.platform.LocalContext
 import androidx.activity.compose.BackHandler
 import androidx.compose.material3.HorizontalDivider
 
@@ -177,37 +178,59 @@ class LogViewerComposeActivity : ComponentActivity() {
     }
 
     /**
-     * 打开日志目录（仅定位目录，不读取文本）
+     * 打开日志目录（自动唤起系统/第三方文件管理器定位目录）
      */
     private fun openLogDirectory() {
         val logDir = Files.LOG_DIR
         if (!logDir.exists()) {
-            ToastUtil.showToast(this, "日志目录不存在")
-            return
+            try { logDir.mkdirs() } catch (_: Exception) {}
         }
 
-        val candidates = listOf(
+        val relativePath = logDir.absolutePath.replaceFirst("^/storage/emulated/0/", "").replaceFirst("^/sdcard/", "")
+        val encodedPath = Uri.encode("primary:$relativePath")
+        val docUri = Uri.parse("content://com.android.externalstorage.documents/document/$encodedPath")
+
+        val intents = listOf(
+            // 1. DocumentsUI 指定目录视角
             Intent(Intent.ACTION_VIEW).apply {
-                setDataAndType(Uri.fromFile(logDir), "inode/directory")
+                setDataAndType(docUri, "vnd.android.document/directory")
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            },
+            // 2. SAF 目录选择器
+            Intent(Intent.ACTION_OPEN_DOCUMENT_TREE).apply {
+                putExtra("android.provider.extra.INITIAL_URI", docUri)
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            },
+            // 3. 通用 inode/directory
+            Intent(Intent.ACTION_VIEW).apply {
+                setDataAndType(Uri.fromFile(logDir), "resource/folder")
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             },
             Intent(Intent.ACTION_VIEW).apply {
-                data = Uri.fromFile(logDir)
+                setDataAndType(Uri.fromFile(logDir), "inode/directory")
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             }
         )
 
-        val launched = candidates.firstOrNull { it.resolveActivity(packageManager) != null }
-        if (launched != null) {
+        for (intent in intents) {
             try {
-                startActivity(launched)
-                return
+                if (intent.resolveActivity(packageManager) != null) {
+                    startActivity(intent)
+                    return
+                }
             } catch (e: Exception) {
-                Log.error(TAG, "打开日志目录失败: ${e.message}")
+                Log.error(TAG, "尝试唤起文件管理器失败: ${e.message}")
             }
         }
 
-        ToastUtil.showToast(this, "请手动打开目录: ${logDir.absolutePath}")
+        // 备用系统选择器
+        try {
+            val chooser = Intent.createChooser(intents.last(), "选择文件管理器打开日志目录")
+            chooser.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            startActivity(chooser)
+        } catch (e: Exception) {
+            ToastUtil.showToast(this, "打开日志目录: ${logDir.absolutePath}")
+        }
     }
 
     override fun onDestroy() {
@@ -232,6 +255,7 @@ fun LogViewerScreen(
     onOpenLogDirectory: () -> Unit,
     onBack: () -> Unit
 ) {
+    val context = LocalContext.current
     val uiState by viewModel.uiState.collectAsState()
     val lazyListState = rememberLazyListState()
 
@@ -245,6 +269,8 @@ fun LogViewerScreen(
     var showMenu by remember { mutableStateOf(false) }
     var showFilterPanel by remember { mutableStateOf(false) }
     var showLevelFilter by remember { mutableStateOf(false) }
+    var isHtmlMode by remember { mutableStateOf(false) }
+    val coroutineScope = rememberCoroutineScope()
 
     val topBarBg = MaterialTheme.colorScheme.primaryContainer
     val topBarContent = MaterialTheme.colorScheme.onPrimaryContainer
@@ -305,6 +331,13 @@ fun LogViewerScreen(
                             }
                         )
                         DropdownMenuItem(
+                            text = { Text(if (uiState.isHtmlMode) "Compose 视图" else "HTML 视图") },
+                            onClick = {
+                                showMenu = false
+                                viewModel.toggleHtmlMode()
+                            }
+                        )
+                        DropdownMenuItem(
                             text = { Text(if (uiState.isSelectionMode) "退出多选模式" else "开启多选模式") },
                             onClick = {
                                 showMenu = false
@@ -312,6 +345,13 @@ fun LogViewerScreen(
                             }
                         )
                         HorizontalDivider()
+                        DropdownMenuItem(
+                            text = { Text("复制全部日志") },
+                            onClick = {
+                                showMenu = false
+                                viewModel.copyAllLogsToClipboard(context)
+                            }
+                        )
                         DropdownMenuItem(
                             text = { Text("导出文件") },
                             onClick = {
@@ -352,6 +392,8 @@ fun LogViewerScreen(
                 .fillMaxSize()
                 .padding(paddingValues)
         ) {
+            var webViewInstance by remember { mutableStateOf<android.webkit.WebView?>(null) }
+
             // 搜索面板
             if (uiState.showSearchPanel) {
                 SearchPanel(
@@ -379,8 +421,26 @@ fun LogViewerScreen(
                 )
             }
 
-            // 状态栏
-            StatusBar(uiState = uiState, viewModel = viewModel)
+            val isScrollingDown by remember {
+                derivedStateOf {
+                    lazyListState.firstVisibleItemIndex > 0 && lazyListState.isScrollInProgress
+                }
+            }
+
+            // 状态栏（包含解耦后的直达底部按钮）
+            StatusBar(
+                uiState = uiState,
+                viewModel = viewModel,
+                onScrollToBottom = {
+                    if (uiState.isHtmlMode) {
+                        webViewInstance?.evaluateJavascript("window.scrollTo(0, document.body.scrollHeight)", null)
+                    } else if (uiState.displayedLines.isNotEmpty()) {
+                        coroutineScope.launch {
+                            lazyListState.animateScrollToItem(uiState.displayedLines.size - 1)
+                        }
+                    }
+                }
+            )
 
             // 日志内容与悬浮组件
             Box(
@@ -388,26 +448,104 @@ fun LogViewerScreen(
                     .weight(1f)
                     .fillMaxWidth()
             ) {
-                LogContent(
-                    viewModel = viewModel,
-                    uiState = uiState,
-                    lazyListState = lazyListState
-                )
+                // 预热并持久化 WebView 实例：彻底消除点击切换时的白屏与等待加载！
+                val preWarmedWebView = remember(context) {
+                    android.webkit.WebView(context).apply {
+                        setLayerType(android.view.View.LAYER_TYPE_HARDWARE, null)
+                        isVerticalScrollBarEnabled = true
+                        isScrollbarFadingEnabled = true
+                        scrollBarStyle = android.view.View.SCROLLBARS_INSIDE_OVERLAY
+                        settings.javaScriptEnabled = true
+                        settings.domStorageEnabled = true
+                        settings.setSupportZoom(true)
+                        settings.builtInZoomControls = true
+                        settings.displayZoomControls = false
+                        addJavascriptInterface(object {
+                            @android.webkit.JavascriptInterface
+                            fun getFullText(): String {
+                                return uiState.displayedLines.joinToString("\n")
+                            }
+                        }, "LogBridge")
+                        webChromeClient = object : android.webkit.WebChromeClient() {
+                            override fun onProgressChanged(view: android.webkit.WebView?, newProgress: Int) {
+                                if (newProgress == 100) {
+                                    evaluateJavascript("initLogBridge()", null)
+                                }
+                            }
+                        }
+                        loadUrl("file:///android_asset/log_viewer_legacy.html")
+                        webViewInstance = this
+                    }
+                }
 
-                RequestNavigator(
-                    viewModel = viewModel,
-                    uiState = uiState,
-                    lazyListState = lazyListState,
-                    modifier = Modifier
-                        .align(Alignment.BottomEnd)
-                        .padding(bottom = 72.dp) // 避免遮挡底栏或底部按钮
-                )
+                // 1. 筛选/日志级别/字号更新时 -> 通知 H5 重新渲染文本
+                LaunchedEffect(uiState.displayedLines, uiState.isHtmlMode) {
+                    if (uiState.isHtmlMode) {
+                        preWarmedWebView.evaluateJavascript("initLogBridge()", null)
+                    }
+                }
 
-                SelectionActionBar(
-                    viewModel = viewModel,
-                    uiState = uiState,
-                    modifier = Modifier.align(Alignment.BottomCenter)
-                )
+                // 2. 搜索词/模式改变时 -> 通知 H5 重新高亮
+                LaunchedEffect(uiState.searchKeyword, uiState.isCaseSensitive, uiState.isRegexSearch, uiState.displayedLines, uiState.isHtmlMode) {
+                    if (uiState.isHtmlMode) {
+                        if (uiState.searchKeyword.isNotEmpty()) {
+                            val kw = uiState.searchKeyword.replace("'", "\\'")
+                            preWarmedWebView.evaluateJavascript("highlightKeyword('$kw', ${uiState.isCaseSensitive}, ${uiState.isRegexSearch})", null)
+                        } else {
+                            preWarmedWebView.evaluateJavascript("clearH5Search()", null)
+                        }
+                    }
+                }
+
+                // 3. 搜索索引改变 (点击“下一个 / 上一个”) -> 通知 H5 平滑跳转
+                LaunchedEffect(uiState.currentSearchIndex, uiState.isHtmlMode) {
+                    if (uiState.isHtmlMode && uiState.currentSearchIndex >= 0 && uiState.searchKeyword.isNotEmpty()) {
+                        preWarmedWebView.evaluateJavascript("jumpSearchMatch(${uiState.currentSearchIndex})", null)
+                    }
+                }
+
+                // Compose 原生日志列表
+                if (!uiState.isHtmlMode) {
+                    LogContent(
+                        viewModel = viewModel,
+                        uiState = uiState,
+                        lazyListState = lazyListState
+                    )
+
+                    // 动态悬浮 RPC 大纲：向下滑动时自动隐藏，向上滑动/静止时自动显现
+                    androidx.compose.animation.AnimatedVisibility(
+                        visible = !isScrollingDown,
+                        enter = androidx.compose.animation.fadeIn(),
+                        exit = androidx.compose.animation.fadeOut(),
+                        modifier = Modifier
+                            .align(Alignment.BottomEnd)
+                            .padding(bottom = 72.dp)
+                    ) {
+                        RequestNavigator(
+                            viewModel = viewModel,
+                            uiState = uiState,
+                            lazyListState = lazyListState
+                        )
+                    }
+
+                    SelectionActionBar(
+                        viewModel = viewModel,
+                        uiState = uiState,
+                        modifier = Modifier.align(Alignment.BottomCenter)
+                    )
+                }
+
+                // 预热全速呈现的 HTML WebView (0 秒秒切无白屏)
+                if (uiState.isHtmlMode) {
+                    androidx.compose.ui.viewinterop.AndroidView(
+                        factory = { preWarmedWebView },
+                        update = { webView ->
+                            webView.settings.textZoom = (uiState.fontSize * 9).coerceIn(40, 200)
+                            webView.evaluateJavascript("initLogBridge()", null)
+                        },
+                        modifier = Modifier.fillMaxSize()
+                    )
+                }
             }
         }
     }

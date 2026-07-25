@@ -442,7 +442,8 @@ fun LogLevelFilterPanel(
 @Composable
 fun StatusBar(
     uiState: LogViewerViewModel.UiState,
-    viewModel: LogViewerViewModel
+    viewModel: LogViewerViewModel,
+    onScrollToBottom: () -> Unit = {}
 ) {
     Surface(
         modifier = Modifier
@@ -467,9 +468,22 @@ fun StatusBar(
             )
 
             Row(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
+                // 解耦一键直达底部按钮（放置在筛选/状态提示与自动滚动之间）
+                IconButton(
+                    onClick = onScrollToBottom,
+                    modifier = Modifier.size(20.dp)
+                ) {
+                    Icon(
+                        Icons.Default.ArrowDropDown,
+                        contentDescription = "直达底部",
+                        modifier = Modifier.size(18.dp),
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                }
+
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
                         text = "自动滚动",

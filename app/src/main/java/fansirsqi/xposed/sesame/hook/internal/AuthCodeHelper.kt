@@ -51,7 +51,9 @@ object AuthCodeHelper {
             Thread {
                 try {
                     val oauth2AuthCodeServiceImplClass = XposedHelpers.findClass("com.alibaba.ariver.rpc.biz.proxy.Oauth2AuthCodeServiceImpl", classLoader)
-                    val oauth2AuthCodeServiceImpl = XposedHelpers.newInstance(oauth2AuthCodeServiceImplClass)
+                    val oauth2AuthCodeServiceImpl = fansirsqi.xposed.sesame.hook.context.AppContext.getServiceObject("com.alibaba.ariver.rpc.biz.proxy.Oauth2AuthCodeService")
+                        ?: fansirsqi.xposed.sesame.hook.context.AppContext.getServiceObject("com.alibaba.ariver.rpc.biz.proxy.Oauth2AuthCodeServiceImpl")
+                        ?: XposedHelpers.newInstance(oauth2AuthCodeServiceImplClass)
                     val authSkipRequestModelClass = XposedHelpers.findClass("com.alibaba.ariver.permission.openauth.model.request.AuthSkipRequestModel", classLoader)
                     val authSkipRequestModel = XposedHelpers.newInstance(authSkipRequestModelClass)
                     XposedHelpers.callMethod(authSkipRequestModel, "setAppId", appId)

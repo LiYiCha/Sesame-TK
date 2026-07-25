@@ -47,7 +47,7 @@ android {
 
         if (!isCIBuild) {
             ndk {
-                abiFilters.addAll(listOf("armeabi-v7a", "arm64-v8a", "x86", "x86_64"))
+                abiFilters.addAll(listOf("arm64-v8a", "x86_64"))
             }
         }
 
@@ -68,7 +68,7 @@ android {
         }
 
 
-        val versionNumber = "0.3.4"
+        val versionNumber = "0.3.5"
         val dateString = SimpleDateFormat("yyMMdd", Locale.CHINA).apply {
             timeZone = TimeZone.getTimeZone("GMT+8")
         }.format(Date())
@@ -83,7 +83,7 @@ android {
         buildConfigField("String", "VERSION", "\"$versionName\"")
 
         ndk {
-            abiFilters.addAll(listOf("armeabi-v7a", "arm64-v8a", "x86", "x86_64"))
+            abiFilters.addAll(listOf("arm64-v8a", "x86_64"))
         }
 
         testOptions {
@@ -91,6 +91,11 @@ android {
                 it.enabled = false
             }
         }
+    }
+
+    lint {
+        checkReleaseBuilds = false
+        abortOnError = false
     }
 
     buildFeatures {
@@ -171,7 +176,7 @@ android {
             isDebuggable = false
             isMinifyEnabled = true
             isShrinkResources = true
-            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            proguardFiles(getDefaultProguardFile("proguard-android.txt"), "proguard-rules.pro")
             signingConfig = signingConfigs.getByName("debug")
         }
     }

@@ -498,7 +498,7 @@ class AntStall : ModelTask() {
                                 )
                             }
                         }, endTime))
-                        Log.runtime(TAG, "添加蹲点请走⛪在[${TimeUtil.getCommonDate(endTime)}]执行")
+//                        Log.runtime(TAG, "添加蹲点请走⛪在[${TimeUtil.getCommonDate(endTime)}]执行")
                     }
                 }
             }
@@ -582,7 +582,7 @@ class AntStall : ModelTask() {
                                 openShop()
                             }
                         }, shopTime))
-                        Log.runtime(TAG, "添加蹲点收摊⛪在[${TimeUtil.getCommonDate(shopTime)}]执行")
+//                        Log.runtime(TAG, "添加蹲点收摊⛪在[${TimeUtil.getCommonDate(shopTime)}]执行")
                     }
                 }
             }

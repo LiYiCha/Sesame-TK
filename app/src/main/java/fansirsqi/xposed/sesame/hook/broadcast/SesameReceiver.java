@@ -12,6 +12,7 @@ import androidx.annotation.NonNull;
 import java.util.Objects;
 
 import fansirsqi.xposed.sesame.hook.ExtendHandle;
+import fansirsqi.xposed.sesame.hook.lifecycle.LifecycleManager;
 import fansirsqi.xposed.sesame.hook.rpc.debug.DebugRpc;
 import fansirsqi.xposed.sesame.hook.scheduler.AlarmScheduler;
 import fansirsqi.xposed.sesame.util.Log;
@@ -58,9 +59,8 @@ public class SesameReceiver extends BroadcastReceiver {
         if (action != null) {
             switch (action) {
                 case "com.eg.android.AlipayGphone.sesame.restart":
-                    String userId = intent.getStringExtra("userId");
-                    if (StringUtil.isEmpty(userId) || Objects.equals(UserMap.getCurrentUid(), userId)) {
-                        fansirsqi.xposed.sesame.hook.lifecycle.LifecycleManager.reloadConfig(userId);
+                    if (callback != null) {
+                        callback.onInitHandler(true);
                     }
                     break;
                 case "com.eg.android.AlipayGphone.sesame.execute":
@@ -91,6 +91,15 @@ public class SesameReceiver extends BroadcastReceiver {
                     } catch (Throwable th) {
                         Log.runtime(TAG, "sesame 测试RPC请求失败:");
                         Log.printStackTrace(TAG, th);
+                    }
+                    break;
+                case "com.eg.android.AlipayGphone.sesame.exportTheme":
+                    try {
+                        String userId = intent.getStringExtra("userId");
+                        kotlin.Pair<Boolean, String> res = fansirsqi.xposed.sesame.hook.theme.ThemeManager.INSTANCE.exportThemesDirectly(userId);
+                        Log.other("ThemeManager", "⚡ 收到 UI 跨进程 IPC 广播，主题导出结果: " + res.getSecond());
+                    } catch (Throwable th) {
+                        Log.error("ThemeManager", "❌ 跨进程 IPC 导出主题异常: " + th.getMessage());
                     }
                     break;
                 case "com.eg.android.AlipayGphone.sesame.rerun":

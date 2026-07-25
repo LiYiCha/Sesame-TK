@@ -1,8 +1,10 @@
-package fansirsqi.xposed.sesame.util
+package fansirsqi.xposed.sesame.task.antOrchard
 
 import fansirsqi.xposed.sesame.hook.ApplicationHook
 import fansirsqi.xposed.sesame.hook.internal.AlipayMiniMarkHelper
 import fansirsqi.xposed.sesame.hook.internal.AuthCodeHelper
+import fansirsqi.xposed.sesame.util.CoroutineUtils
+import fansirsqi.xposed.sesame.util.Log
 import org.json.JSONObject
 import java.io.OutputStreamWriter
 import java.net.HttpURLConnection
@@ -16,13 +18,17 @@ enum class GameTask(
     val action: String,
     val channel: String,
     val version: String,
-    val requestsPerEgg: Int //完成1个🥚要多少次 为了防止网络崩溃 多加1次
+    val requestsPerEgg: Int, //完成1个🥚要多少次 为了防止网络崩溃 多加1次
+    val pf: String = "zfb"
 ) {
     Orchard_ncscc("农场上车车", "2060170000356601", "zfb_ncscc", "ncscc_game_kaiche_every_10", "nongchangleyuan", "1.0.2", 2),
     Farm_ddply("对对碰乐园", "2021004149679303", "zfb_ddply", "ddply_game_xiaochu_every_5", "zhuangyuan", "1.0.14", 2),
 
     Forest_slxcc("森林小车车","2060170000363691","zfb_slxcc","slxcc_game_kaiche_every_10","lianyun_senlin_leyuan","1.0.1",3),
-    Forest_sljyd("森林救援队(能量雨)", "2021005113684028", "zfb_sljydx", "sljyd_game_xiaochu_every_10", "lianyun_senlin_leyuan", "1.0.1", 3);
+    Forest_sljyd("森林救援队(能量雨)", "2021005113684028", "zfb_sljydx", "sljyd_game_xiaochu_every_10", "lianyun_senlin_leyuan", "1.0.1", 3),
+    GoldenBean_ddply("金豆对对碰", "2021004149679303", "zfb_ddply", "ddply_game_xiaochu_every_5", "goldenbean", "1.0.15", 3, "alipay"),
+    Member_ddply("会员对对碰", "2021004149679303", "zfb_ddply", "ddply_game_xiaochu_every_5", "xlyy_WJCNJT", "1.0.15", 3, "alipay"),
+    GoldenBean_nccmx("金豆吃草草", "2060170000355266", "zfb_nccmx", "nccmx_game_xiaochu_every_20", "goldenbean", "1.0.0", 2, "alipay");
 
     private var cachedToken: String? = null
 
@@ -36,8 +42,12 @@ enum class GameTask(
             val reqId = "${System.currentTimeMillis()}_${(1..350).random()}"
 
             val body = JSONObject().apply {
-                put("v", version); put("code", authCode); put("pf", "zfb")
+                put("v", version); put("code", authCode); put("pf", pf)
                 put("reqId", reqId); put("gid", gid); put("version", version)
+                if (gid == "zfb_nccmx") {
+                    put("identid", gid)
+                }
+                put("scene", "")
             }.toString()
 
             val conn = (URL("https://gamesapi2.aslk2018.com/v2/game/login").openConnection() as HttpURLConnection).apply {
@@ -46,6 +56,7 @@ enum class GameTask(
                 setRequestProperty("alipayMiniMark", mark)
                 setRequestProperty("User-Agent", getDynamicUA())
                 setRequestProperty("x-release-type", "ONLINE")
+                setRequestProperty("referer", "https://$appId.hybrid.alipay-eco.com/$appId/$version/index.html")
             }
 
             OutputStreamWriter(conn.outputStream, StandardCharsets.UTF_8).use { it.write(body) }
@@ -74,7 +85,7 @@ enum class GameTask(
      * 外部调用：执行上报任务（同步阻塞，保证主任务顺序不乱）
      */
     fun report(eggCount: Int) {
-        val totalNeeded = eggCount * (requestsPerEgg + 1) // 正常不需要加1，多1次确保网络请求不会错误
+        val totalNeeded = eggCount * requestsPerEgg
         Log.runtime(title, "🚀 开始执行上报任务：目标 $eggCount 个蛋，需请求 $totalNeeded 次")
         
         cachedToken = login()
@@ -157,7 +168,7 @@ enum class GameTask(
             val msg = resJson.optString("msg", "")
 
             if (code == 1) {
-                if (current % requestsPerEgg == 0) Log.other(title, "📈 进度: $current/$total (已达成 ${current/requestsPerEgg} 个蛋)")
+                if (current % requestsPerEgg == 0) Log.other(title, "📈 进度: $current/$total (已达成 ${current/requestsPerEgg} / ${total/requestsPerEgg} 个蛋)")
                 ReportResult(success = true)
             } else {
                 val isTokenErr = msg.contains("token", ignoreCase = true) || msg.contains("auth", ignoreCase = true) || code == 401

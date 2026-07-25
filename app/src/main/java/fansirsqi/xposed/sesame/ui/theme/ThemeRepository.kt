@@ -80,13 +80,29 @@ class ThemeRepository(private val context: Context) {
     /**
      * 立即导出主题
      *
-     * 创建导出请求，由支付宝进程中的监控线程自动执行
+     * 点击时直接尝试导出，无需等待或依赖去到特定页面
      *
      * @return Pair<Boolean, String> 成功标志和提示消息
      */
-    suspend fun exportThemeNow(): Pair<Boolean, String> = withContext(Dispatchers.IO) {
-        // 创建导出请求（标记文件）
-        return@withContext executeOperation(ThemeOperation.EXPORT)
+    suspend fun exportThemeNow(context: Context? = null): Pair<Boolean, String> = withContext(Dispatchers.IO) {
+        val directResult = fansirsqi.xposed.sesame.hook.theme.ThemeManager.exportThemesDirectly()
+        if (directResult.first) {
+            directResult
+        } else {
+            // 如果在宿主/UI进程由于进程权限无法直接读取，发送 IPC 广播触发支付宝 Hook 进程直接导出
+            try {
+                val ctx = context ?: fansirsqi.xposed.sesame.hook.context.AppContext.getAppContext()
+                if (ctx != null) {
+                    val intent = android.content.Intent("com.eg.android.AlipayGphone.sesame.exportTheme")
+                    ctx.sendBroadcast(intent)
+                    Pair(true, "⚡ 已发送 IPC 广播，触发主题即时导出")
+                } else {
+                    executeOperation(ThemeOperation.EXPORT)
+                }
+            } catch (e: Exception) {
+                executeOperation(ThemeOperation.EXPORT)
+            }
+        }
     }
 
     /**

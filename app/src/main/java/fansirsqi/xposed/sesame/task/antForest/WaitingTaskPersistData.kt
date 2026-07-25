@@ -112,7 +112,7 @@ object EnergyWaitingPersistence {
                 val dataStoreKey = getDataStoreKey()
                 DataStore.put(dataStoreKey, persistDataList)
 
-                Log.runtime(TAG, "✅ 保存${persistDataList.size}个蹲点任务到持久化存储 (key: $dataStoreKey)")
+//                Log.runtime(TAG, "✅ 保存${persistDataList.size}个蹲点任务到持久化存储 (key: $dataStoreKey)")
             } catch (e: Exception) {
                 Log.printStackTrace(TAG, "保存蹲点任务失败:", e)
             }
@@ -197,7 +197,7 @@ object EnergyWaitingPersistence {
             return 0
         }
 
-        Log.runtime(TAG, "🔄 开始验证${tasks.size}个恢复的蹲点任务...")
+//        Log.runtime(TAG, "🔄 开始验证${tasks.size}个恢复的蹲点任务...")
 
         var restoredCount = 0
         var skippedCount = 0

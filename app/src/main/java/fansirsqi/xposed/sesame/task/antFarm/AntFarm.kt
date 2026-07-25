@@ -31,7 +31,7 @@ import fansirsqi.xposed.sesame.task.antFarm.AntFarmFamily.familySign
 import fansirsqi.xposed.sesame.task.antForest.TaskTimeChecker
 import fansirsqi.xposed.sesame.util.CoroutineUtils
 import fansirsqi.xposed.sesame.util.DataStore
-import fansirsqi.xposed.sesame.util.GameTask
+import fansirsqi.xposed.sesame.task.antOrchard.GameTask
 import fansirsqi.xposed.sesame.util.JsonUtil
 import fansirsqi.xposed.sesame.util.ListUtil
 import fansirsqi.xposed.sesame.util.Log
@@ -1363,7 +1363,7 @@ class AntFarm : ModelTask() {
                                         }
                                         // 喂鸡
                                         handleAutoFeedAnimal(true)
-                                        Log.runtime(TAG, "🔄 下一次蹲点任务已创建")
+//                                        Log.runtime(TAG, "🔄 下一次蹲点任务已创建")
                                     } catch (e: Exception) {
                                         Log.printStackTrace(TAG,"蹲点投喂任务执行失败", e)
                                     }

@@ -8,9 +8,12 @@ import fansirsqi.xposed.sesame.model.modelFieldExt.BooleanModelField
 import fansirsqi.xposed.sesame.model.modelFieldExt.SelectAndCountModelField
 import fansirsqi.xposed.sesame.model.modelFieldExt.SelectModelField
 import fansirsqi.xposed.sesame.task.ModelTask
+import fansirsqi.xposed.sesame.model.modelFieldExt.ChoiceModelField
+import fansirsqi.xposed.sesame.model.modelFieldExt.IntegerModelField
 import fansirsqi.xposed.sesame.task.other.credit2101.Credit2101
 import fansirsqi.xposed.sesame.task.other.haojia.HaoJiaWuyou
 import fansirsqi.xposed.sesame.task.other.wufu.WuFu2026
+import fansirsqi.xposed.sesame.task.other.gametest.GameTestTask
 import fansirsqi.xposed.sesame.util.Log
 
 class OtherTask0 : ModelTask() {
@@ -42,6 +45,15 @@ class OtherTask0 : ModelTask() {
     /** @brief 五福2026 开关 */
     private var wufu2026: BooleanModelField? = null
 
+    /** @brief 游戏测试 开关 */
+    private var testGameTask: BooleanModelField? = null
+
+    /** @brief 游戏测试 类型选择 */
+    private var testGameSelect: ChoiceModelField? = null
+
+    /** @brief 游戏测试 上报蛋数 */
+    private var testGameEggCount: IntegerModelField? = null
+
 
     override fun getFields(): ModelFields {
         val fields = ModelFields()
@@ -49,8 +61,6 @@ class OtherTask0 : ModelTask() {
             BooleanModelField(
                 "credit2101", "信用2101", false
             ).apply { credit2101 = this })
-
-
 
         fields.addField(
             SelectModelField(
@@ -85,6 +95,33 @@ class OtherTask0 : ModelTask() {
             ).apply { wufu2026 = this }
         )
 
+        // 手动游戏 HTTP 上报测试控制选项
+        fields.addField(
+            BooleanModelField(
+                "testGameTask", "手动测试 | 游戏HTTP上报", false
+            ).apply { testGameTask = this }
+        )
+        fields.addField(
+            ChoiceModelField(
+                "testGameSelect", "测试游戏 | 选择目标类型", 0,
+                arrayOf(
+                    "金豆对对碰 (zfb_ddply)",
+                    "金豆吃草草 (zfb_nccmx)",
+                    "会员对对碰 (xlyy_WJCNJT)",
+                    "庄园对对碰 (zhuangyuan)",
+                    "农场上车车 (ncscc)",
+                    "森林小车车 (slxcc)",
+                    "森林救援队 (sljyd)"
+                ),
+                "选择要手动单步测试上报的小游戏"
+            ).apply { testGameSelect = this }
+        )
+        fields.addField(
+            IntegerModelField(
+                "testGameEggCount", "测试游戏 | 手动上报蛋数", 1
+            ).apply { testGameEggCount = this }
+        )
+
         return fields
     }
 
@@ -101,6 +138,11 @@ class OtherTask0 : ModelTask() {
             // 2026五福
             if(wufu2026!!.value){
                 WuFu2026.start()
+            }
+
+            // 手动游戏 HTTP 上报测试
+            if (testGameTask?.value == true) {
+                GameTestTask.start(testGameTask, testGameSelect, testGameEggCount)
             }
         } catch (e: Exception) {
             Log.printStackTrace(TAG, e)

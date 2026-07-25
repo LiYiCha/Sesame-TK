@@ -37,9 +37,10 @@ class HtmlViewerActivity : BaseActivity() {
         private const val MENU_EXPORT = 1
         private const val MENU_CLEAR = 2
         private const val MENU_OPEN_BROWSER = 3
-        private const val MENU_COPY_URL = 4
-        private const val MENU_SCROLL_TOP = 5
-        private const val MENU_SCROLL_BOTTOM = 6
+        private const val MENU_OPEN_LOG_DIR = 4
+        private const val MENU_COPY_URL = 5
+        private const val MENU_SCROLL_TOP = 6
+        private const val MENU_SCROLL_BOTTOM = 7
     }
 
     private lateinit var mWebView: MyWebView
@@ -305,9 +306,10 @@ class HtmlViewerActivity : BaseActivity() {
             menu.add(0, MENU_CLEAR, 2, getString(R.string.clear_file))
         }
         menu.add(0, MENU_OPEN_BROWSER, 3, getString(R.string.open_with_other_browser))
-        menu.add(0, MENU_COPY_URL, 4, getString(R.string.copy_the_url))
-        menu.add(0, MENU_SCROLL_TOP, 5, getString(R.string.scroll_to_top))
-        menu.add(0, MENU_SCROLL_BOTTOM, 6, getString(R.string.scroll_to_bottom))
+        menu.add(0, MENU_OPEN_LOG_DIR, 4, "打开日志文件夹")
+        menu.add(0, MENU_COPY_URL, 5, getString(R.string.copy_the_url))
+        menu.add(0, MENU_SCROLL_TOP, 6, getString(R.string.scroll_to_top))
+        menu.add(0, MENU_SCROLL_BOTTOM, 7, getString(R.string.scroll_to_bottom))
         return super.onCreateOptionsMenu(menu)
     }
 
@@ -316,6 +318,7 @@ class HtmlViewerActivity : BaseActivity() {
             MENU_EXPORT -> exportFile()
             MENU_CLEAR -> clearFile()
             MENU_OPEN_BROWSER -> openWithBrowser()
+            MENU_OPEN_LOG_DIR -> openLogDirectory()
             MENU_COPY_URL -> copyUrl()
             MENU_SCROLL_TOP -> mWebView.scrollTo(0, 0)
             MENU_SCROLL_BOTTOM -> mWebView.scrollToBottom()
@@ -370,23 +373,87 @@ class HtmlViewerActivity : BaseActivity() {
     }
 
     /**
-     * 使用其他浏览器打开当前 URL
+     * 使用外部浏览器（Chrome / Edge / 系统浏览器）打开当前 HTML 文件或 URL
      */
     private fun openWithBrowser() {
         val currentUri = uri ?: return
-        val scheme = currentUri.scheme
+        try {
+            val intent = Intent(Intent.ACTION_VIEW).apply {
+                val scheme = currentUri.scheme
+                if (scheme.equals("file", ignoreCase = true)) {
+                    val file = File(currentUri.path ?: "")
+                    if (file.exists()) {
+                        val contentUri = androidx.core.content.FileProvider.getUriForFile(
+                            this@HtmlViewerActivity,
+                            "$packageName.fileprovider",
+                            file
+                        )
+                        setDataAndType(contentUri, "text/html")
+                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    } else {
+                        setDataAndType(currentUri, "text/html")
+                    }
+                } else {
+                    setDataAndType(currentUri, "text/html")
+                }
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            startActivity(Intent.createChooser(intent, "选择浏览器打开"))
+        } catch (e: Exception) {
+            Log.error(TAG, "唤起浏览器打开失败: ${e.message}")
+            ToastUtil.showToast("未找到可打开 HTML 的浏览器")
+        }
+    }
 
-        when {
-            scheme.equals("http", ignoreCase = true) || scheme.equals("https", ignoreCase = true) -> {
-                val intent = Intent(Intent.ACTION_VIEW, currentUri)
-                startActivity(intent)
+    /**
+     * 打开日志目录（自动唤起系统/第三方文件管理器定位目录）
+     */
+    private fun openLogDirectory() {
+        val logDir = Files.LOG_DIR
+        if (!logDir.exists()) {
+            try { logDir.mkdirs() } catch (_: Exception) {}
+        }
+
+        val relativePath = logDir.absolutePath.replaceFirst("^/storage/emulated/0/", "").replaceFirst("^/sdcard/", "")
+        val encodedPath = Uri.encode("primary:$relativePath")
+        val docUri = Uri.parse("content://com.android.externalstorage.documents/document/$encodedPath")
+
+        val intents = listOf(
+            Intent(Intent.ACTION_VIEW).apply {
+                setDataAndType(docUri, "vnd.android.document/directory")
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            },
+            Intent(Intent.ACTION_OPEN_DOCUMENT_TREE).apply {
+                putExtra("android.provider.extra.INITIAL_URI", docUri)
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            },
+            Intent(Intent.ACTION_VIEW).apply {
+                setDataAndType(Uri.fromFile(logDir), "resource/folder")
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            },
+            Intent(Intent.ACTION_VIEW).apply {
+                setDataAndType(Uri.fromFile(logDir), "inode/directory")
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             }
-            scheme.equals("file", ignoreCase = true) -> {
-                ToastUtil.makeText(this, "该文件不支持用浏览器打开", Toast.LENGTH_SHORT).show()
+        )
+
+        for (intent in intents) {
+            try {
+                if (intent.resolveActivity(packageManager) != null) {
+                    startActivity(intent)
+                    return
+                }
+            } catch (e: Exception) {
+                Log.error(TAG, "尝试唤起文件管理器失败: ${e.message}")
             }
-            else -> {
-                ToastUtil.makeText(this, "不支持用浏览器打开", Toast.LENGTH_SHORT).show()
-            }
+        }
+
+        try {
+            val chooser = Intent.createChooser(intents.last(), "选择文件管理器打开日志目录")
+            chooser.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            startActivity(chooser)
+        } catch (e: Exception) {
+            ToastUtil.showToast(this, "打开日志目录: ${logDir.absolutePath}")
         }
     }
 }

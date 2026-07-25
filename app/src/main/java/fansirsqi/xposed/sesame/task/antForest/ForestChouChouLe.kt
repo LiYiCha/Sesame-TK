@@ -98,11 +98,11 @@ class ForestChouChouLe {
         runCatching {
             val scenes = getScenes()
             if (scenes.all { Status.hasFlagToday(it.flag) }) {
-                Log.runtime("⏭️ 今天所有森林寻宝任务已完成, 跳过执行")
+//                Log.runtime("⏭️ 今天所有森林寻宝任务已完成, 跳过执行")
                 return
             }
 
-            Log.runtime("开始处理森林寻宝, 共 ${scenes.size} 个场景")
+//            Log.runtime("开始处理森林寻宝, 共 ${scenes.size} 个场景")
             scenes.forEach {
                 processScene(it)
                 sleepCompat(RandomUtil.nextInt(1000, 2001).toLong())
@@ -112,11 +112,11 @@ class ForestChouChouLe {
 
     private fun processScene(s: Scene) = runCatching {
         if (Status.hasFlagToday(s.flag)) {
-            Log.runtime("⏭️ ${s.name} 今天已完成, 跳过")
+//            Log.runtime("⏭️ ${s.name} 今天已完成, 跳过")
             return@runCatching
         }
 
-        Log.runtime("👉 开始处理: ${s.name}")
+//        Log.runtime("👉 开始处理: ${s.name}")
 
         // 1. 检查活动有效期
         val enterResp = AntForestRpcCall.enterDrawActivityopengreen(s.id, s.code, SOURCE).toJson()
@@ -128,7 +128,7 @@ class ForestChouChouLe {
             val startTime = drawActivity.optLong("startTime")
             val endTime = drawActivity.optLong("endTime")
             if (now !in startTime..endTime) {
-                Log.runtime("⛔ ${s.name} 活动不在有效期内, 跳过")
+//                Log.runtime("⛔ ${s.name} 活动不在有效期内, 跳过")
                 return@runCatching
             }
         }
@@ -164,7 +164,7 @@ class ForestChouChouLe {
             }
 
             if (!hasChange) {
-                Log.runtime("${s.name} 本轮无任务状态变更, 结束任务循环")
+//                Log.runtime("${s.name} 本轮无任务状态变更, 结束任务循环")
                 return
             }
             if (loop < 2) sleepCompat(RandomUtil.nextInt(2000, 3001).toLong())
@@ -274,7 +274,7 @@ class ForestChouChouLe {
 
         if (isBlockedTask(taskType, taskName)) return false
 
-        Log.runtime("${s.name} 任务: $taskName [$taskStatus]")
+//        Log.runtime("${s.name} 任务: $taskName [$taskStatus]")
 
         return when (taskStatus) {
             TaskStatus.TODO.name -> handleTodoTask(s, taskName, taskCode, taskType)
@@ -325,7 +325,7 @@ class ForestChouChouLe {
     }
 
     private fun handleFinishedTask(s: Scene, name: String, code: String, type: String): Boolean {
-        Log.runtime("${s.name} 领取奖励: $name")
+//        Log.runtime("${s.name} 领取奖励: $name")
         sleepCompat(RandomUtil.nextInt(3000, 4001).toLong())
         val res = AntForestRpcCall.receiveTaskAwardopengreen(SOURCE, code, type).toJson()
         return if (res != null && res.check()) {

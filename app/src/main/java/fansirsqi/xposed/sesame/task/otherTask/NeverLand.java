@@ -132,7 +132,7 @@ public class NeverLand extends BaseCommTask {
                     // 检查该recordId是否在错误缓存中
                     String bubbleTaskErrorKey = BUBBLE_TASK_ERROR_CACHE_PREFIX + recordId;
                     if (Status.hasTemporaryStatusValid(bubbleTaskErrorKey)) {
-                        Log.runtime(this.displayName + "能量球[" + title + "]已在错误缓存中，跳过处理");
+//                        Log.runtime(this.displayName + "能量球[" + title + "]已在错误缓存中，跳过处理");
                         continue;
                     }
 

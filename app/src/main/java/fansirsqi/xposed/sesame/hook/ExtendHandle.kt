@@ -52,10 +52,10 @@ class ExtendHandle {
                         Toast.show("任务已暂停", true)
                     }
                     ACTION_STOP -> {
-                        TaskScheduler.setPaused(false)
                         TaskScheduler.shutdownExecutors()
                         fansirsqi.xposed.sesame.task.ModelTask.stopAllTask()
-                        Log.runtime("[StopRunReceiver]任务已停止运行🛑")
+                        fansirsqi.xposed.sesame.task.antForest.EnergyWaitingManager.clearAllWaitingTasks()
+                        Log.runtime("[StopRunReceiver]任务已清空并停止运行🛑")
                         Toast.show("任务已停止并清除", true)
                     }
                 }

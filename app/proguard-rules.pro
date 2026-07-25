@@ -1,3 +1,6 @@
+# ---------- 快速构建：开启代码/资源无用清除，不进行类名混淆 ----------
+-dontobfuscate
+
 # ---------- 框架 ----------
 -keep class de.robv.android.xposed.** { *; }
 -keep class io.github.libxposed.service.** { *; }

@@ -71,8 +71,7 @@ public class UIConfig {
     }
 
     private static synchronized void resetToDefault() {
-        Log.runtime(TAG, "重置UI配置");
-        INSTANCE.setUiOption(UI_OPTION_WEB); // 默认设置为 "new"
+        INSTANCE.setUiOption(UI_OPTION_WEB); // 默认设置为 "web"
         INSTANCE.setInit(false);
     }
 

@@ -137,12 +137,6 @@ public class BaseModel extends Model {
     public static final BooleanModelField enableSkinModule = new BooleanModelField("enableSkinModule", "启用皮肤模块", false);
 
     /**
-     * 监控多主题导出|用于多次导出主题使用
-     */
-    @Getter
-    public static final BooleanModelField enableMonitorSkinModule = new BooleanModelField("enableMonitorSkinModule", "启用监控多主题导出", false);
-
-    /**
      * 是否记录日志
      */
     @Getter
@@ -220,10 +214,6 @@ public class BaseModel extends Model {
             fansirsqi.xposed.sesame.hook.theme.ThemeHookV2.applyHooks(
                     enableSkinModule.getValue()  // 复用皮肤模块的开关
             );
-            // 主题多导出
-            if(enableMonitorSkinModule.getValue()) {
-                ThemeManager.INSTANCE.startOperationMonitor();
-            }
         } catch (Throwable t) {
             Log.error(TAG, "❌ 主题Hook模块配置同步失败");
             Log.printStackTrace(TAG, t);
@@ -247,7 +237,6 @@ public class BaseModel extends Model {
         modelFields.addField(debugMode);//是否开启抓包调试模式
         modelFields.addField(autoTokenEnabled);//是否自动获取token
         modelFields.addField(enableSkinModule);//是否启用皮肤模块
-        modelFields.addField(enableMonitorSkinModule);//是否启用监控多主题导出
         modelFields.addField(enableHttpCapture);//是否启用http网络请求抓包
         modelFields.addField(httpCaptureFilter); //抓包黑名单
         modelFields.addField(sendHookData);//启用Hook数据转发

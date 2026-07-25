@@ -221,6 +221,20 @@ object EnergyWaitingManager {
     private var energyCollectCallback: EnergyCollectCallback? = null
 
     /**
+     * 清空所有蹲点任务（内存与持久化磁盘）
+     */
+    @JvmStatic
+    fun clearAllWaitingTasks() {
+        managerScope.launch {
+            taskMutex.withLock {
+                waitingTasks.clear()
+                EnergyWaitingPersistence.clearTasks()
+                Log.runtime(TAG, "🧹 已经清空所有能量蹲点任务及持久化缓存")
+            }
+        }
+    }
+
+    /**
      * 添加蹲点任务（带重复检查优化和智能保护判断）
      *
      * @param userId 用户ID
@@ -437,10 +451,7 @@ object EnergyWaitingManager {
                             return@launch
                         }
 
-                        // 仅在最后1分钟显示倒计时
-                        if (remainingWait in 1..60000L) {
-                            Log.runtime(TAG, "蹲点[${task.getUserTypeTag()}${task.userName}]倒计时${remainingWait/1000}秒")
-                        }
+                        // 仅在倒计时非常接近时显示（屏蔽刷屏日志）
                     }
 
                     // 等待完成，最终检查任务有效性
@@ -524,8 +535,6 @@ object EnergyWaitingManager {
                         val delayTime = randomIntervalMs - timeSinceLastExecute
                         //Log.runtime(TAG, "🎲 随机间隔控制：延迟${delayTime / 1000}秒执行蹲点任务[${task.taskId}]（随机间隔${randomIntervalMs/1000}秒）")
                         delay(delayTime)
-                    } else {
-                        Log.runtime(TAG, "⚡ 无需延迟：距离上次执行已超过${timeSinceLastExecute/1000}秒")
                     }
                 }
 
@@ -551,9 +560,9 @@ object EnergyWaitingManager {
                     //Log.runtime(TAG, "  系统当前时间: ${System.currentTimeMillis()} (${SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(Date())})")
                     //Log.runtime(TAG, "  实际执行时间: $actualTime (${SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(Date(actualTime))})")
                     //Log.runtime(TAG, "  能量成熟时间: ${task.produceTime} (${SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(Date(task.produceTime))})")
-                    if (!task.isSelf()) {
-                        Log.runtime(TAG, "  保护结束时间: $protectionEndTime (${SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(Date(protectionEndTime))})")
-                    }
+                    //if (!task.isSelf()) {
+                    //    Log.runtime(TAG, "  保护结束时间: $protectionEndTime (${SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(Date(protectionEndTime))})")
+                    //}
                     //Log.runtime(TAG, "  时间差异: 系统时间与执行时间差${System.currentTimeMillis() - actualTime}ms")
                     //Log.runtime(TAG, "  能量剩余时间: ${energyTimeRemain}秒")
                     //Log.runtime(TAG, "  能量是否成熟: $isEnergyMature")
@@ -793,7 +802,7 @@ object EnergyWaitingManager {
                 // 3. 手动触发全面验证（仅在手动启用时执行）
                 if (enableRevalidation) {
                     if (waitingTasks.isNotEmpty()) {
-                        Log.runtime(TAG, "🔍 手动全面验证：开始检查所有蹲点任务保护罩状态...")
+//                        Log.runtime(TAG, "🔍 手动全面验证：开始检查所有蹲点任务保护罩状态...")
                         revalidateAllWaitingTasks()
                     }
                 }
@@ -805,7 +814,7 @@ object EnergyWaitingManager {
                         Log.runtime(TAG, "清理维护完成，当前活跃蹲点${waitingTasks.size}个")
                     }
                 } else {
-                    Log.runtime(TAG, "清理维护完成，当前无活跃蹲点任务")
+//                    Log.runtime(TAG, "清理维护完成，当前无活跃蹲点任务")
                 }
             }
         }
@@ -863,7 +872,7 @@ object EnergyWaitingManager {
         val sortedTasks = waitingTasks.values.sortedBy { it.produceTime }
         val displayCount = minOf(3, sortedTasks.size)
 
-        statusBuilder.append("蹲点任务状态 (${waitingTasks.size}个，显示最近${displayCount}个):\n")
+//        statusBuilder.append("蹲点任务状态 (${waitingTasks.size}个，显示最近${displayCount}个):\n")
 
         sortedTasks.take(displayCount).forEach { task ->
             val status = formatTimeStatus(currentTime, task.produceTime)
@@ -896,14 +905,14 @@ object EnergyWaitingManager {
         managerScope.launch {
             taskMutex.withLock {
                 if (waitingTasks.isEmpty()) {
-                    Log.runtime(TAG, "无需验证：当前无蹲点任务")
+//                    Log.runtime(TAG, "无需验证：当前无蹲点任务")
                     return@withLock
                 }
 
                 val tasksToRevalidate = waitingTasks.values.toList()
                 val tasksToRemove = mutableListOf<String>()
 
-                Log.runtime(TAG, "🔄 开始重新验证${tasksToRevalidate.size}个蹲点任务...")
+//                Log.runtime(TAG, "🔄 开始重新验证${tasksToRevalidate.size}个蹲点任务...")
 
                 tasksToRevalidate.forEach { task ->
                     try {
@@ -1020,7 +1029,7 @@ object EnergyWaitingManager {
                     return@launch
                 }
 
-                Log.runtime(TAG, "🔄 从持久化存储恢复${loadedTasks.size}个蹲点任务...")
+//                Log.runtime(TAG, "🔄 从持久化存储恢复${loadedTasks.size}个蹲点任务...")
 
                 // 验证并重新添加任务
                 val restoredCount = EnergyWaitingPersistence.validateAndRestoreTasks(loadedTasks) { task ->
@@ -1047,7 +1056,7 @@ object EnergyWaitingManager {
                 }
 
                 if (restoredCount > 0) {
-                    Log.runtime(TAG, "✅ 成功恢复${restoredCount}个蹲点任务，避免重新遍历好友")
+//                    Log.runtime(TAG, "✅ 成功恢复${restoredCount}个蹲点任务，避免重新遍历好友")
                     // 保存更新后的任务列表
                     EnergyWaitingPersistence.saveTasks(waitingTasks)
                 }

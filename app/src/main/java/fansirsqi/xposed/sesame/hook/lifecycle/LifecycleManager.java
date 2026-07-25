@@ -93,20 +93,6 @@ public class LifecycleManager {
     }
 
     /**
-     * 重新加载用户配置（软重载，防运行任务中断）
-     */
-    public static synchronized void reloadConfig(String userId) {
-        try {
-            Log.runtime(TAG, "⚡ 收到配置更新，开始软重启配置");
-            initHandler(true);
-            Log.runtime(TAG, "✅ 配置软重启完成");
-        } catch (Throwable t) {
-            Log.runtime(TAG, "❌ 软重启配置失败: " + t.getMessage());
-            Log.printStackTrace(TAG, t);
-        }
-    }
-
-    /**
      * 获取 RPC 版本（显式公共方法，确保 Kotlin 可以访问）
      */
     public static RpcVersion getRpcVersion() {
