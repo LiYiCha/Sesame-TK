@@ -233,38 +233,24 @@ class NpcChicken {
         val userId = UserMap.currentUid
         val jo = JSONObject(AntFarmRpcCall.enterFarm(userId, userId))
         if (ResChecker.checkRes(TAG + "进入庄园失败:", jo)) {
-            //获取全部npc小鸡配置（任务、阈值等）
+            // 获取全部npc小鸡配置（任务、阈值等）
             npcHires = jo.optJSONArray("hireNPCAnimalConfigInfoList")
-            // 跳过打印
-            if (Status.hasFlagToday("NpcChicken")){
+            // 对比并增量更新至 DataStore.json
+            syncNpcConfigsWithRemote(npcHires)
+            if (Status.hasFlagToday("NpcChicken_Config_Logged")){
                 return
             }
-            Log.farm("$TAG 进入庄园成功，获取NPC配置成功。")
-            // 友好打印 NPC 配置列表（不含实时奖励值）
-            Log.runtime("$TAG===================================")
-            Log.runtime("$TAG 可用NPC配置：")
             val hires = npcHires
-
-            if (hires != null) {
-                Log.farm("$TAG 获取到${hires.length()}个NPC配置")
+            if (hires != null && hires.length() > 0) {
+                val summary = StringBuilder("$TAG 找到 ${hires.length()} 个可用NPC: ")
                 for (i in 0 until hires.length()){
                     val hire = hires.getJSONObject(i)
-                    val animalId = hire.optString("animalId")
                     val bizRewardName = hire.optString("bizRewardName")
-                    val hireDuration = hire.optInt("hireDuration")
-                    val hireCoolDownDays = hire.optInt("hireCoolDownDays")
-                    val bizRewardThreshold = hire.optDouble("bizRewardThreshold")
-                    val directBizRewardAfterHire = hire.optDouble("directBizRewardAfterHire")
                     val taskSceneCode = hire.optString("taskSceneCode")
-                    val npcAnimalType = hire.optString("npcAnimalType")
-
-                    Log.runtime("$TAG 名称:$bizRewardName 场景:$taskSceneCode 满值:${formatDouble(bizRewardThreshold)} 初:${formatDouble(directBizRewardAfterHire)} 期间:${formatDaysFromSeconds(hireDuration)} 冷却:${hireCoolDownDays}天 型:$npcAnimalType ID:$animalId")
+                    summary.append("[$bizRewardName($taskSceneCode)] ")
                 }
-                Log.runtime("$TAG===================================")
-                Status.setFlagToday("NpcChicken")
-            } else {
-                Log.farm("$TAG 未获取到NPC配置列表，可能的原因：1.接口返回数据格式变化 2.服务器问题")
-                Log.runtime("$TAG 原始返回数据: ${jo.toString()}")
+                Log.farm(summary.toString())
+                Status.setFlagToday("NpcChicken_Config_Logged")
             }
         } else {
             Log.farm("$TAG 进入庄园失败，无法获取NPC配置")
@@ -374,43 +360,120 @@ class NpcChicken {
 
     // ========== 智能调度相关 ==========
 
-    // NPC 配置数据类
-    private data class NpcSmartConfig(
-        val animalId: String,
-        val source: String,
-        val nickName: String,
-        val taskSceneCode: String,
-        val coolDownDays: Int,
-        val rewardThreshold: Double
+    // NPC 配置数据类（支持 JSON 序列化）
+    data class NpcSmartConfig(
+        val animalId: String = "",
+        val source: String = "",
+        val nickName: String = "",
+        val taskSceneCode: String = "",
+        val coolDownDays: Int = 1,
+        val rewardThreshold: Double = 0.0
     )
 
-    // NPC 配置映射（昵称 -> 配置）
-    private val NPC_CONFIG_MAP = mapOf(
-        "黄金鸡" to NpcSmartConfig(
-            animalId = "20250725105101013088000000000004",
-            source = "licaixiaoji_2025_1",
-            nickName = "黄金鸡",
-            taskSceneCode = "ANTFARM_CAIFU_NPC_TASK",
-            coolDownDays = 4,
-            rewardThreshold = 2888.0
-        ),
-        "芝麻大表鸽" to NpcSmartConfig(
-            animalId = "20250901105101013088000000000006",
-            source = "zhimaxiaoji_lianjin",
-            nickName = "芝麻大表鸽",
-            taskSceneCode = "ANTFARM_ZHIMA_NPC_TASK",
-            coolDownDays = 1,
-            rewardThreshold = 88.0
-        ),
-        "农场小鸡" to NpcSmartConfig(
-            animalId = "20250613105101013088000000000002",
-            source = "feiliaoji_202507",
-            nickName = "农场小鸡",
-            taskSceneCode = "ANTFARM_ORCHARD_NPC_TASK",
-            coolDownDays = 7,
-            rewardThreshold = 500.0
+    object NpcRepository {
+        private const val PREF_NPC_CONFIGS = "ant_farm_npc_configs"
+
+        // 默认预置项（保证页面初始展示：黄金鸡、芝麻大表鸽、农场小鸡、到店红包）
+        private val DEFAULT_NPC_MAP = linkedMapOf(
+            "黄金鸡" to NpcSmartConfig("20250725105101013088000000000004", "licaixiaoji_2025_1", "黄金鸡", "ANTFARM_CAIFU_NPC_TASK", 4, 2888.0),
+            "芝麻大表鸽" to NpcSmartConfig("20250901105101013088000000000006", "zhimaxiaoji_lianjin", "芝麻大表鸽", "ANTFARM_ZHIMA_NPC_TASK", 1, 88.0),
+            "农场小鸡" to NpcSmartConfig("20250613105101013088000000000002", "feiliaoji_202507", "农场小鸡", "ANTFARM_ORCHARD_NPC_TASK", 7, 500.0),
+            "到店红包" to NpcSmartConfig("20260115105101013088000000000013", "offfarm_npc_task", "到店红包", "ANTFARM_OFFLINE_PAY_NPC_TASK", 1, 100.0)
         )
-    )
+
+        /**
+         * 获取全量合并后的 NPC 配置字典（默认预置项 ∪ DataStore.json 动态吸收项）
+         */
+        fun getMergedNpcConfigs(): MutableMap<String, NpcSmartConfig> {
+            val result = LinkedHashMap<String, NpcSmartConfig>(DEFAULT_NPC_MAP)
+            try {
+                val localMap = DataStore.getOrCreate(
+                    PREF_NPC_CONFIGS,
+                    object : com.fasterxml.jackson.core.type.TypeReference<Map<String, NpcSmartConfig>>() {}
+                )
+                if (localMap != null && localMap.isNotEmpty()) {
+                    for ((key, value) in localMap) {
+                        result[key] = value
+                    }
+                }
+            } catch (e: Exception) {
+                Log.error("NpcRepository", "读取 DataStore.json NPC配置失败: ${e.message}")
+            }
+            if (!result.containsKey("到店小鸡") && result.containsKey("到店红包")) {
+                result["到店小鸡"] = result["到店红包"]!!
+            }
+            return result
+        }
+
+        /**
+         * 获取供 UI 设置页面展示的可选名称数组（保持预置项，并吸收本地 json 动态项）
+         */
+        fun getAvailableNpcNames(): Array<String> {
+            val names = getMergedNpcConfigs().keys.filter { it != "到店小鸡" }.toMutableList()
+            return names.toTypedArray()
+        }
+
+        /**
+         * 对比远程 RPC 列表，如有新增或变化增量更新入 DataStore.json
+         */
+        fun syncNpcConfigsWithRemote(hires: JSONArray?) {
+            if (hires == null || hires.length() == 0) return
+            val currentMap = getMergedNpcConfigs()
+            var changed = false
+
+            for (i in 0 until hires.length()) {
+                val hire = hires.getJSONObject(i)
+                val animalId = hire.optString("animalId")
+                val bizRewardName = hire.optString("bizRewardName")
+                val taskSceneCode = hire.optString("taskSceneCode")
+                val coolDownDays = hire.optInt("hireCoolDownDays", 1)
+                val threshold = hire.optDouble("bizRewardThreshold", 0.0)
+                val source = hire.optString("source", "npc_task_source")
+
+                if (bizRewardName.isNotEmpty() && animalId.isNotEmpty()) {
+                    val oldConfig = currentMap[bizRewardName]
+                    if (oldConfig == null ||
+                        oldConfig.animalId != animalId ||
+                        oldConfig.taskSceneCode != taskSceneCode ||
+                        oldConfig.coolDownDays != coolDownDays ||
+                        oldConfig.rewardThreshold != threshold
+                    ) {
+                        val newConfig = NpcSmartConfig(
+                            animalId = animalId,
+                            source = source,
+                            nickName = bizRewardName,
+                            taskSceneCode = taskSceneCode,
+                            coolDownDays = coolDownDays,
+                            rewardThreshold = threshold
+                        )
+                        currentMap[bizRewardName] = newConfig
+                        if (bizRewardName.contains("到店")) {
+                            currentMap["到店小鸡"] = newConfig
+                            currentMap["到店红包"] = newConfig
+                        }
+                        changed = true
+                        Log.farm("🐥NPC小鸡 检测到NPC配置更新:[${bizRewardName}] -> 存入 DataStore.json")
+                    }
+                }
+            }
+
+            if (changed) {
+                try {
+                    DataStore.put(PREF_NPC_CONFIGS, currentMap)
+                } catch (e: Exception) {
+                    Log.error("NpcRepository", "保存NPC配置到 DataStore.json 失败: ${e.message}")
+                }
+            }
+        }
+    }
+
+    private fun getNpcConfigs(): MutableMap<String, NpcSmartConfig> {
+        return NpcRepository.getMergedNpcConfigs()
+    }
+
+    private fun syncNpcConfigsWithRemote(hires: JSONArray?) {
+        NpcRepository.syncNpcConfigsWithRemote(hires)
+    }
 
     // NPC 雇佣记录
     private data class NpcHireRecord(
@@ -442,8 +505,9 @@ class NpcChicken {
             // 1. 初始化农场，获取NPC配置
             initFarm()
 
-            // 2. 转换为配置对象列表
-            val selectedConfigs = selectedNpcNames.mapNotNull { NPC_CONFIG_MAP[it] }
+            // 2. 从 DataStore.json 动态加载最新 NPC 配置对象列表
+            val npcConfigMap = getNpcConfigs()
+            val selectedConfigs = selectedNpcNames.mapNotNull { npcConfigMap[it] }
 
             if (selectedConfigs.isEmpty()) {
                 Log.runtime(TAG, "智能调度🤖[未选择有效的NPC]")

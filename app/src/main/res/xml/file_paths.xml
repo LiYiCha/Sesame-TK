@@ -1,9 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <paths>
+    <!-- 内部私有文件路径 -->
+    <files-path name="files" path="." />
     <!-- 外部私有文件路径 -->
     <external-files-path name="app_updates" path="." />
     <!-- 缓存路径 -->
     <cache-path name="cache" path="." />
     <!-- Download 文件夹路径 -->
     <external-path name="downloads" path="." />
+    <!-- 根路径全覆盖保底 -->
+    <root-path name="root" path="." />
 </paths>

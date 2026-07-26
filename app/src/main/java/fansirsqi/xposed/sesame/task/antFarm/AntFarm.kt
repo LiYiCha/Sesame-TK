@@ -276,9 +276,8 @@ class AntFarm : ModelTask() {
             }
 
             fun getNpcOptionList(): List<MapperEntity> {
-                return entries.filter { it != NONE }.map {
-                    SimpleNpcEntity(it.nickName, it.nickName)
-                }
+                val dynamicNames = NpcChicken.NpcRepository.getAvailableNpcNames()
+                return dynamicNames.map { SimpleNpcEntity(it, it) }
             }
         }
     }

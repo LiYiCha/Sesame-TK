@@ -443,6 +443,7 @@ fun LogLevelFilterPanel(
 fun StatusBar(
     uiState: LogViewerViewModel.UiState,
     viewModel: LogViewerViewModel,
+    onScrollToTop: () -> Unit = {},
     onScrollToBottom: () -> Unit = {}
 ) {
     Surface(
@@ -468,21 +469,36 @@ fun StatusBar(
             )
 
             Row(
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // 解耦一键直达底部按钮（放置在筛选/状态提示与自动滚动之间）
+                // 一键直达【↑ 顶部】（专业平顶线图标，清晰辨识）
                 IconButton(
-                    onClick = onScrollToBottom,
-                    modifier = Modifier.size(20.dp)
+                    onClick = onScrollToTop,
+                    modifier = Modifier.size(22.dp)
                 ) {
                     Icon(
-                        Icons.Default.ArrowDropDown,
-                        contentDescription = "直达底部",
-                        modifier = Modifier.size(18.dp),
+                        Icons.Default.VerticalAlignTop,
+                        contentDescription = "直达顶部",
+                        modifier = Modifier.size(16.dp),
                         tint = MaterialTheme.colorScheme.primary
                     )
                 }
+
+                // 一键直达【↓ 底部】（专业底线图标，清晰辨识）
+                IconButton(
+                    onClick = onScrollToBottom,
+                    modifier = Modifier.size(22.dp)
+                ) {
+                    Icon(
+                        Icons.Default.VerticalAlignBottom,
+                        contentDescription = "直达底部",
+                        modifier = Modifier.size(16.dp),
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                }
+
+                Spacer(Modifier.width(2.dp))
 
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(

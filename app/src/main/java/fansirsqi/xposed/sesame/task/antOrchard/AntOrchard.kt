@@ -685,8 +685,6 @@ class AntOrchard : ModelTask() {
             if (hasAwardReceived) {
                 Status.setFlagToday(StatusFlags.FLAG_ANTORCHARD_WIDGET_DAILY_AWARD)
                 Log.runtime(TAG, "回访奖励领取完成")
-            } else {
-                Log.runtime(TAG, "回访奖励已全部领取或无可领取奖励")
             }
         } catch (t: Throwable) {
             Log.printStackTrace(TAG, "receiveOrchardVisitAward err:", t)

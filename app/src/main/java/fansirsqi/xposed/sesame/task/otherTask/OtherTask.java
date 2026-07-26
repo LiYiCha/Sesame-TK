@@ -117,7 +117,8 @@ public class OtherTask extends ModelTask {
     private final BooleanModelField fundapplication = new BooleanModelField("fundapplication", "摇红包", false);
     private final BooleanModelField salaryday = new BooleanModelField("salaryday", "红包雨", false);
     private final BooleanModelField yebExpGold = new BooleanModelField("yebExpGold", "体验金", false);
-    private final BooleanModelField antFishpond = new BooleanModelField("antFishpond", "福气鱼塘", false);
+    @Getter
+    private final static BooleanModelField antFishpond = new BooleanModelField("antFishpond", "福气鱼塘", false);
     private final SelectModelField antFishpondList = new SelectModelField("antFishpondList", "福气鱼塘邀请好友", new LinkedHashSet<>(), AlipayUser::getList);
     private final BooleanModelField hundredTimesDiscountCard = new BooleanModelField("hundredTimesDiscountCard", "百次立减卡", false);
     private final BooleanModelField neverland = new BooleanModelField("neverland", "悦动健康岛", false);

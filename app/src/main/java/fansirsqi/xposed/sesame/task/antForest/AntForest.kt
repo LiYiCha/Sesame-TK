@@ -1988,11 +1988,11 @@ class AntForest : ModelTask(), EnergyCollectCallback {
                 Log.runtime(TAG, rankingName + "数据为空，跳过处理。")
                 return@withContext
             }
-            Log.runtime(
-                TAG,
-                "成功获取" + rankingName + "数据，共发现" + totalDatas.length() + "位好友。"
-            )
-            tc.countDebug("获取$rankingName")
+//            Log.runtime(
+//                TAG,
+//                "成功获取" + rankingName + "数据，共发现" + totalDatas.length() + "位好友。"
+//            )
+//            tc.countDebug("获取$rankingName")
             if (preCondition != null && !preCondition.test(rankingObject)) {
                 return@withContext
             }
@@ -2517,7 +2517,7 @@ class AntForest : ModelTask(), EnergyCollectCallback {
             // 只要开启了收能量，就进去看看，以便添加蹲点
             if (needCollectEnergy) {
                 // 即使排行榜信息显示没有可收能量，也进去检查，以便添加蹲点任务
-                Log.runtime(TAG, "  正在查询好友 [$userName$userId] 的主页...")
+//                Log.runtime(TAG, "  正在查询好友 [$userName$userId] 的主页...")
                 userHomeObj = collectEnergy(userId, queryFriendHome(userId, null), "friend")
             }
             if (needHelpProtect) {

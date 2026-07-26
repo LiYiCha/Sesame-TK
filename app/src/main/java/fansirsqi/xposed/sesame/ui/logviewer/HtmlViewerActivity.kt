@@ -385,7 +385,7 @@ class HtmlViewerActivity : BaseActivity() {
                     if (file.exists()) {
                         val contentUri = androidx.core.content.FileProvider.getUriForFile(
                             this@HtmlViewerActivity,
-                            "$packageName.fileprovider",
+                            "$packageName.provider",
                             file
                         )
                         setDataAndType(contentUri, "text/html")

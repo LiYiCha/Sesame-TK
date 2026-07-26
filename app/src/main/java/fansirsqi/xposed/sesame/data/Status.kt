@@ -545,9 +545,7 @@ class Status {
         private fun writeStatusToFile(currentUid: String, isDayChanged: Boolean, lastSaveTime: Long) {
             try {
                 if (isDayChanged) {
-                    Log.runtime(TAG, "重置 statistics.json")
-                } else {
-                    Log.runtime(TAG, "保存 status.json")
+                    Log.runtime(TAG, "重置 status.json")
                 }
                 Files.write2File(JsonUtil.formatJson(INSTANCE), Files.getStatusFile(currentUid)!!)
             } catch (e: Exception) {

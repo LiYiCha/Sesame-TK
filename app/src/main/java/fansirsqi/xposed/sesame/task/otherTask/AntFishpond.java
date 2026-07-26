@@ -728,21 +728,41 @@ public class AntFishpond extends BaseCommTask {
 
 
     private void fishpondExchangeReward() {
-        JSONObject requestString;
         try {
             JSONObject requestString2 = requestString("com.alipay.antfishpond.fishpondIndex", getData());
             refinedOperation();
-            if (requestString2 == null || !String.valueOf(true).equals(JsonUtil.getValueByPath(requestString2, "roundInfo.canExchange")) || (requestString = requestString("com.alipay.antfishpond.fishpondExchangeReward", getData())) == null) {
+            if (requestString2 == null || !String.valueOf(true).equals(JsonUtil.getValueByPath(requestString2, "roundInfo.canExchange"))) {
+                return;
+            }
+            JSONObject requestString = requestString("com.alipay.antfishpond.fishpondExchangeReward", getData());
+            if (requestString == null || !requestString.optBoolean("success", false) || !requestString.has("exchangeRewardResult")) {
+                String errorDesc = requestString != null ? requestString.optString("desc", requestString.optString("memo", "接口返回失败")) : "返回为空";
+                disableFishpondSwitches(errorDesc);
                 return;
             }
             JSONObject jSONObject = requestString.getJSONObject("exchangeRewardResult");
             String str = this.displayName + jSONObject.optString("title") + jSONObject.optString("targetRewardCount");
-            String title = "\uD83E\uDDE7鱼塘兑换奖励：";
+            String title = "🧧鱼塘兑换奖励：";
             Log.other(str);
             Notify.sendNewNotification(title, str);
-            Log.other(displayName+"鱼塘兑换成功\uD83E\uDDE7");
+            Log.other(displayName + "鱼塘兑换成功🧧");
         } catch (Throwable th) {
             Log.printStackTrace(this.TAG, th);
+            disableFishpondSwitches("异常: " + th.getMessage());
+        }
+    }
+
+    private void disableFishpondSwitches(String reason) {
+        Log.other(this.displayName + "鱼塘兑换失败(" + reason + ")，自动关闭【福气鱼塘】及【自动钓鱼】开关");
+        try {
+            if (OtherTask.getAntFishpond() != null) {
+                OtherTask.getAntFishpond().setValue(false);
+            }
+            if (OtherTask.getFishpondAngle() != null) {
+                OtherTask.getFishpondAngle().setValue(false);
+            }
+        } catch (Throwable t) {
+            Log.error(this.TAG, "关闭鱼塘开关异常: " + t.getMessage());
         }
     }
 

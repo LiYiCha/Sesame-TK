@@ -96,8 +96,9 @@ class LogViewerViewModel : ViewModel() {
     private var endsWithNewline = true
 
     init {
-        // 从持久化存储加载字体大小
+        // 从持久化存储加载配置
         loadFontSize()
+        loadViewMode()
     }
 
     /**
@@ -126,11 +127,29 @@ class LogViewerViewModel : ViewModel() {
         }
     }
 
-    private fun saveHtmlMode(mode: Boolean) {
+    /**
+     * 从 DataStore 加载保存的视图模式 (默认 false 为 Compose 视图)
+     */
+    private fun loadViewMode() {
         try {
-            fansirsqi.xposed.sesame.util.DataStore.put("PREF_HTML_MODE", mode)
+            val savedMode = fansirsqi.xposed.sesame.util.DataStore.get(
+                PREF_IS_HTML_MODE,
+                Boolean::class.java
+            ) ?: false
+            _uiState.update { it.copy(isHtmlMode = savedMode) }
         } catch (e: Exception) {
-            Log.error(TAG, "保存 HTML 模式状态失败: ${e.message}")
+            Log.error(TAG, "加载视图模式状态失败: ${e.message}")
+        }
+    }
+
+    /**
+     * 保存视图模式到 DataStore
+     */
+    private fun saveViewMode(mode: Boolean) {
+        try {
+            fansirsqi.xposed.sesame.util.DataStore.put(PREF_IS_HTML_MODE, mode)
+        } catch (e: Exception) {
+            Log.error(TAG, "保存视图模式状态失败: ${e.message}")
         }
     }
 
@@ -354,7 +373,14 @@ class LogViewerViewModel : ViewModel() {
                     val regex = try {
                         Regex(keyword, options)
                     } catch (e: Exception) {
-                        Log.error(TAG, "正则表达式错误: ${e.message}")
+                        Log.error(TAG, "正则表达式语法错误: ${e.message}")
+                        _uiState.update {
+                            it.copy(
+                                searchResults = emptyList(),
+                                currentSearchIndex = -1,
+                                statusMessage = "正则表达式错误: ${e.message}"
+                            )
+                        }
                         return@launch
                     }
 
@@ -716,7 +742,7 @@ class LogViewerViewModel : ViewModel() {
     fun toggleHtmlMode() {
         val newMode = !_uiState.value.isHtmlMode
         _uiState.update { it.copy(isHtmlMode = newMode) }
-        saveHtmlMode(newMode)
+        saveViewMode(newMode)
     }
 
     fun toggleSelectionMode(enabled: Boolean) {
@@ -816,6 +842,26 @@ class LogViewerViewModel : ViewModel() {
     }
 
     // formatLongLines has been removed as chunking is done on the fly
+
+    /**
+     * 获取用于 WebViewAssetLoader 的日志输入流（线程安全、零阻塞）
+     */
+    fun getLogInputStream(context: android.content.Context): java.io.InputStream? {
+        return try {
+            val state = _uiState.value
+            // 1. 若未做过滤且 watchingFile 存在，直接返回物理文件的 FileInputStream（零内存拷贝、极致流式）
+            if (state.filterKeyword.isEmpty() && watchingFile != null && watchingFile!!.exists()) {
+                java.io.FileInputStream(watchingFile!!)
+            } else {
+                // 2. 若做过滤，将 displayedLines 在内存中构造字节流，免去高频写磁盘 IO 瓶颈
+                val text = state.displayedLines.joinToString("\n")
+                java.io.ByteArrayInputStream(text.toByteArray(Charsets.UTF_8))
+            }
+        } catch (e: Exception) {
+            Log.error(TAG, "获取日志流失败: ${e.message}")
+            null
+        }
+    }
 
     override fun onCleared() {
         super.onCleared()

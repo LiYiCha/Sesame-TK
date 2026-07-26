@@ -369,11 +369,11 @@ public class LifecycleManager {
         } catch (Exception e) {
             Log.printStackTrace(e);
         }
-        try {
-            //FriendWatch.updateDay(userId);
-        } catch (Exception e) {
-            Log.printStackTrace(e);
-        }
+//        try {
+//            //FriendWatch.updateDay(userId);
+//        } catch (Exception e) {
+//            Log.printStackTrace(e);
+//        }
     }
 
     private static volatile boolean isAlipayLoginActive = false;

@@ -418,9 +418,12 @@ class AntSports : ModelTask() {
                         val rpcManagerClass = loader.loadClass("com.alibaba.health.pedometer.intergation.rpc.RpcManager")
                         
                         // 获取 RpcManager 单例，兼容混淆后的方法名
-                        val rpcManager = tryCallStaticMethod(rpcManagerClass, "get", "a")
+                        val rpcManager = tryCallStaticMethod(rpcManagerClass, "get", "a", "getInstance")
                         if (rpcManager == null) {
-                            Log.runtime(TAG, "获取RpcManager实例失败")
+                            if (!Status.hasFlagToday("AntSports_RpcManager_Fail_Muted")) {
+                                Log.debug(TAG, "原步数框架RpcManager未就绪，使用标准RPC接口同步")
+                                Status.setFlagToday("AntSports_RpcManager_Fail_Muted")
+                            }
                             return@Runnable
                         }
                         
@@ -722,7 +725,7 @@ class AntSports : ModelTask() {
                     Log.error(TAG, "领取能量球任务失败: ${resultJson.optString("errorMsg", "未知错误")}")
                 }
             } else {
-                Log.runtime(TAG, "未完成任何任务，跳过领取能量球")
+//                Log.runtime(TAG, "未完成任何任务，跳过领取能量球")
             }
         } catch (t: Throwable) {
             Log.printStackTrace(TAG, "sportsEnergyBubbleTask err:", t)

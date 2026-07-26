@@ -223,6 +223,28 @@
         }
     }, { passive: true });
 
+    let isFetching = false;
+
+    function initLogBridge() {
+        if (isFetching) return;
+        isFetching = true;
+        fetch('https://appassets.androidplatform.net/logdata/stream')
+            .then(response => {
+                if (!response.ok) throw new Error('日志流读取异常 ' + response.status);
+                return response.text();
+            })
+            .then(text => {
+                isFetching = false;
+                fullLogText = text;
+                render();
+            })
+            .catch(err => {
+                isFetching = false;
+                console.error('WebViewAssetLoader 同源流读取失败:', err);
+                logEl.innerHTML = '<div class="line" style="color:red;">日志流加载异常，请尝试切换至 Compose 视图查看</div>';
+            });
+    }
+
     function render() {
         if (!fullLogText) {
             logEl.innerHTML = '';
@@ -231,19 +253,24 @@
         }
 
         const lines = fullLogText.split('\n');
-        const fragment = document.createDocumentFragment();
         rpcBoundaryIndices = [];
 
-        lines.forEach((lineText, lineIdx) => {
+        // 使用 DocumentFragment + 分块渲染，防止上万行日志阻塞 GPU/UI 渲染主线程
+        const fragment = document.createDocumentFragment();
+        const chunkSize = 2000;
+        const totalLines = lines.length;
+
+        for (let i = 0; i < totalLines; i++) {
+            const lineText = lines[i];
             if (lineText.includes('========================>')) {
-                rpcBoundaryIndices.push(lineIdx);
+                rpcBoundaryIndices.push(i);
             }
             const div = document.createElement('div');
             div.className = 'line';
-            div.id = `line-${lineIdx}`;
+            div.id = `line-${i}`;
             div.textContent = lineText;
             fragment.appendChild(div);
-        });
+        }
 
         logEl.innerHTML = '';
         logEl.appendChild(fragment);

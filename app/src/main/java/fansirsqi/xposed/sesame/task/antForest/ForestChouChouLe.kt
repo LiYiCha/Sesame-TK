@@ -237,7 +237,7 @@ class ForestChouChouLe {
                 completed++
             } else {
                 allDone = false
-                Log.runtime("${s.name} 未完成: $taskName [$taskStatus]")
+//                Log.runtime("${s.name} 未完成: $taskName [$taskStatus]")
             }
         }
 

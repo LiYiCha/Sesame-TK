@@ -105,44 +105,57 @@ class GoldBeanPark {
                         continue
                     }
 
-                    // 2. 如果任务已在服务端处于完成待领取状态 (FINISHED / UNRECEIVE / TO_GET)
-                    val isFinished = taskStatus == "FINISHED" || taskStatus == "FINISH" || taskStatus == "FINISHED_UNCLAIMED" || taskStatus == "TO_GET" || taskStatus == "UNRECEIVE"
+                    // 2. 待领奖状态 (FINISHED)：任务服务端已打卡完成，直接领奖
+                    if (taskStatus == "FINISHED") {
+                        var awardRes = receiveTaskAwardAntOrchard(taskType, taskSceneCode)
+                        if (!awardRes.optBoolean("success") && taskSceneCode != "GOLDEN_BEAN_MASTER_TASK") {
+                            awardRes = receiveTaskAwardAntOrchard(taskType, "GOLDEN_BEAN_MASTER_TASK")
+                        }
+                        if (awardRes.optBoolean("success")) {
+                            val incCount = extractAwardBeanCount(awardRes)
+                            Log.other(TAG, "完成任务[$title]+$incCount 金豆")
+                        } else {
+                            val desc = awardRes.optString("desc", awardRes.optString("resultDesc", "结果未知"))
+                            Log.other(TAG, "领取任务[$title]: $desc")
+                        }
+                        delay(1000 + (0..1000).random().toLong())
+                        continue
+                    }
 
-                    // 如果任务在服务端处于未打卡状态 (taskStatus == "TODO")，处理纯 RPC/内部浏览搜索任务，跳过外部 APP 跳转任务 (KUAISHOU/TOUTIAO/DOWNLOAD) 及复杂合成游戏任务
-                    if (!isFinished) {
+                    // 3. 未打卡状态：只有纯 TRIGGER 类型的内部打卡任务，尝试 goldenBeanTrigger 打卡并领奖
+                    if (taskStatus == "TODO") {
                         val type = displayConfig?.optString("type") ?: ""
                         val triggerType = task.optString("triggerType", "TASK_COMPLETE")
                         
-                        // 跳过外部 APP 跳转类任务
-                        val isExternalAppTask = taskType.contains("KUAISHOU") || taskType.contains("TOUTIAO") || 
-                                                taskId.contains("KUAISHOU") || taskId.contains("TOUTIAO") ||
-                                                type.contains("APP") || actionType == "JUMP_APP"
-                        if (isExternalAppTask) {
+                        // 跳过外部 APP 跳转类、支付类 (VISIT) 及理财卡片类任务
+                        val isVisitOrAppTask = actionType == "VISIT" || actionType == "JUMP_APP" || 
+                                               taskType.contains("KUAISHOU") || taskType.contains("TOUTIAO") || 
+                                               taskId.contains("KUAISHOU") || taskId.contains("TOUTIAO") ||
+                                               type.contains("APP") || type == "XIANSHANGZHIFU" || type == "XIANXIAZHIFU" || type == "YUEBAO"
+                        if (isVisitOrAppTask) {
                             continue
                         }
 
-                        // 3. 优先使用金豆乐园专属 RPC (com.alipay.goldenbean.trigger) 触发任务完成
+                        // 优先使用金豆乐园专属 RPC (com.alipay.goldenbean.trigger) 触发任务完成
                         val triggerRes = goldenBeanTrigger(taskId, if (triggerType.isEmpty()) "TASK_COMPLETE" else triggerType)
-                        if (!triggerRes.optBoolean("success")) {
-                            // 回退使用通用 Task 引擎触发
-                            finishTaskAntOrchard(taskType, userId, taskSceneCode)
+
+                        // 【严密防提前领奖锁】：删除假成功回退，只有当 goldenBeanTrigger 明确返回 success == true 时才触发领奖！
+                        if (triggerRes.optBoolean("success")) {
+                            delay(1000 + (0..1000).random().toLong())
+                            var awardRes = receiveTaskAwardAntOrchard(taskType, taskSceneCode)
+                            if (!awardRes.optBoolean("success") && taskSceneCode != "GOLDEN_BEAN_MASTER_TASK") {
+                                awardRes = receiveTaskAwardAntOrchard(taskType, "GOLDEN_BEAN_MASTER_TASK")
+                            }
+                            if (awardRes.optBoolean("success")) {
+                                val incCount = extractAwardBeanCount(awardRes)
+                                Log.other(TAG, "完成任务[$title]+$incCount 金豆")
+                            } else {
+                                val desc = awardRes.optString("desc", awardRes.optString("resultDesc", "结果未知"))
+                                Log.other(TAG, "领取任务[$title]: $desc")
+                            }
                         }
                         delay(1000 + (0..1000).random().toLong())
                     }
-
-                    // 4. 统一领取任务奖励 (适用于刚打卡完成的搜索任务，以及已处于 FINISHED 待领取的对对碰/游戏任务)
-                    var awardRes = receiveTaskAwardAntOrchard(taskType, taskSceneCode)
-                    if (!awardRes.optBoolean("success") && taskSceneCode != "GOLDENBEAN") {
-                        awardRes = receiveTaskAwardAntOrchard(taskType, "GOLDENBEAN")
-                    }
-                    if (awardRes.optBoolean("success")) {
-                        val incCount = extractAwardBeanCount(awardRes)
-                        Log.other(TAG, "完成任务[$title]+$incCount 金豆")
-                    } else {
-                        val desc = awardRes.optString("desc", awardRes.optString("resultDesc", "结果未知"))
-                        Log.other(TAG, "领取任务[$title]: $desc")
-                    }
-                    delay(1000 + (0..1000).random().toLong())
                 }
             }
 
@@ -288,13 +301,14 @@ class GoldBeanPark {
         return count
     }
 
-    private fun finishTaskAntOrchard(taskType: String, userId: String, sceneCode: String = "GOLDENBEAN"): JSONObject {
+    private fun finishTaskAntOrchard(taskType: String, userId: String, sceneCode: String = "GOLDEN_BEAN_MASTER_TASK"): JSONObject {
         val method = "com.alipay.antieptask.finishTaskantorchard"
         val req = JSONObject()
         req.put("bizType", "MASTER")
         req.put("finishBusinessInfo", JSONObject().put("bizType", "MASTER"))
         req.put("outBizNo", "$userId${System.currentTimeMillis()}")
-        req.put("sceneCode", if (sceneCode.isEmpty()) "GOLDENBEAN" else sceneCode)
+        val targetScene = if (sceneCode.isEmpty() || sceneCode == "GOLDENBEAN") "GOLDEN_BEAN_MASTER_TASK" else sceneCode
+        req.put("sceneCode", targetScene)
         req.put("source", "index_baping")
         req.put("taskType", taskType)
         req.put("version", "20260723.01")
@@ -306,13 +320,14 @@ class GoldBeanPark {
         }
     }
 
-    private fun receiveTaskAwardAntOrchard(taskType: String, sceneCode: String = "GOLDENBEAN"): JSONObject {
+    private fun receiveTaskAwardAntOrchard(taskType: String, sceneCode: String = "GOLDEN_BEAN_MASTER_TASK"): JSONObject {
         val method = "com.alipay.antieptask.receiveTaskAwardantorchard"
         val req = JSONObject()
         req.put("bizInfo", JSONObject().put("bizType", "MASTER"))
         req.put("bizType", "MASTER")
         req.put("ignoreLimit", true)
-        req.put("sceneCode", if (sceneCode.isEmpty()) "GOLDENBEAN" else sceneCode)
+        val targetScene = if (sceneCode.isEmpty() || sceneCode == "GOLDENBEAN") "GOLDEN_BEAN_MASTER_TASK" else sceneCode
+        req.put("sceneCode", targetScene)
         req.put("source", "index_baping")
         req.put("taskType", taskType)
         req.put("version", "20260723.01")

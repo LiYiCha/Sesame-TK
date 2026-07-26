@@ -131,7 +131,7 @@ object EnergyWaitingPersistence {
             val persistDataList = DataStore.getOrCreate(dataStoreKey, typeRef)
 
             if (persistDataList.isEmpty()) {
-                Log.runtime(TAG, "持久化存储中无蹲点任务 (key: $dataStoreKey)")
+//                Log.runtime(TAG, "持久化存储中无蹲点任务 (key: $dataStoreKey)")
                 return emptyList()
             }
 
@@ -160,7 +160,7 @@ object EnergyWaitingPersistence {
                 validTasks.add(persistData.toWaitingTask())
             }
 
-            Log.runtime(TAG, "📥 从持久化存储恢复${validTasks.size}个有效任务（跳过${expiredCount}个过期，${tooOldCount}个过旧）")
+//            Log.runtime(TAG, "📥 从持久化存储恢复${validTasks.size}个有效任务（跳过${expiredCount}个过期，${tooOldCount}个过旧）")
 
             validTasks
         } catch (e: Exception) {
