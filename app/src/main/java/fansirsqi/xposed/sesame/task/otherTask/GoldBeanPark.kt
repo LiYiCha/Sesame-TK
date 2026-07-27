@@ -72,16 +72,16 @@ class GoldBeanPark {
             val syncTaskRes = goldenBeanSync(listOf("JAR_INFO", "TASK_LIST"))
             val taskList = syncTaskRes.optJSONArray("taskList")
             if (taskList != null && taskList.length() > 0) {
-                val userId = ApplicationHook.getUserId() ?: ""
                 for (i in 0 until taskList.length()) {
                     val task = taskList.getJSONObject(i)
                     val taskId = task.optString("taskId")
-                    val taskType = task.optString("taskType")
+                    val taskType = task.optString("taskType").ifEmpty { taskId }
                     val taskStatus = task.optString("taskStatus")
                     val actionType = task.optString("actionType")
                     val taskSceneCode = task.optString("sceneCode", "GOLDENBEAN")
                     val displayConfig = task.optJSONObject("taskDisplayConfig")
                     val title = displayConfig?.optString("title") ?: taskId
+                    val type = displayConfig?.optString("type") ?: ""
 
                     // 已完成且已领取的任务跳过 (仅当已真正领取 DONE/RECEIVED 时跳过)
                     if (taskStatus == "DONE" || taskStatus == "RECEIVED") {
@@ -105,7 +105,7 @@ class GoldBeanPark {
                         continue
                     }
 
-                    // 2. 待领奖状态 (FINISHED)：任务服务端已打卡完成，直接领奖
+                    // 2. 待领奖状态 (FINISHED)：任务在服务端已完成待领奖（无论是否为支付/理财，只要完成直接领金豆！）
                     if (taskStatus == "FINISHED") {
                         var awardRes = receiveTaskAwardAntOrchard(taskType, taskSceneCode)
                         if (!awardRes.optBoolean("success") && taskSceneCode != "GOLDEN_BEAN_MASTER_TASK") {
@@ -116,30 +116,25 @@ class GoldBeanPark {
                             Log.other(TAG, "完成任务[$title]+$incCount 金豆")
                         } else {
                             val desc = awardRes.optString("desc", awardRes.optString("resultDesc", "结果未知"))
-                            Log.other(TAG, "领取任务[$title]: $desc")
+                            Log.other(TAG, "领取任务失败[$title]: $desc")
                         }
                         delay(1000 + (0..1000).random().toLong())
                         continue
                     }
 
-                    // 3. 未打卡状态：只有纯 TRIGGER 类型的内部打卡任务，尝试 goldenBeanTrigger 打卡并领奖
+                    // 3. 未打卡状态 ：黑名单判定严密作用于纯 RPC 打卡动作
                     if (taskStatus == "TODO") {
-                        val type = displayConfig?.optString("type") ?: ""
-                        val triggerType = task.optString("triggerType", "TASK_COMPLETE")
-                        
-                        // 跳过外部 APP 跳转类、支付类 (VISIT) 及理财卡片类任务
-                        val isVisitOrAppTask = actionType == "VISIT" || actionType == "JUMP_APP" || 
-                                               taskType.contains("KUAISHOU") || taskType.contains("TOUTIAO") || 
-                                               taskId.contains("KUAISHOU") || taskId.contains("TOUTIAO") ||
-                                               type.contains("APP") || type == "XIANSHANGZHIFU" || type == "XIANXIAZHIFU" || type == "YUEBAO"
-                        if (isVisitOrAppTask) {
+                        // 无法通过纯 RPC 完成的打卡任务，跳过 RPC 打卡
+                        if (isBlacklistedTask(taskId, taskType, actionType, type, title)) {
                             continue
                         }
+
+                        val triggerType = task.optString("triggerType", "TASK_COMPLETE")
 
                         // 优先使用金豆乐园专属 RPC (com.alipay.goldenbean.trigger) 触发任务完成
                         val triggerRes = goldenBeanTrigger(taskId, if (triggerType.isEmpty()) "TASK_COMPLETE" else triggerType)
 
-                        // 【严密防提前领奖锁】：删除假成功回退，只有当 goldenBeanTrigger 明确返回 success == true 时才触发领奖！
+                        // 【严密防提前领奖锁】：只有当 goldenBeanTrigger 明确返回 success == true 时才触发领奖！
                         if (triggerRes.optBoolean("success")) {
                             delay(1000 + (0..1000).random().toLong())
                             var awardRes = receiveTaskAwardAntOrchard(taskType, taskSceneCode)
@@ -151,7 +146,7 @@ class GoldBeanPark {
                                 Log.other(TAG, "完成任务[$title]+$incCount 金豆")
                             } else {
                                 val desc = awardRes.optString("desc", awardRes.optString("resultDesc", "结果未知"))
-                                Log.other(TAG, "领取任务[$title]: $desc")
+                                Log.other(TAG, "领取任务失败[$title]: $desc")
                             }
                         }
                         delay(1000 + (0..1000).random().toLong())
@@ -393,5 +388,32 @@ class GoldBeanPark {
         } catch (e: Exception) {
             JSONObject()
         }
+    }
+
+    /**
+     * 检查金豆乐园任务是否处于黑名单中（无法通过纯 RPC 完成的支付/理财/跳转/订阅类任务）
+     */
+    private fun isBlacklistedTask(
+        taskId: String,
+        taskType: String,
+        actionType: String,
+        type: String,
+        title: String
+    ): Boolean {
+        // 1. 行为与类型黑名单 (外部跳转、支付、理财)
+        if (actionType == "VISIT" || actionType == "JUMP_APP" || type.contains("APP") || 
+            type == "XIANSHANGZHIFU" || type == "XIANXIAZHIFU" || type == "YUEBAO") {
+            return true
+        }
+
+        // 2. 第三方合作与 App 跳转黑名单
+        if (taskType.contains("KUAISHOU") || taskType.contains("TOUTIAO") ||
+            taskId.contains("KUAISHOU") || taskId.contains("TOUTIAO")) {
+            return true
+        }
+
+        // 3. 标题关键字黑名单 (已知非 RPC 任务: 肥料兑换, 首页添加, 消息提醒, 支付, 攒钱, 余额宝)
+        val blackListKeywords = setOf("肥料", "首页", "提醒", "支付", "攒钱", "余额宝", "小游戏")
+        return blackListKeywords.any { title.contains(it) }
     }
 }

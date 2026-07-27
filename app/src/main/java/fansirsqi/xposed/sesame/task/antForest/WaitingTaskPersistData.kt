@@ -208,7 +208,7 @@ object EnergyWaitingPersistence {
                 val userHomeResponse = AntForestRpcCall.queryFriendHomePage(task.userId, task.fromTag)
 
                 if (userHomeResponse.isNullOrEmpty()) {
-                    Log.runtime(TAG, "  验证[${task.userName}]：无法获取主页信息，跳过恢复")
+//                    Log.runtime(TAG, "  验证[${task.userName}]：无法获取主页信息，跳过恢复")
                     skippedCount++
                     return@forEach
                 }
@@ -220,10 +220,10 @@ object EnergyWaitingPersistence {
                     val success = addTaskCallback(task)
                     if (success) {
                         restoredCount++
-                        Log.runtime(
-                            TAG,
-                            "  ⭐️ 恢复[${task.getUserTypeTag()}${task.userName}]球[${task.bubbleId}]：能量${TimeUtil.getCommonDate(task.produceTime)}成熟，到时间直接收取"
-                        )
+//                        Log.runtime(
+//                            TAG,
+//                            "  ⭐️ 恢复[${task.getUserTypeTag()}${task.userName}]球[${task.bubbleId}]：能量${TimeUtil.getCommonDate(task.produceTime)}成熟，到时间直接收取"
+//                        )
                     } else {
                         skippedCount++
                     }
@@ -237,17 +237,17 @@ object EnergyWaitingPersistence {
                     val hours = timeDifference / (1000 * 60 * 60)
                     val minutes = (timeDifference % (1000 * 60 * 60)) / (1000 * 60)
 
-                    Log.runtime(
-                        TAG,
-                        "  ❌ 跳过[${task.getUserTypeTag()}${task.userName}]球[${task.bubbleId}]：保护罩覆盖能量成熟期(${hours}小时${minutes}分钟)"
-                    )
+//                    Log.runtime(
+//                        TAG,
+//                        "  ❌ 跳过[${task.getUserTypeTag()}${task.userName}]球[${task.bubbleId}]：保护罩覆盖能量成熟期(${hours}小时${minutes}分钟)"
+//                    )
                     skippedCount++
                 } else {
                     // 好友任务有效，重新添加
                     val success = addTaskCallback(task)
                     if (success) {
                         restoredCount++
-                        Log.runtime(TAG, "  ✅ 恢复[${task.getUserTypeTag()}${task.userName}]球[${task.bubbleId}]：能量${TimeUtil.getCommonDate(task.produceTime)}成熟")
+//                        Log.runtime(TAG, "  ✅ 恢复[${task.getUserTypeTag()}${task.userName}]球[${task.bubbleId}]：能量${TimeUtil.getCommonDate(task.produceTime)}成熟")
                     } else {
                         skippedCount++
                     }
@@ -261,7 +261,7 @@ object EnergyWaitingPersistence {
             }
         }
 
-        Log.runtime(TAG, "✅ 恢复完成：成功${restoredCount}个，跳过${skippedCount}个")
+//        Log.runtime(TAG, "✅ 恢复完成：成功${restoredCount}个，跳过${skippedCount}个")
 
         return restoredCount
     }

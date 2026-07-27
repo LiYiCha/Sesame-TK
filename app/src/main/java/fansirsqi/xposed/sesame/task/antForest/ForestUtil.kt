@@ -47,7 +47,7 @@ object ForestUtil {
         // 冷却期结束，清除记录
         if (info.cooldownUntil > 0) {
             userFrequencyMap.remove(userId)
-            Log.runtime(TAG, "[${UserMap.getMaskName(userId)}] 冷却期结束，恢复正常处理")
+//            Log.runtime(TAG, "[${UserMap.getMaskName(userId)}] 冷却期结束，恢复正常处理")
         }
         return false
     }

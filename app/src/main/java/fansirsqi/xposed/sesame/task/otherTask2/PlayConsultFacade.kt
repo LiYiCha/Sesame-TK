@@ -215,7 +215,7 @@ class PlayConsultFacade {
                                 if ("COMPLETED" == status || "FINISHED" == status || 
                                     (!isAdTask && currentCount >= targetCount) || 
                                     (targetCount > 0 && currentCount >= targetCount)) {
-                                    Log.runtime(TAG, "任务已完成/跳过: ${adTask.optJSONObject("simpleTaskConfig")?.optString("title","")}")
+//                                    Log.runtime(TAG, "任务已完成/跳过: ${adTask.optJSONObject("simpleTaskConfig")?.optString("title","")}")
                                     continue
                                 }
 

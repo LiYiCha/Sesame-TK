@@ -1442,7 +1442,7 @@ class AntMember : ModelTask() {
             if (signObj != null) {
                 val todayHasSigned = signObj.optBoolean("todayHasSigned", false)
                 if (todayHasSigned) {
-                    Log.runtime("黄金票🎫[今日已签到]")
+//                    Log.runtime("黄金票🎫[今日已签到]")
                 } else {
                     Log.runtime("黄金票🎫[准备签到]")
                     // 调用新接口进行签到
@@ -1556,7 +1556,7 @@ class AntMember : ModelTask() {
                     val signModule = data.optJSONObject("signInBallModule")
                     val signed = signModule != null && signModule.optBoolean("signInStatus", false)
                     if (signed) {
-                        Log.runtime("$TAG.enableGameCenter.signIn", "游戏中心🎮[今日已签到]")
+//                        Log.runtime("$TAG.enableGameCenter.signIn", "游戏中心🎮[今日已签到]")
                     } else {
                         val signResp = AntMemberRpcCall.continueSignIn()
                         delay(300)
@@ -2022,7 +2022,7 @@ class AntMember : ModelTask() {
 
             // 3. 如果是明天任务，跳过
             if (tomorrow) {
-                Log.runtime(TAG, "芝麻炼金⚗️[任务跳过] 任务=$taskName 是明天的奖励")
+//                Log.runtime(TAG, "芝麻炼金⚗️[任务跳过] 任务=$taskName 是明天的奖励")
                 return
             }
 

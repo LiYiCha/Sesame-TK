@@ -592,7 +592,7 @@ class AntOrchard : ModelTask() {
                     Log.runtime(TAG, joSign.toString())
                 }
             } else {
-                Log.runtime(TAG, "农场今日已签到")
+//                Log.runtime(TAG, "农场今日已签到")
             }
         } catch (t: Throwable) {
             Log.printStackTrace(TAG, "orchardSign err:", t)

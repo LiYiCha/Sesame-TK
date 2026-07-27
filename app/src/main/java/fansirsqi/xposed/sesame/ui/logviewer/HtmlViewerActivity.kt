@@ -210,13 +210,14 @@ class HtmlViewerActivity : BaseActivity() {
     override fun onResume() {
         super.onResume()
         try {
-            // 如果是日志文件，启用 JavaScript 并加载日志查看器
-            if (uri != null && "file".equals(uri?.scheme, ignoreCase = true)) {
-                val path = uri?.path
-                if (path != null && path.endsWith(".log")) {
-                    settings.javaScriptEnabled = true
-                    settings.domStorageEnabled = true
-                    mWebView.loadUrl("file:///android_asset/log_viewer.html")
+            if (uri != null) {
+                val path = uri?.path ?: ""
+                settings.javaScriptEnabled = true
+                settings.domStorageEnabled = true
+                if ("file".equals(uri?.scheme, ignoreCase = true) && path.endsWith(".log")) {
+                    mWebView.loadUrl("file:///android_asset/log_viewer_legacy.html")
+                } else {
+                    mWebView.loadUrl(uri.toString())
                 }
             }
         } catch (e: Exception) {
@@ -262,13 +263,20 @@ class HtmlViewerActivity : BaseActivity() {
     }
 
     override fun onDestroy() {
-        super.onDestroy()
         try {
             (mWebView as? MyWebView)?.stopWatchingIncremental()
-            mWebView.destroy()
+            mWebView.apply {
+                loadUrl("about:blank")
+                stopLoading()
+                clearHistory()
+                removeAllViews()
+                (parent as? android.view.ViewGroup)?.removeView(this)
+                destroy()
+            }
         } catch (e: Exception) {
             Log.error(TAG, "销毁 WebView 失败: ${e.message}")
         }
+        super.onDestroy()
     }
 
     /**

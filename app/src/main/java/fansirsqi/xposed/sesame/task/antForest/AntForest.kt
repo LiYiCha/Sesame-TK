@@ -848,14 +848,14 @@ class AntForest : ModelTask(), EnergyCollectCallback {
             // -------------------------------
             // 收自己能量
             // -------------------------------
-            Log.runtime(TAG, "🌳 【正常流程】开始收取自己的能量...")
+//            Log.runtime(TAG, "🌳 【正常流程】开始收取自己的能量...")
             val selfHomeObj = run {
                 val obj = querySelfHome()
                 tc.countDebug("获取自己主页对象信息")
                 if (obj != null) {
 
                     collectEnergy(UserMap.currentUid, obj, "self")
-                    Log.runtime(TAG, "✅ 【正常流程】收取自己的能量完成")
+//                    Log.runtime(TAG, "✅ 【正常流程】收取自己的能量完成")
                     tc.countDebug("收取自己的能量")
                 } else {
                     Log.error(TAG, "❌ 【正常流程】获取自己主页信息失败，跳过能量收取")
@@ -2175,14 +2175,14 @@ class AntForest : ModelTask(), EnergyCollectCallback {
 
                 // D. 排除自己
                 if (friendId == selfId) {
-                    Log.runtime(TAG, "发现自己，跳过")
+//                    Log.runtime(TAG, "发现自己，跳过")
                     consecutiveEmpty++ // 某种意义上也是无效结果
                     continue@loop
                 }
 
                 // E. 本地重复检查 (防止死循环刷同一个有盾的人)
                 if (visitedInSession.contains(friendId)) {
-                    Log.runtime(TAG, "本次已检查过用户($friendId)，跳过")
+//                    Log.runtime(TAG, "本次已检查过用户($friendId)，跳过")
                     consecutiveEmpty++
                     if (consecutiveEmpty >= 3) break@loop // 如果一直重复返回已访问的人，也没必要继续了
                     continue@loop
@@ -2209,7 +2209,7 @@ class AntForest : ModelTask(), EnergyCollectCallback {
                 if (hasShield || hasBomb) {
                     val friendName = UserMap.getMaskName(friendId) ?: "未知好友"
                     val type = if (hasShield) "保护罩" else "炸弹卡"
-                    Log.runtime(TAG, "发现[$friendName]有$type，跳过")
+//                    Log.runtime(TAG, "发现[$friendName]有$type，跳过")
                     // 记录到全局缓存，防止下次运行再次浪费时间查询
                     addToSkipUsers(friendId)
                     // 注意：这里不需要传给服务器 skipUsers，因为我们单纯不收，服务器下次轮询可能还会给，但被上面的 visitedInSession 拦截
@@ -2298,14 +2298,14 @@ class AntForest : ModelTask(), EnergyCollectCallback {
 
                 // D. 排除自己
                 if (friendId == selfId) {
-                    Log.runtime(TAG, "发现自己，跳过")
+//                    Log.runtime(TAG, "发现自己，跳过")
                     consecutiveEmpty++
                     continue@loop
                 }
 
                 // E. 本地会话去重 (防止服务器一直返回同一个ID造成本次死循环)
                 if (visitedInSession.contains(friendId)) {
-                    Log.runtime(TAG, "本次已检查过用户($friendId)，跳过")
+//                    Log.runtime(TAG, "本次已检查过用户($friendId)，跳过")
                     consecutiveEmpty++
                     if (consecutiveEmpty >= 3) break@loop
                     continue@loop

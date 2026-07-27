@@ -103,7 +103,7 @@ class SmartRetryStrategy {
 }
 
 /**
- * 能量球蹲点管理器（精确时机版）
+ * 蹲点管理器（精确时机版）
  *
  * 单一职责：精确管理能量球的蹲点时机
  * 核心原则：
@@ -290,10 +290,10 @@ object EnergyWaitingManager {
                         val protectionEndTime = ForestUtil.getProtectionEndTime(userHomeObj)
                         val timeDifference = protectionEndTime - produceTime
                         val formattedTimeDifference = formatTime(timeDifference)
-                        Log.runtime(
-                            TAG,
-                            "智能跳过蹲点：[好友|$userName]的保护罩比能量球晚到期${formattedTimeDifference}，无法收取，已跳过。"
-                        )
+//                        Log.runtime(
+//                            TAG,
+//                            "智能跳过蹲点：[好友|$userName]的保护罩比能量球晚到期${formattedTimeDifference}，无法收取，已跳过。"
+//                        )
                         // 移除无效的蹲点任务
                         waitingTasks.remove(taskId)
                         EnergyWaitingPersistence.saveTasks(waitingTasks)
@@ -313,7 +313,7 @@ object EnergyWaitingManager {
                 // 检查等待时间是否过长
                 val waitTime = produceTime - currentTime
                 if (waitTime > MAX_WAIT_TIME_MS) {
-                    Log.runtime(TAG, "能量球[$bubbleId]等待时间过长(${waitTime/1000/60}分钟)，跳过蹲点")
+//                    Log.runtime(TAG, "能量球[$bubbleId]等待时间过长(${waitTime/1000/60}分钟)，跳过蹲点")
                     // 移除过长的任务
                     waitingTasks.remove(taskId)
                     EnergyWaitingPersistence.saveTasks(waitingTasks)
@@ -354,10 +354,10 @@ object EnergyWaitingManager {
                     ""
                 }
 
-                Log.runtime(
-                    TAG,
-                    "${actionText}蹲点：[${task.getUserTypeTag()}${fromTag}|${userName}]球[${bubbleId}]在[${TimeUtil.getCommonDate(produceTime)}]成熟(等待${waitTimeMinutes}分钟)${protectionStatus}"
-                )
+//                Log.runtime(
+//                    TAG,
+//                    "${actionText}蹲点：[${task.getUserTypeTag()}${fromTag}|${userName}]球[${bubbleId}]在[${TimeUtil.getCommonDate(produceTime)}]成熟(等待${waitTimeMinutes}分钟)${protectionStatus}"
+//                )
 
                 // 保存到持久化存储
                 EnergyWaitingPersistence.saveTasks(waitingTasks)
@@ -389,7 +389,7 @@ object EnergyWaitingManager {
                         "能量成熟"
                     }
                     val waitMinutes = waitTime / 1000 / 60
-                    Log.runtime(TAG, "🕐 蹲点[${task.getUserTypeTag()}${task.userName}]等待${waitMinutes}分钟(${protectionInfo}→${TimeUtil.getCommonDate(preciseCollectTime)})")
+//                    Log.runtime(TAG, "🕐 蹲点[${task.getUserTypeTag()}${task.userName}]等待${waitMinutes}分钟(${protectionInfo}→${TimeUtil.getCommonDate(preciseCollectTime)})")
 
                     // 倒计时前2分钟验证策略
                     val twoMinutes = 2 * 60 * 1000L
@@ -398,12 +398,12 @@ object EnergyWaitingManager {
                     // 阶段1：如果等待时间>2分钟且是好友任务，先等到倒计时2分钟时验证
                     if (waitTime > twoMinutes && !task.isSelf()) {
                         val waitBeforeValidation = waitTime - twoMinutes
-                        Log.runtime(TAG, "蹲点[${task.getUserTypeTag()}${task.userName}]将在${(waitBeforeValidation/1000/60).toInt()}分钟后验证")
+//                        Log.runtime(TAG, "蹲点[${task.getUserTypeTag()}${task.userName}]将在${(waitBeforeValidation/1000/60).toInt()}分钟后验证")
                         delay(waitBeforeValidation)
 
                         // 检查任务是否被移除
                         if (!waitingTasks.containsKey(task.taskId)) {
-                            Log.runtime(TAG, "⚠️ 蹲点[${task.getUserTypeTag()}${task.userName}]已被移除")
+//                            Log.runtime(TAG, "⚠️ 蹲点[${task.getUserTypeTag()}${task.userName}]已被移除")
                             return@launch
                         }
 
@@ -419,7 +419,7 @@ object EnergyWaitingManager {
                                     val bombEnd = ForestUtil.getBombCardEndTime(userHomeObj)
                                     val protectionEnd = maxOf(shieldEnd, bombEnd)
                                     val coverMinutes = (protectionEnd - task.produceTime) / 1000 / 60
-                                    Log.runtime(TAG, "❌ 验证失败[${task.getUserTypeTag()}${task.userName}]球[${task.bubbleId}]：保护罩覆盖${coverMinutes}分钟，取消蹲点")
+//                                    Log.runtime(TAG, "❌ 验证失败[${task.getUserTypeTag()}${task.userName}]球[${task.bubbleId}]：保护罩覆盖${coverMinutes}分钟，取消蹲点")
                                     waitingTasks.remove(task.taskId)
                                     EnergyWaitingPersistence.saveTasks(waitingTasks)
                                     return@launch
@@ -447,7 +447,7 @@ object EnergyWaitingManager {
 
                         // 检查任务是否仍然有效
                         if (!waitingTasks.containsKey(task.taskId)) {
-                            Log.runtime(TAG, "⚠️ 蹲点[${task.getUserTypeTag()}${task.userName}]已被移除")
+//                            Log.runtime(TAG, "⚠️ 蹲点[${task.getUserTypeTag()}${task.userName}]已被移除")
                             return@launch
                         }
 
@@ -456,20 +456,20 @@ object EnergyWaitingManager {
 
                     // 等待完成，最终检查任务有效性
                     if (!waitingTasks.containsKey(task.taskId)) {
-                        Log.runtime(TAG, "⚠️ 蹲点[${task.getUserTypeTag()}${task.userName}]等待过程中被移除")
+//                        Log.runtime(TAG, "⚠️ 蹲点[${task.getUserTypeTag()}${task.userName}]等待过程中被移除")
                         return@launch
                     }
 
-                    Log.runtime(TAG, "✅ 蹲点[${task.getUserTypeTag()}${task.userName}]等待完成，开始收取")
+//                    Log.runtime(TAG, "✅ 蹲点[${task.getUserTypeTag()}${task.userName}]等待完成，开始收取")
                 } else {
                     // 已经到时间的任务，立即执行
                     val overdueMinutes = (-waitTime) / 1000 / 60
                     if (overdueMinutes > 2) {
                         // 超时超过2分钟，记录警告
-                        Log.runtime(TAG, "⚡ 蹲点[${task.getUserTypeTag()}${task.userName}]已超时${overdueMinutes}分钟，立即收取")
+//                        Log.runtime(TAG, "⚡ 蹲点[${task.getUserTypeTag()}${task.userName}]已超时${overdueMinutes}分钟，立即收取")
                     } else {
                         // 刚到时间或刚超时，正常执行
-                        Log.runtime(TAG, "✅ 蹲点[${task.getUserTypeTag()}${task.userName}]时间已到，立即收取")
+//                        Log.runtime(TAG, "✅ 蹲点[${task.getUserTypeTag()}${task.userName}]时间已到，立即收取")
                     }
                 }
 
@@ -619,11 +619,11 @@ object EnergyWaitingManager {
 
                 if (result.success) {
                     if (result.energyCount > 0) {
-                        Log.runtime(TAG,"✅ 蹲点收取[${task.getUserTypeTag()}${task.userName}]成功${result.energyCount}g(耗时${executeTime}ms)")
+//                        Log.runtime(TAG,"✅ 蹲点收取[${task.getUserTypeTag()}${task.userName}]成功${result.energyCount}g(耗时${executeTime}ms)")
                         waitingTasks.remove(task.taskId) // 成功后移除任务
                         EnergyWaitingPersistence.saveTasks(waitingTasks) // 保存更新
                     } else {
-                        Log.runtime(TAG, "⚠️ 蹲点收取[${task.getUserTypeTag()}${task.userName}]异常：返回0能量(${result.message})")
+//                        Log.runtime(TAG, "⚠️ 蹲点收取[${task.getUserTypeTag()}${task.userName}]异常：返回0能量(${result.message})")
 
                         // 判断是否需要重试
                         if (task.retryCount < task.maxRetries) {
@@ -643,7 +643,7 @@ object EnergyWaitingManager {
                         }
                     }
                 } else {
-                    Log.runtime(TAG, "❌ 蹲点收取[${task.getUserTypeTag()}${task.userName}]失败：${result.message}")
+//                    Log.runtime(TAG, "❌ 蹲点收取[${task.getUserTypeTag()}${task.userName}]失败：${result.message}")
 
                     // 根据失败原因决定是否重试
                     when {
@@ -1025,7 +1025,7 @@ object EnergyWaitingManager {
                 val loadedTasks = EnergyWaitingPersistence.loadTasks()
 
                 if (loadedTasks.isEmpty()) {
-                    Log.runtime(TAG, "持久化存储中无任务需要恢复")
+//                    Log.runtime(TAG, "持久化存储中无任务需要恢复")
                     return@launch
                 }
 

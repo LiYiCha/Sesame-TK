@@ -844,18 +844,61 @@ class LogViewerViewModel : ViewModel() {
     // formatLongLines has been removed as chunking is done on the fly
 
     /**
-     * 获取用于 WebViewAssetLoader 的日志输入流（线程安全、零阻塞）
+     * 专属定制的高性能流式读取器：将 List<String> 逐行转为 stream，零中间堆字符串，永不发生 Java 堆溢出
+     */
+    private class StringListInputStream(private val lines: List<String>) : java.io.InputStream() {
+        private var lineIndex = 0
+        private var currentLineBytes: ByteArray? = null
+        private var byteIndex = 0
+
+        override fun read(): Int {
+            while (currentLineBytes == null || byteIndex >= currentLineBytes!!.size) {
+                if (lineIndex >= lines.size) return -1
+                val line = if (lineIndex == lines.size - 1) lines[lineIndex] else lines[lineIndex] + "\n"
+                currentLineBytes = line.toByteArray(Charsets.UTF_8)
+                byteIndex = 0
+                lineIndex++
+            }
+            return currentLineBytes!![byteIndex++].toInt() and 0xFF
+        }
+
+        override fun read(b: ByteArray, off: Int, len: Int): Int {
+            if (off < 0 || len < 0 || len > b.size - off) throw IndexOutOfBoundsException()
+            if (len == 0) return 0
+
+            var totalRead = 0
+            while (totalRead < len) {
+                while (currentLineBytes == null || byteIndex >= currentLineBytes!!.size) {
+                    if (lineIndex >= lines.size) {
+                        return if (totalRead > 0) totalRead else -1
+                    }
+                    val line = if (lineIndex == lines.size - 1) lines[lineIndex] else lines[lineIndex] + "\n"
+                    currentLineBytes = line.toByteArray(Charsets.UTF_8)
+                    byteIndex = 0
+                    lineIndex++
+                }
+                val availableInLine = currentLineBytes!!.size - byteIndex
+                val toCopy = Math.min(len - totalRead, availableInLine)
+                System.arraycopy(currentLineBytes!!, byteIndex, b, off + totalRead, toCopy)
+                byteIndex += toCopy
+                totalRead += toCopy
+            }
+            return totalRead
+        }
+    }
+
+    /**
+     * 获取用于 WebViewAssetLoader 的日志输入流（线程安全、极致流式、彻底免除 OOM）
      */
     fun getLogInputStream(context: android.content.Context): java.io.InputStream? {
         return try {
             val state = _uiState.value
-            // 1. 若未做过滤且 watchingFile 存在，直接返回物理文件的 FileInputStream（零内存拷贝、极致流式）
-            if (state.filterKeyword.isEmpty() && watchingFile != null && watchingFile!!.exists()) {
+            // 1. 若没有执行任何关键词过滤且未进行任何日志级别过滤，且物理文件存在，直接返回底层文件流 (极速直读)
+            if (state.filterKeyword.isEmpty() && state.enabledLogLevels.size == LogLevel.entries.size && !state.isRegexSearch && watchingFile != null && watchingFile!!.exists()) {
                 java.io.FileInputStream(watchingFile!!)
             } else {
-                // 2. 若做过滤，将 displayedLines 在内存中构造字节流，免去高频写磁盘 IO 瓶颈
-                val text = state.displayedLines.joinToString("\n")
-                java.io.ByteArrayInputStream(text.toByteArray(Charsets.UTF_8))
+                // 2. 若用户进行了过滤或筛选，采用自研流式按行读取器，绝不把数万行拼为一个巨大 String 导致 Java 堆 OOM！
+                StringListInputStream(state.displayedLines)
             }
         } catch (e: Exception) {
             Log.error(TAG, "获取日志流失败: ${e.message}")

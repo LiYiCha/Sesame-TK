@@ -188,6 +188,8 @@
 
     let fullLogText = '';
     let currentSearchKeyword = '';
+    let currentIsCaseSensitive = false;
+    let currentIsRegex = false;
     let searchMatches = [];
     let rpcBoundaryIndices = [];
     let currentRpcIndex = -1;
@@ -245,6 +247,8 @@
             });
     }
 
+    let renderTaskId = 0;
+
     function render() {
         if (!fullLogText) {
             logEl.innerHTML = '';
@@ -254,70 +258,54 @@
 
         const lines = fullLogText.split('\n');
         rpcBoundaryIndices = [];
-
-        // 使用 DocumentFragment + 分块渲染，防止上万行日志阻塞 GPU/UI 渲染主线程
-        const fragment = document.createDocumentFragment();
-        const chunkSize = 2000;
-        const totalLines = lines.length;
-
-        for (let i = 0; i < totalLines; i++) {
-            const lineText = lines[i];
-            if (lineText.includes('========================>')) {
-                rpcBoundaryIndices.push(i);
-            }
-            const div = document.createElement('div');
-            div.className = 'line';
-            div.id = `line-${i}`;
-            div.textContent = lineText;
-            fragment.appendChild(div);
-        }
-
         logEl.innerHTML = '';
-        logEl.appendChild(fragment);
 
-        if (rpcBoundaryIndices.length > 0) {
-            rpcNavEl.style.display = 'flex';
-            currentRpcIndex = 0;
-            updateCurrentRpcCounter();
-        } else {
-            rpcNavEl.style.display = 'none';
-        }
+        const totalLines = lines.length;
+        let currentIndex = 0;
+        const currentTaskId = ++renderTaskId;
 
-        if (currentSearchKeyword) {
-            highlightKeyword(currentSearchKeyword, false, false);
-        }
-    }
+        function renderNextChunk() {
+            if (currentTaskId !== renderTaskId) return;
 
-    function updateCurrentRpcCounter() {
-        if (rpcBoundaryIndices.length === 0) return;
+            const startTime = performance.now();
+            const fragment = document.createDocumentFragment();
 
-        const scrollY = window.scrollY;
-        const estimatedLineIndex = Math.max(0, Math.floor(scrollY / 13.5));
-        
-        let foundIdx = 0;
-        for (let i = 0; i < rpcBoundaryIndices.length; i++) {
-            if (rpcBoundaryIndices[i] <= estimatedLineIndex) {
-                foundIdx = i;
+            while (currentIndex < totalLines) {
+                const lineText = lines[currentIndex];
+                if (lineText.includes('========================>')) {
+                    rpcBoundaryIndices.push(currentIndex);
+                }
+                const div = document.createElement('div');
+                div.className = 'line';
+                div.id = `line-${currentIndex}`;
+                div.textContent = lineText;
+                fragment.appendChild(div);
+                currentIndex++;
+
+                // 每一批渲染严格控制在每帧安全耗时阈值 (8ms) 内，超出立刻终止本批循环，交还控制权给 UI Event Loop
+                if (performance.now() - startTime >= 8) break;
+            }
+
+            logEl.appendChild(fragment);
+
+            if (currentIndex < totalLines) {
+                setTimeout(renderNextChunk, 0);
             } else {
-                break;
+                if (rpcBoundaryIndices.length > 0) {
+                    rpcNavEl.style.display = 'flex';
+                    currentRpcIndex = 0;
+                    updateCurrentRpcCounter();
+                } else {
+                    rpcNavEl.style.display = 'none';
+                }
+
+                if (currentSearchKeyword) {
+                    highlightKeyword(currentSearchKeyword, currentIsCaseSensitive, currentIsRegex);
+                }
             }
         }
-        currentRpcIndex = foundIdx;
-        rpcCountText.textContent = `${currentRpcIndex + 1}/${rpcBoundaryIndices.length}`;
-    }
 
-    function prevRpcMatch() {
-        if (rpcBoundaryIndices.length === 0) return;
-        currentRpcIndex = (currentRpcIndex - 1 + rpcBoundaryIndices.length) % rpcBoundaryIndices.length;
-        jumpToLine(rpcBoundaryIndices[currentRpcIndex]);
-        updateCurrentRpcCounter();
-    }
-
-    function nextRpcMatch() {
-        if (rpcBoundaryIndices.length === 0) return;
-        currentRpcIndex = (currentRpcIndex + 1) % rpcBoundaryIndices.length;
-        jumpToLine(rpcBoundaryIndices[currentRpcIndex]);
-        updateCurrentRpcCounter();
+        renderNextChunk();
     }
 
     function setFullText(text) {
@@ -325,19 +313,10 @@
         render();
     }
 
-    function initLogBridge() {
-        try {
-            if (window.LogBridge && typeof window.LogBridge.getFullText === 'function') {
-                const text = window.LogBridge.getFullText();
-                setFullText(text);
-            }
-        } catch (e) {
-            console.error("LogBridge error:", e);
-        }
-    }
-
     function highlightKeyword(keyword, isCaseSensitive, isRegex) {
         currentSearchKeyword = keyword || '';
+        currentIsCaseSensitive = !!isCaseSensitive;
+        currentIsRegex = !!isRegex;
         searchMatches = [];
 
         if (!currentSearchKeyword) {
@@ -462,6 +441,45 @@
             targetEl.scrollIntoView({ block: 'center', behavior: 'smooth' });
             targetEl.style.backgroundColor = 'rgba(76, 175, 80, 0.35)';
             setTimeout(() => { targetEl.style.backgroundColor = ''; }, 2000);
+        }
+    }
+
+    /**
+     * 专属增量渲染器：供 MyWebView / Native 实时监控追加新日志，内置 DOM 节点上限保护（最多防崩保留50000行）
+     */
+    function appendLog(newText) {
+        if (!newText || typeof newText !== 'string') return;
+        const newLines = newText.split('\n');
+        const fragment = document.createDocumentFragment();
+        const startLineIdx = logEl.children.length;
+
+        for (let i = 0; i < newLines.length; i++) {
+            const lineText = newLines[i];
+            const currentLineId = startLineIdx + i;
+            if (lineText.includes('========================>')) {
+                rpcBoundaryIndices.push(currentLineId);
+            }
+            const div = document.createElement('div');
+            div.className = 'line';
+            div.id = `line-${currentLineId}`;
+            div.textContent = lineText;
+            fragment.appendChild(div);
+        }
+
+        logEl.appendChild(fragment);
+
+        // DOM 节点容量滑动裁剪保护：如超 50000 个节点，自动剔除最先出现的老日志行以保内存无虞
+        while (logEl.children.length > 50000) {
+            logEl.removeChild(logEl.firstElementChild);
+        }
+
+        if (rpcBoundaryIndices.length > 0) {
+            rpcNavEl.style.display = 'flex';
+            updateCurrentRpcCounter();
+        }
+
+        if (currentSearchKeyword) {
+            highlightKeyword(currentSearchKeyword, currentIsCaseSensitive, currentIsRegex);
         }
     }
 

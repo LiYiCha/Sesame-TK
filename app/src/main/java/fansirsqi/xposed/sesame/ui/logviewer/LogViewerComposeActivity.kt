@@ -467,11 +467,12 @@ fun LogViewerScreen(
                         .addPathHandler("/logdata/", androidx.webkit.WebViewAssetLoader.PathHandler { _ ->
                             val inputStream = viewModel.getLogInputStream(context)
                             if (inputStream != null) {
-                                val response = android.webkit.WebResourceResponse("text/plain", "UTF-8", inputStream)
-                                val headers = HashMap<String, String>()
-                                headers["Access-Control-Allow-Origin"] = "*"
-                                response.responseHeaders = headers
-                                response
+                                val headers = HashMap<String, String>().apply {
+                                    put("Access-Control-Allow-Origin", "*")
+                                    put("Cache-Control", "no-store, no-cache, must-revalidate")
+                                    put("Pragma", "no-cache")
+                                }
+                                android.webkit.WebResourceResponse("text/plain", "UTF-8", 200, "OK", headers, inputStream)
                             } else null
                         })
                         .build()
@@ -585,9 +586,27 @@ fun LogViewerScreen(
                         factory = { safeWebView },
                         update = { webView ->
                             webView.settings.textZoom = (uiState.fontSize * 9).coerceIn(40, 200)
+                            webView.evaluateJavascript("initLogBridge()", null)
                         },
                         modifier = Modifier.fillMaxSize()
                     )
+
+                    DisposableEffect(safeWebView) {
+                        onDispose {
+                            try {
+                                safeWebView.apply {
+                                    loadUrl("about:blank")
+                                    stopLoading()
+                                    clearHistory()
+                                    removeAllViews()
+                                    (parent as? android.view.ViewGroup)?.removeView(this)
+                                    destroy()
+                                }
+                            } catch (e: Exception) {
+                                Log.error("LogViewer", "销毁 WebView 异常: ${e.message}")
+                            }
+                        }
+                    }
                 }
             }
         }
