@@ -33,25 +33,7 @@
           -webkit-overflow-scrolling: touch;
         }
 
-        /* 遵循 Android 原生 Overlay 风格的专业触控滚动条 */
-        ::-webkit-scrollbar {
-          width: 10px;
-          height: 10px;
-        }
-        ::-webkit-scrollbar-track {
-          background: transparent;
-        }
-        ::-webkit-scrollbar-thumb {
-          background: rgba(160, 160, 160, 0.4);
-          border-radius: 6px;
-          border: 2px solid transparent;
-          background-clip: padding-box;
-          transition: background-color 0.2s ease;
-        }
-        ::-webkit-scrollbar-thumb:hover,
-        ::-webkit-scrollbar-thumb:active {
-          background: var(--accent);
-        }
+        /* 遵循 Android 原生滚动条机制，不再使用 webkit-scrollbar 重写，以防丧失拖拽功能 */
 
         #log { 
           white-space: pre-wrap; 
@@ -112,13 +94,14 @@
           display: none;
           position: fixed;
           top: 0; left: 0; width: 100%; height: 100%;
-          background: rgba(0,0,0,0.65);
+          background: rgba(0,0,0,0.75);
           z-index: 200;
           align-items: center;
           justify-content: center;
         }
         .modal-content {
-          background: var(--bg);
+          background: #1c1c1e;
+          color: #eeeeee;
           border: 1px solid var(--border);
           border-radius: 12px;
           width: 90%;
@@ -201,17 +184,9 @@
      * 高性能无阻塞 60fps 滚动监听：使用 requestAnimationFrame 防抖节流 + { passive: true }
      */
     function onScrollHandler() {
-        const currentScrollY = window.scrollY;
-
-        // 向下滑动隐藏悬浮胶囊，向上滑动/静止显示
-        if (currentScrollY > lastScrollY && currentScrollY > 40) {
-            rpcNavEl.style.opacity = '0';
-            rpcNavEl.style.transform = 'translateY(16px)';
-        } else {
-            rpcNavEl.style.opacity = '1';
-            rpcNavEl.style.transform = 'translateY(0)';
-        }
-        lastScrollY = currentScrollY;
+        // 取消隐藏逻辑，确保 RPC 大纲导航栏永远处于可视的悬浮层，彻底解决上下滑动不可见的问题
+        rpcNavEl.style.opacity = '1';
+        rpcNavEl.style.transform = 'translateY(0)';
 
         updateCurrentRpcCounter();
         isTicking = false;
@@ -272,8 +247,10 @@
 
             while (currentIndex < totalLines) {
                 const lineText = lines[currentIndex];
-                if (lineText.includes('========================>')) {
-                    rpcBoundaryIndices.push(currentIndex);
+                if (/={5,}.*>/.test(lineText) || lineText.includes('Method:') || lineText.includes('method:')) {
+                    if (!rpcBoundaryIndices.includes(currentIndex)) {
+                        rpcBoundaryIndices.push(currentIndex);
+                    }
                 }
                 const div = document.createElement('div');
                 div.className = 'line';
@@ -456,8 +433,10 @@
         for (let i = 0; i < newLines.length; i++) {
             const lineText = newLines[i];
             const currentLineId = startLineIdx + i;
-            if (lineText.includes('========================>')) {
-                rpcBoundaryIndices.push(currentLineId);
+            if (/={5,}.*>/.test(lineText) || lineText.includes('Method:') || lineText.includes('method:')) {
+                if (!rpcBoundaryIndices.includes(currentLineId)) {
+                    rpcBoundaryIndices.push(currentLineId);
+                }
             }
             const div = document.createElement('div');
             div.className = 'line';

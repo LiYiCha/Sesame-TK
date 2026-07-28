@@ -678,7 +678,8 @@ fun LogLineRow(
                 onCheckedChange = onCheckedChange,
                 modifier = Modifier
                     .padding(end = 4.dp)
-                    .size(20.dp)
+                    .height(0.dp) // 极简零高度占位
+                    .wrapContentHeight(unbounded = true) // 允许超出边界绘制而不撑高父 Row
                     .scale(0.8f)
             )
         }
@@ -1263,7 +1264,14 @@ fun LineDetailDialog(
     AlertDialog(
         onDismissRequest = onDismiss,
         title = {
-            Text(if (block != null) "RPC 抓包详情" else "日志行详情")
+            Column {
+                Text(if (block != null) "RPC 抓包详情" else "日志行详情")
+                Text(
+                    text = "（长按下方文本可自由选取单字与内容）",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
         },
         text = {
             SelectionContainer {

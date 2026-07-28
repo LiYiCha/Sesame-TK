@@ -420,10 +420,6 @@ class AntSports : ModelTask() {
                         // 获取 RpcManager 单例，兼容混淆后的方法名
                         val rpcManager = tryCallStaticMethod(rpcManagerClass, "get", "a", "getInstance")
                         if (rpcManager == null) {
-                            if (!Status.hasFlagToday("AntSports_RpcManager_Fail_Muted")) {
-                                Log.debug(TAG, "原步数框架RpcManager未就绪，使用标准RPC接口同步")
-                                Status.setFlagToday("AntSports_RpcManager_Fail_Muted")
-                            }
                             return@Runnable
                         }
                         

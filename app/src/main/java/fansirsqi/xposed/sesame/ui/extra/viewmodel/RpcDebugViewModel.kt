@@ -204,8 +204,47 @@ class RpcDebugViewModel : ViewModel() {
         var failCount = 0
 
         val trimmed = jsonText.trim()
+
+        // 优先检查是否是从日志/弹窗复制的纯文本抓包格式
+        // 例如：
+        // Method: com.alipay.gamecenteruprod.biz.rpc.p2e.doGoldMallPrizeExchange
+        // Params: {"__apiCallStartTime":1785227273225, ... , "requestData":[{"...": "..."}]}
+        if (trimmed.contains("Method:", ignoreCase = true) && trimmed.contains("Params:", ignoreCase = true)) {
+            try {
+                val methodRegex = Regex("(?i)Method:\\s*([^\\n\\r]+)")
+                val methodMatch = methodRegex.find(trimmed)
+                
+                val paramsRegex = Regex("(?i)Params:\\s*([\\s\\S]+)")
+                val paramsMatch = paramsRegex.find(trimmed)
+                
+                if (methodMatch != null && paramsMatch != null) {
+                    val rpcMethod = methodMatch.groupValues[1].trim()
+                    val rpcParamsJsonStr = paramsMatch.groupValues[1].trim()
+                    
+                    val mapper = com.fasterxml.jackson.databind.ObjectMapper()
+                    val paramsNode = mapper.readTree(rpcParamsJsonStr)
+                    
+                    var finalData = rpcParamsJsonStr
+                    // 精准提取 requestData 层，并保持其原生的数组结构 [] 不变！
+                    if (paramsNode.has("requestData") && paramsNode.get("requestData").isArray) {
+                        finalData = mapper.writeValueAsString(paramsNode.get("requestData"))
+                    }
+                    
+                    val newItem = RequestItem(
+                        title = rpcMethod.substringAfterLast("."),
+                        method = rpcMethod,
+                        data = finalData
+                    )
+                    add(newItem)
+                    return Pair(1, 0)
+                }
+            } catch (e: Exception) {
+                // 若由于特殊字符导致原生 JSON 解析失败，则直接回退到下方的通用 JSON 导入逻辑
+                android.util.Log.w("RpcDebugViewModel", "纯文本提取解析失败: ${e.message}")
+            }
+        }
         
-        // 优先检查是否是单个 RPC 数组格式: ["methodName", "paramsJson", null]
+        // 检查是否是单个 RPC 数组格式: ["methodName", "paramsJson", null]
         if (trimmed.startsWith("[") && trimmed.endsWith("]")) {
             try {
                 val mapper = com.fasterxml.jackson.databind.ObjectMapper()

@@ -430,6 +430,10 @@ fun LogViewerScreen(
                 }
             }
 
+            // WebView 渲染进程崩溃自愈标识
+            var webViewCrashKey by remember { mutableIntStateOf(0) }
+
+
             // 状态栏（包含区分清晰的直达顶部与直达底部按钮）
             StatusBar(
                 uiState = uiState,
@@ -505,8 +509,13 @@ fun LogViewerScreen(
                                 detail: android.webkit.RenderProcessGoneDetail?
                             ): Boolean {
                                 Log.error("LogViewer", "WebView 渲染进程崩溃，启动全自动自我恢复机制...")
-                                view?.destroy()
+                                try {
+                                    view?.destroy()
+                                } catch (e: Exception) {
+                                    // ignore
+                                }
                                 webViewInstance = null
+                                webViewCrashKey++ // 自增 Key，触发下方 AndroidView 彻底重建
                                 return true
                             }
                         }
@@ -573,37 +582,45 @@ fun LogViewerScreen(
                         )
                     }
 
-                    SelectionActionBar(
-                        viewModel = viewModel,
-                        uiState = uiState,
+                    androidx.compose.animation.AnimatedVisibility(
+                        visible = uiState.isSelectionMode && !isScrollingDown,
+                        enter = androidx.compose.animation.slideInVertically(initialOffsetY = { it }) + androidx.compose.animation.fadeIn(),
+                        exit = androidx.compose.animation.slideOutVertically(targetOffsetY = { it }) + androidx.compose.animation.fadeOut(),
                         modifier = Modifier.align(Alignment.BottomCenter)
-                    )
+                    ) {
+                        SelectionActionBar(
+                            viewModel = viewModel,
+                            uiState = uiState
+                        )
+                    }
                 }
 
                 // 预热全速呈现的 HTML WebView (0 秒秒切无白屏)
                 if (uiState.isHtmlMode) {
-                    androidx.compose.ui.viewinterop.AndroidView(
-                        factory = { safeWebView },
-                        update = { webView ->
-                            webView.settings.textZoom = (uiState.fontSize * 9).coerceIn(40, 200)
-                            webView.evaluateJavascript("initLogBridge()", null)
-                        },
-                        modifier = Modifier.fillMaxSize()
-                    )
+                    key(webViewCrashKey) {
+                        androidx.compose.ui.viewinterop.AndroidView(
+                            factory = { safeWebView },
+                            update = { webView ->
+                                webView.settings.textZoom = (uiState.fontSize * 9).coerceIn(40, 200)
+                                webView.evaluateJavascript("initLogBridge()", null)
+                            },
+                            modifier = Modifier.fillMaxSize()
+                        )
 
-                    DisposableEffect(safeWebView) {
-                        onDispose {
-                            try {
-                                safeWebView.apply {
-                                    loadUrl("about:blank")
-                                    stopLoading()
-                                    clearHistory()
-                                    removeAllViews()
-                                    (parent as? android.view.ViewGroup)?.removeView(this)
-                                    destroy()
+                        DisposableEffect(safeWebView) {
+                            onDispose {
+                                try {
+                                    safeWebView.apply {
+                                        loadUrl("about:blank")
+                                        stopLoading()
+                                        clearHistory()
+                                        removeAllViews()
+                                        (parent as? android.view.ViewGroup)?.removeView(this)
+                                        destroy()
+                                    }
+                                } catch (e: Exception) {
+                                    Log.error("LogViewer", "销毁 WebView 异常: ${e.message}")
                                 }
-                            } catch (e: Exception) {
-                                Log.error("LogViewer", "销毁 WebView 异常: ${e.message}")
                             }
                         }
                     }

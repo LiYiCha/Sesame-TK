@@ -43,6 +43,19 @@ class FlashSaleModule : BaseFlashSaleTask() {
         linkedSetOf(),
         PackageExchangeEX::getExchangeItemListForUI
     )
+    private val enableGameCenterGold = BooleanModelField("enableGameCenterGold", "游戏中心金币秒杀", false)
+    private val enableGameCenterGoldList = BooleanModelField("enableGameCenterGoldList", "游戏中心金币列表方式", false)
+    private val gameCenterGoldList = SelectModelField(
+        "gameCenterGoldList",
+        "游戏中心金币 | 商品列表",
+        linkedSetOf(),
+        GameCenterGoldEX::getExchangeItemListForUI
+    )
+    private val gameCenterGoldTargetHour = IntegerModelField(
+        "gameCenterGoldTargetHour",
+        "游戏中心金币 | 秒杀开抢整点(0-23点)",
+        20, 0, 23
+    )
     private val wakeUpMinuteBefore = IntegerModelField("wakeUpMinuteBefore", "唤醒提前时间(分钟)", 2, 1, 30)
     private val enableConcurrent = BooleanModelField("enableConcurrent", "启用并发兑换", false)
 
@@ -56,6 +69,7 @@ class FlashSaleModule : BaseFlashSaleTask() {
     protected val privilegeEX = PrivilegeEX()       // 青春特权大额（10点）
     protected val privilegeSmallEX = PrivilegeEX()  // 青春特权小额（0点）
     protected val packageExchangeEX = PackageExchangeEX()
+    protected val gameCenterGoldEX = GameCenterGoldEX()
 
     // 每个子任务的执行状态控制
     @Volatile
@@ -66,6 +80,8 @@ class FlashSaleModule : BaseFlashSaleTask() {
     private var neverLandTaskFuture: Future<*>? = null
     @Volatile
     private var packageExchangeTaskFuture: Future<*>? = null
+    @Volatile
+    private var gameCenterGoldTaskFuture: Future<*>? = null
 
     companion object {
         private val TASK_EXECUTOR: ExecutorService = Executors.newFixedThreadPool(10)
@@ -73,11 +89,13 @@ class FlashSaleModule : BaseFlashSaleTask() {
         private const val FLASH_SALE_LIST = "flash_sale_list"
         private const val NEVERLAND_LIST = "neverland_list"
         private const val BAOGUO_LIST = "baoguo_list"
+        private const val GAMECENTER_GOLD_LIST = "gamecenter_gold_list"
 
         // 防止重复提交预加载任务
         private val isPreloading = AtomicBoolean(false)
         private val isNeverLandPreloading = AtomicBoolean(false)
         private val isBaoguoPreloading = AtomicBoolean(false)
+        private val isGameCenterGoldPreloading = AtomicBoolean(false)
     }
 
     override fun getWakeUpConfigField(): IntegerModelField? {
@@ -122,6 +140,12 @@ class FlashSaleModule : BaseFlashSaleTask() {
         packageExchangeEX.enablePackageExchange = enablePackageExchange
         packageExchangeEX.wakeUpMinuteBefore = wakeUpMinuteBefore
         packageExchangeEX.packageExchangeList = packageExchangeList
+
+        // 游戏中心金币秒杀
+        gameCenterGoldEX.enableGameCenterGold = enableGameCenterGold
+        gameCenterGoldEX.wakeUpMinuteBefore = wakeUpMinuteBefore
+        gameCenterGoldEX.gameCenterGoldList = gameCenterGoldList
+        gameCenterGoldEX.targetHourField = gameCenterGoldTargetHour
     }
 
     /**
@@ -180,6 +204,24 @@ class FlashSaleModule : BaseFlashSaleTask() {
                 }
             }
         }
+        // 游戏中心金币商品列表预加载
+        if (enableGameCenterGoldList.value &&
+            !Status.hasFlagToday(GAMECENTER_GOLD_LIST) &&
+            isGameCenterGoldPreloading.compareAndSet(false, true)) {
+            TASK_EXECUTOR.submit {
+                try {
+                    val items = GameCenterGoldEX.refreshItemsFromAPI()
+                    if (items.isNotEmpty()) {
+                        Log.other("$TAG 游戏中心金币列表预加载成功: ${items.size} 项")
+                        Status.setFlagToday(GAMECENTER_GOLD_LIST)
+                    } else {
+                        Log.other("$TAG 游戏中心金币列表预加载结果为空，下次运行时重试")
+                    }
+                } finally {
+                    isGameCenterGoldPreloading.set(false)
+                }
+            }
+        }
     }
 
     /**
@@ -225,6 +267,10 @@ class FlashSaleModule : BaseFlashSaleTask() {
         fields.addField(youthPrivilegeList)
         fields.addField(enablePackageExchange)
         fields.addField(packageExchangeList)
+        fields.addField(enableGameCenterGold)
+        fields.addField(enableGameCenterGoldList)
+        fields.addField(gameCenterGoldList)
+        fields.addField(gameCenterGoldTargetHour)
         fields.addField(wakeUpMinuteBefore)
         fields.addField(enableConcurrent)
         return fields
@@ -244,12 +290,15 @@ class FlashSaleModule : BaseFlashSaleTask() {
         privilegeSmallEX.youthPrivilegeList = youthPrivilegeList
         privilegeSmallEX.enablePrivilegeList = enablePrivilegeList
         packageExchangeEX.packageExchangeList = packageExchangeList
+        gameCenterGoldEX.gameCenterGoldList = gameCenterGoldList
+        gameCenterGoldEX.targetHourField = gameCenterGoldTargetHour
         schedulePreloadIfNeeded()
 
         if (enablePrivilege.value) submitPrivilegeTask()
         if (enablePrivilegeSmall.value) submitPrivilegeSmallTask()
         if (enableNeverLand.value) submitNeverLandTask()
         if (enablePackageExchange.value) submitPackageExchangeTask()
+        if (enableGameCenterGold.value) submitGameCenterGoldTask()
     }
 
     /**
@@ -357,6 +406,31 @@ class FlashSaleModule : BaseFlashSaleTask() {
             }
         } catch (e: Exception) {
             Log.error("[FlashSaleModule🚀]包裹兑换任务提交异常", e.message)
+        }
+    }
+
+    /**
+     * 提交游戏中心金币秒杀任务（晚上20点）
+     */
+    private fun submitGameCenterGoldTask() {
+        if (isTaskRunning(gameCenterGoldTaskFuture)) {
+            Log.runtime("[FlashSaleModule🚀]游戏中心金币秒杀任务已在运行中，跳过重复提交")
+            return
+        }
+
+        try {
+            gameCenterGoldTaskFuture = TASK_EXECUTOR.submit {
+                try {
+                    gameCenterGoldEX.prepare()
+                    gameCenterGoldEX.asyncRun()
+                } catch (e: Exception) {
+                    Log.error("[FlashSaleModule🚀]游戏中心金币秒杀任务异常", e.message)
+                } finally {
+                    gameCenterGoldTaskFuture = null
+                }
+            }
+        } catch (e: Exception) {
+            Log.error("[FlashSaleModule🚀]游戏中心金币秒杀任务提交异常", e.message)
         }
     }
 
