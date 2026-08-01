@@ -414,7 +414,7 @@ class FlashSaleModule : BaseFlashSaleTask() {
      */
     private fun submitGameCenterGoldTask() {
         if (isTaskRunning(gameCenterGoldTaskFuture)) {
-            Log.runtime("[FlashSaleModule🚀]游戏中心金币秒杀任务已在运行中，跳过重复提交")
+            Log.runtime("[FlashSaleModule🚀]游戏金币秒杀任务已在运行中，跳过重复提交")
             return
         }
 
@@ -424,13 +424,13 @@ class FlashSaleModule : BaseFlashSaleTask() {
                     gameCenterGoldEX.prepare()
                     gameCenterGoldEX.asyncRun()
                 } catch (e: Exception) {
-                    Log.error("[FlashSaleModule🚀]游戏中心金币秒杀任务异常", e.message)
+                    Log.error("[FlashSaleModule🚀]游戏金币秒杀任务异常", e.message)
                 } finally {
                     gameCenterGoldTaskFuture = null
                 }
             }
         } catch (e: Exception) {
-            Log.error("[FlashSaleModule🚀]游戏中心金币秒杀任务提交异常", e.message)
+            Log.error("[FlashSaleModule🚀]游戏金币秒杀任务提交异常", e.message)
         }
     }
 

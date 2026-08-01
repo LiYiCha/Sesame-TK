@@ -6,6 +6,7 @@ import fansirsqi.xposed.sesame.hook.RequestManager
 import fansirsqi.xposed.sesame.task.antOrchard.GameTask
 import fansirsqi.xposed.sesame.util.Log
 import fansirsqi.xposed.sesame.util.TimeUtil
+import fansirsqi.xposed.sesame.util.maps.UserMap
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -94,7 +95,7 @@ class GoldBeanPark {
                             val drawRes = goldenBeanFortuneDraw()
                             if (drawRes.optBoolean("success")) {
                                 Status.setFlagToday("goldBeanPark::fortuneDraw")
-                                val incCount = extractAwardBeanCount(drawRes)
+                                val incCount = drawRes.optInt("beanDelta",0)
                                 Log.other(TAG, "金豆抽签成功+$incCount 金豆")
                             } else {
                                 Log.other(TAG, "金豆抽签: ${drawRes.optString("resultDesc", "完成")}")
@@ -113,7 +114,7 @@ class GoldBeanPark {
                         }
                         if (awardRes.optBoolean("success")) {
                             val incCount = extractAwardBeanCount(awardRes)
-                            Log.other(TAG, "完成任务[$title]+$incCount 金豆")
+                            Log.other(TAG, "领取[$title]+$incCount 金豆")
                         } else {
                             val desc = awardRes.optString("desc", awardRes.optString("resultDesc", "结果未知"))
                             Log.other(TAG, "领取任务失败[$title]: $desc")
@@ -122,20 +123,17 @@ class GoldBeanPark {
                         continue
                     }
 
-                    // 3. 未打卡状态 ：黑名单判定严密作用于纯 RPC 打卡动作
+                    // 3. 未打卡状态：通过 finishTask 完成任务后领奖
                     if (taskStatus == "TODO") {
                         // 无法通过纯 RPC 完成的打卡任务，跳过 RPC 打卡
                         if (isBlacklistedTask(taskId, taskType, actionType, type, title)) {
                             continue
                         }
 
-                        val triggerType = task.optString("triggerType", "TASK_COMPLETE")
+                        val userId = UserMap.currentUid ?: ""
+                        val finishRes = finishTaskAntOrchard(taskType, userId, taskSceneCode)
 
-                        // 优先使用金豆乐园专属 RPC (com.alipay.goldenbean.trigger) 触发任务完成
-                        val triggerRes = goldenBeanTrigger(taskId, if (triggerType.isEmpty()) "TASK_COMPLETE" else triggerType)
-
-                        // 【严密防提前领奖锁】：只有当 goldenBeanTrigger 明确返回 success == true 时才触发领奖！
-                        if (triggerRes.optBoolean("success")) {
+                        if (finishRes.optBoolean("success")) {
                             delay(1000 + (0..1000).random().toLong())
                             var awardRes = receiveTaskAwardAntOrchard(taskType, taskSceneCode)
                             if (!awardRes.optBoolean("success") && taskSceneCode != "GOLDEN_BEAN_MASTER_TASK") {
@@ -143,10 +141,10 @@ class GoldBeanPark {
                             }
                             if (awardRes.optBoolean("success")) {
                                 val incCount = extractAwardBeanCount(awardRes)
-                                Log.other(TAG, "完成任务[$title]+$incCount 金豆")
+                                Log.other(TAG, "完成[$title]+$incCount 金豆")
                             } else {
-                                val desc = awardRes.optString("desc", awardRes.optString("resultDesc", "结果未知"))
-                                Log.other(TAG, "领取任务失败[$title]: $desc")
+                                val errorMsg = awardRes.optString("errorMsg", awardRes.optString("desc", awardRes.optString("resultDesc", awardRes.toString())))
+                                Log.error(TAG, "任务失败[$title]: $errorMsg")
                             }
                         }
                         delay(1000 + (0..1000).random().toLong())
@@ -193,7 +191,7 @@ class GoldBeanPark {
                                         totalEarned += item.optInt("awardCount", 0)
                                     }
                                 }
-                                Log.other(TAG, "金豆乐园开宝箱/金蛋成功获得+$totalEarned 金豆")
+                                Log.other(TAG, "金豆乐园砸蛋成功获得+$totalEarned 金豆")
                             }
                         }
 
@@ -286,11 +284,11 @@ class GoldBeanPark {
     }
 
     private fun extractAwardBeanCount(res: JSONObject): Int {
-        var count = res.optInt("incAwardCount", res.optInt("awardCount", res.optInt("awardAmount", res.optInt("amount", res.optInt("incBeanCount", 0)))))
+        var count = res.optInt("beanDelta", res.optInt("incAwardCount", res.optInt("awardCount", res.optInt("awardAmount", res.optInt("amount", res.optInt("incBeanCount", 0))))))
         if (count == 0 && res.has("data")) {
             val data = res.optJSONObject("data")
             if (data != null) {
-                count = data.optInt("incAwardCount", data.optInt("awardCount", data.optInt("awardAmount", data.optInt("amount", 0))))
+                count = data.optInt("beanDelta", data.optInt("incAwardCount", data.optInt("awardCount", data.optInt("awardAmount", data.optInt("amount", 0)))))
             }
         }
         return count

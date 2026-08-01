@@ -752,15 +752,16 @@ object HttpCaptureHook {
         if (isBlacklisted(record)) return
         dispatchExecutor.execute {
             try {
-                val processed = if (skipSave) record else CaptureStorage.save(record)
-                val context = fansirsqi.xposed.sesame.hook.context.AppContext.getAppContext()
-                if (context != null) {
-                    val intent = android.content.Intent("fansirsqi.xposed.sesame.NEW_CAPTURE")
-                    val metadataOnly = processed.copy(requestBody = if (processed.requestBody != null && processed.requestBody!!.length > 1000) "[Large Body...]" else processed.requestBody, requestBodyBase64 = null, responseBody = if (processed.responseBody != null && processed.responseBody!!.length > 1000) "[Large Body...]" else processed.responseBody, responseBodyBase64 = null)
-                    intent.putExtra("record_json", fansirsqi.xposed.sesame.util.JsonUtil.formatJson(metadataOnly, false))
-                    intent.putExtra("is_update", processed.statusCode != 0)
-                    context.sendBroadcast(intent)
-                }
+                // 注释掉写入和广播，仅保留 hook 拦截功能（防 OOM）
+                // val processed = if (skipSave) record else CaptureStorage.save(record)
+                // val context = fansirsqi.xposed.sesame.hook.context.AppContext.getAppContext()
+                // if (context != null) {
+                //     val intent = android.content.Intent("fansirsqi.xposed.sesame.NEW_CAPTURE")
+                //     val metadataOnly = processed.copy(requestBody = if (processed.requestBody != null && processed.requestBody!!.length > 1000) "[Large Body...]" else processed.requestBody, requestBodyBase64 = null, responseBody = if (processed.responseBody != null && processed.responseBody!!.length > 1000) "[Large Body...]" else processed.responseBody, responseBodyBase64 = null)
+                //     intent.putExtra("record_json", fansirsqi.xposed.sesame.util.JsonUtil.formatJson(metadataOnly, false))
+                //     intent.putExtra("is_update", processed.statusCode != 0)
+                //     context.sendBroadcast(intent)
+                // }
             } catch (_: Throwable) {}
         }
     }

@@ -33,6 +33,7 @@ class LogViewerViewModel : ViewModel() {
         private const val POLL_INTERVAL = 1000L // 文件轮询间隔（毫秒）
         private const val PREF_FONT_SIZE = "log_viewer_font_size"
         private const val PREF_IS_HTML_MODE = "log_viewer_is_html_mode"
+        private const val PREF_AUTO_SCROLL = "log_viewer_auto_scroll"
         private const val DEFAULT_FONT_SIZE = 9 // 默认字体大小改为9sp
         private const val MAX_RENDER_LINES = 150000
     }
@@ -99,6 +100,7 @@ class LogViewerViewModel : ViewModel() {
         // 从持久化存储加载配置
         loadFontSize()
         loadViewMode()
+        loadAutoScroll()
     }
 
     /**
@@ -124,6 +126,32 @@ class LogViewerViewModel : ViewModel() {
             fansirsqi.xposed.sesame.util.DataStore.put(PREF_FONT_SIZE, size)
         } catch (e: Exception) {
             Log.error(TAG, "保存字体大小失败: ${e.message}")
+        }
+    }
+
+    /**
+     * 从 DataStore 加载自动滚动设置
+     */
+    private fun loadAutoScroll() {
+        try {
+            val saved = fansirsqi.xposed.sesame.util.DataStore.get(
+                PREF_AUTO_SCROLL,
+                Boolean::class.java
+            ) ?: true
+            _uiState.update { it.copy(autoScroll = saved) }
+        } catch (e: Exception) {
+            Log.error(TAG, "加载自动滚动设置失败: ${e.message}")
+        }
+    }
+
+    /**
+     * 保存自动滚动设置到 DataStore
+     */
+    private fun saveAutoScroll(enabled: Boolean) {
+        try {
+            fansirsqi.xposed.sesame.util.DataStore.put(PREF_AUTO_SCROLL, enabled)
+        } catch (e: Exception) {
+            Log.error(TAG, "保存自动滚动设置失败: ${e.message}")
         }
     }
 
@@ -157,6 +185,7 @@ class LogViewerViewModel : ViewModel() {
      * 设置完整日志文本
      */
     fun setFullText(text: String) {
+        _uiState.update { it.copy(isCaptureLog = false) }
         if (text.isEmpty()) {
             synchronized(allLines) {
                 allLines.clear()
@@ -202,7 +231,7 @@ class LogViewerViewModel : ViewModel() {
      */
     fun loadFile(file: File) {
         viewModelScope.launch(Dispatchers.IO) {
-            _uiState.update { it.copy(isLoading = true, statusMessage = "加载中...") }
+            _uiState.update { it.copy(isLoading = true, isCaptureLog = false, statusMessage = "加载中...") }
             try {
                 val lines = ArrayList<String>()
                 var hasH5 = false
@@ -312,9 +341,7 @@ class LogViewerViewModel : ViewModel() {
             allLines.clear()
             endsWithNewline = true
         }
-        _uiState.update {
-            UiState(statusMessage = "已清空显示")
-        }
+        _uiState.update { it.copy(isCaptureLog = false, statusMessage = "已清空显示") }
     }
 
     /**
@@ -508,7 +535,11 @@ class LogViewerViewModel : ViewModel() {
      * 切换自动滚动
      */
     fun toggleAutoScroll() {
-        _uiState.update { it.copy(autoScroll = !it.autoScroll) }
+        _uiState.update {
+            val newVal = !it.autoScroll
+            saveAutoScroll(newVal)
+            it.copy(autoScroll = newVal)
+        }
     }
 
     /**
@@ -761,6 +792,23 @@ class LogViewerViewModel : ViewModel() {
                 state.selectedIndices - index
             } else {
                 state.selectedIndices + index
+            }
+            state.copy(
+                selectedIndices = newSelected,
+                lastSelectedIndex = index
+            )
+        }
+    }
+
+    /**
+     * 设置指定行的选中状态（拖拽多选用，不做 toggle，避免重复翻转）
+     */
+    fun setLineSelection(index: Int, selected: Boolean) {
+        _uiState.update { state ->
+            val newSelected = if (selected) {
+                state.selectedIndices + index
+            } else {
+                state.selectedIndices - index
             }
             state.copy(
                 selectedIndices = newSelected,

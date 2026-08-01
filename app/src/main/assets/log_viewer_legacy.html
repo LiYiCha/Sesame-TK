@@ -8,145 +8,152 @@
         :root {
           --bg: #0b0b0c;
           --fg: #e6e6e6;
-          --border: rgba(255,255,255,0.15);
+          --border: rgba(255,255,255,0.12);
           --accent: #4caf50;
+          --surface: #1a1a1d;
+          --glass: rgba(26, 26, 29, 0.92);
+          --on-glass: #f0f0f0;
         }
         @media (prefers-color-scheme: light) {
           :root {
             --bg: #ffffff;
             --fg: #1f1f1f;
-            --border: rgba(0,0,0,0.15);
+            --border: rgba(0,0,0,0.12);
             --accent: #2e7d32;
+            --surface: #f5f5f5;
+            --glass: rgba(255,255,255,0.92);
+            --on-glass: #1f1f1f;
           }
         }
+
         html, body {
-          margin: 0;
-          padding: 0;
-          background: var(--bg);
-          color: var(--fg);
+          margin: 0; padding: 0;
+          background: var(--bg); color: var(--fg);
           font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
-          line-height: 1.35;
-          font-size: 9px;
+          line-height: 1.35; font-size: 9px;
           -webkit-text-size-adjust: 100%;
-          /* 开启原生平滑滚动与 GPU 硬件加速 */
           scroll-behavior: smooth;
           -webkit-overflow-scrolling: touch;
         }
 
-        /* 遵循 Android 原生滚动条机制，不再使用 webkit-scrollbar 重写，以防丧失拖拽功能 */
-
-        #log { 
-          white-space: pre-wrap; 
-          word-break: break-all; 
-          padding: 8px 12px 60px 8px; 
-          user-select: text; 
-          -webkit-user-select: text; 
+        #log {
+          white-space: pre-wrap; word-break: break-all;
+          padding: 8px 12px 70px 8px;
+          user-select: text; -webkit-user-select: text;
         }
-
-        .line {
-          min-height: 1.25em;
-        }
-
+        .line { min-height: 1.25em; }
         .highlight { background-color: #ffd54f; color: #000; font-weight: bold; padding: 0 2px; border-radius: 2px; }
         .highlight-current { background-color: #ff9800; color: #fff; font-weight: bold; padding: 0 2px; border-radius: 2px; outline: 2px solid #ff5722; }
 
-        /* 与 Compose RequestNavigator 100% 对齐的 RPC 计数悬浮胶囊 */
+        /* ===== RPC 悬浮胶囊 ===== */
         .rpc-fab-capsule {
-          position: fixed;
-          right: 14px;
-          bottom: 24px;
-          display: flex;
-          align-items: center;
-          background: rgba(30, 30, 30, 0.88);
-          backdrop-filter: blur(12px);
-          color: #fff;
-          border: 1px solid var(--border);
-          border-radius: 24px;
-          padding: 2px 6px;
-          box-shadow: 0 4px 16px rgba(0,0,0,0.4);
-          z-index: 90;
-          will-change: transform, opacity;
-          transition: opacity 0.25s cubic-bezier(0.4, 0, 0.2, 1), transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+          position: fixed; right: 14px; bottom: 24px; z-index: 90;
+          display: flex; align-items: center; gap: 0;
+          background: var(--glass); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+          color: var(--on-glass);
+          border: 1px solid var(--border); border-radius: 28px;
+          padding: 2px 4px;
+          box-shadow: 0 4px 20px rgba(0,0,0,0.35);
+          transition: opacity 0.25s ease, transform 0.25s ease;
         }
         .rpc-fab-arrow {
-          background: transparent;
-          border: none;
-          color: #fff;
-          font-size: 11px;
-          padding: 4px 8px;
-          cursor: pointer;
-          user-select: none;
+          background: transparent; border: none;
+          color: var(--on-glass); font-size: 12px;
+          padding: 6px 8px; cursor: pointer; user-select: none;
+          border-radius: 50%; line-height: 1;
+          transition: background 0.15s;
         }
-        .rpc-fab-arrow:active {
-          color: var(--accent);
-        }
+        .rpc-fab-arrow:active { background: rgba(255,255,255,0.12); color: var(--accent); }
         .rpc-fab-count {
-          font-size: 11px;
-          font-weight: bold;
-          padding: 0 6px;
-          cursor: pointer;
-          user-select: none;
-          color: #fff;
+          font-size: 11px; font-weight: 600;
+          padding: 0 8px; cursor: pointer; user-select: none;
+          color: var(--on-glass); letter-spacing: 0.3px;
         }
 
-        /* Modal for RPC Outline */
+        /* ===== Modal 玻璃面板 ===== */
         .modal {
-          display: none;
-          position: fixed;
-          top: 0; left: 0; width: 100%; height: 100%;
-          background: rgba(0,0,0,0.75);
-          z-index: 200;
-          align-items: center;
-          justify-content: center;
+          display: none; position: fixed; inset: 0; z-index: 200;
+          background: rgba(0,0,0,0.65); backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px);
+          align-items: center; justify-content: center;
+        }
+        .modal.show {
+          display: flex;
+          animation: modalIn 0.2s ease;
+        }
+        @keyframes modalIn {
+          from { opacity: 0; }
+          to   { opacity: 1; }
         }
         .modal-content {
-          background: #1c1c1e;
-          color: #eeeeee;
-          border: 1px solid var(--border);
-          border-radius: 12px;
-          width: 90%;
-          max-width: 500px;
-          max-height: 75vh;
-          display: flex;
-          flex-direction: column;
-          box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+          background: var(--surface); color: var(--fg);
+          border-radius: 28px;
+          width: 92%; max-width: 520px; max-height: 78vh;
+          display: flex; flex-direction: column;
+          box-shadow: 0 24px 48px rgba(0,0,0,0.6);
+          animation: panelIn 0.22s cubic-bezier(0.22, 0.61, 0.36, 1);
+        }
+        @keyframes panelIn {
+          from { transform: scale(0.94); opacity: 0; }
+          to   { transform: scale(1);    opacity: 1; }
         }
         .modal-header {
-          padding: 12px 16px;
-          border-bottom: 1px solid var(--border);
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          font-weight: bold;
+          padding: 18px 24px 14px;
+          display: flex; justify-content: space-between; align-items: center;
+          font-size: 16px; font-weight: 600;
         }
-        .modal-body {
-          padding: 8px;
-          overflow-y: auto;
-          flex: 1;
+        .modal-close {
+          background: transparent; border: none;
+          color: var(--fg); font-size: 20px; padding: 4px 8px;
+          cursor: pointer; border-radius: 50%;
+          opacity: 0.55; transition: opacity 0.15s;
         }
-        .outline-item {
-          padding: 10px 12px;
-          border-bottom: 1px solid rgba(255,255,255,0.05);
-          font-size: 12px;
-          cursor: pointer;
-          word-break: break-all;
+        .modal-close:active { opacity: 1; background: rgba(128,128,128,0.15); }
+        .modal-body { padding: 0 16px 16px; overflow-y: auto; flex: 1; }
+
+        /* ===== 大纲 Card 列表项（对齐 Compose CardDefaults） ===== */
+        .outline-card {
+          background: var(--bg);
+          border: 1px solid transparent;
+          border-radius: 12px;
+          margin-bottom: 6px;
+          cursor: pointer; user-select: none;
+          transition: border-color 0.15s, background 0.15s;
+          overflow: hidden;
         }
-        .outline-item:active {
-          background: rgba(255,255,255,0.15);
+        .outline-card:active { filter: brightness(1.1); }
+        .outline-card.current {
+          background: rgba(76, 175, 80, 0.12);
+          border-color: var(--accent);
         }
-        .outline-tag {
-          font-size: 10px;
-          color: var(--accent);
-          margin-right: 6px;
+        .outline-row {
+          display: flex; align-items: center;
+          padding: 10px 14px; gap: 10px;
+          min-height: 44px;
+        }
+        .outline-idx {
+          font-size: 12px; font-weight: 700;
+          flex-shrink: 0;
+          color: rgba(255,255,255,0.5);
+        }
+        .outline-card.current .outline-idx { color: var(--accent); }
+        .outline-method {
+          font-size: 13px; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+          color: var(--fg); flex: 1; min-width: 0;
+          white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+          line-height: 1.3;
+        }
+        .outline-card.current .outline-method { color: #c8e6c9; }
+        .outline-empty {
+          padding: 32px 18px; text-align: center;
+          font-size: 13px; color: rgba(128,128,128,0.7);
         }
     </style>
 </head>
 <body>
 
-<!-- 纯粹全屏 H5 日志文本画布 -->
 <div id="log"></div>
 
-<!-- 与 Compose 统一的 RPC 计数悬浮胶囊 (▲ 1/15 ▼) -->
+<!-- RPC 悬浮胶囊 -->
 <div id="rpcNavigator" class="rpc-fab-capsule">
     <button class="rpc-fab-arrow" onclick="prevRpcMatch()">▲</button>
     <span id="rpcCountText" class="rpc-fab-count" onclick="showRpcOutline()">0/0</span>
@@ -157,8 +164,8 @@
 <div id="rpcModal" class="modal">
     <div class="modal-content">
         <div class="modal-header">
-            <span>RPC Method 大纲</span>
-            <button class="rpc-fab-arrow" style="padding: 2px 8px;" onclick="closeRpcOutline()">✕</button>
+            <span>RPC 请求大纲列表</span>
+            <button class="modal-close" onclick="closeRpcOutline()">✕</button>
         </div>
         <div class="modal-body" id="rpcList"></div>
     </div>
@@ -176,23 +183,49 @@
     let searchMatches = [];
     let rpcBoundaryIndices = [];
     let currentRpcIndex = -1;
+    let autoScrollEnabled = true;
 
+    // ============================================================
+    //  滚动监听 — 实时更新当前 RPC 位置计数器
+    // ============================================================
     let lastScrollY = window.scrollY;
     let isTicking = false;
 
-    /**
-     * 高性能无阻塞 60fps 滚动监听：使用 requestAnimationFrame 防抖节流 + { passive: true }
-     */
+    function updateCurrentRpcCounter() {
+        if (rpcBoundaryIndices.length === 0) {
+            rpcCountText.textContent = '0/0';
+            currentRpcIndex = -1;
+            return;
+        }
+        const viewTop = window.scrollY;
+        const viewBottom = viewTop + window.innerHeight;
+        const total = rpcBoundaryIndices.length;
+
+        // 找到当前视口内最近的 RPC
+        let closest = 0;
+        let minDist = Infinity;
+        for (let i = 0; i < total; i++) {
+            const lineIdx = rpcBoundaryIndices[i];
+            const el = document.getElementById('line-' + lineIdx);
+            if (!el) continue;
+            const elTop = el.offsetTop;
+            const elBottom = elTop + el.offsetHeight;
+            const elCenter = (elTop + elBottom) / 2;
+            const dist = Math.abs((viewTop + viewBottom) / 2 - elCenter);
+            if (dist < minDist) { minDist = dist; closest = i; }
+            if (elTop > viewBottom) break;
+        }
+        currentRpcIndex = closest;
+        rpcCountText.textContent = (closest + 1) + '/' + total;
+    }
+
     function onScrollHandler() {
-        // 取消隐藏逻辑，确保 RPC 大纲导航栏永远处于可视的悬浮层，彻底解决上下滑动不可见的问题
         rpcNavEl.style.opacity = '1';
         rpcNavEl.style.transform = 'translateY(0)';
-
         updateCurrentRpcCounter();
         isTicking = false;
     }
 
-    // 绑定 { passive: true }，完美释放 GPU Compositor 主线程卡顿
     window.addEventListener('scroll', () => {
         if (!isTicking) {
             window.requestAnimationFrame(onScrollHandler);
@@ -200,6 +233,39 @@
         }
     }, { passive: true });
 
+    // ============================================================
+    //  RPC 前后跳转
+    // ============================================================
+    function prevRpcMatch() {
+        if (rpcBoundaryIndices.length === 0) return;
+        let target = currentRpcIndex - 1;
+        if (target < 0) target = rpcBoundaryIndices.length - 1;
+        currentRpcIndex = target;
+        jumpToRpcLine(rpcBoundaryIndices[target]);
+        updateCurrentRpcCounter();
+    }
+
+    function nextRpcMatch() {
+        if (rpcBoundaryIndices.length === 0) return;
+        let target = currentRpcIndex + 1;
+        if (target >= rpcBoundaryIndices.length) target = 0;
+        currentRpcIndex = target;
+        jumpToRpcLine(rpcBoundaryIndices[target]);
+        updateCurrentRpcCounter();
+    }
+
+    function jumpToRpcLine(lineIndex) {
+        const targetEl = document.getElementById('line-' + lineIndex);
+        if (targetEl) {
+            targetEl.scrollIntoView({ block: 'center', behavior: 'smooth' });
+            targetEl.style.backgroundColor = 'rgba(76, 175, 80, 0.25)';
+            setTimeout(() => { targetEl.style.backgroundColor = ''; }, 1800);
+        }
+    }
+
+    // ============================================================
+    //  初始化 & 数据加载
+    // ============================================================
     let isFetching = false;
 
     function initLogBridge() {
@@ -218,10 +284,13 @@
             .catch(err => {
                 isFetching = false;
                 console.error('WebViewAssetLoader 同源流读取失败:', err);
-                logEl.innerHTML = '<div class="line" style="color:red;">日志流加载异常，请尝试切换至 Compose 视图查看</div>';
+                logEl.innerHTML = '<div class="line" style="color:red;padding:16px;">日志流加载异常，请尝试切换至 Compose 视图查看</div>';
             });
     }
 
+    // ============================================================
+    //  分块渲染（含 RPC 边界检测）
+    // ============================================================
     let renderTaskId = 0;
 
     function render() {
@@ -254,12 +323,11 @@
                 }
                 const div = document.createElement('div');
                 div.className = 'line';
-                div.id = `line-${currentIndex}`;
+                div.id = 'line-' + currentIndex;
                 div.textContent = lineText;
                 fragment.appendChild(div);
                 currentIndex++;
 
-                // 每一批渲染严格控制在每帧安全耗时阈值 (8ms) 内，超出立刻终止本批循环，交还控制权给 UI Event Loop
                 if (performance.now() - startTime >= 8) break;
             }
 
@@ -279,6 +347,13 @@
                 if (currentSearchKeyword) {
                     highlightKeyword(currentSearchKeyword, currentIsCaseSensitive, currentIsRegex);
                 }
+
+                // 自动滚动到底部
+                if (autoScrollEnabled) {
+                    requestAnimationFrame(() => {
+                        window.scrollTo({ top: document.body.scrollHeight, behavior: 'instant' });
+                    });
+                }
             }
         }
 
@@ -290,6 +365,68 @@
         render();
     }
 
+    // ============================================================
+    //  增量追加 & 自动滚动
+    // ============================================================
+    function appendLog(newText) {
+        if (!newText || typeof newText !== 'string') return;
+        const newLines = newText.split('\n');
+        const fragment = document.createDocumentFragment();
+        const startLineIdx = logEl.children.length;
+
+        for (let i = 0; i < newLines.length; i++) {
+            const lineText = newLines[i];
+            const currentLineId = startLineIdx + i;
+            if (/={5,}.*>/.test(lineText) || lineText.includes('Method:') || lineText.includes('method:')) {
+                if (!rpcBoundaryIndices.includes(currentLineId)) {
+                    rpcBoundaryIndices.push(currentLineId);
+                }
+            }
+            const div = document.createElement('div');
+            div.className = 'line';
+            div.id = 'line-' + currentLineId;
+            div.textContent = lineText;
+            fragment.appendChild(div);
+        }
+
+        logEl.appendChild(fragment);
+
+        // DOM 容量保护：超过 50000 行则裁剪，同时修正 RPC 索引偏移
+        while (logEl.children.length > 50000) {
+            const removed = logEl.firstElementChild;
+            if (removed && removed.id && removed.id.startsWith('line-')) {
+                const rmIdx = parseInt(removed.id.slice(5), 10);
+                rpcBoundaryIndices = rpcBoundaryIndices
+                    .filter(idx => idx !== rmIdx)
+                    .map(idx => idx > rmIdx ? idx - 1 : idx);
+            }
+            logEl.removeChild(removed);
+        }
+
+        if (rpcBoundaryIndices.length > 0) {
+            rpcNavEl.style.display = 'flex';
+            updateCurrentRpcCounter();
+        }
+
+        if (currentSearchKeyword) {
+            highlightKeyword(currentSearchKeyword, currentIsCaseSensitive, currentIsRegex);
+        }
+
+        // 自动滚动
+        if (autoScrollEnabled) {
+            requestAnimationFrame(() => {
+                window.scrollTo({ top: document.body.scrollHeight, behavior: 'instant' });
+            });
+        }
+    }
+
+    function setAutoScroll(enabled) {
+        autoScrollEnabled = !!enabled;
+    }
+
+    // ============================================================
+    //  搜索高亮
+    // ============================================================
     function highlightKeyword(keyword, isCaseSensitive, isRegex) {
         currentSearchKeyword = keyword || '';
         currentIsCaseSensitive = !!isCaseSensitive;
@@ -306,41 +443,33 @@
             const flags = isCaseSensitive ? 'g' : 'gi';
             const pattern = isRegex ? currentSearchKeyword : escapeRegExp(currentSearchKeyword);
             searchRegex = new RegExp(pattern, flags);
-        } catch (e) {
-            return;
-        }
+        } catch (e) { return; }
 
         const lineNodes = logEl.querySelectorAll('.line');
         lineNodes.forEach((node) => {
             const text = node.textContent;
             if (!text) return;
-
             searchRegex.lastIndex = 0;
             let match;
             let lastIndex = 0;
             const fragment = document.createDocumentFragment();
             let hasMatch = false;
-
             while ((match = searchRegex.exec(text)) !== null) {
                 hasMatch = true;
                 const matchText = match[0];
                 const matchStart = match.index;
-
                 if (matchStart > lastIndex) {
                     fragment.appendChild(document.createTextNode(text.substring(lastIndex, matchStart)));
                 }
-
                 const span = document.createElement('span');
                 span.className = 'highlight';
                 span.textContent = matchText;
-                span.id = `match-${searchMatches.length}`;
+                span.id = 'match-' + searchMatches.length;
                 searchMatches.push(span);
                 fragment.appendChild(span);
-
                 lastIndex = matchStart + matchText.length;
                 if (match.index === searchRegex.lastIndex) searchRegex.lastIndex++;
             }
-
             if (hasMatch) {
                 if (lastIndex < text.length) {
                     fragment.appendChild(document.createTextNode(text.substring(lastIndex)));
@@ -353,12 +482,9 @@
 
     function jumpSearchMatch(index) {
         if (searchMatches.length === 0) return;
-        
         const safeIdx = ((index % searchMatches.length) + searchMatches.length) % searchMatches.length;
-
         const prevFocus = document.querySelector('.highlight-current');
         if (prevFocus) prevFocus.className = 'highlight';
-
         const currSpan = searchMatches[safeIdx];
         if (currSpan) {
             currSpan.className = 'highlight-current';
@@ -376,6 +502,9 @@
         return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     }
 
+    // ============================================================
+    //  RPC 大纲 Modal
+    // ============================================================
     function showRpcOutline() {
         const modal = document.getElementById('rpcModal');
         const rpcListEl = document.getElementById('rpcList');
@@ -383,85 +512,54 @@
         rpcListEl.innerHTML = '';
 
         if (rpcBoundaryIndices.length === 0) {
-            rpcListEl.innerHTML = '<div class="outline-item">未查找到 RPC 请求记录</div>';
+            rpcListEl.innerHTML = '<div class="outline-empty">未查找到 RPC 请求记录</div>';
         } else {
             rpcBoundaryIndices.forEach((lineIndex, index) => {
-                let methodName = lines[lineIndex] || '';
-                for (let offset = 1; offset <= 5 && (lineIndex + offset) < lines.length; offset++) {
-                    const l = lines[lineIndex + offset].trim();
-                    if (l.startsWith('Method:') || l.startsWith('method:')) {
-                        methodName = l.replace(/^(Method|method):/, '').trim();
+                let methodName = '';
+                for (let offset = 0; offset <= 5 && (lineIndex + offset) < lines.length; offset++) {
+                    const l = lines[lineIndex + offset];
+                    const m = l.match(/^(?:Method|method):\s*(.+)/);
+                    if (m) {
+                        methodName = m[1].trim();
                         break;
                     }
                 }
+                if (!methodName) {
+                    const raw = lines[lineIndex].trim();
+                    methodName = raw.length > 80 ? raw.substring(0, 80) + '…' : raw;
+                }
 
-                const div = document.createElement('div');
-                div.className = 'outline-item';
-                div.innerHTML = `<span class="outline-tag">#${index + 1}</span> ${escapeHtml(methodName)}`;
-                div.onclick = () => {
+                const isCurrent = (index === currentRpcIndex);
+                const card = document.createElement('div');
+                card.className = 'outline-card' + (isCurrent ? ' current' : '');
+                card.innerHTML =
+                    '<div class="outline-row">' +
+                    '<span class="outline-idx">[' + (index + 1) + ']</span>' +
+                    '<span class="outline-method" title="' + escapeHtml(methodName) + '">' + escapeHtml(methodName) + '</span>' +
+                    '</div>';
+                card.onclick = () => {
                     closeRpcOutline();
-                    jumpToLine(lineIndex);
+                    currentRpcIndex = index;
+                    jumpToRpcLine(lineIndex);
+                    updateCurrentRpcCounter();
                 };
-                rpcListEl.appendChild(div);
+                rpcListEl.appendChild(card);
             });
         }
-        modal.style.display = 'flex';
+        modal.classList.add('show');
     }
 
     function closeRpcOutline() {
-        document.getElementById('rpcModal').style.display = 'none';
+        document.getElementById('rpcModal').classList.remove('show');
     }
 
     function jumpToLine(lineIndex) {
-        const targetEl = document.getElementById(`line-${lineIndex}`);
-        if (targetEl) {
-            targetEl.scrollIntoView({ block: 'center', behavior: 'smooth' });
-            targetEl.style.backgroundColor = 'rgba(76, 175, 80, 0.35)';
-            setTimeout(() => { targetEl.style.backgroundColor = ''; }, 2000);
-        }
+        jumpToRpcLine(lineIndex);
     }
 
-    /**
-     * 专属增量渲染器：供 MyWebView / Native 实时监控追加新日志，内置 DOM 节点上限保护（最多防崩保留50000行）
-     */
-    function appendLog(newText) {
-        if (!newText || typeof newText !== 'string') return;
-        const newLines = newText.split('\n');
-        const fragment = document.createDocumentFragment();
-        const startLineIdx = logEl.children.length;
-
-        for (let i = 0; i < newLines.length; i++) {
-            const lineText = newLines[i];
-            const currentLineId = startLineIdx + i;
-            if (/={5,}.*>/.test(lineText) || lineText.includes('Method:') || lineText.includes('method:')) {
-                if (!rpcBoundaryIndices.includes(currentLineId)) {
-                    rpcBoundaryIndices.push(currentLineId);
-                }
-            }
-            const div = document.createElement('div');
-            div.className = 'line';
-            div.id = `line-${currentLineId}`;
-            div.textContent = lineText;
-            fragment.appendChild(div);
-        }
-
-        logEl.appendChild(fragment);
-
-        // DOM 节点容量滑动裁剪保护：如超 50000 个节点，自动剔除最先出现的老日志行以保内存无虞
-        while (logEl.children.length > 50000) {
-            logEl.removeChild(logEl.firstElementChild);
-        }
-
-        if (rpcBoundaryIndices.length > 0) {
-            rpcNavEl.style.display = 'flex';
-            updateCurrentRpcCounter();
-        }
-
-        if (currentSearchKeyword) {
-            highlightKeyword(currentSearchKeyword, currentIsCaseSensitive, currentIsRegex);
-        }
-    }
-
+    // ============================================================
+    //  工具函数
+    // ============================================================
     function escapeHtml(text) {
         return text
             .replace(/&/g, "&amp;")
@@ -470,6 +568,9 @@
             .replace(/"/g, "&quot;")
             .replace(/'/g, "&#039;");
     }
+
+    // 页面加载完成即启动流式加载
+    initLogBridge();
 </script>
 </body>
 </html>

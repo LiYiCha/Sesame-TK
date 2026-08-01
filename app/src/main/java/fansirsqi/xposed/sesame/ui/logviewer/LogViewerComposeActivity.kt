@@ -7,16 +7,9 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
 import androidx.core.view.WindowCompat
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.*
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import fansirsqi.xposed.sesame.ui.theme.app.SesameTheme
@@ -24,14 +17,8 @@ import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.SpanStyle
-import androidx.compose.ui.text.buildAnnotatedString
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import fansirsqi.xposed.sesame.util.Files
 import fansirsqi.xposed.sesame.util.LanguageUtil
 import fansirsqi.xposed.sesame.util.Log
@@ -116,7 +103,7 @@ class LogViewerComposeActivity : ComponentActivity() {
             }
 
             // 缺省保底：若未解析到目标文件，自动寻址 LOG_DIR 目录下的最新日志文件
-            if (targetFile == null || !targetFile!!.exists()) {
+            if (targetFile == null || !targetFile.exists()) {
                 val logDir = Files.LOG_DIR
                 targetFile = logDir.listFiles()?.filter { it.isFile && it.name.endsWith(".log") }
                     ?.maxByOrNull { it.lastModified() }
@@ -424,9 +411,22 @@ fun LogViewerScreen(
                 )
             }
 
-            val isScrollingDown by remember {
-                derivedStateOf {
-                    lazyListState.firstVisibleItemIndex > 0 && lazyListState.isScrollInProgress
+            // 滚动方向追踪：下滑隐藏悬浮组件，上滑/静止显示
+            var scrollDirection by remember { mutableStateOf(ScrollDirection.IDLE) }
+            LaunchedEffect(lazyListState) {
+                var prevIdx = lazyListState.firstVisibleItemIndex
+                var prevOff = lazyListState.firstVisibleItemScrollOffset
+                snapshotFlow {
+                    Triple(lazyListState.firstVisibleItemIndex, lazyListState.firstVisibleItemScrollOffset, lazyListState.isScrollInProgress)
+                }.collect { (idx, off, scrolling) ->
+                    scrollDirection = if (scrolling) {
+                        when {
+                            idx > prevIdx || (idx == prevIdx && off > prevOff) -> ScrollDirection.DOWN
+                            idx < prevIdx || (idx == prevIdx && off < prevOff) -> ScrollDirection.UP
+                            else -> scrollDirection
+                        }
+                    } else ScrollDirection.IDLE
+                    prevIdx = idx; prevOff = off
                 }
             }
 
@@ -551,10 +551,17 @@ fun LogViewerScreen(
                     }
                 }
 
-                // 3. 搜索索引改变 (点击“下一个 / 上一个”) -> 通知 H5 平滑跳转
+                // 3. 搜索索引改变 (点击"下一个 / 上一个") -> 通知 H5 平滑跳转
                 LaunchedEffect(uiState.currentSearchIndex, uiState.isHtmlMode) {
                     if (uiState.isHtmlMode && uiState.currentSearchIndex >= 0 && uiState.searchKeyword.isNotEmpty()) {
                         safeWebView.evaluateJavascript("jumpSearchMatch(${uiState.currentSearchIndex})", null)
+                    }
+                }
+
+                // 4. 自动滚动开关变更 -> 同步到 H5
+                LaunchedEffect(uiState.autoScroll, uiState.isHtmlMode) {
+                    if (uiState.isHtmlMode) {
+                        safeWebView.evaluateJavascript("setAutoScroll(${uiState.autoScroll})", null)
                     }
                 }
 
@@ -568,7 +575,7 @@ fun LogViewerScreen(
 
                     // 动态悬浮 RPC 大纲：向下滑动时自动隐藏，向上滑动/静止时自动显现
                     androidx.compose.animation.AnimatedVisibility(
-                        visible = !isScrollingDown,
+                        visible = scrollDirection != ScrollDirection.DOWN,
                         enter = androidx.compose.animation.fadeIn(),
                         exit = androidx.compose.animation.fadeOut(),
                         modifier = Modifier
@@ -583,7 +590,7 @@ fun LogViewerScreen(
                     }
 
                     androidx.compose.animation.AnimatedVisibility(
-                        visible = uiState.isSelectionMode && !isScrollingDown,
+                        visible = uiState.isSelectionMode && scrollDirection != ScrollDirection.DOWN,
                         enter = androidx.compose.animation.slideInVertically(initialOffsetY = { it }) + androidx.compose.animation.fadeIn(),
                         exit = androidx.compose.animation.slideOutVertically(targetOffsetY = { it }) + androidx.compose.animation.fadeOut(),
                         modifier = Modifier.align(Alignment.BottomCenter)
@@ -629,3 +636,5 @@ fun LogViewerScreen(
         }
     }
 }
+
+private enum class ScrollDirection { UP, DOWN, IDLE }

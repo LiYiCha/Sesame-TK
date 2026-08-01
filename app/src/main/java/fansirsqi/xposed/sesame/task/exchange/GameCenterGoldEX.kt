@@ -15,7 +15,7 @@ import fansirsqi.xposed.sesame.util.Log
 class GameCenterGoldEX : BaseFlashSaleTask() {
 
     companion object {
-        private const val TAG = "游戏中心金币EX🎮"
+        private const val TAG = "游戏金币EX🎮"
         private const val CACHE_KEY_GAMECENTER_GOLD_ITEMS = "gamecenter_gold_exchange_items_cache"
 
         private const val QUERY_METHOD = "com.alipay.gamecenteruprod.biz.rpc.p2e.queryGoldExgPrizePage"
@@ -189,7 +189,6 @@ class GameCenterGoldEX : BaseFlashSaleTask() {
 
                 val item = ExchangeItem(prizeId, 0.0, consumeGoldAmount, prizeName)
                 resultList.add(item)
-                Log.other("$TAG 已成功构建 ${targetHour}:00 秒杀条目: [$prizeName]")
             }
             return resultList
         } catch (e: Exception) {
@@ -263,7 +262,7 @@ class GameCenterGoldEX : BaseFlashSaleTask() {
                 }
                 true
             } else {
-                val errorMsg = resJson.optString("errorMsg", resJson.optString("desc", "未知错误"))
+                val errorMsg = resJson.optString("errorMsg", "未知错误")
                 Log.other("$TAG ⚠️ 兑换 [${item.name}] 失败: $errorMsg")
                 false
             }
