@@ -906,8 +906,6 @@ class AntForest : ModelTask(), EnergyCollectCallback {
                 if (canConsumeAnimalProp && consumeAnimalProp!!.value) {
                     queryAndConsumeAnimal()
                     tc.countDebug("森林巡护")
-                } else {
-                    Log.runtime("已经有动物伙伴在巡护森林~")
                 }
 
                 if (combineAnimalPiece!!.value) {

@@ -43,7 +43,7 @@ class GoldBeanPark {
             // 1. 首页初始化与数据同步
             goldenBeanIndex()
             listTopItemsByScene()
-            val syncRes = goldenBeanSync(listOf("JAR_INFO", "SIGN", "MARKETING_POPUP", "TASK_LIST"))
+            val syncRes = goldenBeanSync(listOf("JAR_INFO", "SIGN", "MARKETING_POPUP", "TASK_LIST", "FORTUNE_DRAW", "EXCHANGE_MANURE", "FARM_TASK", "GAME_CENTER_FOR_INDEX", "DRAINAGE", "SPROUT_INFO"))
             if (!syncRes.optBoolean("success", true) && syncRes.has("resultDesc")) {
                 Log.error(TAG, "金豆同步异常: ${syncRes.optString("resultDesc")}")
             }
@@ -69,10 +69,15 @@ class GoldBeanPark {
                 }
             }
 
-            // 3. 拉取最新任务列表并执行
-            val syncTaskRes = goldenBeanSync(listOf("JAR_INFO", "TASK_LIST"))
-            val taskList = syncTaskRes.optJSONArray("taskList")
-            if (taskList != null && taskList.length() > 0) {
+            // 3. 任务处理：每完成/领取一个任务就重新 sync，模拟真实操作节奏
+            while (true) {
+                // ── 拉取最新任务列表 ──
+                val syncTaskRes = goldenBeanSync(listOf("JAR_INFO", "TASK_LIST", "FORTUNE_DRAW", "EXCHANGE_MANURE", "FARM_TASK", "GAME_CENTER_FOR_INDEX", "DRAINAGE", "SPROUT_INFO"))
+                val taskList = syncTaskRes.optJSONArray("taskList")
+                if (taskList == null || taskList.length() == 0) break
+
+                var hasWorkDone = false
+
                 for (i in 0 until taskList.length()) {
                     val task = taskList.getJSONObject(i)
                     val taskId = task.optString("taskId")
@@ -84,29 +89,26 @@ class GoldBeanPark {
                     val title = displayConfig?.optString("title") ?: taskId
                     val type = displayConfig?.optString("type") ?: ""
 
-                    // 已完成且已领取的任务跳过 (仅当已真正领取 DONE/RECEIVED 时跳过)
-                    if (taskStatus == "DONE" || taskStatus == "RECEIVED") {
-                        continue
-                    }
+                    // 已完成且已领取的任务跳过
+                    if (taskStatus == "DONE" || taskStatus == "RECEIVED") continue
 
-                    // 1. 抽签任务
+                    // 1. 抽签任务（一次性，不需 re-sync）
                     if (actionType == "FORTUNE_DRAW" || taskType == "FORTUNE_DRAW" || taskId == "FORTUNE_DRAW") {
                         if (!Status.hasFlagToday("goldBeanPark::fortuneDraw")) {
                             val drawRes = goldenBeanFortuneDraw()
                             if (drawRes.optBoolean("success")) {
                                 Status.setFlagToday("goldBeanPark::fortuneDraw")
-                                val incCount = drawRes.optInt("beanDelta",0)
+                                val incCount = drawRes.optInt("beanDelta", 0)
                                 Log.other(TAG, "金豆抽签成功+$incCount 金豆")
                             } else {
                                 Log.other(TAG, "金豆抽签: ${drawRes.optString("resultDesc", "完成")}")
                                 Status.setFlagToday("goldBeanPark::fortuneDraw")
                             }
                         }
-                        delay(1000 + (0..1000).random().toLong())
                         continue
                     }
 
-                    // 2. 待领奖状态 (FINISHED)：任务在服务端已完成待领奖（无论是否为支付/理财，只要完成直接领金豆！）
+                    // 2. 待领奖状态 (FINISHED)：领奖后 re-sync
                     if (taskStatus == "FINISHED") {
                         var awardRes = receiveTaskAwardAntOrchard(taskType, taskSceneCode)
                         if (!awardRes.optBoolean("success") && taskSceneCode != "GOLDEN_BEAN_MASTER_TASK") {
@@ -115,20 +117,40 @@ class GoldBeanPark {
                         if (awardRes.optBoolean("success")) {
                             val incCount = extractAwardBeanCount(awardRes)
                             Log.other(TAG, "领取[$title]+$incCount 金豆")
+                            hasWorkDone = true
+                            break
                         } else {
                             val desc = awardRes.optString("desc", awardRes.optString("resultDesc", "结果未知"))
                             Log.other(TAG, "领取任务失败[$title]: $desc")
                         }
-                        delay(1000 + (0..1000).random().toLong())
                         continue
                     }
 
-                    // 3. 未打卡状态：通过 finishTask 完成任务后领奖
-                    if (taskStatus == "TODO") {
-                        // 无法通过纯 RPC 完成的打卡任务，跳过 RPC 打卡
-                        if (isBlacklistedTask(taskId, taskType, actionType, type, title)) {
-                            continue
+                    // 3. 广告浏览任务 (xlight)：独立 RPC，每次完成需 re-sync 拿新 bizId
+                    if (taskStatus == "TODO" && type == "xlight") {
+                        val spmExtend = task.optJSONObject("spmExtend")
+                        val xlightMap = spmExtend?.optJSONObject("xlightLogExtMap")
+                        val bizId = xlightMap?.optString("bizId")
+                        if (bizId.isNullOrEmpty()) continue
+
+                        val adRes = finishAdTask(bizId, xlightMap?.optJSONObject("extendInfo"))
+                        if (adRes.optBoolean("success")) {
+                            val reward = adRes.optJSONObject("extendInfo")?.optJSONObject("rewardInfo")
+                            val amount = reward?.optString("rewardAmount", "0") ?: "0"
+                            val taskTitle = adRes.optJSONObject("extendInfo")?.optJSONObject("taskInfo")?.optString("taskTitle", title) ?: title
+                            Log.other(TAG, "广告完成[$taskTitle]+$amount 金豆")
+                            hasWorkDone = true
+                            break
+                        } else {
+                            Log.other(TAG, "广告任务失败[$title]: ${adRes.optString("errMsg", "未知错误")}")
                         }
+                        delay(13000 + (0..1000).random().toLong())
+                        continue
+                    }
+
+                    // 4. 未打卡状态：finishTask + 领奖后 re-sync
+                    if (taskStatus == "TODO") {
+                        if (isBlacklistedTask(taskId, taskType, actionType, type, title)) continue
 
                         val userId = UserMap.currentUid ?: ""
                         val finishRes = finishTaskAntOrchard(taskType, userId, taskSceneCode)
@@ -142,14 +164,20 @@ class GoldBeanPark {
                             if (awardRes.optBoolean("success")) {
                                 val incCount = extractAwardBeanCount(awardRes)
                                 Log.other(TAG, "完成[$title]+$incCount 金豆")
+                                hasWorkDone = true
+                                break
                             } else {
                                 val errorMsg = awardRes.optString("errorMsg", awardRes.optString("desc", awardRes.optString("resultDesc", awardRes.toString())))
                                 Log.error(TAG, "任务失败[$title]: $errorMsg")
                             }
                         }
-                        delay(1000 + (0..1000).random().toLong())
+                        delay(2000 + (0..1000).random().toLong())
+                        continue
                     }
                 }
+
+                // 本轮未处理任何任务，退出 while
+                if (!hasWorkDone) break
             }
 
             // 4. 金豆对对碰游戏自动上报与开金蛋/开宝箱 (charitygamecenter)
@@ -327,6 +355,20 @@ class GoldBeanPark {
         val params = JSONArray().put(req).toString()
         return try {
             JSONObject(RequestManager.requestString(method, params))
+        } catch (e: Exception) {
+            JSONObject()
+        }
+    }
+
+    private fun finishAdTask(bizId: String, extendInfo: JSONObject? = null): JSONObject {
+        val method = "com.alipay.adtask.biz.mobilegw.service.task.finish"
+        val req = JSONObject().apply { put("bizId", bizId) }
+        if (extendInfo != null && extendInfo.length() > 0) {
+            req.put("extendInfo", extendInfo)
+        }
+        return try {
+            val params = JSONArray().put(req)
+            JSONObject(RequestManager.requestString(method, params.toString()))
         } catch (e: Exception) {
             JSONObject()
         }

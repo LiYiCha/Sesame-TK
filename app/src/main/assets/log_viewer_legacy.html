@@ -279,6 +279,10 @@
             .then(text => {
                 isFetching = false;
                 fullLogText = text;
+                // 非抓包日志（不含 ========================> 标记）不显示 RPC 胶囊
+                if (!text.includes('========================>')) {
+                    rpcNavEl.style.display = 'none';
+                }
                 render();
             })
             .catch(err => {

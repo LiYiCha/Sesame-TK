@@ -47,7 +47,7 @@ class GameCenterGoldEX : BaseFlashSaleTask() {
                     }
                 }
             } catch (e: Exception) {
-                Log.error(TAG, "从 DataStore 读取游戏中心金币缓存异常: ${e.message}")
+                Log.error(TAG, "从 DataStore 读取游戏金币缓存异常: ${e.message}")
             }
             return listOf(MemberBenefit("", "暂无数据 (请确保已开启开关并自动加载列表)"))
         }
@@ -60,12 +60,12 @@ class GameCenterGoldEX : BaseFlashSaleTask() {
             return try {
                 val response = RequestManager.requestString(QUERY_METHOD, QUERY_PARAMS)
                 if (response.isNullOrEmpty()) {
-                    Log.error(TAG, "⚠️ 获取游戏中心金币商品列表返回为空")
+                    Log.error(TAG, "⚠️ 获取游戏金币商品列表返回为空")
                     return emptyList()
                 }
                 val json = JSONObject(response)
                 if (!json.optBoolean("success", false)) {
-                    Log.error(TAG, "⚠️ 获取游戏中心金币商品列表失败: ${json.optString("errorMsg")}")
+                    Log.error(TAG, "⚠️ 获取游戏金币商品列表失败: $json")
                     return emptyList()
                 }
                 val dataObj = json.optJSONObject("data") ?: return emptyList()
@@ -114,7 +114,7 @@ class GameCenterGoldEX : BaseFlashSaleTask() {
                 }
                 benefits
             } catch (e: Exception) {
-                Log.error(TAG, "获取游戏中心金币商品列表异常: ${e.message}")
+                Log.error(TAG, "获取游戏金币商品列表异常: ${e.message}")
                 emptyList()
             }
         }
@@ -128,7 +128,7 @@ class GameCenterGoldEX : BaseFlashSaleTask() {
 
     override fun isConcurrentMode(): Boolean = true
 
-    override fun getName(): String = "游戏中心金币EX🎮"
+    override fun getName(): String = "游戏金币EX🎮"
     override fun getGroup(): ModelGroup = ModelGroup.EXCHANGE
     override fun getIcon(): String = "AntSports.png"
 
@@ -158,12 +158,12 @@ class GameCenterGoldEX : BaseFlashSaleTask() {
             // 2. 从 API 重新拉取最新商品与加签 sendSign
             val response = RequestManager.requestString(QUERY_METHOD, QUERY_PARAMS)
             if (response.isNullOrEmpty()) {
-                Log.error(TAG, "拉取游戏中心金币商品列表失败，任务终止")
+                Log.error(TAG, "拉取游戏金币商品列表失败，任务终止")
                 return emptyList()
             }
             val json = JSONObject(response)
             if (!json.optBoolean("success", false)) {
-                Log.error(TAG, "拉取游戏中心金币商品列表返回错误: ${json.optString("errorMsg")}")
+                Log.error(TAG, "拉取游戏金币商品列表返回错误: ${json.optString("errorMsg")}")
                 return emptyList()
             }
             val dataObj = json.optJSONObject("data") ?: return emptyList()
@@ -179,9 +179,8 @@ class GameCenterGoldEX : BaseFlashSaleTask() {
                 }
             }
 
-            // 3. 构建秒杀条目 (按照 UI 设置的整点开抢)
+            // 3. 构建秒杀条目
             val resultList = mutableListOf<ExchangeItem>()
-            val targetHour = getTargetHour()
             for (prizeId in selectedIds) {
                 val prizeObj = apiItemsMap[prizeId] ?: continue
                 val prizeName = prizeObj.optString("name")
@@ -256,7 +255,7 @@ class GameCenterGoldEX : BaseFlashSaleTask() {
                 val reqObj = params.optJSONObject(0)
                 val prizeType = reqObj?.optString("prizeType", "") ?: ""
                 if ("LAFITE_PRIZE" == prizeType) {
-                    Log.other("$TAG 🎉 成功秒杀到实物下单资格 [${item.name}]！请在7天内进入支付宝兑换记录完成 0.01 元支付包邮寄送！")
+                    Log.other("$TAG 🎉 成功秒杀到实物下单资格 [${item.name}]！")
                 } else {
                     Log.other("$TAG 🎉 成功秒杀/兑换到奖品 [${item.name}]！")
                 }

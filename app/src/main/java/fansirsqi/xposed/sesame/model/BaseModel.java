@@ -192,7 +192,7 @@ public class BaseModel extends Model {
         // 配置已加载，更新验证码Hook状态
         try {
             fansirsqi.xposed.sesame.hook.CaptchaHook.INSTANCE.updateHooks(
-                    enableCaptchaUIHook.getValue()
+                    enableCaptchaUIHook.value
             );
         } catch (Throwable t) {
             Log.error(TAG, "❌ 验证码Hook配置同步失败");
@@ -202,7 +202,7 @@ public class BaseModel extends Model {
         // 配置已加载，更新皮肤模块Hook状态
         try {
             fansirsqi.xposed.sesame.hook.skin.SkinHook.updateHooks(
-                    enableSkinModule.getValue()
+                    enableSkinModule.value
             );
         } catch (Throwable t) {
             Log.error(TAG, "❌ 皮肤模块Hook配置同步失败");
@@ -212,7 +212,7 @@ public class BaseModel extends Model {
         // 应用主题Hook模块（动态版本）
         try {
             fansirsqi.xposed.sesame.hook.theme.ThemeHookV2.applyHooks(
-                    enableSkinModule.getValue()  // 复用皮肤模块的开关
+                    enableSkinModule.value  // 复用皮肤模块的开关
             );
         } catch (Throwable t) {
             Log.error(TAG, "❌ 主题Hook模块配置同步失败");

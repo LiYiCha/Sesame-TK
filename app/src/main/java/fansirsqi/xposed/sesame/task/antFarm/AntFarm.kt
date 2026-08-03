@@ -1872,7 +1872,7 @@ class AntFarm : ModelTask() {
      */
     private fun cleanOldAnswers(farmAnswerCache: MutableMap<String, String>?, today: String?) {
         try {
-            Log.runtime(TAG, "cleanOldAnswers 开始清理缓存")
+//            Log.runtime(TAG, "cleanOldAnswers 开始清理缓存")
             if (farmAnswerCache == null || farmAnswerCache.isEmpty()) return
             // 将今天日期转为数字格式：20250405
             val todayInt = convertDateToInt(today) // 如 "2025-04-05" → 20250405
@@ -1889,13 +1889,13 @@ class AntFarm : ModelTask() {
                         if (dateInt == -1) continue
                         if (todayInt - dateInt <= daysToKeep) {
                             cleanedMap[entry.key] = entry.value //保存7天内的答案
-                            Log.runtime(TAG, "保留 日期：" + todayInt + "缓存日期：" + dateInt + " 题目：" + parts[0])
+//                            Log.runtime(TAG, "保留 日期：" + todayInt + "缓存日期：" + dateInt + " 题目：" + parts[0])
                         }
                     }
                 }
             }
             DataStore.put(FARM_ANSWER_CACHE_KEY, cleanedMap)
-            Log.runtime(TAG, "cleanOldAnswers 清理缓存完毕")
+//            Log.runtime(TAG, "cleanOldAnswers 清理缓存完毕")
         } catch (e: Exception) {
             Log.printStackTrace(TAG, "cleanOldAnswers error:", e)
         }
@@ -1909,7 +1909,7 @@ class AntFarm : ModelTask() {
      * @return 日期数字格式，如 "2025-04-05" → 20250405
      */
     private fun convertDateToInt(dateStr: String?): Int {
-        Log.runtime(TAG, "convertDateToInt 开始转换日期：$dateStr")
+//        Log.runtime(TAG, "convertDateToInt 开始转换日期：$dateStr")
         if (dateStr == null || dateStr.length != 10 || dateStr[4] != '-' || dateStr[7] != '-') {
             Log.error("日期格式错误：$dateStr")
             return -1 // 格式错误

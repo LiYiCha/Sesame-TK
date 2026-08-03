@@ -341,7 +341,9 @@ class LogViewerViewModel : ViewModel() {
             allLines.clear()
             endsWithNewline = true
         }
-        _uiState.update { it.copy(isCaptureLog = false, statusMessage = "已清空显示") }
+        _uiState.update {
+            it.copy(displayedLines = emptyList(), displayedLineIndices = emptyList(), isCaptureLog = false, statusMessage = "已清空显示")
+        }
     }
 
     /**
@@ -819,8 +821,13 @@ class LogViewerViewModel : ViewModel() {
 
     fun selectRange(from: Int, to: Int) {
         _uiState.update { state ->
-            val range = if (from <= to) from..to else to..from
-            val newSelected = state.selectedIndices + range.toSet()
+            val start = minOf(from, to)
+            val end = maxOf(from, to)
+            val newSelected = mutableSetOf<Int>()
+            newSelected.addAll(state.selectedIndices)
+            for (i in start..end) {
+                newSelected.add(i)
+            }
             state.copy(
                 selectedIndices = newSelected,
                 lastSelectedIndex = to
@@ -835,6 +842,24 @@ class LogViewerViewModel : ViewModel() {
                 selectedIndices = emptySet(),
                 lastSelectedIndex = null
             )
+        }
+    }
+
+    fun selectAll() {
+        _uiState.update { state ->
+            state.copy(selectedIndices = state.displayedLineIndices.toSet())
+        }
+    }
+
+    fun invertSelection() {
+        _uiState.update { state ->
+            val inverted = mutableSetOf<Int>()
+            for (idx in state.displayedLineIndices) {
+                if (idx !in state.selectedIndices) {
+                    inverted.add(idx)
+                }
+            }
+            state.copy(selectedIndices = inverted)
         }
     }
 

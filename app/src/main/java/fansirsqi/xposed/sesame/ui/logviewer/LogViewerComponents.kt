@@ -677,8 +677,8 @@ fun LogLineRow(
                 checked = isSelected,
                 onCheckedChange = onCheckedChange,
                 modifier = Modifier
-                    // Checkbox 自带约4dp左侧内边距(Material规范)，用负值抵消；右边仅留1dp呼吸间距
-                    .padding(start = (-2).dp, end = 1.dp)
+                    .offset(x = (-2).dp)
+                    .padding(end = 1.dp)
                     .height(0.dp) // 极简零高度占位
                     .wrapContentHeight(unbounded = true) // 允许超出边界绘制而不撑高父 Row
                     .scale(0.8f)
@@ -791,33 +791,6 @@ fun LogContent(
                                 prevDistance = 0f
                             }
                         } while (event.changes.any { it.pressed })
-                    }
-                }
-                .pointerInput(uiState.isSelectionMode) {
-                    // 多选模式下支持拖拽快速批量选择/取消
-                    if (!uiState.isSelectionMode) return@pointerInput
-                    awaitEachGesture {
-                        val down = awaitFirstDown(requireUnconsumed = false)
-                        val startIdx = findItemIndexAtY(lazyListState, down.position.y) ?: return@awaitEachGesture
-
-                        // 首个 item 的选中状态决定整次拖拽是选中还是取消
-                        val isSelecting = startIdx !in viewModel.uiState.value.selectedIndices
-                        var lastIdx = startIdx
-                        viewModel.setLineSelection(startIdx, isSelecting)
-
-                        do {
-                            val event = awaitPointerEvent()
-                            val change = event.changes.firstOrNull { it.id == down.id } ?: break
-                            if (!change.pressed) break
-
-                            if (change.positionChanged()) {
-                                val idx = findItemIndexAtY(lazyListState, change.position.y)
-                                if (idx != null && idx != lastIdx) {
-                                    viewModel.setLineSelection(idx, isSelecting)
-                                    lastIdx = idx
-                                }
-                            }
-                        } while (true)
                     }
                 }
                 .padding(start = 8.dp, end = 24.dp, top = 8.dp, bottom = 8.dp)
@@ -1686,9 +1659,15 @@ fun SelectionActionBar(
             )
             
             Row(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
+                TextButton(onClick = { viewModel.selectAll() }) {
+                    Text("全选", color = MaterialTheme.colorScheme.onPrimaryContainer, fontSize = 12.sp)
+                }
+                TextButton(onClick = { viewModel.invertSelection() }) {
+                    Text("反选", color = MaterialTheme.colorScheme.onPrimaryContainer, fontSize = 12.sp)
+                }
                 TextButton(
                     onClick = { viewModel.clearSelection() }
                 ) {

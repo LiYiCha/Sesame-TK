@@ -109,7 +109,7 @@ public class Log {
     }
 
     public static void error(String message) {
-        if (BaseModel.getErrNotify().getValue()) {
+        if (BaseModel.errNotify.value) {
             Notify.sendNewNotification("‼️芝麻粒运行时发生异常，详情查看异常日志", message);
         }
         runtime(message);
