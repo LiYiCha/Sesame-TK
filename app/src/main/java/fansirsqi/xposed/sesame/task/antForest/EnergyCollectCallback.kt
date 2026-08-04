@@ -619,7 +619,7 @@ object EnergyWaitingManager {
 
                 if (result.success) {
                     if (result.energyCount > 0) {
-//                        Log.runtime(TAG,"✅ 蹲点收取[${task.getUserTypeTag()}${task.userName}]成功${result.energyCount}g(耗时${executeTime}ms)")
+//                        //Log.runtime(TAG,"✅ 蹲点收取[${task.getUserTypeTag()}${task.userName}]成功${result.energyCount}g(耗时${executeTime}ms)")
                         waitingTasks.remove(task.taskId) // 成功后移除任务
                         EnergyWaitingPersistence.saveTasks(waitingTasks) // 保存更新
                     } else {
@@ -648,17 +648,17 @@ object EnergyWaitingManager {
                     // 根据失败原因决定是否重试
                     when {
                         result.hasShield || result.hasBomb -> {
-                            Log.runtime(TAG, "  → 检测到保护罩/炸弹卡")
+                            //Log.runtime(TAG, "  → 检测到保护罩/炸弹卡")
                             waitingTasks.remove(task.taskId)
                             EnergyWaitingPersistence.saveTasks(waitingTasks) // 保存更新
                         }
                         result.message.contains("用户无可收取的能量球") -> {
-                            Log.runtime(TAG, "  → 能量球已不存在，移除任务")
+                            //Log.runtime(TAG, "  → 能量球已不存在，移除任务")
                             waitingTasks.remove(task.taskId)
                             EnergyWaitingPersistence.saveTasks(waitingTasks) // 保存更新
                         }
                         result.message.contains("无法查询用户能量信息") -> {
-                            Log.runtime(TAG, "  → 用户能量信息查询失败，移除任务")
+                            //Log.runtime(TAG, "  → 用户能量信息查询失败，移除任务")
                             waitingTasks.remove(task.taskId)
                             EnergyWaitingPersistence.saveTasks(waitingTasks) // 保存更新
                         }
@@ -783,7 +783,7 @@ object EnergyWaitingManager {
                     val taskNames = expiredTasks.values.map { it.userName }.take(3).joinToString(",")
                     val moreText = if (expiredTasks.size > 3) "等${expiredTasks.size}个" else ""
 
-                    Log.runtime(TAG, "🧹 清理过期蹲点：[${taskNames}${moreText}]")
+                    //Log.runtime(TAG, "🧹 清理过期蹲点：[${taskNames}${moreText}]")
 
                     // 执行移除
                     expiredTasks.forEach { (taskId, _) ->

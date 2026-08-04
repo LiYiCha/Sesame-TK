@@ -7,7 +7,10 @@ import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.ElevatedCard
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -19,9 +22,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.Surface
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.ComposeView
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -30,7 +36,7 @@ import fansirsqi.xposed.sesame.ui.extra.RequestItem
 import fansirsqi.xposed.sesame.ui.extra.viewmodel.RpcDebugViewModel
 
 /**
- * RPC 调试工具
+ * RPC 调试工具（重设计 — 卡片式分区布局）
  *
  * @param vm ViewModel
  * @param callbacks 回调
@@ -54,136 +60,164 @@ private fun RpcDebugScreen(vm: RpcDebugViewModel, callbacks: Callbacks) {
     Column(
         modifier = Modifier
             .heightIn(min = 300.dp, max = 600.dp)
-            .padding(16.dp)
-            .verticalScroll(scroll)
+            .padding(12.dp)
+            .verticalScroll(scroll),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        // 请求信息标题
+        // ========== 页面标题 ==========
         Text(
-            text = "RPC 调试工具",
+            "RPC 调试工具",
             style = MaterialTheme.typography.headlineSmall,
-            modifier = Modifier.padding(bottom = 16.dp)
+            fontWeight = FontWeight.Bold
         )
-        // 请求标题
-        OutlinedTextField(
-            value = title,
-            onValueChange = { vm.updateTitle(it) },
-            label = { Text("Title") },
-            modifier = Modifier.fillMaxWidth()
-        )
-        Spacer(Modifier.height(8.dp))
-        OutlinedTextField(
-            value = method,
-            onValueChange = { vm.updateMethod(it) },
-            label = { Text("Method") },
-            modifier = Modifier.fillMaxWidth()
-        )
-        Spacer(Modifier.height(8.dp))
-        Row(
+
+        // ========== 请求配置卡片 ==========
+        ElevatedCard(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+            shape = RoundedCornerShape(12.dp)
         ) {
-            Text("Data(JSON)", style = MaterialTheme.typography.bodyMedium)
-            TextButton(
-                onClick = { vm.triggerManualUnescape() },
-                contentPadding = PaddingValues(0.dp),
-                modifier = Modifier.height(24.dp)
-            ) {
-                Text("去除转义", fontSize = 10.sp)
+            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text("请求配置", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+
+                OutlinedTextField(
+                    value = title,
+                    onValueChange = { vm.updateTitle(it) },
+                    label = { Text("Title") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    shape = RoundedCornerShape(10.dp)
+                )
+                OutlinedTextField(
+                    value = method,
+                    onValueChange = { vm.updateMethod(it) },
+                    label = { Text("Method") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    shape = RoundedCornerShape(10.dp)
+                )
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("Data (JSON)", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Medium)
+                    TextButton(
+                        onClick = { vm.triggerManualUnescape() },
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
+                    ) { Text("去除转义", fontSize = 12.sp) }
+                }
+                OutlinedTextField(
+                    value = data,
+                    onValueChange = { vm.updateData(it) },
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 120.dp),
+                    shape = RoundedCornerShape(10.dp)
+                )
+
+                // 操作按钮区分主次
+                Spacer(Modifier.height(4.dp))
+                // 主要操作（第一行）
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Button(
+                        onClick = { callbacks.onSend(-1) },
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(10.dp)
+                    ) { Text("测试") }
+                    Button(
+                        onClick = {
+                            val newItem = RequestItem(title = title.ifBlank { "未命名" }, method = method, data = data)
+                            vm.add(newItem)
+                        },
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(10.dp)
+                    ) { Text("保存") }
+                }
+                // 次要操作（第二行）
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    FilledTonalButton(
+                        onClick = { showImportDialog = true },
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(10.dp)
+                    ) { Text("导入") }
+                }
+                // 开关类操作（第三行）
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    OutlinedButton(
+                        onClick = { callbacks.onToggle(1) },
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(10.dp)
+                    ) { Text("抓包日志") }
+                    OutlinedButton(
+                        onClick = { callbacks.onToggle(2) },
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(10.dp)
+                    ) { Text("请求日志") }
+                }
             }
         }
-        Spacer(Modifier.height(4.dp))
-        OutlinedTextField(
-            value = data,
-            onValueChange = { vm.updateData(it) },
-            modifier = Modifier.fillMaxWidth().heightIn(min = 120.dp)
-        )
-        Spacer(Modifier.height(12.dp))
-        // 第一行按钮：主要操作
-        Row(
+
+        // ========== 执行结果卡片 ==========
+        ElevatedCard(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+            shape = RoundedCornerShape(12.dp)
         ) {
-            Button(
-                onClick = {
-                    val newItem = RequestItem(
-                        title = title.ifBlank { "未命名" },
-                        method = method,
-                        data = data
+            Column(modifier = Modifier.padding(16.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("执行结果", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    TextButton(onClick = { showDialog = true }) { Text("查看全部") }
+                }
+                Spacer(Modifier.height(8.dp))
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 100.dp, max = 200.dp)
+                        .verticalScroll(rememberScrollState())
+                ) {
+                    Text(
+                        text = result.ifBlank { "等待结果…" },
+                        style = if (zoomed) MaterialTheme.typography.headlineSmall else MaterialTheme.typography.bodyMedium,
+                        color = if (result.isBlank()) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface
                     )
-                    vm.add(newItem)
-                },
-                modifier = Modifier.weight(1f)
-            ) { Text("保存") }
-            Button(
-                onClick = { callbacks.onSend(-1) },
-                colors = ButtonDefaults.buttonColors(),
-                modifier = Modifier.weight(1f)
-            ) { Text("测试") }
-            Button(
-                onClick = { showImportDialog = true },
-                modifier = Modifier.weight(1f)
-            ) { Text("导入") }
-        }
-        Spacer(Modifier.height(8.dp))
-        // 第二行按钮：日志查看
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            Button(
-                onClick = { callbacks.onToggle(1) },
-                modifier = Modifier.weight(1f)
-            ) { Text("抓包日志") }
-            Button(
-                onClick = { callbacks.onToggle(2) },
-                modifier = Modifier.weight(1f)
-            ) { Text("请求日志") }
-        }
-        Spacer(Modifier.height(12.dp))
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .heightIn(min = 120.dp, max = 240.dp)
-                .verticalScroll(rememberScrollState())
-        ) {
-            Text(
-                text = result.ifBlank { "等待结果…" },
-                style = if (zoomed) MaterialTheme.typography.headlineSmall else MaterialTheme.typography.bodyMedium,
-            )
-        }
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-            TextButton(onClick = { showDialog = true }) { Text("查看全部") }
+                }
+            }
         }
         if (showDialog) {
             AlertDialog(
                 onDismissRequest = { showDialog = false },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .fillMaxHeight(0.9f),
+                modifier = Modifier.fillMaxWidth().fillMaxHeight(0.9f),
                 confirmButton = { TextButton(onClick = { showDialog = false }) { Text("关闭") } },
-                title = { Text("查看全部") },
+                title = { Text("查看全部", fontWeight = FontWeight.Bold) },
                 text = {
                     Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .fillMaxHeight()
-                            .verticalScroll(rememberScrollState())
+                        modifier = Modifier.fillMaxWidth().fillMaxHeight().verticalScroll(rememberScrollState())
                     ) {
                         SelectionContainer {
-                            Text(
-                                text = result.ifBlank { "暂无内容" },
-                                style = MaterialTheme.typography.bodyMedium
-                            )
+                            Text(result.ifBlank { "暂无内容" }, style = MaterialTheme.typography.bodyMedium)
                         }
                     }
                 }
             )
         }
-        Spacer(Modifier.height(12.dp))
+
+        // ========== 请求列表卡片 ==========
         RequestListScreen(vm, callbacks)
 
+        // ========== 编辑对话框 ==========
         if (editingItem != null) {
+            val context = LocalContext.current
             var editTitle by remember(editingItem) { mutableStateOf(editingItem?.title ?: "") }
             var editDescription by remember(editingItem) { mutableStateOf(editingItem?.description ?: "") }
             var editMethod by remember(editingItem) { mutableStateOf(editingItem?.method ?: "") }
@@ -191,53 +225,81 @@ private fun RpcDebugScreen(vm: RpcDebugViewModel, callbacks: Callbacks) {
             AlertDialog(
                 onDismissRequest = { vm.dismissEditDialog() },
                 confirmButton = {
-                    TextButton(onClick = { vm.updateEditingItem(editTitle, editDescription, editMethod, editData) }) { Text("保存") }
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        // 复制请求按钮（导出为可导入格式）
+                        Button(
+                            onClick = {
+                                val exportJson = buildString {
+                                    append("{")
+                                    append("\"title\":\"${editTitle.replace("\"", "\\\"")}\",")
+                                    append("\"description\":\"${editDescription.replace("\"", "\\\"")}\",")
+                                    append("\"method\":\"${editMethod.replace("\"", "\\\"")}\",")
+                                    append("\"data\":\"${editData.replace("\"", "\\\"")}\"")
+                                    append("}")
+                                }
+                                val cm = context
+                                    .getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                                cm.setPrimaryClip(android.content.ClipData.newPlainText("rpc_request", exportJson))
+                                fansirsqi.xposed.sesame.util.ToastUtil.showToast(
+                                    context, "已复制请求到剪贴板"
+                                )
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(10.dp)
+                        ) {
+                            Text("复制请求（可导入格式）")
+                        }
+                        // 保存 + 取消
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            TextButton(
+                                onClick = { vm.updateEditingItem(editTitle, editDescription, editMethod, editData) },
+                                modifier = Modifier.weight(1f)
+                            ) { Text("保存") }
+                            TextButton(
+                                onClick = { vm.dismissEditDialog() },
+                                modifier = Modifier.weight(1f)
+                            ) { Text("取消") }
+                        }
+                    }
                 },
-                dismissButton = {
-                    TextButton(onClick = { vm.dismissEditDialog() }) { Text("取消") }
-                },
-                title = { Text("编辑请求") },
+                title = { Text("编辑请求", fontWeight = FontWeight.Bold) },
                 text = {
                     Column(
                         modifier = Modifier.verticalScroll(rememberScrollState()),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
-                        OutlinedTextField(value = editTitle, onValueChange = { editTitle = it }, label = { Text("Title") })
-                        OutlinedTextField(value = editDescription, onValueChange = { editDescription = it }, label = { Text("Description") })
-                        OutlinedTextField(
-                            value = editMethod,
-                            onValueChange = {
-                                editMethod = it
-                            },
-                            label = { Text("Method") }
-                        )
+                        OutlinedTextField(value = editTitle, onValueChange = { editTitle = it }, label = { Text("Title") }, shape = RoundedCornerShape(10.dp))
+                        OutlinedTextField(value = editDescription, onValueChange = { editDescription = it }, label = { Text("Description") }, shape = RoundedCornerShape(10.dp))
+                        OutlinedTextField(value = editMethod, onValueChange = { editMethod = it }, label = { Text("Method") }, shape = RoundedCornerShape(10.dp))
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text("Data(JSON)", style = MaterialTheme.typography.bodyMedium)
+                            Text("Data (JSON)", style = MaterialTheme.typography.labelLarge)
                             TextButton(
                                 onClick = { editData = vm.unescapeString(editData) },
-                                contentPadding = PaddingValues(0.dp),
-                                modifier = Modifier.height(24.dp)
-                            ) {
-                                Text("去除转义", fontSize = 10.sp)
-                            }
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
+                            ) { Text("去除转义", fontSize = 12.sp) }
                         }
                         OutlinedTextField(
                             value = editData,
-                            onValueChange = {
-                                editData = it
-                            },
-                            modifier = Modifier.fillMaxWidth().heightIn(min = 100.dp)
+                            onValueChange = { editData = it },
+                            modifier = Modifier.fillMaxWidth().heightIn(min = 100.dp),
+                            shape = RoundedCornerShape(10.dp)
                         )
                     }
                 }
             )
         }
 
-        // 导入对话框
+        // ========== 导入对话框 ==========
         if (showImportDialog) {
             AlertDialog(
                 onDismissRequest = {
@@ -249,35 +311,20 @@ private fun RpcDebugScreen(vm: RpcDebugViewModel, callbacks: Callbacks) {
                     TextButton(onClick = {
                         val (success, fail) = vm.importFromJson(importText)
                         importResult = "导入成功: $success 个，失败: $fail 个"
-                        if (fail == 0) {
-                            // 全部成功，关闭对话框
-                            showImportDialog = false
-                            importText = ""
-                            importResult = ""
-                        }
+                        if (fail == 0) { showImportDialog = false; importText = ""; importResult = "" }
                     }) { Text("导入") }
                 },
                 dismissButton = {
-                    TextButton(onClick = {
-                        showImportDialog = false
-                        importText = ""
-                        importResult = ""
-                    }) { Text("取消") }
+                    TextButton(onClick = { showImportDialog = false; importText = ""; importResult = "" }) { Text("取消") }
                 },
-                title = { Text("批量导入请求") },
+                title = { Text("批量导入请求", fontWeight = FontWeight.Bold) },
                 text = {
                     Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .heightIn(min = 200.dp, max = 400.dp)
-                            .verticalScroll(rememberScrollState()),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                        modifier = Modifier.fillMaxWidth().heightIn(min = 200.dp, max = 400.dp).verticalScroll(rememberScrollState()),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
                         Text(
-                            text = "支持两种格式：\n" +
-                                    "1. 新格式：{\"Name\":\"标题\",\"Description\":\"描述\",\"methodName\":\"方法\",\"requestData\":[{}]}\n" +
-                                    "2. 现有格式：{\"title\":\"标题\",\"method\":\"方法\",\"data\":\"数据\"}\n\n" +
-                                    "可以粘贴多个 JSON 对象（连续粘贴或用数组包裹）",
+                            text = "支持两种格式：\n1. 新格式：{\"Name\":\"标题\",\"Description\":\"描述\",\"methodName\":\"方法\",\"requestData\":[{}]}\n2. 现有格式：{\"title\":\"标题\",\"method\":\"方法\",\"data\":\"数据\"}\n\n可以粘贴多个 JSON 对象（连续粘贴或用数组包裹）",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -285,19 +332,15 @@ private fun RpcDebugScreen(vm: RpcDebugViewModel, callbacks: Callbacks) {
                             value = importText,
                             onValueChange = { importText = it },
                             label = { Text("JSON 内容") },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .heightIn(min = 150.dp),
-                            maxLines = 10
+                            modifier = Modifier.fillMaxWidth().heightIn(min = 150.dp),
+                            maxLines = 10,
+                            shape = RoundedCornerShape(10.dp)
                         )
                         if (importResult.isNotEmpty()) {
                             Text(
                                 text = importResult,
                                 style = MaterialTheme.typography.bodyMedium,
-                                color = if (importResult.contains("失败: 0"))
-                                    MaterialTheme.colorScheme.primary
-                                else
-                                    MaterialTheme.colorScheme.error
+                                color = if (importResult.contains("失败: 0")) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
                             )
                         }
                     }

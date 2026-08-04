@@ -73,7 +73,8 @@ class LogViewerViewModel : ViewModel() {
         val selectedIndices: Set<Int> = emptySet(),
         val lastSelectedIndex: Int? = null,
         val showSearchPanel: Boolean = false,
-        val isHtmlMode: Boolean = false
+        val isHtmlMode: Boolean = false,
+        val rpcActiveLineIndex: Int? = null  // 当前 RPC 导航高亮的行（displayLines 中的索引）
     )
 
     /**
@@ -907,11 +908,19 @@ class LogViewerViewModel : ViewModel() {
         val state = _uiState.value
         val list = mutableListOf<Int>()
         state.displayedLines.forEachIndexed { index, line ->
-            if (line.contains("========================>")) {
+            if (line.trim().startsWith("Method:") ||
+                line.trim().startsWith("method:")) {
                 list.add(index)
             }
         }
         return list
+    }
+
+    /**
+     * 通知当前 RPC 导航到了第几条，用于在日志列表中高亮对应行
+     */
+    fun updateRpcActiveLine(lineIndex: Int?) {
+        _uiState.update { it.copy(rpcActiveLineIndex = lineIndex) }
     }
 
     // formatLongLines has been removed as chunking is done on the fly

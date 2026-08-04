@@ -87,7 +87,7 @@ object UserEnergyPatternManager {
         }
 
         if (expiredUsers.isNotEmpty()) {
-            Log.runtime(TAG, "清理过期用户模式数据：${expiredUsers.size}个用户")
+            //Log.runtime(TAG, "清理过期用户模式数据：${expiredUsers.size}个用户")
         }
     }
 }

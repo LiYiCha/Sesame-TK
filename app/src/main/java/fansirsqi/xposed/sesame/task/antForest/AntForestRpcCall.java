@@ -728,7 +728,7 @@ public class AntForestRpcCall {
         requestData.put("source", source); // 必须传递 source
 
         String args = "[" + requestData + "]";
-        Log.runtime("AntForestRpcCall", "listTaskopengreen - 场景: " + sceneCode + ", source: " + source);
+        //Log.runtime("AntForestRpcCall", "listTaskopengreen - 场景: " + sceneCode + ", source: " + source);
         return RequestManager.requestString("com.alipay.antieptask.listTaskopengreen", args);
     }
 

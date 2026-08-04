@@ -7,6 +7,8 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
 import androidx.core.view.WindowCompat
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
@@ -17,6 +19,11 @@ import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import fansirsqi.xposed.sesame.util.Files
@@ -434,13 +441,20 @@ fun LogViewerScreen(
             var webViewCrashKey by remember { mutableIntStateOf(0) }
 
 
+            // 仅在 WebView 存活时执行 JS，避免 "destroyed WebView" 崩溃
+            fun runJsSafely(view: android.webkit.WebView?, script: () -> String) {
+                val wv = view ?: return
+                if (!wv.isAttachedToWindow) return
+                wv.post { wv.evaluateJavascript(script(), null) }
+            }
+
             // 状态栏（包含区分清晰的直达顶部与直达底部按钮）
             StatusBar(
                 uiState = uiState,
                 viewModel = viewModel,
                 onScrollToTop = {
                     if (uiState.isHtmlMode) {
-                        webViewInstance?.evaluateJavascript("window.scrollTo(0, 0)", null)
+                        webViewInstance?.scrollTo(0, 0)
                     } else if (uiState.displayedLines.isNotEmpty()) {
                         coroutineScope.launch {
                             lazyListState.animateScrollToItem(0)
@@ -449,7 +463,7 @@ fun LogViewerScreen(
                 },
                 onScrollToBottom = {
                     if (uiState.isHtmlMode) {
-                        webViewInstance?.evaluateJavascript("window.scrollTo(0, document.body.scrollHeight)", null)
+                        webViewInstance?.let { it.scrollTo(0, it.contentHeight) }
                     } else if (uiState.displayedLines.isNotEmpty()) {
                         coroutineScope.launch {
                             lazyListState.animateScrollToItem(uiState.displayedLines.size - 1)
@@ -484,8 +498,10 @@ fun LogViewerScreen(
                     android.webkit.WebView(context).apply {
                         setLayerType(android.view.View.LAYER_TYPE_HARDWARE, null)
                         isVerticalScrollBarEnabled = true
-                        isScrollbarFadingEnabled = true
-                        scrollBarStyle = android.view.View.SCROLLBARS_INSIDE_OVERLAY
+                        isScrollbarFadingEnabled = false
+                        scrollBarFadeDuration = 0
+                        scrollBarDefaultDelayBeforeFade = Integer.MAX_VALUE
+                        isHorizontalScrollBarEnabled = false
                         settings.javaScriptEnabled = true
                         settings.domStorageEnabled = true
                         settings.setSupportZoom(true)
@@ -523,7 +539,7 @@ fun LogViewerScreen(
                         webChromeClient = object : android.webkit.WebChromeClient() {
                             override fun onProgressChanged(view: android.webkit.WebView?, newProgress: Int) {
                                 if (newProgress == 100) {
-                                    evaluateJavascript("initLogBridge()", null)
+                                    runJsSafely(view) { "initLogBridge()" }
                                 }
                             }
                         }
@@ -535,7 +551,7 @@ fun LogViewerScreen(
                 // 1. 筛选/日志级别/字号更新时 -> 通知 H5 重新渲染文本
                 LaunchedEffect(uiState.displayedLines, uiState.isHtmlMode) {
                     if (uiState.isHtmlMode) {
-                        safeWebView.evaluateJavascript("initLogBridge()", null)
+                        runJsSafely(safeWebView) { "initLogBridge()" }
                     }
                 }
 
@@ -544,9 +560,9 @@ fun LogViewerScreen(
                     if (uiState.isHtmlMode) {
                         if (uiState.searchKeyword.isNotEmpty()) {
                             val kw = uiState.searchKeyword.replace("'", "\\'")
-                            safeWebView.evaluateJavascript("highlightKeyword('$kw', ${uiState.isCaseSensitive}, ${uiState.isRegexSearch})", null)
+                            runJsSafely(safeWebView) { "highlightKeyword('$kw', ${uiState.isCaseSensitive}, ${uiState.isRegexSearch})" }
                         } else {
-                            safeWebView.evaluateJavascript("clearH5Search()", null)
+                            runJsSafely(safeWebView) { "clearH5Search()" }
                         }
                     }
                 }
@@ -554,14 +570,14 @@ fun LogViewerScreen(
                 // 3. 搜索索引改变 (点击"下一个 / 上一个") -> 通知 H5 平滑跳转
                 LaunchedEffect(uiState.currentSearchIndex, uiState.isHtmlMode) {
                     if (uiState.isHtmlMode && uiState.currentSearchIndex >= 0 && uiState.searchKeyword.isNotEmpty()) {
-                        safeWebView.evaluateJavascript("jumpSearchMatch(${uiState.currentSearchIndex})", null)
+                        runJsSafely(safeWebView) { "jumpSearchMatch(${uiState.currentSearchIndex})" }
                     }
                 }
 
                 // 4. 自动滚动开关变更 -> 同步到 H5
                 LaunchedEffect(uiState.autoScroll, uiState.isHtmlMode) {
                     if (uiState.isHtmlMode) {
-                        safeWebView.evaluateJavascript("setAutoScroll(${uiState.autoScroll})", null)
+                        runJsSafely(safeWebView) { "setAutoScroll(${uiState.autoScroll})" }
                     }
                 }
 
@@ -605,14 +621,20 @@ fun LogViewerScreen(
                 // 预热全速呈现的 HTML WebView (0 秒秒切无白屏)
                 if (uiState.isHtmlMode) {
                     key(webViewCrashKey) {
-                        androidx.compose.ui.viewinterop.AndroidView(
-                            factory = { safeWebView },
-                            update = { webView ->
-                                webView.settings.textZoom = (uiState.fontSize * 9).coerceIn(40, 200)
-                                webView.evaluateJavascript("initLogBridge()", null)
-                            },
-                            modifier = Modifier.fillMaxSize()
-                        )
+                        Box(modifier = Modifier.fillMaxSize()) {
+                            androidx.compose.ui.viewinterop.AndroidView(
+                                factory = { safeWebView },
+                                update = { webView ->
+                                    webView.settings.textZoom = (uiState.fontSize * 9).coerceIn(40, 200)
+                                    runJsSafely(webView) { "initLogBridge()" }
+                                },
+                                modifier = Modifier.fillMaxSize()
+                            )
+                            WebViewFastScrollbar(
+                                webView = safeWebView,
+                                modifier = Modifier.align(Alignment.CenterEnd)
+                            )
+                        }
 
                         DisposableEffect(safeWebView) {
                             onDispose {
@@ -638,3 +660,93 @@ fun LogViewerScreen(
 }
 
 private enum class ScrollDirection { UP, DOWN, IDLE }
+
+/**
+ * WebView 自定义可拖拽快速滚动条
+ * 解决 Android WebView 中 CSS ::-webkit-scrollbar 无法触摸拖拽的问题
+ */
+@Composable
+private fun WebViewFastScrollbar(
+    webView: android.webkit.WebView?,
+    modifier: Modifier = Modifier
+) {
+    val wv = webView ?: return
+    var thumbFraction by remember { mutableFloatStateOf(0f) }
+    var isDragging by remember { mutableStateOf(false) }
+
+    val visibleRatio by remember(wv) {
+        derivedStateOf {
+            val contentH = (wv.contentHeight * wv.scale).toFloat()
+            val viewH = wv.height.toFloat()
+            if (contentH <= 0f || viewH >= contentH) 1f
+            else (viewH / contentH).coerceIn(0.05f, 1f)
+        }
+    }
+
+    LaunchedEffect(wv) {
+        wv.setOnScrollChangeListener { _, _, scrollY, _, _ ->
+            val contentH = (wv.contentHeight * wv.scale).toFloat()
+            val viewH = wv.height.toFloat()
+            val maxScroll = contentH - viewH
+            thumbFraction = if (maxScroll > 0) (scrollY / maxScroll).coerceIn(0f, 1f) else 0f
+        }
+    }
+
+    fun scrollToFraction(fraction: Float) {
+        val contentH = (wv.contentHeight * wv.scale).toFloat()
+        val viewH = wv.height.toFloat()
+        val maxScroll = contentH - viewH
+        if (maxScroll > 0) {
+            wv.scrollTo(0, (fraction * maxScroll).toInt().coerceIn(0, maxScroll.toInt()))
+        }
+    }
+
+    if (visibleRatio >= 1f && !isDragging) return
+
+    val thumbAlpha = when {
+        isDragging -> 0.8f
+        thumbFraction > 0f && thumbFraction < 1f -> 0.35f
+        else -> 0.12f
+    }
+
+    Box(
+        modifier = modifier
+            .fillMaxHeight()
+            .width(24.dp)
+            .pointerInput(wv) {
+                detectDragGestures(
+                    onDragStart = { offset ->
+                        isDragging = true
+                        thumbFraction = (offset.y / size.height).coerceIn(0f, 1f)
+                        scrollToFraction(thumbFraction)
+                    },
+                    onDrag = { change, _ ->
+                        thumbFraction = (change.position.y / size.height).coerceIn(0f, 1f)
+                        scrollToFraction(thumbFraction)
+                    },
+                    onDragEnd = { isDragging = false },
+                    onDragCancel = { isDragging = false }
+                )
+            }
+    ) {
+        Canvas(modifier = Modifier.fillMaxSize().padding(vertical = 4.dp)) {
+            val trackW = 3.dp.toPx()
+            val trackX = (size.width - trackW) / 2
+            val thumbH = (size.height * visibleRatio).coerceAtLeast(36.dp.toPx())
+            val thumbY = thumbFraction * (size.height - thumbH)
+
+            drawRoundRect(
+                color = Color(0x18FFFFFF),
+                topLeft = Offset(trackX, 0f),
+                size = Size(trackW, size.height),
+                cornerRadius = CornerRadius(trackW / 2)
+            )
+            drawRoundRect(
+                color = Color.White.copy(alpha = thumbAlpha),
+                topLeft = Offset(trackX, thumbY),
+                size = Size(trackW, thumbH),
+                cornerRadius = CornerRadius(trackW / 2)
+            )
+        }
+    }
+}

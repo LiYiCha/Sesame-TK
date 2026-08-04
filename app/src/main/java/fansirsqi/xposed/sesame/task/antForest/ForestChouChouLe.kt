@@ -294,7 +294,7 @@ class ForestChouChouLe {
             } else false
         } else if (type.startsWith("FOREST_NORMAL_DRAW") || type.startsWith("FOREST_ACTIVITY_DRAW")) {
             // 普通任务
-            Log.runtime("${s.name} 执行任务(模拟耗时): $name")
+           // Log.runtime("${s.name} 执行任务(模拟耗时): $name")
             sleepCompat(RandomUtil.nextInt(3000, 4001).toLong())
 
             val result = if (type.contains("XLIGHT")) {
