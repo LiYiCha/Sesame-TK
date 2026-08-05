@@ -1032,6 +1032,7 @@ public class NeverLand extends BaseCommTask {
         return "fail";
     }
     // 初始化黑名单
+    @SuppressWarnings("unchecked")
     private void initBlackList() {
         blackList = DataStore.INSTANCE.get("NeverLandBlackList",  Set.class);
     }

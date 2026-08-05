@@ -47,6 +47,7 @@ public class ToastUtil {
      * @param message 显示的消息
      */
     @SuppressLint("InflateParams")
+    @SuppressWarnings("deprecation")
     public static void showToast(Context context, String message) {
         Log.runtime("try showToast: " + message);
         try {
@@ -84,6 +85,7 @@ public class ToastUtil {
      * @param duration 显示时长
      * @return Toast 对象
      */
+    @SuppressWarnings("deprecation")
     public static Toast makeText(Context context, String message, int duration) {
         try {
             LayoutInflater inflater = (LayoutInflater) context.getSystemService(Context.LAYOUT_INFLATER_SERVICE);
