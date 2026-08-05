@@ -7,8 +7,6 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
 import androidx.core.view.WindowCompat
-import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
@@ -19,11 +17,6 @@ import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.geometry.CornerRadius
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import fansirsqi.xposed.sesame.util.Files
@@ -478,12 +471,13 @@ fun LogViewerScreen(
                     .weight(1f)
                     .fillMaxWidth()
             ) {
-                // 工业级 WebViewAssetLoader 零拷贝渲染器：解决 CORS 跨域、全自动自愈与零 Java 堆 OOM
-                val safeWebView = remember(context) {
+                var safeWebView by remember { mutableStateOf<android.webkit.WebView?>(null) }
+
+                fun createWebView(ctx: android.content.Context): android.webkit.WebView {
                     val assetLoader = androidx.webkit.WebViewAssetLoader.Builder()
-                        .addPathHandler("/assets/", androidx.webkit.WebViewAssetLoader.AssetsPathHandler(context))
+                        .addPathHandler("/assets/", androidx.webkit.WebViewAssetLoader.AssetsPathHandler(ctx))
                         .addPathHandler("/logdata/", androidx.webkit.WebViewAssetLoader.PathHandler { _ ->
-                            val inputStream = viewModel.getLogInputStream(context)
+                            val inputStream = viewModel.getLogInputStream(ctx)
                             if (inputStream != null) {
                                 val headers = HashMap<String, String>().apply {
                                     put("Access-Control-Allow-Origin", "*")
@@ -495,7 +489,7 @@ fun LogViewerScreen(
                         })
                         .build()
 
-                    android.webkit.WebView(context).apply {
+                    return android.webkit.WebView(ctx).apply {
                         setLayerType(android.view.View.LAYER_TYPE_HARDWARE, null)
                         isVerticalScrollBarEnabled = true
                         isScrollbarFadingEnabled = false
@@ -525,13 +519,9 @@ fun LogViewerScreen(
                                 detail: android.webkit.RenderProcessGoneDetail?
                             ): Boolean {
                                 Log.error("LogViewer", "WebView 渲染进程崩溃，启动全自动自我恢复机制...")
-                                try {
-                                    view?.destroy()
-                                } catch (e: Exception) {
-                                    // ignore
-                                }
+                                try { view?.destroy() } catch (_: Exception) {}
                                 webViewInstance = null
-                                webViewCrashKey++ // 自增 Key，触发下方 AndroidView 彻底重建
+                                webViewCrashKey++
                                 return true
                             }
                         }
@@ -621,35 +611,46 @@ fun LogViewerScreen(
                 // 预热全速呈现的 HTML WebView (0 秒秒切无白屏)
                 if (uiState.isHtmlMode) {
                     key(webViewCrashKey) {
-                        Box(modifier = Modifier.fillMaxSize()) {
-                            androidx.compose.ui.viewinterop.AndroidView(
-                                factory = { safeWebView },
-                                update = { webView ->
-                                    webView.settings.textZoom = (uiState.fontSize * 9).coerceIn(40, 200)
-                                    runJsSafely(webView) { "initLogBridge()" }
-                                },
-                                modifier = Modifier.fillMaxSize()
-                            )
-                            WebViewFastScrollbar(
-                                webView = safeWebView,
-                                modifier = Modifier.align(Alignment.CenterEnd)
-                            )
-                        }
+                        val scrollbar = remember { WebViewScrollbar(context) }
+                        val sbW = dpToPx(context, 16)
+                        androidx.compose.ui.viewinterop.AndroidView(
+                            factory = {
+                                val container = android.widget.FrameLayout(context)
+                                // 每次进入 HTML 模式都创建全新 WebView，不复用已销毁的
+                                val wv = createWebView(context)
+                                safeWebView = wv
+                                container.addView(wv, android.widget.FrameLayout.LayoutParams(
+                                    android.widget.FrameLayout.LayoutParams.MATCH_PARENT,
+                                    android.widget.FrameLayout.LayoutParams.MATCH_PARENT
+                                ).apply { rightMargin = sbW })
+                                container.addView(scrollbar, android.widget.FrameLayout.LayoutParams(
+                                    sbW,
+                                    android.widget.FrameLayout.LayoutParams.MATCH_PARENT
+                                ).apply { gravity = android.view.Gravity.END })
+                                scrollbar.attachWebView(wv)
+                                container
+                            },
+                            update = { container ->
+                                val wv = container.getChildAt(0) as? android.webkit.WebView ?: return@AndroidView
+                                wv.settings.textZoom = (uiState.fontSize * 9).coerceIn(40, 200)
+                                runJsSafely(wv) { "initLogBridge()" }
+                            },
+                            modifier = Modifier.fillMaxSize()
+                        )
 
-                        DisposableEffect(safeWebView) {
+                        DisposableEffect(Unit) {
                             onDispose {
-                                try {
-                                    safeWebView.apply {
-                                        loadUrl("about:blank")
-                                        stopLoading()
-                                        clearHistory()
-                                        removeAllViews()
-                                        (parent as? android.view.ViewGroup)?.removeView(this)
-                                        destroy()
-                                    }
-                                } catch (e: Exception) {
-                                    Log.error("LogViewer", "销毁 WebView 异常: ${e.message}")
+                                safeWebView?.let { wv ->
+                                    try {
+                                        wv.loadUrl("about:blank")
+                                        wv.stopLoading()
+                                        wv.clearHistory()
+                                        wv.removeAllViews()
+                                        (wv.parent as? android.view.ViewGroup)?.removeView(wv)
+                                        wv.destroy()
+                                    } catch (_: Exception) {}
                                 }
+                                safeWebView = null
                             }
                         }
                     }
@@ -661,92 +662,6 @@ fun LogViewerScreen(
 
 private enum class ScrollDirection { UP, DOWN, IDLE }
 
-/**
- * WebView 自定义可拖拽快速滚动条
- * 解决 Android WebView 中 CSS ::-webkit-scrollbar 无法触摸拖拽的问题
- */
-@Composable
-private fun WebViewFastScrollbar(
-    webView: android.webkit.WebView?,
-    modifier: Modifier = Modifier
-) {
-    val wv = webView ?: return
-    var thumbFraction by remember { mutableFloatStateOf(0f) }
-    var isDragging by remember { mutableStateOf(false) }
-
-    val visibleRatio by remember(wv) {
-        derivedStateOf {
-            val contentH = (wv.contentHeight * wv.scale).toFloat()
-            val viewH = wv.height.toFloat()
-            if (contentH <= 0f || viewH >= contentH) 1f
-            else (viewH / contentH).coerceIn(0.05f, 1f)
-        }
-    }
-
-    LaunchedEffect(wv) {
-        wv.setOnScrollChangeListener { _, _, scrollY, _, _ ->
-            val contentH = (wv.contentHeight * wv.scale).toFloat()
-            val viewH = wv.height.toFloat()
-            val maxScroll = contentH - viewH
-            thumbFraction = if (maxScroll > 0) (scrollY / maxScroll).coerceIn(0f, 1f) else 0f
-        }
-    }
-
-    fun scrollToFraction(fraction: Float) {
-        val contentH = (wv.contentHeight * wv.scale).toFloat()
-        val viewH = wv.height.toFloat()
-        val maxScroll = contentH - viewH
-        if (maxScroll > 0) {
-            wv.scrollTo(0, (fraction * maxScroll).toInt().coerceIn(0, maxScroll.toInt()))
-        }
-    }
-
-    if (visibleRatio >= 1f && !isDragging) return
-
-    val thumbAlpha = when {
-        isDragging -> 0.8f
-        thumbFraction > 0f && thumbFraction < 1f -> 0.35f
-        else -> 0.12f
-    }
-
-    Box(
-        modifier = modifier
-            .fillMaxHeight()
-            .width(24.dp)
-            .pointerInput(wv) {
-                detectDragGestures(
-                    onDragStart = { offset ->
-                        isDragging = true
-                        thumbFraction = (offset.y / size.height).coerceIn(0f, 1f)
-                        scrollToFraction(thumbFraction)
-                    },
-                    onDrag = { change, _ ->
-                        thumbFraction = (change.position.y / size.height).coerceIn(0f, 1f)
-                        scrollToFraction(thumbFraction)
-                    },
-                    onDragEnd = { isDragging = false },
-                    onDragCancel = { isDragging = false }
-                )
-            }
-    ) {
-        Canvas(modifier = Modifier.fillMaxSize().padding(vertical = 4.dp)) {
-            val trackW = 3.dp.toPx()
-            val trackX = (size.width - trackW) / 2
-            val thumbH = (size.height * visibleRatio).coerceAtLeast(36.dp.toPx())
-            val thumbY = thumbFraction * (size.height - thumbH)
-
-            drawRoundRect(
-                color = Color(0x18FFFFFF),
-                topLeft = Offset(trackX, 0f),
-                size = Size(trackW, size.height),
-                cornerRadius = CornerRadius(trackW / 2)
-            )
-            drawRoundRect(
-                color = Color.White.copy(alpha = thumbAlpha),
-                topLeft = Offset(trackX, thumbY),
-                size = Size(trackW, thumbH),
-                cornerRadius = CornerRadius(trackW / 2)
-            )
-        }
-    }
+private fun dpToPx(context: android.content.Context, dp: Int): Int {
+    return (dp * context.resources.displayMetrics.density).toInt()
 }

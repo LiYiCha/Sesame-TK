@@ -1397,4 +1397,32 @@ public class AntFarmRpcCall {
         return RequestManager.requestString("com.alipay.antieptask.receiveTaskAwardantfarm", data);
     }
 
+    // === 以下为 AG-dev 新增（仅农场相关） ===
+
+    /** 查询"雇佣小鸡拿饲料"任务候选列表 */
+    public static String hireAnimalTaskList() {
+        JSONObject args = new JSONObject();
+        try {
+            args.put("requestType", "NORMAL");
+            args.put("sceneCode", "ANTFARMWORKSHOP");
+            args.put("source", "H5");
+        } catch (Exception ignored) {}
+        return RequestManager.requestString("com.alipay.antfarm.hireAnimalTaskList", new JSONArray().put(args).toString());
+    }
+
+    /** 从任务列表雇佣小鸡 */
+    public static String hireAnimalFromTaskList(String friendUserId) {
+        JSONObject args = new JSONObject();
+        try {
+            args.put("friendUserId", friendUserId);
+            args.put("hireActionType", "HIRE_IN_FRIEND_FARM");
+            args.put("isDoubleReward", true);
+            args.put("isFromHireTaskList", true);
+            args.put("requestType", "NORMAL");
+            args.put("sceneCode", "ANTFARMWORKSHOP");
+            args.put("sendCardChat", true);
+            args.put("source", "H5");
+        } catch (Exception ignored) {}
+        return RequestManager.requestString("com.alipay.antfarm.hireAnimal", new JSONArray().put(args).toString());
+    }
 }

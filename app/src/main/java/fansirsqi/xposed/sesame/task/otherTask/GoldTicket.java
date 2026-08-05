@@ -360,6 +360,22 @@ public class GoldTicket extends BaseCommTask {
         return RequestManager.requestString(method, params);
     }
 
+    /** 黄金票首页收取（新端点优先，失败回退旧端点） */
+    private void goldIndexCollect() throws JSONException {
+        JSONObject res = requestString("com.alipay.wealthgoldtwa.needle.index.collect",
+            "\"trigger\":\"Y\",\"bizScene\":\"gold_page\"");
+        if (res != null && res.optBoolean("success")) {
+            String prize = JsonUtil.getValueByPath(res, "result.moneyBillPrizeResult.prizeView");
+            String amount = JsonUtil.getValueByPath(res, "result.moneyBillPrizeResult.moneyBill.moneyBillAmount");
+            if (!prize.isEmpty() || !amount.isEmpty()) {
+                Log.other(displayName + "[收取]" + prize + (amount.isEmpty() ? "" : " " + amount));
+            }
+        } else {
+            // 新端点失败，回退旧端点
+            goldBillCollect("\"bizScene\":\"gold_page\",");
+        }
+    }
+
     protected void handle() {
         //Log.other(displayName + "开始执行");
         try {
@@ -370,6 +386,7 @@ public class GoldTicket extends BaseCommTask {
                 //goldBillCollect("\"campId\":\"CP1417744\",\"directModeDisableCollect\":true,\"from\":\"antfarm\",");
                 goldTicket();
                 wealthgoldtwa();
+                goldIndexCollect();
                 //goldBillCollect("");
                 submit();
         } catch (Throwable th){

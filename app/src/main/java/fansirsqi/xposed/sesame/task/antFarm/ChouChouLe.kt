@@ -635,4 +635,19 @@ class ChouChouLe {
         }
         return false
     }
+
+    // --- IP商城状态持久化 ---
+
+    data class IpChouChouLeData(
+        var activityId: String = "",
+        val shopItems: MutableMap<String, String> = mutableMapOf(),      // skuId → "名称|限购|价格"
+        val exchangedCounts: MutableMap<String, Int> = mutableMapOf()    // skuId → 累计兑换次数
+    ) {
+        fun toJson(): JSONObject = JSONObject().apply {
+            put("activityId", activityId)
+            put("shopItems", JSONObject().apply { shopItems.forEach { (k, v) -> put(k, v) } })
+            put("exchangedCounts", JSONObject().apply { exchangedCounts.forEach { (k, v) -> put(k, v) } })
+        }
+    }
+
 }

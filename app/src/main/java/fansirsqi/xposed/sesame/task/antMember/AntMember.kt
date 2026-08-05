@@ -88,8 +88,9 @@ class AntMember : ModelTask() {
     // 黄金票配置 - 提取/兑换
     private var enableGoldTicketConsume: BooleanModelField? = null
 
-    /** 账单 贴纸 功能开关 */
+    /** 账单 贴纸/拼贴世界 功能开关 */
     private var collectStickers: BooleanModelField? = null
+    private var billBlockWorld: BooleanModelField? = null
 
     // 【新增】芝麻粒兑换
     private var sesameGrainExchange: BooleanModelField? = null
@@ -204,6 +205,8 @@ class AntMember : ModelTask() {
 
         collectStickers = BooleanModelField("CollectStickers", "领取贴纸", false)
         modelFields.addField(collectStickers)
+        billBlockWorld = BooleanModelField("billBlockWorld", "账单拼贴世界", false)
+        modelFields.addField(billBlockWorld)
 
 
 
@@ -346,6 +349,9 @@ class AntMember : ModelTask() {
 
                 if (collectStickers!!.value) {
                     queryAndCollectStickers()
+                }
+                if (billBlockWorld!!.value) {
+                    runBillBlockWorld()
                 }
 
 
@@ -2609,6 +2615,154 @@ class AntMember : ModelTask() {
             Log.printStackTrace("$TAG stickerAutoCollect err", e)
         }
     }
+
+    // === 账单拼贴世界（积木世界） ===
+
+    fun runBillBlockWorld() {
+        try {
+            var home = queryBlockWorldHome() ?: return
+            var attempts = 0
+            while (attempts++ < 30) {
+                if (home.pendingBlocks.isNotEmpty()) {
+                    val block = home.pendingBlocks.first()
+                    val pos = findBlockWorldFreePos(home, block) ?: run {
+                        Log.runtime(TAG, "账单拼贴世界⏭️无法放置贴纸")
+                        return
+                    }
+                    if (!collectBlockWorldBlock(block.recordId, pos.first, pos.second)) return
+                    home = queryBlockWorldHome() ?: return
+                    continue
+                }
+                val mergePair = findBlockWorldMergePair(home)
+                if (mergePair != null) {
+                    val (main, merged) = mergePair
+                    if (!mergeBlockWorldBlocks(main.recordId, listOf(merged.recordId),
+                            merged.posX ?: 0, merged.posY ?: 0)) return
+                    home = queryBlockWorldHome() ?: return
+                    continue
+                }
+                val chapter = home.chapters.firstOrNull { it.id == home.canvas.chapterId }
+                if (chapter != null && chapter.isCompleted && !chapter.isRewarded) {
+                    if (!advanceBlockWorldChapter(chapter.id)) return
+                    home = queryBlockWorldHome() ?: return
+                    continue
+                }
+                // 同步画布
+                if (home.placedBlocks.any { it.hasValidPos }) {
+                    syncBlockWorldCanvas(home)
+                }
+                Log.runtime(TAG, "账单拼贴世界✅处理完成")
+                return
+            }
+        } catch (e: Exception) {
+            Log.printStackTrace("$TAG runBillBlockWorld err", e)
+        }
+    }
+
+    private data class BwCanvas(val chapterId: String, val seasonId: String, val width: Int, val length: Int)
+    private data class BwBlock(val recordId: String, val configId: String, val level: Int,
+                                val width: Int, val length: Int, val posX: Int?, val posY: Int?) {
+        val hasValidPos get() = posX != null && posY != null
+    }
+    private data class BwChapter(val id: String, val isCompleted: Boolean, val isRewarded: Boolean)
+    private data class BwHome(val canvas: BwCanvas, val chapters: List<BwChapter>,
+                               val pendingBlocks: List<BwBlock>, val placedBlocks: List<BwBlock>)
+
+    private fun queryBlockWorldHome(): BwHome? {
+        val res = JSONObject(AntMemberRpcCall.queryBillBlockWorldHome())
+        if (!isBlockWorldSuccess(res)) return null
+        val data = res.optJSONObject("data") ?: return null
+        val cj = data.optJSONObject("canvas") ?: return null
+        val canvas = BwCanvas(cj.optString("currentChapterId"), cj.optString("seasonId"),
+            cj.optInt("canvasWidth"), cj.optInt("canvasLength"))
+        if (canvas.chapterId.isBlank() || canvas.seasonId.isBlank()) return null
+        return BwHome(canvas,
+            chapters = parseBwChapters(data.optJSONArray("chapterTasks")),
+            pendingBlocks = parseBwBlocks(data.optJSONArray("pendingBlocks"), false),
+            placedBlocks = parseBwBlocks(data.optJSONArray("placedBlocks"), true))
+    }
+
+    private fun parseBwChapters(arr: JSONArray?): List<BwChapter> {
+        if (arr == null) return emptyList()
+        return (0 until arr.length()).mapNotNull { i ->
+            val c = arr.optJSONObject(i) ?: return@mapNotNull null
+            BwChapter(c.optString("chapterId"),
+                c.optBoolean("completed") || c.optString("status").uppercase() in setOf("COMPLETED", "REWARDED"),
+                c.optString("status").uppercase() == "REWARDED")
+        }
+    }
+
+    private fun parseBwBlocks(arr: JSONArray?, includePos: Boolean): List<BwBlock> {
+        if (arr == null) return emptyList()
+        return (0 until arr.length()).mapNotNull { i ->
+            val b = arr.optJSONObject(i) ?: return@mapNotNull null
+            val rid = b.optString("blockRecordId")
+            if (rid.isBlank()) return@mapNotNull null
+            BwBlock(rid, b.optString("blockConfigId"), b.optInt("level"),
+                b.optInt("width"), b.optInt("length"),
+                if (includePos && b.has("posX")) b.optInt("posX") else null,
+                if (includePos && b.has("posY")) b.optInt("posY") else null)
+        }
+    }
+
+    private fun findBlockWorldFreePos(home: BwHome, block: BwBlock): Pair<Int, Int>? {
+        if (block.width <= 0 || block.length <= 0) return null
+        val maxX = home.canvas.width - block.width
+        val maxY = home.canvas.length - block.length
+        if (maxX < 0 || maxY < 0) return null
+        val occupied = mutableSetOf<Pair<Int, Int>>()
+        home.placedBlocks.forEach { b ->
+            val px = b.posX ?: return@forEach
+            val py = b.posY ?: return@forEach
+            for (x in px until px + b.width) for (y in py until py + b.length) occupied.add(x to y)
+        }
+        var best: Pair<Int, Int>? = null
+        var bestArea = Int.MAX_VALUE
+        for (x in 0..maxX) for (y in 0..maxY) {
+            var overlaps = false
+            for (dx in 0 until block.width) for (dy in 0 until block.length) {
+                if ((x + dx to y + dy) in occupied) { overlaps = true; break }
+            }
+            if (overlaps) continue
+            val area = (x + block.width) * (y + block.length)
+            if (area < bestArea) { best = x to y; bestArea = area }
+        }
+        return if (best != null) Pair(best.first, best.second) else null
+    }
+
+    private fun findBlockWorldMergePair(home: BwHome): Pair<BwBlock, BwBlock>? {
+        val valid = home.placedBlocks.filter { it.configId.isNotBlank() && it.level > 0 && it.hasValidPos }
+        for (i in valid.indices) for (j in i + 1 until valid.size) {
+            if (valid[i].configId == valid[j].configId && valid[i].level == valid[j].level) return valid[i] to valid[j]
+        }
+        return null
+    }
+
+    private fun collectBlockWorldBlock(recordId: String, posX: Int, posY: Int): Boolean {
+        val res = JSONObject(AntMemberRpcCall.collectBillBlockWorldBlock(recordId, posX, posY))
+        return isBlockWorldSuccess(res).also { if (!it) Log.runtime(TAG, "账单拼贴世界❌放置贴纸失败") }
+    }
+
+    private fun mergeBlockWorldBlocks(mainId: String, mergedIds: List<String>, posX: Int, posY: Int): Boolean {
+        val res = JSONObject(AntMemberRpcCall.mergeBillBlockWorldBlocks(mainId, mergedIds, posX, posY))
+        return isBlockWorldSuccess(res)
+    }
+
+    private fun syncBlockWorldCanvas(home: BwHome) {
+        val positions = JSONArray()
+        home.placedBlocks.filter { it.hasValidPos }.forEach { b ->
+            positions.put(JSONObject().put("blockRecordId", b.recordId).put("posX", b.posX).put("posY", b.posY))
+        }
+        AntMemberRpcCall.syncBillBlockWorldCanvas(home.canvas.seasonId, positions)
+    }
+
+    private fun advanceBlockWorldChapter(chapterId: String): Boolean {
+        val res = JSONObject(AntMemberRpcCall.advanceBillBlockWorldChapter(chapterId))
+        return isBlockWorldSuccess(res)
+    }
+
+    private fun isBlockWorldSuccess(res: JSONObject): Boolean =
+        res.optBoolean("success") && res.optInt("resultCode", -1) == 200
 
     companion object {
         private val TAG: String = AntMember::class.java.getSimpleName()

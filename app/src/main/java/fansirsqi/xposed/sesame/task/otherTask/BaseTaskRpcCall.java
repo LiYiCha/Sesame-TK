@@ -50,7 +50,8 @@ public class BaseTaskRpcCall {
             JSONArray taskDetailList = taskQueryResponse.getJSONObject("result").getJSONArray("taskDetailList");
             for (int i = 0; i < taskDetailList.length(); i++) {
                 JSONObject taskDetail = taskDetailList.getJSONObject(i);
-                if (!"USER_TRIGGER".equals(taskDetail.getString("sendCampTriggerType"))) {
+                String triggerType = taskDetail.getString("sendCampTriggerType");
+                if (!"USER_TRIGGER".equals(triggerType) && !"EVENT_TRIGGER".equals(triggerType)) {
                     continue;
                 }
 
@@ -78,12 +79,19 @@ public class BaseTaskRpcCall {
                         }
                         break;
 
+                    case "TODO":
+                        triggerResponse = new JSONObject(taskTrigger(taskId, "signup", str));
+                        if (!triggerResponse.optBoolean(SUCCESS)) {
+                            Log.error(str2 + ".doTask.signup", triggerResponse.optString("resultDesc"));
+                        }
+                        break;
+
                     default:
                         break;
                 }
 
                 // Final task completion check and trigger
-                if (!"SIGNUP_COMPLETE".equals(taskProcessStatus) && !NONE_SIGNUP.equals(taskProcessStatus) && !TO_RECEIVE.equals(taskProcessStatus)) {
+                if (!"SIGNUP_COMPLETE".equals(taskProcessStatus) && !NONE_SIGNUP.equals(taskProcessStatus) && !TO_RECEIVE.equals(taskProcessStatus) && !"TODO".equals(taskProcessStatus)) {
                     Log.other(str3 + "[" + taskTitle + "]任务已经完成");
                 } else {
                     triggerResponse = new JSONObject(taskTrigger(taskId, "send", str));

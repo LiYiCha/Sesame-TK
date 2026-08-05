@@ -37,6 +37,11 @@ class ForestChouChouLe {
         // 屏蔽的任务名称关键词
         private val BLOCKED_NAMES = setOf("玩游戏得", "开宝箱")
 
+        // 无需重试的错误码（已完成/次数上限）
+        private const val TASK_AWARD_ALREADY_FINISHED = "400000030"
+        private const val TASK_ALREADY_FINISHED = "2600000016"
+        private const val TASK_RIGHTS_LIMIT = "400000012"
+
         /**
          * 抽奖场景数据类
          */
@@ -56,8 +61,8 @@ class ForestChouChouLe {
         // 动态获取抽奖场景配置
         private fun getScenes(): List<Scene> {
             val defaultScenes = listOf(
-                Scene("2025112701", SCENE_NORMAL, "森林寻宝", "forest::chouChouLe::normal::completed"),
-                Scene("20251024", SCENE_ACTIVITY, "森林寻宝IP", "forest::chouChouLe::activity::completed")
+                Scene("2026051801", SCENE_NORMAL, "森林寻宝", "forest::chouChouLe::normal::completed"),
+                Scene("20260607", SCENE_ACTIVITY, "森林寻宝IP", "forest::chouChouLe::activity::completed")
             )
 
             return runCatching {
@@ -308,10 +313,14 @@ class ForestChouChouLe {
                 Log.forest("${s.name} 🧾 $name")
                 true
             } else {
+                // 检查是否是可忽略的错误码（已完成/次数上限）
+                val errorCode = resJson?.optString("code", "") ?: ""
+                if (errorCode in listOf(TASK_AWARD_ALREADY_FINISHED, TASK_ALREADY_FINISHED, TASK_RIGHTS_LIMIT)) {
+                    return false // 静默跳过，不记错不黑名单
+                }
                 val count = taskTryCount.computeIfAbsent(type) { AtomicInteger(0) }.incrementAndGet()
                 Log.error(TAG, "${s.name} 任务失败($count): $name")
                 if (resJson != null) {
-                    val errorCode = resJson.optString("code", "")
                     val errorMsg = resJson.optString("desc", "")
                     if (errorCode.isNotEmpty() || errorMsg.isNotEmpty()) {
                         TaskBlacklist.autoAddToBlacklist(type, name, errorCode, errorMsg)
@@ -332,6 +341,10 @@ class ForestChouChouLe {
             Log.forest("${s.name} 🧾 $name 奖励领取成功")
             true
         } else {
+            val errorCode = res?.optString("code", "") ?: ""
+            if (errorCode in listOf(TASK_AWARD_ALREADY_FINISHED, TASK_ALREADY_FINISHED)) {
+                return true // 已领取过，视为处理成功
+            }
             Log.error(TAG, "${s.name} 奖励领取失败: $name")
             false
         }

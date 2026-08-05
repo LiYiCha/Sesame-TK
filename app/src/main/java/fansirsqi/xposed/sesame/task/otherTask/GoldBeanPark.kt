@@ -20,8 +20,14 @@ import java.util.Locale
 /**
  * 金豆乐园 🎡
  */
-class GoldBeanPark {
+class GoldBeanPark(private val enableManureExchange: Boolean = false) {
     private val TAG = "金豆乐园🎡"
+
+    companion object {
+        private const val SOURCE = "babafarm"
+        private const val VERSION = "20260723.01"
+        private const val MINER_SOURCE = "ch_url-https://render.alipay.com/p/yuyan/180020010001291350/index.html"
+    }
 
     fun run() {
         val hour = TimeUtil.getHourOfDay()
@@ -230,6 +236,12 @@ class GoldBeanPark {
                 }
             }
 
+            // 5. 肥料换豆
+            handleManureExchange()
+
+            // 6. 金猫矿工
+            handleMiner()
+
         } catch (e: Exception) {
             Log.error(TAG, "handleGoldBeanPark error: $e")
         }
@@ -247,7 +259,7 @@ class GoldBeanPark {
         }
     }
 
-    private fun goldenBeanSync(syncTypeList: List<String>): JSONObject {
+    private fun goldenBeanSync(syncTypeList: List<String>,): JSONObject {
         val method = "com.alipay.goldenbean.sync"
         val syncTypeArr = JSONArray()
         for (item in syncTypeList) {
@@ -455,5 +467,158 @@ class GoldBeanPark {
         // 3. 标题关键字黑名单 (已知非 RPC 任务: 肥料兑换, 首页添加, 消息提醒, 支付, 攒钱, 余额宝)
         val blackListKeywords = setOf("肥料", "首页", "提醒", "支付", "攒钱", "余额宝", "小游戏")
         return blackListKeywords.any { title.contains(it) }
+    }
+
+    // --- 肥料换豆 ---
+
+    private suspend fun handleManureExchange() {
+        if (!enableManureExchange || Status.hasFlagToday("goldBeanPark::manureExchange")) return
+        try {
+            val indexRes = goldenBeanIndex()
+            val exchangeInfo = indexRes.optJSONObject("manureExchangeInfo") ?: return
+            val farmOpened = exchangeInfo.optBoolean("farmOpened")
+            val pageOpened = exchangeInfo.optBoolean("pageOpened")
+            val taobaoBinding = exchangeInfo.optBoolean("taobaoBinding")
+            val currentManure = exchangeInfo.optInt("currentManure", 0)
+            val minExchangeAmount = exchangeInfo.optInt("minExchangeAmount", 0)
+            val remainQuota = exchangeInfo.optInt("remainQuota", 0)
+
+            if (!farmOpened || !pageOpened || !taobaoBinding) return
+            if (minExchangeAmount <= 0 || remainQuota <= 0) return
+            val toExchange = minOf(minExchangeAmount, remainQuota)
+            if (toExchange <= 0 || currentManure < toExchange) return
+
+            val beforeRes = goldenBeanSync(listOf("JAR_INFO", "EXCHANGE_MANURE", "TASK_LIST"))
+            val exchangeRes = goldenBeanManureExchange(toExchange)
+            if (!exchangeRes.optBoolean("success", true)) {
+                Log.error(TAG, "肥料换豆失败: ${exchangeRes.optString("resultDesc", "未知错误")}")
+                return
+            }
+            delay(1000)
+            val afterRes = goldenBeanSync(listOf("JAR_INFO", "EXCHANGE_MANURE", "TASK_LIST"))
+
+            val afterInfo = afterRes.optJSONObject("manureExchangeInfo")
+            val afterManure = afterInfo?.optInt("currentManure", -1) ?: -1
+            val afterQuota = afterInfo?.optInt("remainQuota", -1) ?: -1
+            Log.other(TAG, "肥料换豆成功 amount=$toExchange remainManure=$afterManure remainQuota=$afterQuota")
+            Status.setFlagToday("goldBeanPark::manureExchange")
+        } catch (e: Exception) {
+            Log.error(TAG, "handleManureExchange error: $e")
+        }
+    }
+
+    // --- 金猫矿工 ---
+
+    private suspend fun handleMiner() {
+        try {
+            val indexRes = goldenBeanMinerIndex()
+            if (!indexRes.optBoolean("enabled", false)) return
+            val minerInfo = indexRes.optJSONObject("minerInfo") ?: return
+            val taskProgress = minerInfo.optJSONObject("taskProgress") ?: return
+            if (!taskProgress.optBoolean("canGrab", false)) return
+
+            // 已抓取的 itemId
+            val grabbedItemIds = mutableSetOf<String>()
+            val progress = minerInfo.optJSONObject("progress")
+            val alreadyGrabbed = progress?.optJSONArray("grabbedItemIds") ?: JSONArray()
+            for (i in 0 until alreadyGrabbed.length()) {
+                alreadyGrabbed.optString(i).takeIf { it.isNotBlank() }?.let(grabbedItemIds::add)
+            }
+            // 可抓取的 BEAN 类 itemId
+            val beanItemIds = mutableListOf<String>()
+            val items = minerInfo.optJSONObject("currentLevel")?.optJSONArray("items") ?: return
+            for (i in 0 until items.length()) {
+                val item = items.optJSONObject(i) ?: continue
+                val itemId = item.optString("itemId").trim()
+                if (item.optString("type") == "BEAN" && itemId.isNotBlank() && itemId !in grabbedItemIds) {
+                    beanItemIds.add(itemId)
+                }
+            }
+
+            var candidateIndex = 0
+            var remainingTimes = taskProgress.optInt("remainingTimes", 0)
+            var canGrab = taskProgress.optBoolean("canGrab", false)
+            while (canGrab && remainingTimes > 0) {
+                val itemId = beanItemIds.getOrNull(candidateIndex)
+                val expectedResult = if (itemId.isNullOrBlank()) "EMPTY" else "BEAN"
+                val grabRes = goldenBeanMinerGrab(expectedResult, itemId.orEmpty())
+                if (!grabRes.optBoolean("success", true)) {
+                    Log.error(TAG, "金猫矿工抓取失败: ${grabRes.optString("resultDesc", "未知错误")}")
+                    return
+                }
+                if (grabRes.optBoolean("needAd", false)) {
+                    Log.other(TAG, "金猫矿工[服务端要求广告，跳过]")
+                    return
+                }
+                // 抓取后回查金豆罐状态
+                delay(300)
+                goldenBeanSync(listOf("JAR_INFO"))
+                if (expectedResult == "BEAN") candidateIndex++
+                val updatedProgress = grabRes.optJSONObject("taskProgress") ?: return
+                val updatedRemaining = updatedProgress.optInt("remainingTimes", remainingTimes)
+                if (updatedRemaining >= remainingTimes) return
+                remainingTimes = updatedRemaining
+                canGrab = updatedProgress.optBoolean("canGrab", false)
+                Log.other(TAG, "金猫矿工抓取成功 remainingTimes=$remainingTimes canGrab=$canGrab")
+            }
+            // 最终回查
+            val finalRes = goldenBeanMinerIndex()
+            val finalProgress = finalRes.optJSONObject("minerInfo")?.optJSONObject("taskProgress")
+            if (finalProgress != null) {
+                Log.other(TAG, "金猫矿工完成 canGrab=${finalProgress.optBoolean("canGrab", false)} remainingTimes=${finalProgress.optInt("remainingTimes", -1)}")
+            }
+        } catch (e: Exception) {
+            Log.error(TAG, "handleMiner error: $e")
+        }
+    }
+
+    // --- 新增 RPC 方法 ---
+
+    private fun goldenBeanManureExchange(exchangeBeanAmount: Int): JSONObject {
+        val method = "com.alipay.goldenbean.manureExchange"
+        val req = JSONObject()
+        req.put("bizType", "MASTER")
+        req.put("exchangeBeanAmount", exchangeBeanAmount)
+        req.put("source", SOURCE)
+        req.put("version", VERSION)
+        return try {
+            JSONObject(RequestManager.requestString(method, JSONArray().put(req).toString()))
+        } catch (e: Exception) {
+            JSONObject()
+        }
+    }
+
+    private fun goldenBeanMinerIndex(): JSONObject {
+        val method = "com.alipay.goldenbean.miner.index"
+        val req = JSONObject()
+        req.put("bizType", "MASTER")
+        req.put("source", MINER_SOURCE)
+        req.put("version", VERSION)
+        return try {
+            JSONObject(RequestManager.requestString(method, JSONArray().put(req).toString()))
+        } catch (e: Exception) {
+            JSONObject()
+        }
+    }
+
+    private fun goldenBeanMinerGrab(
+        grabResult: String,
+        itemId: String = ""
+    ): JSONObject {
+        val method = "com.alipay.goldenbean.miner.grab"
+        val req = JSONObject()
+        req.put("bizType", "MASTER")
+        req.put("grabId", java.util.UUID.randomUUID().toString())
+        req.put("grabResult", grabResult)
+        if (itemId.isNotBlank()) {
+            req.put("itemId", itemId)
+        }
+        req.put("source", MINER_SOURCE)
+        req.put("version", VERSION)
+        return try {
+            JSONObject(RequestManager.requestString(method, JSONArray().put(req).toString()))
+        } catch (e: Exception) {
+            JSONObject()
+        }
     }
 }

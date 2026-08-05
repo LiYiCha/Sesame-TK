@@ -189,6 +189,101 @@ object HolidayTheme {
         }
     }
 
+    fun getDarkMode(): String {
+        return try {
+            DataStore.get("dark_mode_ui", String::class.java) ?: "auto"
+        } catch (e: Exception) {
+            "auto"
+        }
+    }
+
+    fun setDarkMode(mode: String) {
+        try {
+            DataStore.put("dark_mode_ui", mode)
+        } catch (_: Exception) {}
+    }
+
+    /** 判断当前是否需要深色模式（含时间调度逻辑） */
+    fun shouldUseDarkTheme(): Boolean {
+        return when (getDarkMode()) {
+            "light" -> false
+            "dark" -> true
+            "schedule" -> {
+                val hour = java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY)
+                hour in 18..23 || hour in 0..5
+            }
+            else -> false
+        }
+    }
+
+    /** 随一天时间变换的主题色 */
+    val TIME_THEMES = mapOf(
+        "dawn" to ThemeColors(      // 5:00-8:00 黎明·暖橙
+            mainColor = Color(0xFFFF7043), bgColor = Color(0xFFFFF3E0),
+            cardBgColor = Color(0xFFFFFBF5), textColor = Color(0xFF3E2723),
+            activeColor = Color(0xFFE64A19), title = "🌅 黎明", story = "曙光初现"
+        ),
+        "morning" to ThemeColors(    // 8:00-12:00 上午·青绿
+            mainColor = Color(0xFF66BB6A), bgColor = Color(0xFFE8F5E9),
+            cardBgColor = Color(0xFFF5FFF5), textColor = Color(0xFF1B5E20),
+            activeColor = Color(0xFF43A047), title = "☀️ 上午", story = "万物生长"
+        ),
+        "noon" to ThemeColors(       // 12:00-14:00 正午·明蓝
+            mainColor = Color(0xFF42A5F5), bgColor = Color(0xFFE3F2FD),
+            cardBgColor = Color(0xFFF5FBFF), textColor = Color(0xFF0D47A1),
+            activeColor = Color(0xFF1E88E5), title = "☀️ 正午", story = "烈日当空"
+        ),
+        "afternoon" to ThemeColors(  // 14:00-18:00 午后·暖金
+            mainColor = Color(0xFFFFA726), bgColor = Color(0xFFFFF8E1),
+            cardBgColor = Color(0xFFFFFDF5), textColor = Color(0xFF4E342E),
+            activeColor = Color(0xFFF57C00), title = "🌤️ 午后", story = "金色午后"
+        ),
+        "dusk" to ThemeColors(       // 18:00-20:00 黄昏·橘红
+            mainColor = Color(0xFFEF5350), bgColor = Color(0xFFFFF0F0),
+            cardBgColor = Color(0xFFFFF5F5), textColor = Color(0xFF3E1010),
+            activeColor = Color(0xFFC62828), title = "🌅 黄昏", story = "落日余晖"
+        ),
+        "night" to ThemeColors(      // 20:00-5:00 夜晚·深紫
+            mainColor = Color(0xFF7E57C2), bgColor = Color(0xFF1A1025),
+            cardBgColor = Color(0xFF241535), textColor = Color(0xFFE1BEE7),
+            activeColor = Color(0xFFB388FF), title = "🌙 夜晚", story = "月色如水"
+        )
+    )
+
+    /** 根据当前时间返回对应的时段主题 */
+    fun getTimeTheme(): ThemeColors? {
+        val hour = java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY)
+        return when (hour) {
+            in 5..7 -> TIME_THEMES["dawn"]
+            in 8..11 -> TIME_THEMES["morning"]
+            in 12..13 -> TIME_THEMES["noon"]
+            in 14..17 -> TIME_THEMES["afternoon"]
+            in 18..19 -> TIME_THEMES["dusk"]
+            else -> TIME_THEMES["night"]
+        }
+    }
+
+    /** 预设配色套餐（主色, 背景色） */
+    val PRESET_COMBOS = listOf(
+        listOf("#FF6B6B", "#FFF0EE"),  // 珊瑚红
+        listOf("#4ECDC4", "#E8FAF8"),  // 青碧绿
+        listOf("#FF8C42", "#FFF3E8"),  // 暖橘
+        listOf("#7C3AED", "#F3EEFF"),  // 紫罗兰
+        listOf("#0EA5E9", "#E6F4FB"),  // 天蓝
+        listOf("#F59E0B", "#FFFBEB"),  // 琥珀金
+        listOf("#10B981", "#ECFDF5"),  // 翡翠绿
+        listOf("#EC4899", "#FDF2F8"),  // 玫瑰粉
+        listOf("#6366F1", "#EEF2FF"),  // 靛蓝
+        listOf("#14B8A6", "#F0FDFA"),  // 青蓝
+        listOf("#F97316", "#FFF7ED"),  // 夕阳橙
+        listOf("#8B5CF6", "#F5F3FF"),  // 淡紫
+    )
+
+    /** 随机获取一组配色 */
+    fun getRandomCombo(): List<String> {
+        return PRESET_COMBOS.random()
+    }
+
     fun getCustomColor(): String {
         return try {
             DataStore.get("custom_theme_color", String::class.java) ?: "#E64000"
@@ -283,39 +378,27 @@ object HolidayTheme {
 
     fun getHolidayColorScheme(darkTheme: Boolean): ColorScheme? {
         val colors = getHolidayColors() ?: return null
-        
         return if (darkTheme) {
             darkColorScheme(
-                primary = colors.activeColor,
-                onPrimary = Color.Black,
-                primaryContainer = colors.mainColor,
-                onPrimaryContainer = Color.White,
-                secondary = colors.activeColor,
-                onSecondary = Color.Black,
-                background = Color(0xFF121212),
-                onBackground = Color(0xFFE0E0E0),
-                surface = Color(0xFF1E1E1E),
-                onSurface = Color(0xFFE0E0E0),
-                surfaceVariant = Color(0xFF2C2C2C),
-                onSurfaceVariant = Color(0xFFBDBDBD)
+                primary = colors.activeColor, onPrimary = Color.Black,
+                primaryContainer = colors.mainColor, onPrimaryContainer = Color.White,
+                secondary = colors.activeColor, onSecondary = Color.Black,
+                background = Color(0xFF121212), onBackground = Color(0xFFE0E0E0),
+                surface = Color(0xFF1E1E1E), onSurface = Color(0xFFE0E0E0),
+                surfaceVariant = Color(0xFF2C2C2C), onSurfaceVariant = Color(0xFFBDBDBD)
             )
         } else {
             lightColorScheme(
-                primary = colors.mainColor,
-                onPrimary = Color.White,
-                primaryContainer = colors.bgColor,
-                onPrimaryContainer = colors.mainColor,
-                secondary = colors.activeColor,
-                onSecondary = Color.White,
-                background = colors.bgColor,
-                onBackground = colors.textColor,
-                surface = colors.cardBgColor,
-                onSurface = colors.textColor,
-                surfaceVariant = colors.bgColor,
-                onSurfaceVariant = colors.textColor.copy(alpha = 0.7f)
+                primary = colors.mainColor, onPrimary = Color.White,
+                primaryContainer = colors.bgColor, onPrimaryContainer = colors.mainColor,
+                secondary = colors.activeColor, onSecondary = Color.White,
+                background = colors.bgColor, onBackground = colors.textColor,
+                surface = colors.cardBgColor, onSurface = colors.textColor,
+                surfaceVariant = colors.bgColor, onSurfaceVariant = colors.textColor.copy(alpha = 0.7f)
             )
         }
     }
+
     fun getNextHolidayInfo(): String {
         val calendar = Calendar.getInstance()
         val year = calendar.get(Calendar.YEAR)

@@ -1,5 +1,6 @@
 package fansirsqi.xposed.sesame.ui.network
 
+import android.annotation.SuppressLint
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -36,6 +37,7 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.material3.HorizontalDivider
 import kotlinx.coroutines.launch
 import fansirsqi.xposed.sesame.hook.network.model.CaptureRecord
 import fansirsqi.xposed.sesame.ui.theme.app.SesameColors
@@ -488,7 +490,11 @@ private fun RecordItem(
                                 showMenu = false
                             }
                         )
-                        Divider()
+                        HorizontalDivider(
+                            Modifier,
+                            DividerDefaults.Thickness,
+                            DividerDefaults.color
+                        )
                         DropdownMenuItem(
                             text = { Text("过滤该域名") },
                             leadingIcon = { Icon(Icons.Rounded.FilterList, null, modifier = Modifier.size(18.dp)) },
@@ -730,6 +736,7 @@ private fun AppBarIconWithText(
 /**
  * 优化后的高性能可拖拽滚动条组件
  */
+@SuppressLint("UnusedBoxWithConstraintsScope")
 @Composable
 private fun VerticalScrollbar(
     modifier: Modifier,

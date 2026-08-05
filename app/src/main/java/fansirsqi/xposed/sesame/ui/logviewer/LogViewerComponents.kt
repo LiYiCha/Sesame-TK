@@ -581,11 +581,8 @@ fun LogLineRow(
                 checked = isSelected,
                 onCheckedChange = onCheckedChange,
                 modifier = Modifier
-                    .offset(x = (-2).dp)
-                    .padding(end = 1.dp)
-                    .height(0.dp) // 极简零高度占位
-                    .wrapContentHeight(unbounded = true) // 允许超出边界绘制而不撑高父 Row
-                    .scale(0.8f)
+                    .size(18.dp)
+                    .padding(end = 2.dp)
             )
         }
 
@@ -1576,21 +1573,21 @@ fun SelectionActionBar(
 
     Surface(
         modifier = modifier
-            .padding(horizontal = 16.dp, vertical = 8.dp)
+            .padding(horizontal = 8.dp, vertical = 8.dp)
             .fillMaxWidth(),
         color = MaterialTheme.colorScheme.surface,
         tonalElevation = 4.dp,
         shadowElevation = 6.dp,
-        shape = RoundedCornerShape(16.dp)
+        shape = RoundedCornerShape(12.dp)
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 8.dp),
+                .padding(horizontal = 6.dp, vertical = 6.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // 左侧：已选计数 + 全选 Checkbox
+            // 左侧：已选计数
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Checkbox(
                     checked = uiState.selectedIndices.size == uiState.displayedLines.size && uiState.displayedLines.isNotEmpty(),
@@ -1600,37 +1597,39 @@ fun SelectionActionBar(
                     },
                     modifier = Modifier.size(24.dp)
                 )
-                Spacer(Modifier.width(8.dp))
                 Text(
-                    text = "已选 ${uiState.selectedIndices.size} 行",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold
+                    text = "${uiState.selectedIndices.size}",
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1
                 )
             }
 
             // 右侧：操作按钮
             Row(
-                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                horizontalArrangement = Arrangement.spacedBy(1.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                TextButton(onClick = { viewModel.selectAll() }, contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp)) {
-                    Text("全选", fontSize = 13.sp)
-                }
-                TextButton(onClick = { viewModel.invertSelection() }, contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp)) {
-                    Text("反选", fontSize = 13.sp)
-                }
-                TextButton(onClick = { viewModel.clearSelection() }, contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp)) {
-                    Text("取消", fontSize = 13.sp)
-                }
+                TextButton(
+                    onClick = { viewModel.selectAll() },
+                    contentPadding = PaddingValues(horizontal = 4.dp, vertical = 4.dp)
+                ) { Text("全选", fontSize = 12.sp, maxLines = 1) }
+                TextButton(
+                    onClick = { viewModel.invertSelection() },
+                    contentPadding = PaddingValues(horizontal = 4.dp, vertical = 4.dp)
+                ) { Text("反选", fontSize = 12.sp, maxLines = 1) }
+                TextButton(
+                    onClick = { viewModel.clearSelection() },
+                    contentPadding = PaddingValues(horizontal = 4.dp, vertical = 4.dp)
+                ) { Text("取消", fontSize = 12.sp, maxLines = 1) }
                 FilledTonalButton(
                     onClick = { viewModel.copySelectedLines(context) },
                     enabled = uiState.selectedIndices.isNotEmpty(),
-                    contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp),
-                    shape = RoundedCornerShape(10.dp)
+                    contentPadding = PaddingValues(horizontal = 6.dp, vertical = 4.dp),
+                    shape = RoundedCornerShape(6.dp)
                 ) {
-                    Icon(Icons.Default.ContentCopy, null, modifier = Modifier.size(16.dp))
-                    Spacer(Modifier.width(6.dp))
-                    Text("复制", fontSize = 13.sp)
+                    Icon(Icons.Default.ContentCopy, null, modifier = Modifier.size(12.dp))
+                    Text("复制", fontSize = 12.sp, maxLines = 1, softWrap = false)
                 }
             }
         }

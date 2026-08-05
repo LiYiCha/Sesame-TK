@@ -12,6 +12,7 @@ import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.automirrored.rounded.Input
 import androidx.compose.material.icons.rounded.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -84,7 +85,8 @@ fun CaptureResendScreen(viewModel: CaptureResendViewModel, onBack: () -> Unit) {
                         Box {
                             IconButton(onClick = { showMenu = true }) { Icon(Icons.Rounded.MoreVert, null, tint = appBarContent, modifier = Modifier.size(18.dp)) }
                             DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
-                                DropdownMenuItem(text = { Text("导入解析", fontSize = 13.sp) }, leadingIcon = { Icon(Icons.Rounded.Input, null, modifier = Modifier.size(18.dp)) }, onClick = { showMenu = false; showImport = true })
+                                DropdownMenuItem(text = { Text("导入解析", fontSize = 13.sp) }, leadingIcon = { Icon(
+                                    Icons.AutoMirrored.Rounded.Input, null, modifier = Modifier.size(18.dp)) }, onClick = { showMenu = false; showImport = true })
                                 DropdownMenuItem(text = { Text("清空全部", fontSize = 13.sp, color = MaterialTheme.colorScheme.error) }, leadingIcon = { Icon(Icons.Rounded.DeleteOutline, null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(18.dp)) }, onClick = { viewModel.clear(); showMenu = false })
                             }
                         }

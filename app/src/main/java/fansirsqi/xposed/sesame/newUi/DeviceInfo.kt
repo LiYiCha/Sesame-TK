@@ -5,6 +5,12 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.os.Build
 import android.widget.Toast
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
@@ -26,6 +32,7 @@ import androidx.compose.foundation.border
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
@@ -51,16 +58,137 @@ class PreviewDeviceInfoProvider : PreviewParameterProvider<Map<String, String>> 
     )
 }
 
+/**
+ * 主题实时预览卡片 — 脉冲按钮 + 打字机故事 + 实时时钟
+ */
+@Composable
+private fun LivePreviewCard(holidayColors: HolidayTheme.ThemeColors?, dark: Boolean) {
+    val main = holidayColors?.mainColor ?: if (dark) Color(0xFF90CAF9) else Color(0xFF1976D2)
+    val bg = holidayColors?.bgColor ?: if (dark) Color(0xFF1E3A5F) else Color(0xFFE3F2FD)
+    val textColor = if (dark) Color(0xFFE0E0E0) else Color(0xFF212121)
+    val story = holidayColors?.story ?: ""
+    val title = holidayColors?.title ?: ""
+
+    // 实时时钟
+    var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(Unit) { while (true) { now = System.currentTimeMillis(); kotlinx.coroutines.delay(1000) } }
+    val hour = java.util.Calendar.getInstance().apply { timeInMillis = now }.get(java.util.Calendar.HOUR_OF_DAY)
+    val min = java.util.Calendar.getInstance().apply { timeInMillis = now }.get(java.util.Calendar.MINUTE)
+    val periodName = when (hour) { in 5..7 -> "🌅 黎明"; in 8..11 -> "☀️ 上午"; in 12..13 -> "☀️ 正午"; in 14..17 -> "🌤️ 午后"; in 18..19 -> "🌅 黄昏"; else -> "🌙 夜晚" }
+    val timeStr = "${hour.toString().padStart(2,'0')}:${min.toString().padStart(2,'0')}"
+
+    // 打字机效果
+    var displayedChars by remember { mutableIntStateOf(0) }
+    LaunchedEffect(story) {
+        displayedChars = 0
+        story.forEachIndexed { i, _ ->
+            kotlinx.coroutines.delay(60)
+            displayedChars = i + 1
+        }
+    }
+
+    // 脉冲动画
+    val pulseScale by rememberInfiniteTransition(label = "pulse").animateFloat(
+        initialValue = 1f, targetValue = 1.04f,
+        animationSpec = infiniteRepeatable(tween(800, easing = FastOutSlowInEasing), RepeatMode.Reverse)
+    )
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = bg.copy(alpha = 0.5f)),
+        shape = RoundedCornerShape(14.dp)
+    ) {
+        Column(modifier = Modifier.padding(14.dp)) {
+            // 标题行：预览标签 + 实时时钟
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text("实时预览", fontSize = 11.sp, color = textColor.copy(alpha = 0.5f))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(periodName, fontSize = 11.sp, color = main, fontWeight = FontWeight.Medium)
+                    Text(" · $timeStr", fontSize = 11.sp, color = textColor.copy(alpha = 0.4f))
+                }
+            }
+            Spacer(Modifier.height(10.dp))
+
+            Surface(
+                color = bg,
+                shape = RoundedCornerShape(12.dp),
+                shadowElevation = 1.dp,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(14.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("🌳 蚂蚁森林", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = textColor)
+                        Surface(color = main.copy(alpha = 0.15f), shape = RoundedCornerShape(6.dp)) {
+                            Text("今日", modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp), fontSize = 11.sp, color = main)
+                        }
+                    }
+                    Spacer(Modifier.height(8.dp))
+
+                    // 打字机故事
+                    if (story.isNotEmpty()) {
+                        Text(
+                            story.take(displayedChars),
+                            fontSize = 12.sp,
+                            color = textColor.copy(alpha = 0.65f),
+                            lineHeight = 18.sp
+                        )
+                        if (displayedChars < story.length) {
+                            Text("▍", fontSize = 12.sp, color = main)
+                        }
+                        Spacer(Modifier.height(6.dp))
+                    }
+
+                    Text("已收集 158g 绿色能量", fontSize = 12.sp, color = textColor.copy(alpha = 0.7f))
+                    Spacer(Modifier.height(8.dp))
+                    Box(
+                        modifier = Modifier.fillMaxWidth().height(6.dp)
+                            .background(main.copy(alpha = 0.15f), RoundedCornerShape(3.dp))
+                    ) {
+                        Box(
+                            modifier = Modifier.fillMaxWidth(0.73f).height(6.dp)
+                                .background(main, RoundedCornerShape(3.dp))
+                        )
+                    }
+                    Spacer(Modifier.height(4.dp))
+                    Text("73%", fontSize = 10.sp, color = main, modifier = Modifier.align(Alignment.End))
+                    Spacer(Modifier.height(10.dp))
+
+                    // 脉冲按钮
+                    Surface(
+                        color = main,
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier.align(Alignment.CenterHorizontally).scale(pulseScale)
+                    ) {
+                        Text(
+                            "去收集",
+                            modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp),
+                            fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color.White
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
 @Composable
 fun DeviceInfoCard(info: Map<String, String>, oneWord: String? = null) {
     var themeMode by remember { mutableStateOf(HolidayTheme.getThemeMode()) }
     var customColor by remember { mutableStateOf(HolidayTheme.getCustomColor()) }
     var useHolidayIcons by remember { mutableStateOf(HolidayTheme.getUseHolidayIcons()) }
     var useAnimalIcons by remember { mutableStateOf(HolidayTheme.getUseAnimalIcons()) }
+    var darkMode by remember { mutableStateOf(HolidayTheme.getDarkMode()) }
     var showDialog by remember { mutableStateOf(false) }
     
     val context = LocalContext.current
-    LaunchedEffect(themeMode, customColor, useHolidayIcons, useAnimalIcons) {
+    LaunchedEffect(themeMode, customColor, useHolidayIcons, useAnimalIcons, darkMode) {
         val activity = context as? BaseActivity
         activity?.updateToolbarTheme()
     }
@@ -81,7 +209,13 @@ fun DeviceInfoCard(info: Map<String, String>, oneWord: String? = null) {
         }
     }
     
-    val darkTheme = isSystemInDarkTheme()
+    val darkTheme = HolidayTheme.getDarkMode().let { mode ->
+        when (mode) {
+            "light" -> false
+            "dark" -> true
+            else -> isSystemInDarkTheme()
+        }
+    }
     val localColorScheme = if (holidayColors != null) {
         if (darkTheme) {
             darkColorScheme(
@@ -350,6 +484,49 @@ fun DeviceInfoCard(info: Map<String, String>, oneWord: String? = null) {
                         modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState()),
                         verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
+                        // ========== 实时预览卡片 ==========
+                        LivePreviewCard(holidayColors, darkTheme)
+
+                        // ========== 暗黑模式 ==========
+                        Text("暗黑模式：", style = MaterialTheme.typography.labelSmall, color = Color.Gray)
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(10.dp))
+                                .padding(4.dp),
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            listOf(
+                                "auto" to "跟随系统",
+                                "light" to "浅色",
+                                "dark" to "深色",
+                                "schedule" to "日出日落"
+                            ).forEach { (mode, label) ->
+                                val selected = darkMode == mode
+                                Surface(
+                                    color = if (selected) brandColor else Color.Transparent,
+                                    shape = RoundedCornerShape(8.dp),
+                                    modifier = Modifier.weight(1f).clickable {
+                                        darkMode = mode
+                                        HolidayTheme.setDarkMode(mode)
+                                    }
+                                ) {
+                                    Text(
+                                        text = label,
+                                        modifier = Modifier.padding(vertical = 8.dp),
+                                        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                                        fontSize = 13.sp,
+                                        fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
+                                        color = if (selected) Color.White else MaterialTheme.colorScheme.onSurface
+                                    )
+                                }
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(4.dp))
+                        HorizontalDivider()
+                        Spacer(modifier = Modifier.height(4.dp))
+
                         // Switch Options
                         Text("功能开关：", style = MaterialTheme.typography.labelSmall, color = Color.Gray)
                         Column(
@@ -521,6 +698,34 @@ fun DeviceInfoCard(info: Map<String, String>, oneWord: String? = null) {
                                 }
                                 
                                 Spacer(modifier = Modifier.height(8.dp))
+
+                                // 🎲 随机配色按钮
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.End
+                                ) {
+                                    Surface(
+                                        color = brandColor.copy(alpha = 0.1f),
+                                        shape = RoundedCornerShape(8.dp),
+                                        modifier = Modifier.clickable {
+                                            val combo = HolidayTheme.getRandomCombo()
+                                            customColor = combo[0]
+                                            themeMode = "custom"
+                                            HolidayTheme.saveThemeConfigEx("custom", customColor, useHolidayIcons, useAnimalIcons)
+                                        }
+                                    ) {
+                                        Row(
+                                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Text("🎲", fontSize = 14.sp)
+                                            Spacer(Modifier.width(4.dp))
+                                            Text("随机配色", fontSize = 12.sp, color = brandColor, fontWeight = FontWeight.Medium)
+                                        }
+                                    }
+                                }
+                                
+                                Spacer(modifier = Modifier.height(4.dp))
                                 
                                 val presets = listOf(
                                     "#E64000", "#0077B6", "#2C6E49", "#FF758F", 

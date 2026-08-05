@@ -20,7 +20,6 @@ import fansirsqi.xposed.sesame.hook.RpcResponseHandler;
 import fansirsqi.xposed.sesame.hook.context.AppContext;
 import fansirsqi.xposed.sesame.hook.resource.WakeLockManager;
 import fansirsqi.xposed.sesame.hook.rpc.bridge.NewRpcBridge;
-import fansirsqi.xposed.sesame.hook.rpc.bridge.OldRpcBridge;
 import fansirsqi.xposed.sesame.hook.rpc.bridge.RpcBridge;
 import fansirsqi.xposed.sesame.hook.rpc.bridge.RpcVersion;
 import fansirsqi.xposed.sesame.hook.rpc.intervallimit.RpcIntervalLimit;
@@ -193,11 +192,7 @@ public class LifecycleManager {
                     WakeLockManager.acquire(service, service.getClass().getName());
                 }
                 AlarmScheduler.setWakenAtTimeAlarm();
-                if (BaseModel.getNewRpc().getValue()) {
-                    rpcBridge = new NewRpcBridge();
-                } else {
-                    rpcBridge = new OldRpcBridge();
-                }
+                rpcBridge = new NewRpcBridge();
                 rpcBridge.load();
                 rpcVersion = rpcBridge.getVersion();
                 //抓包调试模式

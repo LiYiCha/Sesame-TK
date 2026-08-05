@@ -109,14 +109,7 @@ fun ThemeScreen(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(
-                    brush = Brush.verticalGradient(
-                        colors = listOf(
-                            Color(0xFFF5F7FA),
-                            Color(0xFFE8EAF6)
-                        )
-                    )
-                )
+                .background(MaterialTheme.colorScheme.background)
         ) {
             LazyColumn(
                 modifier = Modifier
@@ -336,7 +329,7 @@ private fun ThemeItem(
             .clickable(onClick = onSelect),
         shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(
-            containerColor = Color.White
+            containerColor = MaterialTheme.colorScheme.surface
         )
     ) {
         Row(

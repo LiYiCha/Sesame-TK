@@ -84,11 +84,9 @@ public class BaseModel extends Model {
 
     @Getter
     public static final IntegerModelField setMaxErrorCount = new IntegerModelField("setMaxErrorCount", "异常次数阈值", 8);
-    /**
-     * 是否启用新接口（最低支持版本 v10.3.96.8100）
-     */
-    @Getter
-    public static final BooleanModelField newRpc = new BooleanModelField("newRpc", "使用新接口(最低支持v10.3.96.8100)", true);
+    // 新接口已固定为默认，不再需要开关
+    //@Getter
+    //public static final BooleanModelField newRpc = new BooleanModelField("newRpc", "使用新接口(最低支持v10.3.96.8100)", true);
     /**
      * 是否开启抓包调试模式
      */
@@ -233,7 +231,7 @@ public class BaseModel extends Model {
         modelFields.addField(waitWhenException);//异常发生时的等待时间
         modelFields.addField(errNotify);//异常通知开关
 //        modelFields.addField(setMaxErrorCount);//异常次数阈值
-        modelFields.addField(newRpc);//是否启用新接口
+//        modelFields.addField(newRpc);//是否启用新接口(已固定)
         modelFields.addField(debugMode);//是否开启抓包调试模式
         modelFields.addField(autoTokenEnabled);//是否自动获取token
         modelFields.addField(enableSkinModule);//是否启用皮肤模块

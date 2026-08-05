@@ -195,7 +195,7 @@ public class AntFishpond extends BaseCommTask {
     private void receiveTriggerSub(){
         String method = "com.alipay.antfishpond.triggerSubplotsActivity";
         String params = "[{\"actionType\":\"receiveAward\",\"activityType\":\"FISH_ACTIVITY\",\"requestType\":\"NORMAL\"," +
-                "\"sceneCode\":\"GameCenter\",\"source\":\"ch_alipaysearch__chsub_normal\",\"version\":\"20240722.01\"}]";
+                "\"sceneCode\":\"GameCenter\",\"source\":\"farmpool\",\"version\":\"20260211.01\"}]";
         try{
             JSONObject rpcEntity = new JSONObject(RequestManager.requestString(method, params));
             if (rpcEntity.optBoolean("success")){
@@ -211,7 +211,7 @@ public class AntFishpond extends BaseCommTask {
     //每日开宝箱
     private void gifiBox() {
         String method = "com.alipay.antfishpond.triggerSubplotsActivity";
-        String data = "[{\"actionType\":\"receiveAward\",\"activityType\":\"GIFT_BOX\",\"requestType\":\"NORMAL\",\"sceneCode\":\"GameCenter\",\"source\":\"ch_alipaysearch__chsub_normal\",\"version\":\"20240722.01\"}]";
+        String data = "[{\"actionType\":\"receiveAward\",\"activityType\":\"GIFT_BOX\",\"requestType\":\"NORMAL\",\"sceneCode\":\"GameCenter\",\"source\":\"farmpool\",\"version\":\"20260211.01\"}]";
         String rpcEntity = RequestManager.requestString(method, data);
        if (rpcEntity != null){
            JSONObject jsonObject = null;
@@ -375,7 +375,7 @@ public class AntFishpond extends BaseCommTask {
      * 进入鱼塘
      */
     private boolean entryFishpond() {
-        String params = "[{\"requestType\":\"NORMAL\",\"sceneCode\":\"GameCenter\",\"source\":\"farmpool\",\"version\":\"20240722.01\"}]";
+        String params = "[{\"requestType\":\"NORMAL\",\"sceneCode\":\"GameCenter\",\"source\":\"farmpool\",\"version\":\"20260211.01\"}]";
         try{
             JSONObject rpcEntity = new JSONObject(RequestManager.requestString(
                     "com.alipay.antfishpond.fishpondIndex", params));
@@ -410,7 +410,7 @@ public class AntFishpond extends BaseCommTask {
             if (jsonObject.optBoolean("success")) {
                 TimeUtil.sleep(RandomUtil.nextInt(1500, 21000));
                 String awardMethod = "com.alipay.antiep.receiveTaskAward";
-                String awardData = "[{\"ignoreLimit\":false,\"requestType\":\"NORMAL\",\"sceneCode\":\"ANTFISHPOND_TASK\",\"source\":\"farmpool\",\"taskType\":\"NORMAL_WANYOUXI\",\"version\":\"20240722.01\"}]";
+                String awardData = "[{\"ignoreLimit\":false,\"requestType\":\"NORMAL\",\"sceneCode\":\"ANTFISHPOND_TASK\",\"source\":\"farmpool\",\"taskType\":\"NORMAL_WANYOUXI\",\"version\":\"20260211.01\"}]";
                 JSONObject result = new JSONObject(RequestManager.requestString(awardMethod, awardData));
                 if (result.optBoolean("success")) {
                         Log.other(this.displayName + "领取敲金蛋任务奖励");
@@ -689,8 +689,8 @@ public class AntFishpond extends BaseCommTask {
     private void updateFishpondSyncIndex() {
         try {
             String method = "com.alipay.antfishpond.fishpondSyncIndex";
-            String params = "[{\"requestType\":\"NORMAL\",\"sceneCode\":\"GameCenter\",\"source\":\"ch_alipaysearch__chsub_normal\"," +
-                    "\"syncTypeList\":[\"FISH_ACTIVITY\",\"TASK_DISPLAY\",\"TOMORROW_ROD\"],\"version\":\"20240722.01\"}]";
+            String params = "[{\"requestType\":\"NORMAL\",\"sceneCode\":\"GameCenter\",\"source\":\"farmpool\"," +
+                    "\"syncTypeList\":[\"FISH_ACTIVITY\",\"TASK_DISPLAY\",\"TOMORROW_ROD\"],\"version\":\"20260211.01\"}]";
             JSONObject json = new JSONObject(RequestManager.requestString(method, params));
             if (json.optBoolean("success")) {
                 // 从响应中提取 fishActivity 对象
@@ -768,7 +768,7 @@ public class AntFishpond extends BaseCommTask {
 
     private void fishpondAdNotice(String adBizNo) {
         try {
-            String params = "[{\"adBizNo\":\"" + adBizNo + "\",\"requestType\":\"NORMAL\",\"sceneCode\":\"GameCenter\",\"source\":\"ch_appcenter__chsub_9patch\",\"version\":\"20260211.01\"}]";
+            String params = "[{\"adBizNo\":\"" + adBizNo + "\",\"requestType\":\"NORMAL\",\"sceneCode\":\"GameCenter\",\"source\":\"farmpool\",\"version\":\"20260211.01\"}]";
             RequestManager.requestString("com.alipay.antfishpond.fishpondAdNotice", params);
         } catch (Exception e) {
             Log.error(this.TAG, "fishpondAdNotice Error: " + e.getMessage());
@@ -778,7 +778,7 @@ public class AntFishpond extends BaseCommTask {
     private void finishExtraTask(String adBizNo, String taskId) {
         try {
             String outBizNo = UserMap.getCurrentUid() + System.currentTimeMillis();
-            String params = "[{\"finishBusinessInfo\":{\"pwPreBizId\":\"" + adBizNo + "\"},\"outBizNo\":\"" + outBizNo + "\",\"requestType\":\"NORMAL\",\"sceneCode\":\"ANTFISHPOND_ANGLE_RESULT_AD\",\"source\":\"ch_appcenter__chsub_9patch\",\"taskType\":\"" + taskId + "\",\"version\":\"0.2.2406061508.39\"}]";
+            String params = "[{\"finishBusinessInfo\":{\"pwPreBizId\":\"" + adBizNo + "\"},\"outBizNo\":\"" + outBizNo + "\",\"requestType\":\"NORMAL\",\"sceneCode\":\"ANTFISHPOND_ANGLE_RESULT_AD\",\"source\":\"farmpool\",\"taskType\":\"" + taskId + "\",\"version\":\"20260211.01\"}]";
             JSONObject response = new JSONObject(RequestManager.requestString("com.alipay.antiep.finishTask", params));
             if (response.optBoolean("success")) {
                 Log.other(this.displayName + "额外奖励任务完成成功");

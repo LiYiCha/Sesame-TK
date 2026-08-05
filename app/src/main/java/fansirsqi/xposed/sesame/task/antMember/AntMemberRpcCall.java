@@ -859,6 +859,75 @@ public class AntMemberRpcCall {
     }
 
 
+    // === 账单拼贴世界（积木世界） ===
+
+    public static String queryBillBlockWorldHome() {
+        return RequestManager.requestString("alipay.memberasset.block.queryBlockHome", "[{}]");
+    }
+
+    public static String collectBillBlockWorldBlock(String blockRecordId, int posX, int posY) {
+        JSONObject args = new JSONObject();
+        try {
+            args.put("blockRecordId", blockRecordId);
+            args.put("posX", posX);
+            args.put("posY", posY);
+        } catch (JSONException ignored) {}
+        return RequestManager.requestString("alipay.memberasset.block.collectBlock",
+                new JSONArray().put(args).toString());
+    }
+
+    public static String placeBillBlockWorldBlock(String blockRecordId, int posX, int posY) {
+        JSONObject args = new JSONObject();
+        try {
+            args.put("blockRecordId", blockRecordId);
+            args.put("posX", posX);
+            args.put("posY", posY);
+        } catch (JSONException ignored) {}
+        return RequestManager.requestString("alipay.memberasset.block.placeBlock",
+                new JSONArray().put(args).toString());
+    }
+
+    public static String syncBillBlockWorldCanvas(String seasonId, JSONArray blockPositions) {
+        JSONObject args = new JSONObject();
+        try {
+            args.put("blockPositions", blockPositions);
+            args.put("seasonId", seasonId);
+        } catch (JSONException ignored) {}
+        return RequestManager.requestString("alipay.memberasset.block.syncCanvas",
+                new JSONArray().put(args).toString());
+    }
+
+    public static String mergeBillBlockWorldBlocks(String mainBlockId, List<String> mergedBlockIds,
+                                                    int posX, int posY) {
+        JSONObject args = new JSONObject();
+        try {
+            args.put("mainBlockId", mainBlockId);
+            args.put("mergedBlockIds", new JSONArray(mergedBlockIds));
+            args.put("posX", posX);
+            args.put("posY", posY);
+        } catch (JSONException ignored) {}
+        return RequestManager.requestString("alipay.memberasset.block.mergeBlock",
+                new JSONArray().put(args).toString());
+    }
+
+    public static String reclaimBillBlockWorldBlock(String blockRecordId) {
+        JSONObject args = new JSONObject();
+        try {
+            args.put("blockRecordId", blockRecordId);
+        } catch (JSONException ignored) {}
+        return RequestManager.requestString("alipay.memberasset.block.reclaimBlock",
+                new JSONArray().put(args).toString());
+    }
+
+    public static String advanceBillBlockWorldChapter(String chapterId) {
+        JSONObject args = new JSONObject();
+        try {
+            args.put("chapterId", chapterId);
+        } catch (JSONException ignored) {}
+        return RequestManager.requestString("alipay.memberasset.block.advanceChapter",
+                new JSONArray().put(args).toString());
+    }
+
     //芝麻信誉 部分
     public static class Zmxy {
         private static String Version="2025-10-22";

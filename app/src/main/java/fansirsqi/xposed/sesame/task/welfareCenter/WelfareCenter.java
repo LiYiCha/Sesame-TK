@@ -272,7 +272,10 @@ public class WelfareCenter extends ModelTask {
                     Log.runtime(String.format("网商银行🏦签到[%s]",
                             JsonUtil.getValueByPath(response, "result.todaySignInfo.signPrizeSentPoint.point")));
                     Status.setFlagToday(CompletedKeyEnum.WelfareCenterSigninPlay.name());
-                } else {
+                } else if (response.optBoolean("signNotAdmit", false) && !response.optBoolean("canRetry", false)) {
+                    Log.runtime("网商银行🏦签到已完成(今日)");
+                    Status.setFlagToday(CompletedKeyEnum.WelfareCenterSigninPlay.name());
+                } else if (!response.optBoolean("canRetry", false)) {
                     Log.error(TAG + ".signinPlay err: " + response.optString("resultDesc"));
                 }
             }

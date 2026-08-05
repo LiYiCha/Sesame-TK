@@ -179,7 +179,7 @@ public class YebExpGold extends BaseCommTask{
 
     private void taskQuery() {
         try {
-            StringBuilder stringBuilder = new StringBuilder("\"chInfo\":\"ch_url-https://2021001192699414.hybrid.alipay-eco.com/index.html\",\"signIn\":{\"daysOfQuerySignInData\":21,\"displaySignInTextList\":[{\"value\":\"持\"},{\"value\":\"续\"},{\"value\":\"签\"},{\"value\":\"到\"},{\"value\":\"可\"},{\"value\":\"领\"},{\"value\":\"\"}],\"downgrade\":false,\"todayRedDotText\":\"戳这里\",\"tomorrowRedDotText\":\"\"},\"task\":{\"downgrade\":false,\"queryComplete\":false,\"startTime\":");
+            StringBuilder stringBuilder = new StringBuilder("\"chInfo\":\"ch_url-https://render.alipay.com/p/yuyan/180020010001282160/index.html\",\"signIn\":{\"daysOfQuerySignInData\":21,\"displaySignInTextList\":[{\"value\":\"持\"},{\"value\":\"续\"},{\"value\":\"签\"},{\"value\":\"到\"},{\"value\":\"可\"},{\"value\":\"领\"},{\"value\":\"\"}],\"downgrade\":false,\"todayRedDotText\":\"戳这里\",\"tomorrowRedDotText\":\"\"},\"task\":{\"downgrade\":false,\"queryComplete\":false,\"startTime\":");
             stringBuilder.append(System.currentTimeMillis());
             stringBuilder.append(",\"strategyCode\":\"YEB_TRIAL_ASSET_TASK_BLOCK_REC\"}");
             JSONObject requestString = requestString("com.alipay.yebscenebff.needle.yebExpGold.queryMain", stringBuilder.toString());
@@ -237,8 +237,90 @@ public class YebExpGold extends BaseCommTask{
     public void handle(int i) {
         this.executeIntervalInt = i;
         if (!Status.hasFlagToday(CompletedKeyEnum.YebExpGold.name())) {
+            handleCertVoucherFlow();
+            handlePromoTaskList();
             taskQuery();
             yebTrialAsset();
+        }
+    }
+
+    // --- 券凭证转换+自动兑换+激活 ---
+    private void handleCertVoucherFlow() {
+        try {
+            // 1. 查询可用体验金凭证
+            JSONObject queryRes = requestString("alipay.yebprod.query.queryYebTrialCertVoucher",
+                "\"component\":\"PROMO_ACTIVITY\",\"sortType\":\"drawTime\",\"source\":\"QIANAPP\"," +
+                "\"voucherTemplateIdList\":[\"202312260007300180780087H5IR\",\"2026011300073001807800H1558H\"]");
+            if (queryRes == null) return;
+
+            JSONArray equityList = queryRes.optJSONObject("result") != null ?
+                queryRes.optJSONObject("result").optJSONArray("equityList") : null;
+            if (equityList == null || equityList.length() == 0) return;
+
+            boolean hasCanUse = false;
+            for (int i = 0; i < equityList.length(); i++) {
+                if ("CAN_USE".equalsIgnoreCase(equityList.getJSONObject(i).optString("equityStatus"))) {
+                    hasCanUse = true; break;
+                }
+            }
+            if (!hasCanUse) return;
+
+            // 2. 转换凭证
+            JSONObject convertRes = requestString("com.alipay.yebscenebff.needle.yebExpGoldVoucherConvert",
+                "\"convertType\":\"all\",\"isShowExchangeModal\":true");
+            TimeUtil.sleep((long) this.executeIntervalInt);
+
+            // 3. 对转换结果执行兑换+激活
+            JSONArray convertResults = convertRes != null ? convertRes.optJSONArray("convertResults") : null;
+            if (convertResults == null) return;
+
+            for (int i = 0; i < convertResults.length(); i++) {
+                JSONObject item = convertResults.getJSONObject(i).optJSONObject("value");
+                if (item != null && item.optBoolean("success")) {
+                    double amount = item.optDouble("amount", 0);
+                    if (amount > 0) {
+                        exchange(amount);
+                        TimeUtil.sleep((long) this.executeIntervalInt);
+                    }
+                }
+            }
+        } catch (Throwable th) {
+            TimeUtil.sleep((long) this.executeIntervalInt);
+        }
+    }
+
+    // --- promo任务列表（独立任务源） ---
+    private void handlePromoTaskList() {
+        try {
+            JSONObject response = requestString("com.alipay.yebpromobff.promosdk2024.task.query",
+                "\"needTriggerPrize\":false,\"playActionCode\":\"TASK_LIST_CONSULT\",\"playEntrance\":\"HYQ_TASK_LIST_ENTRANCE_2\"");
+            if (response == null) return;
+
+            JSONArray taskDetailList = response.optJSONObject("result") != null ?
+                response.optJSONObject("result").optJSONArray("taskDetailList") : null;
+            if (taskDetailList == null || taskDetailList.length() == 0) return;
+
+            for (int i = 0; i < taskDetailList.length(); i++) {
+                JSONObject task = taskDetailList.getJSONObject(i);
+                String taskId = task.optString("taskId").trim();
+                if (taskId.isEmpty()) continue;
+
+                String status = task.optString("simplifiedStatus",
+                    task.optString("taskProcessStatus", ""));
+                if ("COMPLETE".equalsIgnoreCase(status) || "RECEIVE_SUCCESS".equalsIgnoreCase(status)) continue;
+
+                String title = task.optString("title", taskId);
+                String outBizNo = taskId + "-" + System.currentTimeMillis() + "-";
+                JSONObject completeRes = requestString("com.alipay.yebpromobff.promosdk2024.task.complete",
+                    "\"appName\":\"yebpromobff\",\"outBizNo\":\"" + outBizNo +
+                    "\",\"playActionCode\":\"TASK_COMPLETE\",\"playEntrance\":\"HYQ_TASK_LIST_ENTRANCE_2\",\"taskId\":\"" + taskId + "\"");
+                if (completeRes != null && completeRes.optBoolean("success")) {
+                    Log.other("余额宝体验金🍿完成推广任务[" + title + "]");
+                }
+                TimeUtil.sleep((long) this.executeIntervalInt);
+            }
+        } catch (Throwable th) {
+            TimeUtil.sleep((long) this.executeIntervalInt);
         }
     }
 }

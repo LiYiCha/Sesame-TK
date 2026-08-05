@@ -68,14 +68,7 @@ fun ThemeDetailScreen(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(
-                    brush = Brush.verticalGradient(
-                        colors = listOf(
-                            Color(0xFFF5F7FA),
-                            Color(0xFFE8EAF6)
-                        )
-                    )
-                )
+                .background(MaterialTheme.colorScheme.background)
         ) {
             LazyColumn(
                 modifier = Modifier

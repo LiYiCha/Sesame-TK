@@ -26,6 +26,16 @@ class SesameAlchemy {
                 "芝麻租赁下单得芝麻粒",
         )
     private val version = "2025-10-22" //版本号
+
+    /** 任务连续失败计数: title -> count */
+    private val failureCountMap = mutableMapOf<String, Int>()
+
+    /** 可重试的错误模式（网络/服务端暂时不可用，不应计入失败） */
+    private val retryableErrorPatterns = listOf(
+        "REMOTE_INVOKE_EXCEPTION", "SYSTEM_ERROR", "system error",
+        "系统繁忙", "稍后重试", "网络异常", "timeout", "TIMEOUT",
+        "RPC_FAILED", "rpc failed", "服务不可用",
+    )
     fun run(){
         // 防止并发执行
         if (isRunning) {
@@ -44,12 +54,14 @@ class SesameAlchemy {
                 // 原有的执行逻辑保持不变
                 init() //初始化
                 initBlackTaskList() //初始化黑名单
+                initFailureCount() //加载失败计数
                 querySignIn() //签到
                 doHomeTask() //首页任务
                 getAdTask() //芝麻信用广告任务
                 queryFanBao() //饭补
                 handleTask() //处理任务
                 alchemyExecute() //自动炼金
+                collectAlchemyCredit() //一键收取芝麻粒
             } catch (e: Exception) {
                 Log.error(TAG, "执行过程中发生异常: $e")
             } finally {
@@ -90,12 +102,19 @@ class SesameAlchemy {
                 val cost = data.optInt("alchemyCostZml", 5) // 单次消耗
                 var capReached = data.optBoolean("capReached", false) // 是否达到上限
                 var currentLevel = data.optInt("currentLevel", 0)
+                var freeAlchemyNum = data.optInt("freeAlchemyNum", 0) // 免费炼金次数
+                var paidAlchemyCount = 0
+
+                // 计算安全上限：免费次数 + 芝麻粒可支撑的次数
+                val maxAttempts = freeAlchemyNum + (if (capReached) 0 else zmlBalance / cost)
+                var attemptCount = 0
 
                 // 循环炼金逻辑
-                while (zmlBalance >= cost && !capReached) {
+                while (attemptCount < maxAttempts && !capReached) {
                     sleepCompat(1500)
                     val alchemyRes = AntMemberRpcCall.Zmxy.Alchemy.alchemyExecute()
                     val alchemyJo = JSONObject(alchemyRes)
+                    attemptCount++
 
                     if (alchemyJo.optBoolean("success")) {
                         val alData = alchemyJo.optJSONObject("data")
@@ -109,24 +128,64 @@ class SesameAlchemy {
 
                             Log.other(
                                 "芝麻炼金⚗️[炼金成功]" +
-                                        "#消耗" + cost + "粒" +
+                                        "#消耗" + (if (freeAlchemyNum > 0) "免费" else cost.toString() + "粒") +
                                         " | 获得" + goldNum + "金" +
                                         " | 当前等级Lv." + currentLevel +
                                         (if (levelUp) "（升级🎉）" else "") +
                                         (if (levelFull) "（满级🏆）" else "")
                             )
-                            zmlBalance -= cost
+
+                            if (freeAlchemyNum > 0) {
+                                freeAlchemyNum--
+                            } else {
+                                zmlBalance -= cost
+                                paidAlchemyCount++
+                            }
+
+                            // 满级红包提现
+                            val roundStatus = alData.optString("roundStatus", "")
+                            if (roundStatus == "WAIT_WITHDRAW") {
+                                handleAlchemyWithdraw()
+                            }
                         } else {
                             break
                         }
                     } else {
-                        Log.runtime(TAG, "芝麻炼金失败: " + alchemyJo.optString("resultView"))
-                        break
+                        val resultView = alchemyJo.optString("resultView", "")
+                        if (resultView.contains("CAP_REACHED") || resultView.contains("CURRENT_LEVEL_MAX")) {
+                            capReached = true
+                            Log.other("芝麻炼金⚗️已达上限")
+                        } else {
+                            Log.runtime(TAG, "芝麻炼金失败: $resultView")
+                            break
+                        }
                     }
+                }
+                if (capReached) {
+                    Status.setFlagToday("alchemyCapReached")
                 }
             }
         } else {
             Log.runtime(TAG, "芝麻炼金首页查询失败")
+        }
+    }
+
+    /** 满级红包提现 */
+    private fun handleAlchemyWithdraw() {
+        try {
+            if (Status.hasFlagToday("alchemyWithdraw")) return
+            val method = "com.antgroup.zmxy.zmmemberop.biz.rpc.creditaccumulate.CreditAccumulateStrategyRpcManager.withdraw"
+            val params = "[{}]"
+            val result = JSONObject(RequestManager.requestString(method, params))
+            if (result.optBoolean("success")) {
+                val amount = result.optJSONObject("data")?.optString("amount", "") ?: ""
+                Log.other("芝麻炼金⚗️满级红包提现成功" + (if (amount.isNotEmpty()) " +$amount" else ""))
+                Status.setFlagToday("alchemyWithdraw")
+            } else {
+                Log.error(TAG, "满级红包提现失败: $result")
+            }
+        } catch (e: Exception) {
+            Log.error(TAG, "handleAlchemyWithdraw: $e")
         }
     }
 
@@ -168,6 +227,23 @@ class SesameAlchemy {
             Log.error(TAG, "collectTask: $e")
         }
     }
+    /** 一键收取炼金反馈芝麻粒 */
+    private fun collectAlchemyCredit() {
+        try {
+            val queryRes = JSONObject(AntMemberRpcCall.Zmxy.Alchemy.queryCreditFeedback())
+            if (!queryRes.optBoolean("success")) return
+            val vos = queryRes.optJSONArray("creditFeedbackVOS")
+            if (vos == null || vos.length() == 0) return
+            val collectRes = JSONObject(AntMemberRpcCall.Zmxy.Alchemy.collectCreditFeedback())
+            if (collectRes.optBoolean("success")) {
+                val totalPoints = collectRes.optJSONObject("data")?.optInt("totalPoints", 0) ?: 0
+                Log.other("$TAG 一键收取芝麻粒 $totalPoints 粒 (共 ${vos.length()} 项)")
+            }
+        } catch (e: Exception) {
+            Log.error(TAG, "collectAlchemyCredit: $e")
+        }
+    }
+
     private fun queryCollectTask(){
         try {
             val result = JSONObject(AntMemberRpcCall.Zmxy.Alchemy.queryCreditFeedback())
@@ -237,7 +313,7 @@ class SesameAlchemy {
             val processedTasks = mutableSetOf<String>() // 记录已处理的任务
             var hasNewTasks = true
             var loopCount = 0
-            val maxLoop = 3 // 最大循环次数，防止无限循环
+            val maxLoop = 5 // 最大循环次数
             var todo = true // 是否需要完成任务
             if (Status.hasFlagToday("SesameAlchemy")){
                  todo = false // 如果已经标记完成，则不需要完成
@@ -250,62 +326,68 @@ class SesameAlchemy {
                 val result = JSONObject(AntMemberRpcCall.Zmxy.Alchemy.queryListV3())
                 if (result.optBoolean("success")){
                     val data = result.getJSONObject("data")
-                    val taskLists = data.getJSONArray("toCompleteVOS")
-                    var allTasksProcessed = true // 标记是否所有任务都已处理
+                    // 多任务源：toCompleteVOS + waitJoinTaskVOS + waitCompleteTaskVOS
+                    val allTasks = org.json.JSONArray()
+                    listOf("toCompleteVOS", "waitJoinTaskVOS", "waitCompleteTaskVOS").forEach { key ->
+                        val arr = data.optJSONArray(key)
+                        if (arr != null) {
+                            for (j in 0 until arr.length()) {
+                                allTasks.put(arr.getJSONObject(j))
+                            }
+                        }
+                    }
 
-                    for (i in 0 until taskLists.length()){
-                        val task = taskLists.getJSONObject(i)
+                    var allTasksProcessed = true
+
+                    for (i in 0 until allTasks.length()){
+                        val task = allTasks.getJSONObject(i)
                         val bizType = task.optString("bizType")
                         val title = task.optString("title")
                         val templateId = task.optString("templateId")
 
-                        // 如果任务已处理过，跳过
-                        if (processedTasks.contains(templateId) ||skipTaskList.contains(title)) {
+                        // 跳过已处理/黑名单/助力型任务
+                        if (processedTasks.contains(templateId) || skipTaskList.contains(title)) {
                             continue
                         }
+                        if (task.optBoolean("shareAssist", false)) continue
 
                         //广告任务
                         if (bizType.equals("AD_TASK")){
-                            allTasksProcessed = false // 发现未处理的任务
+                            allTasksProcessed = false
                             val logExtMap = task.getJSONObject("logExtMap")
                             val bizId = logExtMap.optString("bizId")
-                            finishAdTask(bizId,title)
-                            hasNewTasks = true // 标记有新任务被处理，需要重新检查
+                            val (adSuccess, adErr) = finishAdTask(bizId,title)
+                            if (adSuccess) handleTaskSuccess(title) else handleTaskFailure(title, adErr)
+                            hasNewTasks = true
                         }else if (bizType.equals("LIFE_RECORD") && todo){
-                            allTasksProcessed = false // 发现未处理的任务
-                            // 领取任务
+                            allTasksProcessed = false
                             val recordId = joinActivity(templateId)
                             if (recordId.isEmpty()){
-                                processedTasks.add(templateId) // 标记为已处理（即使失败）
+                                processedTasks.add(templateId)
                                 continue
                             }
                             sleepCompat(10000 + (Math.random() * 1000).toLong())
-                            // 回调任务
                             feedbackTask(templateId)
                             sleepCompat(6000 + (Math.random() * 1000).toLong())
-                            // 完成任务
-                            pushActivity(recordId, title)
+                            val (pushSuccess, pushErr) = pushActivity(recordId, title)
+                            if (pushSuccess) handleTaskSuccess(title) else handleTaskFailure(title, pushErr)
 
-                            // 将任务添加到已处理列表
                             processedTasks.add(templateId)
-                            hasNewTasks = true // 标记有新任务被处理，需要重新检查
+                            hasNewTasks = true
 
                             Log.runtime("$TAG 已处理 LIFE_RECORD 任务: $title (templateId: $templateId)")
                         }
-                        //协程随机休眠
                         sleepCompat(7000 + (Math.random() * 1000).toLong())
                     }
 
-                    // 如果所有任务都已处理，且没有新的任务需要处理，则退出循环
                     if (allTasksProcessed && !hasNewTasks) {
                         break
                     }
                 }
             }
 
-            // 如果循环正常结束（不是因为达到最大循环次数），说明所有任务已完成
             if (loopCount < maxLoop) {
-                if (todo) { // 仅当原本需要完成任务时，才设置完成标记
+                if (todo) {
                     Status.setFlagToday("SesameAlchemy")
                     Log.other("$TAG 芝麻炼金任务全部完成")
                 }
@@ -315,6 +397,55 @@ class SesameAlchemy {
         }
     }
 
+    // --- 智能黑名单：仅业务拒绝连续失败3次才加入 ---
+
+    private fun initFailureCount() {
+        try {
+            val stored: String = DataStore.get("alchemyFailureCount", String::class.java) ?: ""
+            if (stored.isNotEmpty()) {
+                stored.split("|").filter { it.contains("=") }.forEach {
+                    val parts = it.split("=", limit = 2)
+                    failureCountMap[parts[0]] = parts[1].toIntOrNull() ?: 0
+                }
+            }
+        } catch (e: Exception) {
+            Log.error(TAG, "initFailureCount: $e")
+        }
+    }
+
+    private fun saveFailureCount() {
+        try {
+            val encoded = failureCountMap.entries.joinToString("|") { "${it.key}=${it.value}" }
+            DataStore.put("alchemyFailureCount", encoded)
+        } catch (e: Exception) {
+            Log.error(TAG, "saveFailureCount: $e")
+        }
+    }
+
+    /** 返回 true 表示错误可重试（网络/服务端瞬态），不计入黑名单 */
+    private fun isRetryableError(errorResponse: String): Boolean {
+        if (errorResponse.isEmpty()) return true // 空响应通常是网络问题
+        return retryableErrorPatterns.any { errorResponse.contains(it, ignoreCase = true) }
+    }
+
+    /** 任务失败时调用 */
+    private fun handleTaskFailure(title: String, errorResponse: String) {
+        if (isRetryableError(errorResponse)) return
+        val count = failureCountMap.getOrDefault(title, 0) + 1
+        failureCountMap[title] = count
+        saveFailureCount()
+        if (count >= 3) {
+            skipTaskList.add(title)
+            Log.other("$TAG [$title]连续失败${count}次，已加入黑名单")
+        }
+    }
+
+    /** 任务成功时调用，重置失败计数 */
+    private fun handleTaskSuccess(title: String) {
+        if (failureCountMap.remove(title) != null) {
+            saveFailureCount()
+        }
+    }
 
     //领取任务
     private fun joinActivity(templateId: String): String{
@@ -353,18 +484,22 @@ class SesameAlchemy {
         }
     }
     // 完成任务
-    private fun pushActivity(recordId: String, title: String){
+    private fun pushActivity(recordId: String, title: String): Pair<Boolean, String> {
         try {
             val method = "com.antgroup.zmxy.zmmemberop.biz.rpc.promise.PromiseRpcManager.pushActivity"
             val params = "[{\"recordId\":\"$recordId\"}]"
             val result = JSONObject(RequestManager.requestString(method, params))
             if (result.optBoolean("success")){
                 Log.other("$TAG 完成[$title]")
+                return Pair(true, "")
             }else{
+                val err = result.optString("resultDesc", "")
                 Log.error(TAG,"任务[$title]失败: ${result}")
+                return Pair(false, err)
             }
         }catch (e: Exception){
             Log.error(TAG, "pushActivity: $e")
+            return Pair(false, e.message ?: "")
         }
     }
     //饭补
@@ -445,18 +580,22 @@ class SesameAlchemy {
         }
     }
 
-    private fun finishAdTask(bizId: String,title: String){
+    private fun finishAdTask(bizId: String,title: String): Pair<Boolean, String> {
         try {
             val method = "com.alipay.adtask.biz.mobilegw.service.task.finish"
             val params = "[{\"bizId\":\"$bizId\",\"extendInfo\":{}}]"
             val result = JSONObject(RequestManager.requestString(method, params))
             if (result.optBoolean("success")){
                 Log.other(TAG, "完成[$title]")
+                return Pair(true, "")
             }else{
+                val err = result.optString("resultDesc", "")
                 Log.error(TAG, "完成[$title]失败: $result")
+                return Pair(false, err)
             }
         }catch (e: Exception){
             Log.error(TAG, "finishAdTask: $e")
+            return Pair(false, e.message ?: "")
         }
     }
 
