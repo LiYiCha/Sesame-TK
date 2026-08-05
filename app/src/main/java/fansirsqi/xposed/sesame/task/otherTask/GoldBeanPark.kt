@@ -197,7 +197,7 @@ class GoldBeanPark(private val enableManureExchange: Boolean = false) {
                         val usedQuota = drawRights.optInt("usedQuota", 0)
 
                         val remainToTask = quotaLimit - usedQuota
-                        if (remainToTask > 0 && quotaCanUse == 0) {
+                        if (remainToTask > 0 && quotaCanUse < remainToTask) {
                             Log.other(TAG, "金豆乐园宝箱/金蛋进度 $usedQuota/$quotaLimit，自动执行【金豆对对碰/吃草草】上报补齐...")
                             try {
                                 GameTask.GoldenBean_ddply.report(remainToTask)
