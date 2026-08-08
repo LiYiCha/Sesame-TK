@@ -110,7 +110,14 @@ open class BaseActivity : AppCompatActivity() {
 
     fun updateToolbarTheme() {
         val tb = toolbar ?: return
-        val isNightMode = (resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK) == android.content.res.Configuration.UI_MODE_NIGHT_YES
+        val mode = HolidayTheme.getDarkMode()
+        val isSystemNight = (resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK) == android.content.res.Configuration.UI_MODE_NIGHT_YES
+        val isNightMode = when {
+            mode == "light" -> false
+            mode == "dark" -> true
+            mode == "schedule" -> HolidayTheme.shouldUseDarkTheme()
+            else -> isSystemNight
+        }
         val holidayColors = HolidayTheme.getHolidayColors()
         val argbColor = if (holidayColors != null) {
             holidayColors.bgColor.toArgb() // 使用浅色背景 (淡色)

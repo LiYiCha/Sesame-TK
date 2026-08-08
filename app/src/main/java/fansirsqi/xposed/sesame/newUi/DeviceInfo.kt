@@ -65,7 +65,7 @@ class PreviewDeviceInfoProvider : PreviewParameterProvider<Map<String, String>> 
 private fun LivePreviewCard(holidayColors: HolidayTheme.ThemeColors?, dark: Boolean) {
     val main = holidayColors?.mainColor ?: if (dark) Color(0xFF90CAF9) else Color(0xFF1976D2)
     val bg = holidayColors?.bgColor ?: if (dark) Color(0xFF1E3A5F) else Color(0xFFE3F2FD)
-    val textColor = if (dark) Color(0xFFE0E0E0) else Color(0xFF212121)
+    val textColor = holidayColors?.textColor ?: if (dark) Color(0xFFE0E0E0) else Color(0xFF212121)
     val story = holidayColors?.story ?: ""
     val title = holidayColors?.title ?: ""
 
