@@ -65,6 +65,7 @@ public class LifecycleManager {
     private static RpcVersion rpcVersion;
     private static XC_MethodHook.Unhook rpcRequestUnhook;
     private static XC_MethodHook.Unhook rpcResponseUnhook;
+    private static volatile Class<?> cachedFastJsonClass = null;
     private static final java.util.Map<Object, Object[]> rpcHookMap = new java.util.concurrent.ConcurrentHashMap<>();
 
     private static final String modelVersion = fansirsqi.xposed.sesame.BuildConfig.VERSION_NAME;
@@ -630,14 +631,13 @@ public class LifecycleManager {
                                 opType = method.getName();
                             }
                             String realOpType = opType;
-                            if ("alipay.client.executerpc".equalsIgnoreCase(opType)) {
+                            Object[] rpcArgs = (Object[]) param.args[2];
+                            boolean isH5Rpc = "alipay.client.executerpc".equalsIgnoreCase(opType) || "executeRPC".equalsIgnoreCase(method.getName());
+
+                            if (isH5Rpc && rpcArgs != null && rpcArgs.length > 0 && rpcArgs[0] != null) {
                                 try {
-                                    Object[] rpcArgs = (Object[]) param.args[2];
-                                    if (rpcArgs != null && rpcArgs.length > 0 && rpcArgs[0] != null) {
-                                        realOpType = String.valueOf(rpcArgs[0]);
-                                    }
+                                    realOpType = String.valueOf(rpcArgs[0]);
                                 } catch (Throwable ignored) {
-                                    // Ignore
                                 }
                             }
                             XposedHelpers.setAdditionalInstanceField(param, "opType", realOpType);
@@ -647,28 +647,34 @@ public class LifecycleManager {
                                 return;
                             }
                             
-                            // 序列化入参
+                            // 序列化入参：对于 H5 RPC (executeRPC)，args[1] 为真正从 H5 传上来的 JSON 字符串 requestData！
                             String paramsJson = "";
-                            try {
-                                Object[] args = (Object[]) param.args[2];
-                                if (args != null) {
-                                    Class<?> jsonClass = classLoader.loadClass("com.alibaba.fastjson.JSON");
-                                    paramsJson = (String) XposedHelpers.callStaticMethod(jsonClass, "toJSONString", (Object) args);
-                                }
-                            } catch (Throwable t) {
+                            if (isH5Rpc && rpcArgs != null && rpcArgs.length >= 2 && rpcArgs[1] != null) {
+                                paramsJson = String.valueOf(rpcArgs[1]);
+                            } else {
                                 try {
-                                    Object[] args = (Object[]) param.args[2];
-                                    if (args != null) {
-                                        java.util.List<String> list = new java.util.ArrayList<>();
-                                        for (Object arg : args) {
-                                            list.add(arg == null ? "null" : arg.toString());
+                                    if (rpcArgs != null) {
+                                        Class<?> jsonClass = cachedFastJsonClass;
+                                        if (jsonClass == null) {
+                                            jsonClass = classLoader.loadClass("com.alibaba.fastjson.JSON");
+                                            cachedFastJsonClass = jsonClass;
                                         }
-                                        paramsJson = list.toString();
-                                    } else {
+                                        paramsJson = (String) XposedHelpers.callStaticMethod(jsonClass, "toJSONString", (Object) rpcArgs);
+                                    }
+                                } catch (Throwable t) {
+                                    try {
+                                        if (rpcArgs != null) {
+                                            java.util.List<String> list = new java.util.ArrayList<>();
+                                            for (Object arg : rpcArgs) {
+                                                list.add(arg == null ? "null" : arg.toString());
+                                            }
+                                            paramsJson = list.toString();
+                                        } else {
+                                            paramsJson = "[]";
+                                        }
+                                    } catch (Throwable ignored) {
                                         paramsJson = "[]";
                                     }
-                                } catch (Throwable ignored) {
-                                    paramsJson = "[]";
                                 }
                             }
                             XposedHelpers.setAdditionalInstanceField(param, "paramsJson", paramsJson);
@@ -693,7 +699,11 @@ public class LifecycleManager {
                                 try {
                                     Object result = param.getResult();
                                     if (result != null) {
-                                        Class<?> jsonClass = classLoader.loadClass("com.alibaba.fastjson.JSON");
+                                        Class<?> jsonClass = cachedFastJsonClass;
+                                        if (jsonClass == null) {
+                                            jsonClass = classLoader.loadClass("com.alibaba.fastjson.JSON");
+                                            cachedFastJsonClass = jsonClass;
+                                        }
                                         responseJson = (String) XposedHelpers.callStaticMethod(jsonClass, "toJSONString", result);
                                     } else {
                                         responseJson = "null";

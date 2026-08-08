@@ -261,7 +261,7 @@ class CommonRequest {
         jo.put("chInfo", chInfo)
         jo.put("skipTaskList", skipTaskList)
         return requestString(
-            "alipay.membertangram.biz.rpc.student.queryTaskModel",
+            "com.alipay.mobileopl.youthprivilege.rpc.mgw.queryTaskModel",
             JSONArray().put(jo).toString()
         )
     }
@@ -283,12 +283,14 @@ class CommonRequest {
         taskType: String?
     ): String {
         val jo = JSONObject()
-        jo.put("taskBizId", taskBizId)
+        if (!StringUtil.isEmpty(taskBizId)) {
+            jo.put("taskBizId", taskBizId)
+        }
         jo.put("taskCode", taskCode)
         jo.put("taskSource", taskSource)
         jo.put("taskType", taskType)
         return requestString(
-            "alipay.membertangram.biz.rpc.student.taskSignUp",
+            "com.alipay.mobileopl.youthprivilege.rpc.mgw.taskSignUp",
             JSONArray().put(jo).toString()
         )
     }
@@ -315,7 +317,7 @@ class CommonRequest {
             params.put("taskSource", taskSource)
             params.put("taskType", taskType)
             return requestString(
-                "alipay.membertangram.biz.rpc.student.taskComplete",
+                "com.alipay.mobileopl.youthprivilege.rpc.mgw.taskComplete",
                 JSONArray().put(params).toString()
             )
         } catch (e: JSONException) {

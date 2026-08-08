@@ -112,6 +112,27 @@ object AntOrchardRpcCall {
         )
     }
 
+    fun submitUserPlayDurationAction(gameAppId: String, playTime: Int = 30, source: String = "bbnc_mc_xbioen04"): String {
+        return RequestManager.requestString(
+            "com.alipay.gamecenteruprod.biz.rpc.v3.submitUserPlayDurationAction",
+            "[{\"gameAppId\":\"$gameAppId\",\"playTime\":$playTime,\"source\":\"$source\",\"statisticTag\":\"\"}]"
+        )
+    }
+
+    fun submitGameEvent(appId: String, eventCode: String = "GAME_PLAY_TIME", playDuration: Int = 30): String {
+        return RequestManager.requestString(
+            "com.alipay.gameevent.biz.rpc.submitEvent",
+            "[{\"appId\":\"$appId\",\"eventCode\":\"$eventCode\",\"bizScene\":\"ANTFARM_ORCHARD\",\"extInfo\":\"{\\\"playDuration\\\":$playDuration}\"}]"
+        )
+    }
+
+    fun triggerTbTask(taskId: String, taskPlantType: String = "ANTIEP"): String {
+        return RequestManager.requestString(
+            "com.alipay.antfarm.triggerTbTask",
+            "[{\"requestType\":\"NORMAL\",\"sceneCode\":\"ORCHARD\",\"source\":\"ch_appcenter__chsub_9patch\",\"taskId\":\"$taskId\",\"taskPlantType\":\"$taskPlantType\",\"version\":\"$VERSION\"}]"
+        )
+    }
+
     fun queryOptionalPlay(): String {
         val data = """
             [{
@@ -156,14 +177,6 @@ object AntOrchardRpcCall {
             }]
         """.trimIndent()
         return RequestManager.requestString("com.alipay.antieptask.receiveTaskAwardantorchard", data)
-    }
-
-
-    fun triggerTbTask(taskId: String, taskPlantType: String): String {
-        return RequestManager.requestString(
-            "com.alipay.antfarm.triggerTbTask",
-            "[{\"requestType\":\"NORMAL\",\"sceneCode\":\"ORCHARD\",\"source\":\"ch_appcenter__chsub_9patch\",\"taskId\":\"$taskId\",\"taskPlantType\":\"$taskPlantType\",\"version\":\"$VERSION\"}]"
-        )
     }
 
     //砸蛋

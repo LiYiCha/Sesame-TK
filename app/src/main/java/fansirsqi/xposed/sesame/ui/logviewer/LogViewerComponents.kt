@@ -581,8 +581,10 @@ fun LogLineRow(
                 checked = isSelected,
                 onCheckedChange = onCheckedChange,
                 modifier = Modifier
-                    .size(18.dp)
-                    .padding(end = 2.dp)
+                    .padding(end = 4.dp)
+                    .height(0.dp) // 极简零高度占位
+                    .wrapContentHeight(unbounded = true) // 允许超出边界绘制而不撑高父 Row
+                    .scale(0.8f)
             )
         }
 
@@ -801,11 +803,24 @@ fun FastScrollbar(
     var trackHeightPx by remember { mutableIntStateOf(0) }
 
     val firstVisibleIndex = lazyListState.firstVisibleItemIndex
-    val visibleItemsCount = lazyListState.layoutInfo.visibleItemsInfo.size
+    val layoutInfo = lazyListState.layoutInfo
+    val visibleItemsInfo = layoutInfo.visibleItemsInfo
+    val visibleItemsCount = visibleItemsInfo.size
 
     if (visibleItemsCount >= totalItems) return
 
-    val scrollFraction = (firstVisibleIndex.toFloat() / (totalItems - visibleItemsCount)).coerceIn(0f, 1f)
+    // 采用亚像素级别的滚动偏移量计算，而不是粗糙的整行相除，解决巨大条目滚动时的跳动问题
+    val scrollFraction = if (visibleItemsInfo.isNotEmpty() && totalItems > 1) {
+        val firstItem = visibleItemsInfo.first()
+        val itemFraction = if (firstItem.size > 0) {
+            (-firstItem.offset).toFloat() / firstItem.size.toFloat()
+        } else 0f
+        
+        val exactIndex = firstVisibleIndex.toFloat() + itemFraction.coerceIn(0f, 1f)
+        (exactIndex / (totalItems - 1f)).coerceIn(0f, 1f)
+    } else {
+        0f
+    }
 
     var isDragging by remember { mutableStateOf(false) }
     var showScrollbar by remember { mutableStateOf(true) }
@@ -826,7 +841,8 @@ fun FastScrollbar(
     )
 
     val minThumbHeightPx = 40f
-    val thumbHeightPx = ((visibleItemsCount.toFloat() / totalItems) * trackHeightPx).coerceAtLeast(minThumbHeightPx)
+    // 放弃使用剧烈波动的 visibleItemsCount，改用相对固定的视野容量（如20行）计算出稳定的滑块大小
+    val thumbHeightPx = (trackHeightPx * (20f / totalItems.coerceAtLeast(20))).coerceIn(minThumbHeightPx, trackHeightPx / 2f)
     val maxThumbOffset = (trackHeightPx - thumbHeightPx).coerceAtLeast(0f)
 
     var localDragOffset by remember { mutableFloatStateOf(0f) }
@@ -869,7 +885,7 @@ fun FastScrollbar(
                         localDragOffset = currentY
                         
                         val fraction = if (currentMaxThumbOffset > 0) currentY / currentMaxThumbOffset else 0f
-                        val targetIndex = (fraction * (currentTotalItems - currentVisibleItemsCount)).roundToInt().coerceIn(0, currentTotalItems - 1)
+                        val targetIndex = (fraction * (currentTotalItems - 1)).roundToInt().coerceIn(0, currentTotalItems - 1)
                         
                         scrollJob?.cancel()
                         scrollJob = coroutineScope.launch {
@@ -892,7 +908,7 @@ fun FastScrollbar(
                                     localDragOffset = currentY
                                     
                                     val currentFraction = if (currentMaxThumbOffset > 0) currentY / currentMaxThumbOffset else 0f
-                                    val targetIdx = (currentFraction * (currentTotalItems - currentVisibleItemsCount)).roundToInt().coerceIn(0, currentTotalItems - 1)
+                                    val targetIdx = (currentFraction * (currentTotalItems - 1)).roundToInt().coerceIn(0, currentTotalItems - 1)
                                     
                                     scrollJob?.cancel()
                                     scrollJob = coroutineScope.launch {
@@ -1386,6 +1402,24 @@ fun RequestNavigator(
             val visibleInfo = lazyListState.layoutInfo.visibleItemsInfo
             if (visibleInfo.none { it.index == lineIdx }) {
                 lazyListState.scrollToItem(lineIdx)
+            }
+        }
+    }
+
+    // 自动追踪滑动：根据当前页面视野的最顶端日志，寻找距离它最近的 RPC 锚点
+    LaunchedEffect(lazyListState.firstVisibleItemIndex, boundaryIndices) {
+        if (boundaryIndices.isNotEmpty()) {
+            val currentTopIndex = lazyListState.firstVisibleItemIndex
+            var bestIndex = 0
+            for (i in boundaryIndices.indices) {
+                if (boundaryIndices[i] <= currentTopIndex) {
+                    bestIndex = i
+                } else {
+                    break
+                }
+            }
+            if (trackedIndex != bestIndex) {
+                trackedIndex = bestIndex
             }
         }
     }

@@ -625,16 +625,17 @@ public class AntForestRpcCall {
 
     public static String studentQqueryCheckInModel() throws JSONException {
         JSONObject jo = new JSONObject();
-        jo.put("chInfo", "ch_appcollect__chsub_my-recentlyUsed");
+        jo.put("chInfo", "ch_appcenter__chsub_9patch");
+        jo.put("queryAd", false);
         jo.put("skipTaskModule", false);
-        return RequestManager.requestString("alipay.membertangram.biz.rpc.student.queryCheckInModel", new JSONArray().put(jo).toString());
+        return RequestManager.requestString("com.alipay.mobileopl.youthprivilege.rpc.mgw.queryCheckInModel", new JSONArray().put(jo).toString());
     }
 
     /*青春特权领红包*/
     public static String studentCheckin() throws JSONException {
         JSONObject jo = new JSONObject();
-        jo.put("source", "chInfo_ch_appcenter__chsub_9patch");
-        return RequestManager.requestString("alipay.membertangram.biz.rpc.student.checkIn", new JSONArray().put(jo).toString());
+        jo.put("source", "ch_appcenter__chsub_9patch");
+        return RequestManager.requestString("com.alipay.mobileopl.youthprivilege.rpc.mgw.checkIn", new JSONArray().put(jo).toString());
     }
 
     /** 查询绿色行动 */

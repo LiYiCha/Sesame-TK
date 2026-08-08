@@ -95,11 +95,26 @@
         .highlight-current {
           background-color: var(--highlight-current-bg);
           color: var(--highlight-current-fg);
-          font-weight: 700;
-          padding: 1px 3px;
-          border-radius: 3px;
+          font-weight: 600;
+          padding: 0 4px;
+          border-radius: 4px;
           outline: 2px solid var(--accent);
-          outline-offset: 1px;
+          outline-offset: -1px;
+        }
+
+        /* 全局默认选中背景色 */
+        ::selection {
+          background-color: rgba(0, 120, 215, 0.4);
+        }
+
+        /* 解决“选中时高亮消失”的体验问题：让高亮词汇在被选中时呈现特殊的反差色 */
+        .highlight::selection { 
+          background-color: #ff5252 !important; 
+          color: #fff !important; 
+        }
+        .highlight-current::selection { 
+          background-color: #d50000 !important; 
+          color: #fff !important; 
         }
 
         /* ============================================================

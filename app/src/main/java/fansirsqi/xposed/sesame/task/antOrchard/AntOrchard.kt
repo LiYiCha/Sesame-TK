@@ -20,6 +20,7 @@ import fansirsqi.xposed.sesame.util.TaskBlacklist
 import fansirsqi.xposed.sesame.util.maps.UserMap
 import org.json.JSONObject
 import java.util.Calendar
+import androidx.core.net.toUri
 
 class AntOrchard : ModelTask() {
     companion object {
@@ -507,7 +508,8 @@ class AntOrchard : ModelTask() {
             val taskList = responseJson.getJSONArray("taskList")
             for (i in 0 until taskList.length()) {
                 val task = taskList.getJSONObject(i)
-                if (task.optString("taskStatus") != "TODO") continue
+                val taskStatus = task.optString("taskStatus")
+                if (taskStatus != "TODO" && taskStatus != "FINISHED") continue
 
                 val actionType = task.optString("actionType")
                 val sceneCode = task.optString("sceneCode")
@@ -571,6 +573,75 @@ class AntOrchard : ModelTask() {
                     } else {
                         Log.error(TAG, "农场任务🧾[$title]${finishResponse.optString("desc")}")
                     }
+                    continue
+                }
+
+                if (actionType == "MULTI_STAGE") {
+                    val taskPlantType = task.optString("taskPlantType", "ANTIEP")
+
+                    // 1. 若任务状态已经是 FINISHED（说明该阶段试玩已达标，可以直接领奖）：
+                    // 跳过提交时长和 finishTask 步骤，直接调用 triggerTbTask 领取奖励！
+                    if (taskStatus == "FINISHED") {
+                        val joClaim = JSONObject(AntOrchardRpcCall.triggerTbTask(taskId, taskPlantType))
+                        if (ResChecker.checkRes(TAG, joClaim)) {
+                            val incAward = joClaim.optInt("incAwardCount", 0)
+                            Log.farm("农场试玩任务🎮[$title] 领取 +${incAward}g肥料")
+                        } else {
+                            Log.error(TAG, "农场试玩任务🎮[$title] 领取已达标奖励失败: ${joClaim.optString("resultDesc")}")
+                        }
+                        continue
+                    }
+
+                    val rightsTimes = task.optInt("rightsTimes", 0)
+                    val rightsTimesLimit = task.optInt("rightsTimesLimit", 1)
+                    val displayConfig = task.optJSONObject("taskDisplayConfig")
+                    val targetUrl = displayConfig?.optString("targetUrl", "") ?: ""
+
+                    var gameAppId = ""
+                    if (targetUrl.isNotEmpty()) {
+                        try {
+                            val uri = targetUrl.toUri()
+                            gameAppId = uri.getQueryParameter("appId") ?: ""
+                        } catch (ignored: Throwable) {
+                        }
+                    }
+
+                    var hasNextStage = true
+                    var currentRightsTimes = rightsTimes
+
+                    while (hasNextStage && currentRightsTimes < rightsTimesLimit) {
+                        if (gameAppId.isNotEmpty()) {
+                            // 先发送游戏时长心跳与在线事件，确保服务端累积足够的在线时长
+                            val hbCount = if (currentRightsTimes >= 1) 2 else 1
+                            for (hb in 1..hbCount) {
+                                AntOrchardRpcCall.submitUserPlayDurationAction(gameAppId, 30)
+                                AntOrchardRpcCall.submitGameEvent(gameAppId, "GAME_PLAY_TIME", 30)
+                                CoroutineUtils.sleepCompat(1000)
+                            }
+                        }
+
+                        // 时长发够后提交 AntiEP 阶段试玩完成 (自动生成最新唯一时间戳 outBizNo)
+                        val finishResponse = JSONObject(AntOrchardRpcCall.finishTask(userId, sceneCode, taskId))
+                        if (ResChecker.checkRes(TAG, finishResponse)) {
+                            val awardVO = finishResponse.optJSONObject("finishAwardResultVO")
+                            val delta = awardVO?.optInt("deltaAwardCount") ?: 0
+                            val currentStage = awardVO?.optInt("stage") ?: (currentRightsTimes + 1)
+                            
+                            // 动态读取服务端返回的 hasNextStage 标记
+                            hasNextStage = awardVO?.optBoolean("hasNextStage") ?: false
+
+                            // 触发农场领取本阶段肥料奖励
+                            AntOrchardRpcCall.triggerTbTask(taskId, taskPlantType)
+                            Log.farm("农场试玩任务🎮[$title] 第${currentStage}阶段 +${delta}g肥料")
+                            currentRightsTimes++
+                        } else {
+                            val errorDesc = finishResponse.optString("desc", finishResponse.optString("memo", "阶段未完成"))
+                            Log.error(TAG, "农场试玩任务🎮[$title] 阶段处理结束: $errorDesc")
+                            break
+                        }
+                        CoroutineUtils.sleepCompat(executeIntervalInt.toLong())
+                    }
+                    continue
                 }
             }
         } catch (t: Throwable) {

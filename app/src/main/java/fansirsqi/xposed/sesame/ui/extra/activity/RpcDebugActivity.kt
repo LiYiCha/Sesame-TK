@@ -23,7 +23,7 @@ import fansirsqi.xposed.sesame.util.Log
 import fansirsqi.xposed.sesame.util.extra.RequestStorage
 
 /**
- * 全量 Compose 化的 Rpc 调试页面（保留 XML 备份，但不再使用）。
+ * 全量 Compose 化的 Rpc 调试页面（模拟请求）。
  */
 class RpcDebugActivity : AppCompatActivity() {
     private val requests = mutableListOf<RequestItem>()

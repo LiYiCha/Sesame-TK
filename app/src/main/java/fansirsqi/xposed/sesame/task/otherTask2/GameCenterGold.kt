@@ -580,7 +580,7 @@ class GameCenterGold : BaseCommTask() {
     /**
      * 9. 查询 Space 气泡奖励 (关键: 触发和得到任务奖励)
      */
-    private fun queryBySpaceCodeList(): String? {
+    private fun queryBySpaceCodeList(): String {
         val method = "com.alipay.gameucdp.space.queryBySpaceCodeList"
         val params = "[{\"deviceLevel\":\"high\",\"source\":\"ch_appcenter__chsub_9patch\",\"sourceTab\":\"p2e\",\"spaceCodeList\":[\"p2e_ucdp_layer\"],\"unityDeviceLevel\":\"high\"}]"
         return RequestManager.requestString(method, params)
@@ -589,7 +589,7 @@ class GameCenterGold : BaseCommTask() {
     /**
      * 10. 上报 Space 曝光反馈
      */
-    private fun spaceFeedback(): String? {
+    private fun spaceFeedback(): String {
         val method = "com.alipay.gameucdp.space.feedback"
         val params = "[{\"feedBackList\":[{\"creativeId\":\"p2e_browse_task_complete\",\"deliverUnitId\":\"p2e#p2e\",\"spaceCode\":\"p2e_ucdp_layer\",\"type\":\"EXPOSE\"}]}]"
         return RequestManager.requestString(method, params)
@@ -598,7 +598,7 @@ class GameCenterGold : BaseCommTask() {
     /**
      * 11. 时长上报 RPC
      */
-    private fun submitUserPlayDurationAction(gameAppId: String, playTime: Int): String? {
+    private fun submitUserPlayDurationAction(gameAppId: String, playTime: Int): String {
         val method = "com.alipay.gamecenteruprod.biz.rpc.v3.submitUserPlayDurationAction"
         val params = "[{\"gameAppId\":\"$gameAppId\",\"playTime\":$playTime,\"source\":\"yxzx_mc_xasqsr68\",\"statisticTag\":\"\"}]"
         return RequestManager.requestString(method, params)

@@ -70,21 +70,30 @@ class PrivilegeTask {
                     waitForDuration(RandomUtil.nextLong(2500, 2600))
                     // 检查查询是否成功
                     if (queryResult.optString("resultCode") != "SUCCESS") {
-                        Log.error(TAG, "任务查询失败：$queryResult")
-                        Log.forest(TAG, "任务查询失败：" + queryResult.optString("resultDesc"))
+                        val errMsg = queryResult.optString("resultMessage", queryResult.optString("resultDesc", "查询失败"))
+                        Log.error(TAG, "任务查询失败：$errMsg")
+                        Log.forest(TAG, "任务查询失败：$errMsg")
                         return
                     }
 
-                    val feedsTaskVO = queryResult.optJSONObject("studentTaskModule")
-                    if (feedsTaskVO == null) {
-                        Log.error(TAG, "未找到任务模块")
+                    val studentTaskModule = queryResult.optJSONObject("studentTaskModule")
+                    if (studentTaskModule == null) {
+                        Log.error(TAG, "未找到任务模块 (studentTaskModule)")
                         return
                     }
 
-                    val taskList = feedsTaskVO
-                        .optJSONArray("taskGroupList")
-                        .optJSONObject(0)
-                        .optJSONArray("taskList")
+                    val taskGroupList = studentTaskModule.optJSONArray("taskGroupList")
+                    if (taskGroupList == null || taskGroupList.length() == 0) {
+                        Log.forest("$STUDENT_SIGN_PREFIX 所有任务已完成🏆")
+                        return
+                    }
+
+                    val firstGroup = taskGroupList.optJSONObject(0)
+                    val taskList = firstGroup?.optJSONArray("taskList")
+                    if (taskList == null || taskList.length() == 0) {
+                        Log.forest("$STUDENT_SIGN_PREFIX 所有任务已完成🏆")
+                        return
+                    }
 
                     // ── Step 2：单次遍历——找第一个可处理的任务 ───────────────
                     var foundPending = false // 本轮是否还存在未完成任务
@@ -99,7 +108,7 @@ class PrivilegeTask {
                         val taskBizId   = task.optString("taskBizId")
                         val prizeAmount = task.optString("prizeAmount", "0")
 
-                        if (taskStatus == "COMPLETE") continue // 已完成，跳过
+                        if (taskStatus == "COMPLETE" || taskStatus == "FINISHED" || taskStatus == "DONE") continue // 已完成，跳过
 
                         // 当前任务尚未完成，说明整体还有工作要做
                         foundPending = true
@@ -129,7 +138,7 @@ class PrivilegeTask {
                                 // ✅ 成功：立即 break，回到外层 while 重新拉取任务列表
                                 break
                             } else {
-                                val desc = completeResult.optString("resultDesc", "未知原因")
+                                val desc = completeResult.optString("resultMessage", completeResult.optString("resultDesc", "未知原因"))
                                 Log.error(TAG, "任务[$taskName]完成失败：$desc")
                                 taskErrorCounts[taskName] = errorCount + 1
                             }
@@ -142,8 +151,7 @@ class PrivilegeTask {
 
                     // ── Step 3：退出条件 ──────────────────────────────────────
                     if (!foundPending) {
-                        // 所有任务都是 COMPLETE，今日完成
-                        //Status.setTemporaryStatusWithExpiry("privilegeTask_completed_temp", 7200000)
+                        // 所有任务都是 COMPLETE/FINISHED，今日完成
                         Log.forest("$STUDENT_SIGN_PREFIX 所有任务已完成🏆")
                         return
                     }
@@ -151,7 +159,10 @@ class PrivilegeTask {
                     // 避免单个任务持续失败时无限空转：若所有待处理任务都已达到错误上限则退出
                     val pendingTasks = (0 until taskList.length())
                         .map { taskList.optJSONObject(it) }
-                        .filter { it.optString("taskStatus") != "COMPLETE" }
+                        .filter {
+                            val st = it.optString("taskStatus")
+                            st != "COMPLETE" && st != "FINISHED" && st != "DONE"
+                        }
                     val allPendingExhausted = pendingTasks.all { t ->
                         (taskErrorCounts[t.optString("taskName")] ?: 0) >= 3
                     }
