@@ -1064,7 +1064,7 @@ class AntMember : ModelTask() {
             val jsonObject = JSONObject(str)
             if (!ResChecker.checkRes(TAG, jsonObject)) {
                 Log.error(
-                    "$TAG.doAllMemberAvailableTask", "会员任务响应失败: " + jsonObject.getString("resultDesc")
+                    "$TAG.doAllMemberAvailableTask", "会员任务响应失败: " + jsonObject.optString("resultDesc")
                 )
                 return@run
             }

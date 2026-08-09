@@ -3,6 +3,7 @@ package fansirsqi.xposed.sesame.hook;
 import fansirsqi.xposed.sesame.data.Config;
 import fansirsqi.xposed.sesame.util.Log;
 import fansirsqi.xposed.sesame.task.otherTask.OtherTask;
+import fansirsqi.xposed.sesame.util.maps.UserMap;
 
 public class RpcResponseHandler {
 
@@ -73,7 +74,7 @@ public class RpcResponseHandler {
     }
 
     private static void saveConfigWithLog(String fieldName, String value) {
-        String userId = fansirsqi.xposed.sesame.util.maps.UserMap.getCurrentUid();
+        String userId = UserMap.getCurrentUid();
             if (Config.save(userId, false)) {
                 Log.runtime("✅ 配置 [" + fieldName + "] 已保存: " + value);
             } else {

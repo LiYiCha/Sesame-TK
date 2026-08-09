@@ -64,7 +64,7 @@ public class TravelDeals extends BaseCommTask {
         for (String tab : tabs) { // 按顺序处理每个 tab
             String response = queryTask(method, tab); // 查询任务列表
             if (response == null) {
-                Log.other(displayName + "查询任务列表失败: 请先过滑块验证!!!5分钟后可重新执行");
+                Log.other(displayName, "查询任务列表失败: 请先过滑块验证!!!5分钟后可重新执行");
                 Status.setTemporaryStatusWithExpiry("travelDeals", 1000 * 60 * 10);
                 Notify.sendNewNotification(displayName, "请先过滑块验证!!!10分钟后可重新执行");
                 return; // 如果查询失败，跳过当前 tab
@@ -77,7 +77,7 @@ public class TravelDeals extends BaseCommTask {
                 // 检查错误码
                 int errorCode = result.optInt("error");
                 if (errorCode == 1009 || errorCode == 48 || errorCode == 6004) {
-                    Log.other(displayName + " 错误 error: " + result.optString("errorMessage"));
+                    Log.other(displayName, " 错误 error: " + result.optString("errorMessage"));
                     TimeUtil.sleep(RandomUtil.nextInt(10000, 13000));
                     Status.setTemporaryStatusWithExpiry("travelDeals", 1000 * 60 * 5);
                     return;
@@ -112,14 +112,14 @@ public class TravelDeals extends BaseCommTask {
                         // 提取 xlight 对象
                         JSONObject xlight = task.optJSONObject("xlight");
                         if (xlight == null) {
-                            Log.error(displayName + "响应数据中缺少 xlight 字段"+activityName);
+                            Log.error(displayName, "响应数据中缺少 xlight 字段"+activityName);
                             skippedTasks.add(activityName);
                             DataStore.INSTANCE.put("travelDeals_blackList", skippedTasks);
                             return;
                         }
                         String bizId = xlight.optString("bizId","");
                         if (bizId.isEmpty()) {
-                            Log.error(displayName + "任务缺少 bizId: " + activityName);
+                            Log.error(displayName, "任务缺少 bizId: " + activityName);
                             skippedTasks.add(activityName);
                             DataStore.INSTANCE.put("travelDeals_blackList", skippedTasks);
                             continue;
@@ -137,18 +137,18 @@ public class TravelDeals extends BaseCommTask {
                         try {
                             subTask(method, code, String.valueOf(outBizNo), recordNo, activityName);
                         } catch (JSONException e) {
-                            Log.error(displayName +activityName+ "任务失败: " + e.getMessage());
+                            Log.error(displayName,activityName+ "任务失败: " + e.getMessage());
                             return;
                         }
                     }
                 }
                 // 遍历结束后判断是否全部完成
                 if (completedCount == totalTasks && totalTasks > 0) {
-                    Log.other(displayName + "所有任务已完成");
+                    Log.other(displayName, "所有任务已完成");
                     Status.setFlagToday(CompletedKeyEnum.TravelTask.name());
                 }
             } catch (JSONException e) {
-                Log.error(displayName + "解析任务列表失败: tab=" + tab + ", 错误信息=" + e.getMessage());
+                Log.error(displayName, "解析任务列表失败: tab=" + tab + ", 错误信息=" + e.getMessage());
                 TimeUtil.sleep(RandomUtil.nextInt(10000, 11000));
             }
         }
@@ -165,7 +165,7 @@ public class TravelDeals extends BaseCommTask {
         // 调用接口完成任务
         String response = RequestManager.requestString(method, params);
         if (response == null || response.isEmpty()) {
-            Log.error(displayName + "完成 eventPush 任务失败: 请先过滑块验证");
+            Log.error(displayName, "完成 eventPush 任务失败: 请先过滑块验证");
             Status.setTemporaryStatusWithExpiry("travelDeals", 1000 * 60 * 5);
             Notify.sendNewNotification(displayName, "请先过滑块验证!!!5分钟后可重新执行");
             return  false;
@@ -176,14 +176,14 @@ public class TravelDeals extends BaseCommTask {
             JSONObject res = new JSONObject(response);
 
             if (!res.optBoolean("success")){
-                Log.error(displayName + "完成 eventPush 任务失败: " + res);
+                Log.error(displayName, "完成 eventPush 任务失败: " + res);
                 return  false;
             }
 
             // 提取业务内容字段
             JSONObject bizContent = res.optJSONObject("bizContent");
             if (bizContent == null) {
-                Log.error(displayName + "业务内容字段缺失: " + activityName);
+                Log.error(displayName, "业务内容字段缺失: " + activityName);
                 skippedTasks.add(activityName);
                 DataStore.INSTANCE.put("travelDeals_blackList", skippedTasks);
                 return false;
@@ -193,12 +193,12 @@ public class TravelDeals extends BaseCommTask {
             String pointValue = bizContent.optString("point", "未知");
 
             // 打印日志
-            Log.other(displayName + "完成[" + activityName +
+            Log.other(displayName, "完成[" + activityName +
                     "]奖励: " + pointValue +"\uD83D\uDE80");
 
 
         } catch (JSONException e) {
-            Log.error(displayName + "解析 eventPush 任务结果失败: " + e.getMessage());
+            Log.error(displayName, "解析 eventPush 任务结果失败: " + e.getMessage());
         }
         return true;
     }
@@ -212,7 +212,7 @@ public class TravelDeals extends BaseCommTask {
 
         String s = RequestManager.requestString(method, params);
         if (s == null || s.isEmpty()) {
-            Log.error(displayName + "完成任务失败: 请先过滑块验证!");
+            Log.error(displayName, "完成任务失败: 请先过滑块验证!");
             Status.setTemporaryStatusWithExpiry("traveDeals",   1000*60*5);
             Notify.sendNewNotification(displayName, "请先过滑块验证!!!5分钟后可重新执行");
             return;
@@ -220,17 +220,17 @@ public class TravelDeals extends BaseCommTask {
         try {
             JSONObject res = new JSONObject(s);
             if (res == null) {
-                Log.error(displayName + "完成任务失败: 返回值无法解析为JSON");
+                Log.error(displayName, "完成任务失败: 返回值无法解析为JSON");
                 return;
             }
             if (1009 == res.optInt("error")) {
                 Log.other(displayName+activityName + "错误 error: " + res.optString("errorMessage"));
                 throw new RuntimeException(displayName+res.optString("errorMessage"));
             } else if (48 == res.optInt("error")) {
-                Log.other(displayName + "错误 error: " + res.optString("errorMessage"));
+                Log.other(displayName, "错误 error: " + res.optString("errorMessage"));
                 return;
             } else if (6004 == res.optInt("error")) {
-                Log.other(displayName + "错误 error: " + res.optString("errorMessage"));
+                Log.other(displayName, "错误 error: " + res.optString("errorMessage"));
                 return;
             }
 
@@ -238,15 +238,15 @@ public class TravelDeals extends BaseCommTask {
                     "components.trip_benefit_mileage_task_independent_component_task_reward_process.content.processedTask.detailInfo.rightSendResult.record.bizContent");
 
             if (bizContent == null) {
-                Log.error(displayName + activityName + "业务内容字段缺失原因:" + res);
+                Log.error(displayName, activityName + "业务内容字段缺失原因:" + res);
                 return;
             }
 
             String pointValue = bizContent.getString("point");
-            Log.other(displayName + "完成[" + activityName + "]+" + pointValue+"里程\uD83D\uDE80");
+            Log.other(displayName, "完成[" + activityName + "]+" + pointValue+"里程\uD83D\uDE80");
 
         } catch (JSONException e) {
-            Log.error(displayName + "解析任务结果失败: " + e.getMessage());
+            Log.error(displayName, "解析任务结果失败: " + e.getMessage());
             throw e; // 抛出异常以便上层捕获
         }
     }
@@ -268,7 +268,7 @@ public class TravelDeals extends BaseCommTask {
                 "[{\"booth\":[\"bigTripSign\"],\"extParams\":{\"signRewardBooth\":\"bigTripSignReward\"},\"scene\":\"\",\"touchPoint\":\"bigTrip\"}]");
 
         if (result == null || result.isEmpty()) {
-            Log.error(displayName + "查询签到信息失败,请先过滑块验证");
+            Log.error(displayName, "查询签到信息失败,请先过滑块验证");
             Status.setTemporaryStatusWithExpiry("travelDealsSign", 1000 * 60 * 5);
             Notify.sendNewNotification(displayName, "请先过滑块验证!!!5分钟后可重新执行");
             return;
@@ -277,34 +277,34 @@ public class TravelDeals extends BaseCommTask {
         try {
             JSONObject res = new JSONObject(result);
             if (res == null) {
-                Log.error(displayName + "查询签到信息失败: 返回值无法解析为JSON");
+                Log.error(displayName, "查询签到信息失败: 返回值无法解析为JSON");
                 return;
             }
 
             if (1009 == res.optInt("error")) {
-                Log.other(displayName + "错误 error: " + res.optString("errorMessage"));
+                Log.other(displayName, "错误 error: " + res.optString("errorMessage"));
                 return;
             } else if (48 == res.optInt("error")) {
-                Log.other(displayName + "错误 error: " + res.optString("errorMessage"));
+                Log.other(displayName, "错误 error: " + res.optString("errorMessage"));
                 return;
             }else if (6004 == res.optInt("error")) {
-                Log.other(displayName + "错误 error: " + res.optString("errorMessage"));
+                Log.other(displayName, "错误 error: " + res.optString("errorMessage"));
                 return;
             }
 
             String contentId = JsonUtil.getValueByPath(res, "contentInfos.bigTripSign.[0].contentId");
             if (contentId == null || contentId.isEmpty()) {
-                Log.error(displayName + "查询签到信息失败: 缺少 'contentId' 字段");
+                Log.error(displayName, "查询签到信息失败: 缺少 'contentId' 字段");
                 return;
             }
 
             String s = RequestManager.requestString("alipay.imasp.scene.userapply",
                     "[{\"booth\":\"bigTripSign\",\"contentId\":\"" + contentId + "\",\"extParams\":{\"signRewardBooth\":\"bigTripSignReward\"},\"scene\":\"trip\",\"touchPoint\":\"bigTrip\"}]");
 
-            Log.other(displayName + "签到成功");
+            Log.other(displayName, "签到成功");
             Status.setFlagToday(CompletedKeyEnum.TravelSign.name());
         } catch (JSONException e) {
-            Log.error(displayName + "Json解析错误: " + e.getMessage());
+            Log.error(displayName, "Json解析错误: " + e.getMessage());
         }
     }
 

@@ -713,14 +713,16 @@ fun LogContent(
                     )
                 }
 
-                // 稳定回调 lambda 从而避免重组
-                val onLineClick = remember(index, line, uiState.isSelectionMode, uiState.displayedLines) {
+                // 稳定回调 lambda 从而避免重组（不再将 displayedLines 作为 key，避免全量重组）
+                val onLineClick = remember(index, uiState.isSelectionMode) {
                     {
                         if (uiState.isSelectionMode) {
                             viewModel.toggleLineSelection(index)
                         } else {
-                            activeDetailLine = line
-                            activeDetailBlock = findRpcBlockAround(uiState.displayedLines, index)
+                            // 延迟到点击时读取最新的 displayedLines，避免闭包捕获导致重组
+                            val currentLines = viewModel.uiState.value.displayedLines
+                            activeDetailLine = currentLines.getOrNull(index) ?: line
+                            activeDetailBlock = findRpcBlockAround(currentLines, index)
                         }
                     }
                 }
@@ -799,7 +801,6 @@ fun FastScrollbar(
     modifier: Modifier = Modifier
 ) {
     if (totalItems <= 0) return
-    val coroutineScope = rememberCoroutineScope()
     var trackHeightPx by remember { mutableIntStateOf(0) }
 
     val firstVisibleIndex = lazyListState.firstVisibleItemIndex
@@ -809,17 +810,26 @@ fun FastScrollbar(
 
     if (visibleItemsCount >= totalItems) return
 
-    // 采用亚像素级别的滚动偏移量计算，而不是粗糙的整行相除，解决巨大条目滚动时的跳动问题
-    val scrollFraction = if (visibleItemsInfo.isNotEmpty() && totalItems > 1) {
+    // 采用像素级滚动偏移 + 末尾精确判定，解决「页面到底但滑块未到底」的问题
+    val scrollFraction = run {
+        if (visibleItemsInfo.isEmpty() || totalItems <= 1) return@run 0f
+
+        val lastItem = visibleItemsInfo.last()
+        val viewportEnd = layoutInfo.viewportEndOffset
+
+        // 精确判断是否已到底：最后一个可见 item 是列表末尾且底边在视口内
+        if (lastItem.index == totalItems - 1 && lastItem.offset + lastItem.size <= viewportEnd) {
+            return@run 1f
+        }
+
         val firstItem = visibleItemsInfo.first()
         val itemFraction = if (firstItem.size > 0) {
             (-firstItem.offset).toFloat() / firstItem.size.toFloat()
         } else 0f
-        
+
+        val maxScrollIndex = (totalItems - visibleItemsCount).coerceAtLeast(1)
         val exactIndex = firstVisibleIndex.toFloat() + itemFraction.coerceIn(0f, 1f)
-        (exactIndex / (totalItems - 1f)).coerceIn(0f, 1f)
-    } else {
-        0f
+        (exactIndex / maxScrollIndex).coerceIn(0f, 1f)
     }
 
     var isDragging by remember { mutableStateOf(false) }
@@ -859,12 +869,26 @@ fun FastScrollbar(
         }
     }
 
-    var scrollJob by remember { mutableStateOf<Job?>(null) }
-
     val currentTotalItems by rememberUpdatedState(totalItems)
-    val currentVisibleItemsCount by rememberUpdatedState(visibleItemsCount)
     val currentMaxThumbOffset by rememberUpdatedState(maxThumbOffset)
     val currentThumbHeightPx by rememberUpdatedState(thumbHeightPx)
+
+    // 拖拽目标索引：pointer 事件只更新此值，由单独的 LaunchedEffect 驱动滚动，避免频繁 cancel/launch
+    var dragTargetIndex by remember { mutableIntStateOf(-1) }
+
+    // 单个长期协程监听 dragTargetIndex 变化并驱动滚动，不再每帧 cancel/launch
+    LaunchedEffect(isDragging) {
+        if (!isDragging) return@LaunchedEffect
+        var lastScrolledIndex = -1
+        while (isDragging) {
+            val target = dragTargetIndex
+            if (target >= 0 && target != lastScrolledIndex) {
+                lastScrolledIndex = target
+                lazyListState.scrollToItem(target)
+            }
+            delay(16L) // ~60fps 帧同步
+        }
+    }
 
     Box(
         modifier = modifier
@@ -878,27 +902,22 @@ fun FastScrollbar(
                         val down = awaitFirstDown(requireUnconsumed = false)
                         isDragging = true
                         showScrollbar = true
-                        
+
                         val initialY = down.position.y
                         val halfThumb = currentThumbHeightPx / 2
                         var currentY = (initialY - halfThumb).coerceIn(0f, currentMaxThumbOffset)
                         localDragOffset = currentY
-                        
+
                         val fraction = if (currentMaxThumbOffset > 0) currentY / currentMaxThumbOffset else 0f
-                        val targetIndex = (fraction * (currentTotalItems - 1)).roundToInt().coerceIn(0, currentTotalItems - 1)
-                        
-                        scrollJob?.cancel()
-                        scrollJob = coroutineScope.launch {
-                            lazyListState.scrollToItem(targetIndex)
-                        }
+                        dragTargetIndex = (fraction * (currentTotalItems - 1)).roundToInt().coerceIn(0, currentTotalItems - 1)
                         down.consume()
-                        
+
                         var dragEvent = down
                         while (true) {
                             val event = awaitPointerEvent()
                             val anyPressed = event.changes.any { it.pressed }
                             if (!anyPressed) break
-                            
+
                             val pointerChange = event.changes.firstOrNull { it.id == dragEvent.id } ?: event.changes.first()
                             if (pointerChange.pressed) {
                                 if (pointerChange.positionChanged()) {
@@ -906,14 +925,9 @@ fun FastScrollbar(
                                     val diffY = pointerChange.position.y - dragEvent.position.y
                                     currentY = (currentY + diffY).coerceIn(0f, currentMaxThumbOffset)
                                     localDragOffset = currentY
-                                    
+
                                     val currentFraction = if (currentMaxThumbOffset > 0) currentY / currentMaxThumbOffset else 0f
-                                    val targetIdx = (currentFraction * (currentTotalItems - 1)).roundToInt().coerceIn(0, currentTotalItems - 1)
-                                    
-                                    scrollJob?.cancel()
-                                    scrollJob = coroutineScope.launch {
-                                        lazyListState.scrollToItem(targetIdx)
-                                    }
+                                    dragTargetIndex = (currentFraction * (currentTotalItems - 1)).roundToInt().coerceIn(0, currentTotalItems - 1)
                                 }
                                 dragEvent = pointerChange
                             } else {
@@ -922,6 +936,7 @@ fun FastScrollbar(
                         }
                     } finally {
                         isDragging = false
+                        dragTargetIndex = -1
                     }
                 }
             }

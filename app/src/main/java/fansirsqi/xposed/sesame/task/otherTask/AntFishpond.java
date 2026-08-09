@@ -15,6 +15,7 @@ import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import fansirsqi.xposed.sesame.data.Config;
 import fansirsqi.xposed.sesame.data.Status;
 import fansirsqi.xposed.sesame.hook.ApplicationHook;
 import fansirsqi.xposed.sesame.hook.RequestManager;
@@ -121,7 +122,7 @@ public class AntFishpond extends BaseCommTask {
                 TimeUtil.sleep(RandomUtil.nextInt(15000, 16000));
             }
         } catch (Throwable th) {
-            Log.error(displayName+"listTask--error:"+th);
+            Log.error(displayName,"listTask--error:"+th);
         }
     }
     private void triggerSubplotsActivity() {
@@ -168,7 +169,7 @@ public class AntFishpond extends BaseCommTask {
                                         "triggerSubplotsActivity.extend." + set);
 
                                 if (reward != null && !reward.isEmpty()) {
-                                    Log.other(displayName + "领取奖励[" + reward + "根钓竿]");
+                                    Log.other(displayName,"领取奖励[" + reward + "根钓竿]");
                                 }
                             }
                         }
@@ -183,7 +184,7 @@ public class AntFishpond extends BaseCommTask {
                         break;
 
                     default:
-                        Log.other(displayName + "未知活动类型: " + activityType);
+                        Log.other(displayName,"未知活动类型: " + activityType);
                 }
             }
         } catch (Throwable th) {
@@ -199,7 +200,7 @@ public class AntFishpond extends BaseCommTask {
         try{
             JSONObject rpcEntity = new JSONObject(RequestManager.requestString(method, params));
             if (rpcEntity.optBoolean("success")){
-                Log.other(this.displayName + "领取鱼竿+1");
+                Log.other(this.displayName,"领取鱼竿+1");
             }else {
                 Log.error(this.displayName+".receiveTriggerSub 领取失败:"+rpcEntity);
             }
@@ -221,7 +222,7 @@ public class AntFishpond extends BaseCommTask {
                Log.error(this.displayName+".gifiBox JSON解析错误:"+e);
            }
            if (jsonObject.optBoolean("success")){
-               Log.other(this.displayName + "完成每日开宝箱");
+               Log.other(this.displayName,"完成每日开宝箱");
            }
        }
     }
@@ -250,7 +251,7 @@ public class AntFishpond extends BaseCommTask {
             if (z || str.isEmpty() || requestString("com.alipay.antfishpond.sign", getData() + ",\"signKey\": \"" + str + "\"") == null) {
                 return;
             }
-            Log.other(this.displayName + "签到成功");
+            Log.other(this.displayName,"签到成功");
             Status.setFlagToday(CompletedKeyEnum.AntFishpondSign.name());
         } catch (Exception e) {
             Log.printStackTrace(this.TAG, e);
@@ -279,7 +280,7 @@ public class AntFishpond extends BaseCommTask {
 
             if ("FINISHED".equals(taskStatus)) {
                 // 任务已完成，可以领取奖励
-                Log.other(this.displayName + "领取[" + title + "]");
+                Log.other(this.displayName,"领取[" + title + "]");
                 receiveTaskAward(taskData);
                 return;
             }
@@ -339,7 +340,7 @@ public class AntFishpond extends BaseCommTask {
                 JSONObject json = requestString("com.alipay.antiep.finishTask", taskData + ",\"outBizNo\":\"" + UserMap.getCurrentUid() + System.currentTimeMillis() + "\"");
                 TimeUtil.sleep(500L);
                 if (json != null && json.optBoolean("success")) {
-                    Log.other(this.displayName + "完成[" + title + "]");
+                    Log.other(this.displayName,"完成[" + title + "]");
                     // 完成后立即尝试领取奖励
                     receiveTaskAward(taskData);
                 } else if (json != null && !json.optBoolean("success")) {
@@ -354,7 +355,7 @@ public class AntFishpond extends BaseCommTask {
                         if (errorMsg.contains("不支持rpc调用") || errorMsg.contains("不支持") || "200000006".equals(errorCode)) {
                             failedTaskCache.add(taskId);
                             fansirsqi.xposed.sesame.util.TaskBlacklist.autoAddToBlacklist(taskId, title, errorCode, errorMsg);
-                            //Log.runtime(this.displayName + "任务[" + title + "]加入失败缓存，避免重复尝试");
+                            //Log.runtime(this.displayName,"任务[" + title + "]加入失败缓存，避免重复尝试");
                         }
                     }
                 } else {
@@ -362,7 +363,7 @@ public class AntFishpond extends BaseCommTask {
                     Log.error(this.TAG + "完成任务失败[" + title + "]:响应为空");
                     failedTaskCache.add(taskId);
                     fansirsqi.xposed.sesame.util.TaskBlacklist.autoAddToBlacklist(taskId, title, "RESPONSE_NULL", "响应为空");
-                    //Log.runtime(this.displayName + "任务[" + title + "]加入失败缓存，避免重复尝试");
+                    //Log.runtime(this.displayName,"任务[" + title + "]加入失败缓存，避免重复尝试");
                 }
             }
         } catch (Exception e) {
@@ -380,10 +381,10 @@ public class AntFishpond extends BaseCommTask {
             JSONObject rpcEntity = new JSONObject(RequestManager.requestString(
                     "com.alipay.antfishpond.fishpondIndex", params));
             if (rpcEntity.optBoolean("success")){
-                Log.other(this.displayName + "完成[从农场进入鱼塘成功]");
+                Log.other(this.displayName,"完成[从农场进入鱼塘成功]");
                 return true;
             }else{
-                Log.error(this.displayName + "完成[从农场进入鱼塘失败]:"+rpcEntity);
+                Log.error(this.displayName,"完成[从农场进入鱼塘失败]:"+rpcEntity);
             }
         } catch (Exception e) {
             Log.printStackTrace(this.TAG, e);
@@ -413,25 +414,25 @@ public class AntFishpond extends BaseCommTask {
                 String awardData = "[{\"ignoreLimit\":false,\"requestType\":\"NORMAL\",\"sceneCode\":\"ANTFISHPOND_TASK\",\"source\":\"farmpool\",\"taskType\":\"NORMAL_WANYOUXI\",\"version\":\"20260211.01\"}]";
                 JSONObject result = new JSONObject(RequestManager.requestString(awardMethod, awardData));
                 if (result.optBoolean("success")) {
-                        Log.other(this.displayName + "领取敲金蛋任务奖励");
+                        Log.other(this.displayName,"领取敲金蛋任务奖励");
                 } else {
                     String errorCode = result.optString("code", "");
                     String errorMsg = result.optString("desc", "");
                     String resultCode = result.optString("resultCode", "");
                     // 如果任务已领取，不记录为错误
                     if (!"400000005".equals(errorCode)) {
-                        Log.error(this.displayName + "领取敲金蛋奖励失败: " + errorMsg);
+                        Log.error(this.displayName,"领取敲金蛋奖励失败: " + errorMsg);
                     } else if (!resultCode.isEmpty()) {
-                        Log.error(this.displayName + "领取敲金蛋奖励失败: " + resultCode);
+                        Log.error(this.displayName,"领取敲金蛋奖励失败: " + resultCode);
                     }else {
-                        Log.error(this.displayName + "敲金蛋任务失败: " + errorMsg);
+                        Log.error(this.displayName,"敲金蛋任务失败: " + errorMsg);
                     }
                 }
             }else {
-                Log.error(this.displayName + ".kqGoldEgg 失败:" + jsonObject);
+                Log.error(this.displayName,".kqGoldEgg 失败:" + jsonObject);
             }
         }catch (Exception e){
-            Log.error(this.displayName + ".kqGoldEgg 错误:" + e);
+            Log.error(this.displayName,".kqGoldEgg 错误:" + e);
         }finally {
             Status.setFlagToday("kqGoldEgg");
         }
@@ -458,7 +459,7 @@ public class AntFishpond extends BaseCommTask {
             if (s != null) {
                 JSONObject json = new JSONObject(s);
                 if (json != null && json.optBoolean("success")) {
-                    Log.other(this.displayName + "[逛一逛精选商品]成功");
+                    Log.other(this.displayName,"[逛一逛精选商品]成功");
                     TimeUtil.sleep(RandomUtil.nextInt(15000,16000));
                     // 成功完成任务后尝试领取奖励
                     String taskData = getData("ANTFISHPOND_TASK") + ",\"taskType\":\"GYG_XLIGHT_JX_BUSINEES_3_SUPPLY\"";
@@ -614,7 +615,7 @@ public class AntFishpond extends BaseCommTask {
         try {
             int i = jSONObject.optInt("rodSumCount",0);
             if (i==0){
-                Log.error(this.displayName + "钓鱼出错:"+jSONObject);
+                Log.error(this.displayName,"钓鱼出错:"+jSONObject);
                 return null;
             }
             //提取其他参数
@@ -642,15 +643,16 @@ public class AntFishpond extends BaseCommTask {
             String string2 = jSONObject2.getString("fishType");
             String string3 = jSONObject2.getString("bizNo");
             if (!string.isEmpty() && "0.01".equals(string)) {
-                Log.other(this.displayName + "token失效，停止自动钓鱼，手动钓一次鱼后将自动更新token");
+                Log.other(this.displayName,"token失效，停止自动钓鱼，手动钓一次鱼后将自动更新token");
                 OtherTask.getFishpondToken().setValue("");
                 OtherTask.getFishpondAngle().setValue(false);
+                Config.save(UserMap.getCurrentUid(), true);
                 return null;
             }
             if ("WELFARE_FISH".equals(string2)) {
                 return string3;
             }
-            Log.other(this.displayName + "钓鱼获得[" + jSONObject2.getString("fishName") + "]+" + string + "剩余" + i + "次");
+            Log.other(this.displayName,"钓鱼获得[" + jSONObject2.getString("fishName") + "]+" + string + "剩余" + i + "次");
             if (i == 0) {
                 return null;
             }
@@ -675,7 +677,7 @@ public class AntFishpond extends BaseCommTask {
             Object valueByPathObject = JsonUtil.getValueByPathObject(requestString, "roundInfo.fishAssetInfo");
             if (valueByPathObject != null) {
                 JSONObject jSONObject = (JSONObject) valueByPathObject;
-                Log.other(this.displayName + "目标[" + jSONObject.getString("targetFishWeight") + "]当前[" + jSONObject.getString("currentFishWeight") + "]剩余[" + jSONObject.getString("diffFishWeight") + "]");
+                Log.other(this.displayName,"目标[" + jSONObject.getString("targetFishWeight") + "]当前[" + jSONObject.getString("currentFishWeight") + "]剩余[" + jSONObject.getString("diffFishWeight") + "]");
                 if (Objects.equals(jSONObject.getString("targetFishWeight"), jSONObject.getString("currentFishWeight"))){
                     fishpondExchangeReward();
                 }
@@ -701,7 +703,7 @@ public class AntFishpond extends BaseCommTask {
                         int leftFishTimesValue = fishActivity.optInt("leftFishTimes", -1);
                         if (leftFishTimesValue > 0) {
                             this.leftFishTimes = leftFishTimesValue;
-                            //Log.runtime(displayName + "还需要钓几次得鱼竿: " + this.leftFishTimes);
+                            //Log.runtime(displayName,"还需要钓几次得鱼竿: " + this.leftFishTimes);
                         } else if (leftFishTimesValue == 0) {
                             receiveTriggerSub();
                         } else {
@@ -745,7 +747,7 @@ public class AntFishpond extends BaseCommTask {
             String title = "🧧鱼塘兑换奖励：";
             Log.other(str);
             Notify.sendNewNotification(title, str);
-            Log.other(displayName + "鱼塘兑换成功🧧");
+            Log.other(displayName,"鱼塘兑换成功🧧");
         } catch (Throwable th) {
             Log.printStackTrace(this.TAG, th);
             disableFishpondSwitches("异常: " + th.getMessage());
@@ -753,7 +755,7 @@ public class AntFishpond extends BaseCommTask {
     }
 
     private void disableFishpondSwitches(String reason) {
-        Log.other(this.displayName + "鱼塘兑换失败(" + reason + ")，自动关闭【福气鱼塘】及【自动钓鱼】开关");
+        Log.other(this.displayName,"鱼塘兑换失败(" + reason + ")，自动关闭【福气鱼塘】及【自动钓鱼】开关");
         try {
             if (OtherTask.getAntFishpond() != null) {
                 OtherTask.getAntFishpond().setValue(false);
@@ -761,6 +763,7 @@ public class AntFishpond extends BaseCommTask {
             if (OtherTask.getFishpondAngle() != null) {
                 OtherTask.getFishpondAngle().setValue(false);
             }
+            Config.save(UserMap.getCurrentUid(), true);
         } catch (Throwable t) {
             Log.error(this.TAG, "关闭鱼塘开关异常: " + t.getMessage());
         }
@@ -781,16 +784,16 @@ public class AntFishpond extends BaseCommTask {
             String params = "[{\"finishBusinessInfo\":{\"pwPreBizId\":\"" + adBizNo + "\"},\"outBizNo\":\"" + outBizNo + "\",\"requestType\":\"NORMAL\",\"sceneCode\":\"ANTFISHPOND_ANGLE_RESULT_AD\",\"source\":\"farmpool\",\"taskType\":\"" + taskId + "\",\"version\":\"20260211.01\"}]";
             JSONObject response = new JSONObject(RequestManager.requestString("com.alipay.antiep.finishTask", params));
             if (response.optBoolean("success")) {
-                Log.other(this.displayName + "额外奖励任务完成成功");
+                Log.other(this.displayName,"额外奖励任务完成成功");
                 failedTaskCache.add(taskId);
             } else {
                 String desc = response.optString("desc", "");
                 String code = response.optString("code", "");
                 if (desc.contains("无状态转换") || desc.contains("不支持") || "400000030".equals(code) || "400000005".equals(code) || "200000006".equals(code)) {
                     failedTaskCache.add(taskId);
-                    Log.runtime(this.displayName + "额外奖励任务[" + taskId + "]无需状态转换或不支持RPC: " + desc);
+                    Log.runtime(this.displayName,"额外奖励任务[" + taskId + "]无需状态转换或不支持RPC: " + desc);
                 } else {
-                    Log.error(this.displayName + "额外奖励任务完成失败: " + desc);
+                    Log.error(this.displayName,"额外奖励任务完成失败: " + desc);
                 }
             }
         } catch (Exception e) {

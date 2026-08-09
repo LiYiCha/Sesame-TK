@@ -28,6 +28,7 @@ import java.io.File
 import androidx.compose.ui.platform.LocalContext
 import androidx.activity.compose.BackHandler
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.ui.graphics.toArgb
 
 /**
  * Compose 版本的日志查看器 Activity
@@ -491,10 +492,8 @@ fun LogViewerScreen(
 
                     return android.webkit.WebView(ctx).apply {
                         setLayerType(android.view.View.LAYER_TYPE_HARDWARE, null)
-                        isVerticalScrollBarEnabled = true
-                        isScrollbarFadingEnabled = false
-                        scrollBarFadeDuration = 0
-                        scrollBarDefaultDelayBeforeFade = Integer.MAX_VALUE
+                        // 禁用原生滚动条，使用自定义 WebViewScrollbar 替代（避免双滚动条）
+                        isVerticalScrollBarEnabled = false
                         isHorizontalScrollBarEnabled = false
                         settings.javaScriptEnabled = true
                         settings.domStorageEnabled = true
@@ -610,9 +609,11 @@ fun LogViewerScreen(
 
                 // 预热全速呈现的 HTML WebView (0 秒秒切无白屏)
                 if (uiState.isHtmlMode) {
+                    val themePrimary = MaterialTheme.colorScheme.primary
+                    val themeOnSurface = MaterialTheme.colorScheme.onSurface
                     key(webViewCrashKey) {
                         val scrollbar = remember { WebViewScrollbar(context) }
-                        val sbW = dpToPx(context, 16)
+                        val sbW = dpToPx(context, 24)
                         androidx.compose.ui.viewinterop.AndroidView(
                             factory = {
                                 val container = android.widget.FrameLayout(context)
@@ -632,6 +633,8 @@ fun LogViewerScreen(
                             },
                             update = { container ->
                                 val wv = container.getChildAt(0) as? android.webkit.WebView ?: return@AndroidView
+                                val sb = container.getChildAt(1) as? WebViewScrollbar
+                                sb?.setColors(themePrimary.toArgb(), themeOnSurface.toArgb())
                                 wv.settings.textZoom = (uiState.fontSize * 9).coerceIn(40, 200)
                                 runJsSafely(wv) { "initLogBridge()" }
                             },

@@ -465,7 +465,7 @@ class GoldBeanPark(private val enableManureExchange: Boolean = false) {
         }
 
         // 3. 标题关键字黑名单 (已知非 RPC 任务: 肥料兑换, 首页添加, 消息提醒, 支付, 攒钱, 余额宝)
-        val blackListKeywords = setOf("肥料", "首页", "提醒", "支付", "攒钱", "余额宝", "小游戏")
+        val blackListKeywords = setOf("肥料", "首页", "提醒", "支付", "攒钱", "余额宝", "小游戏","逛一逛金猫矿工")
         return blackListKeywords.any { title.contains(it) }
     }
 

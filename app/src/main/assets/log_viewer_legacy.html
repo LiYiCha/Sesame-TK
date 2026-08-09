@@ -416,12 +416,27 @@
         updateCurrentRpcCounter();
     }
 
+    // 上一次高亮的元素引用
+    let prevHighlightEl = null;
+    let prevHighlightTimer = null;
+
     function jumpToRpcLine(lineIndex) {
+        // 立即清除上一次高亮
+        if (prevHighlightEl) {
+            prevHighlightEl.style.backgroundColor = '';
+            prevHighlightEl = null;
+        }
+        if (prevHighlightTimer) {
+            clearTimeout(prevHighlightTimer);
+            prevHighlightTimer = null;
+        }
+
         const targetEl = document.getElementById('line-' + lineIndex);
         if (targetEl) {
             targetEl.scrollIntoView({ block: 'center', behavior: 'smooth' });
             targetEl.style.backgroundColor = 'rgba(76, 175, 80, 0.25)';
-            setTimeout(() => { targetEl.style.backgroundColor = ''; }, 1800);
+            prevHighlightEl = targetEl;
+            // 当前高亮保持显示，直到下次跳转时才被清除
         }
     }
 

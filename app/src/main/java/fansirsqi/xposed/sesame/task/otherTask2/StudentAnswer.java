@@ -71,19 +71,19 @@ public class StudentAnswer {
 
                         if (!"FINISH".equals(taskProcessType)){
                             if (!doTask("signup",taskId)) {
-                                Log.error(TAG+"任务[" + taskName+"]报名失败");
+                                Log.error(TAG,"任务[" + taskName+"]报名失败");
                             }
                             TimeUtil.sleep(RandomUtil.nextInt(15000,17000));
                             boolean result = doTask("send", taskId);
                             if (result){
-                                Log.runtime(TAG+"完成[" + taskName+"]"+taskCompleteReward+"卡");
+                                Log.runtime(TAG,"完成[" + taskName+"]"+taskCompleteReward+"卡");
                                 // 任务成功执行，从黑名单中移除（如果存在）
                                 if (taskBlackList.contains(taskId)) {
                                     taskBlackList.remove(taskId);
                                     Log.runtime(TAG + "任务[" + taskName + "]执行成功，从黑名单中移除");
                                 }
                             }else {
-                                Log.error(TAG+"任务[" + taskName+"]执行失败");
+                                Log.error(TAG,"任务[" + taskName+"]执行失败");
                                 handleTaskFailure(taskId);
                             }
                         }

@@ -122,7 +122,7 @@ public class DebugRpc {
                     queryTreeForExchange(projectId);
                 }
             } else {
-                Log.runtime(TAG, jo.getString("resultDesc"));
+                Log.runtime(TAG, jo.optString("resultDesc"));
             }
         } catch (Throwable t) {
             Log.runtime(TAG, "getTreeItems err:");

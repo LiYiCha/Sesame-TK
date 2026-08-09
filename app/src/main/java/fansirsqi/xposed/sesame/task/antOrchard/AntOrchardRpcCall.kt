@@ -1,6 +1,8 @@
 package fansirsqi.xposed.sesame.task.antOrchard
 
 import fansirsqi.xposed.sesame.hook.RequestManager
+import org.json.JSONArray
+import org.json.JSONObject
 
 object AntOrchardRpcCall {
     private const val VERSION = "20251209.01"
@@ -120,10 +122,15 @@ object AntOrchardRpcCall {
     }
 
     fun submitGameEvent(appId: String, eventCode: String = "GAME_PLAY_TIME", playDuration: Int = 30): String {
-        return RequestManager.requestString(
-            "com.alipay.gameevent.biz.rpc.submitEvent",
-            "[{\"appId\":\"$appId\",\"eventCode\":\"$eventCode\",\"bizScene\":\"ANTFARM_ORCHARD\",\"extInfo\":\"{\\\"playDuration\\\":$playDuration}\"}]"
-        )
+        val extInfo = JSONObject().put("playDuration", playDuration).toString()
+        val data = JSONArray().put(
+            JSONObject()
+                .put("appId", appId)
+                .put("eventCode", eventCode)
+                .put("bizScene", "ANTFARM_ORCHARD")
+                .put("extInfo", extInfo)
+        ).toString()
+        return RequestManager.requestString("com.alipay.gameevent.biz.rpc.submitEvent", data)
     }
 
     fun triggerTbTask(taskId: String, taskPlantType: String = "ANTIEP"): String {
