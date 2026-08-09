@@ -1,10 +1,6 @@
 package fansirsqi.xposed.sesame.newui
 
-import android.content.ClipData
-import android.content.ClipboardManager
-import android.content.Context
 import android.os.Build
-import android.widget.Toast
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -13,7 +9,6 @@ import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -21,6 +16,11 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.runtime.saveable.rememberSaveable
 import fansirsqi.xposed.sesame.ui.theme.app.HolidayTheme
 import fansirsqi.xposed.sesame.ui.BaseActivity
 import androidx.compose.foundation.pager.HorizontalPager
@@ -34,7 +34,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.PreviewParameterProvider
@@ -180,12 +179,16 @@ private fun LivePreviewCard(holidayColors: HolidayTheme.ThemeColors?, dark: Bool
 
 @Composable
 fun DeviceInfoCard(info: Map<String, String>, oneWord: String? = null) {
-    var themeMode by remember { mutableStateOf(HolidayTheme.getThemeMode()) }
-    var customColor by remember { mutableStateOf(HolidayTheme.getCustomColor()) }
-    var useHolidayIcons by remember { mutableStateOf(HolidayTheme.getUseHolidayIcons()) }
-    var useAnimalIcons by remember { mutableStateOf(HolidayTheme.getUseAnimalIcons()) }
-    var darkMode by remember { mutableStateOf(HolidayTheme.getDarkMode()) }
-    var showDialog by remember { mutableStateOf(false) }
+    val currentThemeVersion = HolidayTheme.themeVersion.intValue
+    var themeMode by rememberSaveable(currentThemeVersion) { mutableStateOf(HolidayTheme.getThemeMode()) }
+    var customColor by rememberSaveable(currentThemeVersion) { mutableStateOf(HolidayTheme.getCustomColor()) }
+    var useHolidayIcons by rememberSaveable(currentThemeVersion) { mutableStateOf(HolidayTheme.getUseHolidayIcons()) }
+    var useAnimalIcons by rememberSaveable(currentThemeVersion) { mutableStateOf(HolidayTheme.getUseAnimalIcons()) }
+    var darkMode by rememberSaveable(currentThemeVersion) { mutableStateOf(HolidayTheme.getDarkMode()) }
+    var showDialog by rememberSaveable { mutableStateOf(false) }
+    var showLinePicker by rememberSaveable { mutableStateOf(false) }
+    var showAnimalPicker by rememberSaveable { mutableStateOf(false) }
+    var showPlantPicker by rememberSaveable { mutableStateOf(false) }
     
     val context = LocalContext.current
     LaunchedEffect(themeMode, customColor, useHolidayIcons, useAnimalIcons, darkMode) {
@@ -209,7 +212,7 @@ fun DeviceInfoCard(info: Map<String, String>, oneWord: String? = null) {
         }
     }
     
-    val darkTheme = HolidayTheme.getDarkMode().let { mode ->
+    val darkTheme = darkMode.let { mode ->
         when (mode) {
             "light" -> false
             "dark" -> true
@@ -265,7 +268,7 @@ fun DeviceInfoCard(info: Map<String, String>, oneWord: String? = null) {
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
             elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
         ) {
-            val pagerState = rememberPagerState(pageCount = { 2 })
+            val pagerState = rememberPagerState(pageCount = { 3 })
 
             Column {
                 HorizontalPager(
@@ -277,6 +280,19 @@ fun DeviceInfoCard(info: Map<String, String>, oneWord: String? = null) {
                             val holidayTitle = holidayColors?.title ?: "🎉 欢迎使用 Sesame-TK"
                             val holidayStory = holidayColors?.story ?: "“岁月静好，芝麻常伴。” 模块已正常加载，愿您今天也有好心情！保持童心与好奇，探索生活的精彩。"
 
+                            var isIconAnimating by remember { mutableStateOf(false) }
+                            val iconScale by animateFloatAsState(
+                                targetValue = if (isIconAnimating) 1.25f else 1f,
+                                animationSpec = androidx.compose.animation.core.spring(dampingRatio = androidx.compose.animation.core.Spring.DampingRatioHighBouncy),
+                                finishedListener = { isIconAnimating = false }
+                            )
+                            var isAnimalAnimating by remember { mutableStateOf(false) }
+                            val animalScale by animateFloatAsState(
+                                targetValue = if (isAnimalAnimating) 1.25f else 1f,
+                                animationSpec = androidx.compose.animation.core.spring(dampingRatio = androidx.compose.animation.core.Spring.DampingRatioHighBouncy),
+                                finishedListener = { isAnimalAnimating = false }
+                            )
+
                             Column(modifier = Modifier.padding(16.dp)) {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     Surface(
@@ -285,12 +301,43 @@ fun DeviceInfoCard(info: Map<String, String>, oneWord: String? = null) {
                                         modifier = Modifier.size(40.dp)
                                     ) {
                                         Box(contentAlignment = Alignment.Center) {
-                                            Icon(
-                                                Icons.Rounded.Celebration,
-                                                contentDescription = null,
-                                                tint = brandColor,
-                                                modifier = Modifier.size(20.dp)
-                                            )
+                                            if (fansirsqi.xposed.sesame.ui.theme.app.EcosystemManager.currentLineIcon != null) {
+                                                Box(
+                                                    modifier = Modifier.pointerInput(Unit) {
+                                                        detectTapGestures(
+                                                            onTap = { isIconAnimating = true },
+                                                            onLongPress = { showLinePicker = true }
+                                                        )
+                                                    },
+                                                    contentAlignment = Alignment.Center
+                                                ) {
+                                                    coil.compose.AsyncImage(
+                                                        model = coil.request.ImageRequest.Builder(context)
+                                                            .data(fansirsqi.xposed.sesame.ui.theme.app.EcosystemManager.currentLineIcon)
+                                                            .apply {
+                                                                if (fansirsqi.xposed.sesame.ui.theme.app.EcosystemManager.currentLineIcon?.endsWith(".svg", ignoreCase = true) == true) {
+                                                                    decoderFactory(coil.decode.SvgDecoder.Factory())
+                                                                }
+                                                            }
+                                                            .build(),
+                                                        contentDescription = null,
+                                                        colorFilter = androidx.compose.ui.graphics.ColorFilter.tint(brandColor),
+                                                        modifier = Modifier.size(20.dp).graphicsLayer { scaleX = iconScale; scaleY = iconScale }
+                                                    )
+                                                }
+                                            } else {
+                                                Icon(
+                                                    Icons.Rounded.Celebration,
+                                                    contentDescription = null,
+                                                    tint = brandColor,
+                                                    modifier = Modifier.size(20.dp).graphicsLayer { scaleX = iconScale; scaleY = iconScale }.pointerInput(Unit) {
+                                                        detectTapGestures(
+                                                            onTap = { isIconAnimating = true },
+                                                            onLongPress = { showLinePicker = true }
+                                                        )
+                                                    }
+                                                )
+                                            }
                                         }
                                     }
                                     Spacer(modifier = Modifier.width(12.dp))
@@ -312,13 +359,15 @@ fun DeviceInfoCard(info: Map<String, String>, oneWord: String? = null) {
                                 Spacer(modifier = Modifier.height(16.dp))
                                 
                                 Box(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .clip(RoundedCornerShape(12.dp))
-                                        .background(containerColor.copy(alpha = 0.25f))
-                                        .padding(12.dp)
+                                    modifier = Modifier.fillMaxWidth()
                                 ) {
-                                    Column {
+                                    Box(
+                                        modifier = Modifier
+                                            .matchParentSize()
+                                            .clip(RoundedCornerShape(12.dp))
+                                            .background(containerColor.copy(alpha = 0.25f))
+                                    )
+                                    Column(modifier = Modifier.padding(12.dp)) {
                                         Text(
                                             text = holidayStory,
                                             style = MaterialTheme.typography.bodyMedium,
@@ -331,6 +380,16 @@ fun DeviceInfoCard(info: Map<String, String>, oneWord: String? = null) {
                                             style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
                                             color = brandColor
                                         )
+                                    }
+                                    Box(
+                                        modifier = Modifier.align(Alignment.BottomEnd).offset(x = 10.dp, y = 10.dp).pointerInput(Unit) {
+                                            detectTapGestures(
+                                                onTap = { isAnimalAnimating = true },
+                                                onLongPress = { showAnimalPicker = true }
+                                            )
+                                        }
+                                    ) {
+                                        fansirsqi.xposed.sesame.ui.theme.app.EcosystemCardDecorator(modifier = Modifier.graphicsLayer { scaleX = animalScale; scaleY = animalScale })
                                     }
                                 }
 
@@ -450,6 +509,148 @@ fun DeviceInfoCard(info: Map<String, String>, oneWord: String? = null) {
                                 }
                             }
                         }
+                        2 -> {
+                            var isEcoAnimating by remember { mutableStateOf(false) }
+                            val ecoScale by animateFloatAsState(
+                                targetValue = if (isEcoAnimating) 1.25f else 1f,
+                                animationSpec = androidx.compose.animation.core.spring(dampingRatio = androidx.compose.animation.core.Spring.DampingRatioHighBouncy),
+                                finishedListener = { isEcoAnimating = false }
+                            )
+                            Column(modifier = Modifier.padding(16.dp)) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Surface(
+                                        color = containerColor,
+                                        shape = CircleShape,
+                                        modifier = Modifier.size(40.dp)
+                                    ) {
+                                        Box(contentAlignment = Alignment.Center) {
+                                            if (fansirsqi.xposed.sesame.ui.theme.app.EcosystemManager.currentAnimal != null) {
+                                                Box(
+                                                    modifier = Modifier.pointerInput(Unit) {
+                                                        detectTapGestures(
+                                                            onTap = { 
+                                                                fansirsqi.xposed.sesame.ui.theme.app.EcosystemManager.shuffle()
+                                                                isEcoAnimating = true 
+                                                            },
+                                                            onLongPress = { showAnimalPicker = true }
+                                                        )
+                                                    },
+                                                    contentAlignment = Alignment.Center
+                                                ) {
+                                                    coil.compose.AsyncImage(
+                                                        model = coil.request.ImageRequest.Builder(context)
+                                                            .data(fansirsqi.xposed.sesame.ui.theme.app.EcosystemManager.currentAnimal)
+                                                            .apply {
+                                                                if (fansirsqi.xposed.sesame.ui.theme.app.EcosystemManager.currentAnimal?.endsWith(".svg", ignoreCase = true) == true) {
+                                                                    decoderFactory(coil.decode.SvgDecoder.Factory())
+                                                                }
+                                                            }
+                                                            .build(),
+                                                        contentDescription = null,
+                                                        modifier = Modifier.size(24.dp).graphicsLayer { scaleX = ecoScale; scaleY = ecoScale }
+                                                    )
+                                                }
+                                            } else {
+                                                Icon(
+                                                    Icons.Rounded.Eco,
+                                                    contentDescription = null,
+                                                    tint = brandColor,
+                                                    modifier = Modifier.size(24.dp).graphicsLayer { scaleX = ecoScale; scaleY = ecoScale }.pointerInput(Unit) {
+                                                        detectTapGestures(
+                                                            onTap = { 
+                                                                fansirsqi.xposed.sesame.ui.theme.app.EcosystemManager.shuffle()
+                                                                isEcoAnimating = true
+                                                            },
+                                                            onLongPress = { showAnimalPicker = true }
+                                                        )
+                                                    }
+                                                )
+                                            }
+                                        }
+                                    }
+                                    Spacer(modifier = Modifier.width(12.dp))
+                                    Column {
+                                        Text(
+                                            text = "生态守护舱",
+                                            style = MaterialTheme.typography.titleMedium,
+                                            fontWeight = FontWeight.Bold,
+                                            color = accentColor
+                                        )
+                                        Text(
+                                            text = "大自然的馈赠，生命的气息",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = accentColor.copy(alpha = 0.6f)
+                                        )
+                                    }
+                                }
+                                Spacer(modifier = Modifier.height(16.dp))
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(130.dp)
+                                        .clip(RoundedCornerShape(16.dp))
+                                        .background(
+                                            brush = androidx.compose.ui.graphics.Brush.verticalGradient(
+                                                colors = listOf(
+                                                    containerColor.copy(alpha = 0.4f),
+                                                    containerColor.copy(alpha = 0.1f)
+                                                )
+                                            )
+                                        )
+                                        .pointerInput(Unit) {
+                                            detectTapGestures(
+                                                onTap = { 
+                                                    fansirsqi.xposed.sesame.ui.theme.app.EcosystemManager.shuffle()
+                                                    isEcoAnimating = true
+                                                },
+                                                onLongPress = { showAnimalPicker = true }
+                                            )
+                                        },
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    val infiniteTransition = androidx.compose.animation.core.rememberInfiniteTransition()
+                                    val breathScale by infiniteTransition.animateFloat(
+                                        initialValue = 0.95f,
+                                        targetValue = 1.05f,
+                                        animationSpec = infiniteRepeatable(
+                                            animation = tween(2000, easing = androidx.compose.animation.core.EaseInOutSine),
+                                            repeatMode = RepeatMode.Reverse
+                                        )
+                                    )
+                                    
+                                    val finalScale = ecoScale * breathScale
+                                    
+                                    if (fansirsqi.xposed.sesame.ui.theme.app.EcosystemManager.currentAnimal != null) {
+                                        coil.compose.AsyncImage(
+                                            model = coil.request.ImageRequest.Builder(context)
+                                                .data(fansirsqi.xposed.sesame.ui.theme.app.EcosystemManager.currentAnimal)
+                                                .apply {
+                                                    if (fansirsqi.xposed.sesame.ui.theme.app.EcosystemManager.currentAnimal?.endsWith(".svg", ignoreCase = true) == true) {
+                                                        decoderFactory(coil.decode.SvgDecoder.Factory())
+                                                    }
+                                                }
+                                                .build(),
+                                            contentDescription = "Ecosystem Centerpiece",
+                                            modifier = Modifier.size(80.dp).graphicsLayer { scaleX = finalScale; scaleY = finalScale }
+                                        )
+                                    } else {
+                                        Icon(
+                                            Icons.Rounded.Eco,
+                                            contentDescription = null,
+                                            tint = brandColor.copy(alpha = 0.7f),
+                                            modifier = Modifier.size(80.dp).graphicsLayer { scaleX = finalScale; scaleY = finalScale }
+                                        )
+                                    }
+                                    
+                                    Text(
+                                        text = "轻触切换 • 长按图鉴",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = accentColor.copy(alpha = 0.4f),
+                                        modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 12.dp)
+                                    )
+                                }
+                            }
+                        }
                     }
                 }
 
@@ -461,7 +662,7 @@ fun DeviceInfoCard(info: Map<String, String>, oneWord: String? = null) {
                         .padding(bottom = 12.dp),
                     horizontalArrangement = Arrangement.Center
                 ) {
-                    repeat(2) { iteration ->
+                    repeat(3) { iteration ->
                         val color = if (pagerState.currentPage == iteration) brandColor else containerColor.copy(alpha = 0.4f)
                         Box(
                             modifier = Modifier
@@ -708,8 +909,9 @@ fun DeviceInfoCard(info: Map<String, String>, oneWord: String? = null) {
                                         color = brandColor.copy(alpha = 0.1f),
                                         shape = RoundedCornerShape(8.dp),
                                         modifier = Modifier.clickable {
-                                            val combo = HolidayTheme.getRandomCombo()
-                                            customColor = combo[0]
+                                            val r = kotlin.random.Random
+                                            val randomHex = String.format("#FF%06X", 0xFFFFFF and r.nextInt())
+                                            customColor = randomHex
                                             themeMode = "custom"
                                             HolidayTheme.saveThemeConfigEx("custom", customColor, useHolidayIcons, useAnimalIcons)
                                         }
@@ -718,7 +920,12 @@ fun DeviceInfoCard(info: Map<String, String>, oneWord: String? = null) {
                                             modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
                                             verticalAlignment = Alignment.CenterVertically
                                         ) {
-                                            Text("🎲", fontSize = 14.sp)
+                                            Icon(
+                                                imageVector = androidx.compose.material.icons.Icons.Rounded.Palette,
+                                                contentDescription = "Random Color",
+                                                tint = brandColor,
+                                                modifier = Modifier.size(16.dp)
+                                            )
                                             Spacer(Modifier.width(4.dp))
                                             Text("随机配色", fontSize = 12.sp, color = brandColor, fontWeight = FontWeight.Medium)
                                         }
@@ -770,6 +977,15 @@ fun DeviceInfoCard(info: Map<String, String>, oneWord: String? = null) {
                     }
                 }
             )
+        }
+        if (showLinePicker) {
+            fansirsqi.xposed.sesame.ui.theme.app.SVGSelectorDialog(type = "lines") { showLinePicker = false }
+        }
+        if (showAnimalPicker) {
+            fansirsqi.xposed.sesame.ui.theme.app.SVGSelectorDialog(type = "animal") { showAnimalPicker = false }
+        }
+        if (showPlantPicker) {
+            fansirsqi.xposed.sesame.ui.theme.app.SVGSelectorDialog(type = "zml") { showPlantPicker = false }
         }
     }
 }

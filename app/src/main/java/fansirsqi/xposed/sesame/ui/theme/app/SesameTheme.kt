@@ -94,6 +94,7 @@ fun SesameTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
     content: @Composable () -> Unit
 ) {
+    val version = HolidayTheme.themeVersion.intValue
     val mode = HolidayTheme.getDarkMode()
     val resolvedDark = when {
         mode == "light" -> false
@@ -135,9 +136,18 @@ fun SesameTheme(
         content = {
             Box(modifier = Modifier.fillMaxSize()) {
                 content()
+                // 全局生态陪伴水印
+                if (HolidayTheme.getUseAnimalIcons()) {
+                    EcosystemWatermark()
+                }
+                
                 // 夜晚散星动画（仅深色模式）
                 if (resolvedDark) {
                     TwinklingStars(tint = colorScheme.primary.copy(alpha = 0.15f))
+                }
+
+                if (fansirsqi.xposed.sesame.BuildConfig.DEBUG) {
+                    PerformanceMonitor()
                 }
             }
         }

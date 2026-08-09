@@ -6,7 +6,6 @@ import android.content.ClipboardManager
 import android.content.Intent
 import android.content.res.ColorStateList
 import android.net.Uri
-import android.os.Build
 import android.os.Bundle
 import android.view.Menu
 import android.view.MenuItem

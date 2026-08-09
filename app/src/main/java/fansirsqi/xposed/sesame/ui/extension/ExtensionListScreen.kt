@@ -157,7 +157,7 @@ private fun ModernExtensionCard(
             ),
         shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(
-            containerColor = Color.White
+            containerColor = MaterialTheme.colorScheme.surface
         )
     ) {
         Column(
@@ -194,7 +194,7 @@ private fun ModernExtensionCard(
                         Icon(
                             imageVector = Icons.Outlined.Palette,
                             contentDescription = null,
-                            tint = Color(0xFF131313), // 深蓝色图标
+                            tint = Color.Black, // 图标底色有渐变背景，文字用黑色更清晰
                             modifier = Modifier.size(32.dp)
                         )
                     }
@@ -207,7 +207,7 @@ private fun ModernExtensionCard(
                             text = moduleState.module.name,
                             fontSize = 20.sp,
                             fontWeight = FontWeight.Bold,
-                            color = Color(0xFF131313)
+                            color = MaterialTheme.colorScheme.onSurface
                         )
 
                         Spacer(modifier = Modifier.height(4.dp))
@@ -215,7 +215,7 @@ private fun ModernExtensionCard(
                         Text(
                             text = moduleState.module.description,
                             fontSize = 13.sp,
-                            color = Color(0xFF616161),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                             lineHeight = 18.sp
                         )
                     }

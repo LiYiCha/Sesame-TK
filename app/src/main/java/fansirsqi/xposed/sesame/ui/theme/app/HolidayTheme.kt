@@ -6,8 +6,30 @@ import androidx.compose.material3.lightColorScheme
 import androidx.compose.ui.graphics.Color
 import java.util.Calendar
 import fansirsqi.xposed.sesame.util.DataStore
+import androidx.appcompat.app.AppCompatDelegate
+import androidx.compose.runtime.mutableIntStateOf
 
 object HolidayTheme {
+    val themeVersion = mutableIntStateOf(0)
+    val themeObservers = mutableListOf<() -> Unit>()
+
+    fun notifyThemeChanged() {
+        themeObservers.forEach { it.invoke() }
+    }
+
+    fun applyGlobalNightMode() {
+        val mode = getDarkMode()
+        val nightMode = when {
+            mode == "light" -> AppCompatDelegate.MODE_NIGHT_NO
+            mode == "dark" -> AppCompatDelegate.MODE_NIGHT_YES
+            mode == "schedule" -> {
+                if (shouldUseDarkTheme()) AppCompatDelegate.MODE_NIGHT_YES else AppCompatDelegate.MODE_NIGHT_NO
+            }
+            else -> AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM
+        }
+        AppCompatDelegate.setDefaultNightMode(nightMode)
+    }
+
     data class ThemeColors(
         val mainColor: Color,
         val bgColor: Color,
@@ -197,9 +219,14 @@ object HolidayTheme {
         }
     }
 
-    fun setDarkMode(mode: String) {
+    fun setDarkMode(mode: String, applyImmediately: Boolean = true) {
         try {
             DataStore.put("dark_mode_ui", mode)
+            themeVersion.intValue++
+            if (applyImmediately) {
+                applyGlobalNightMode()
+            }
+            notifyThemeChanged()
         } catch (_: Exception) {}
     }
 
@@ -312,6 +339,8 @@ object HolidayTheme {
         try {
             DataStore.put("custom_theme_mode", mode)
             DataStore.put("custom_theme_color", color)
+            themeVersion.intValue++
+            notifyThemeChanged()
         } catch (e: Exception) {
             // ignore
         }
@@ -323,6 +352,8 @@ object HolidayTheme {
             DataStore.put("custom_theme_color", color)
             DataStore.put("custom_theme_use_holiday_icons", useHoliday)
             DataStore.put("custom_theme_use_animal_icons", useAnimal)
+            themeVersion.intValue++
+            notifyThemeChanged()
         } catch (e: Exception) {
             // ignore
         }

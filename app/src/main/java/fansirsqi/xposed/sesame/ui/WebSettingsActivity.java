@@ -119,10 +119,10 @@ public class WebSettingsActivity extends BaseActivity {
             @Override
             public void handleOnBackPressed() {
                 if (webView.canGoBack()) {
-                    Log.runtime(TAG, "WebSettingsActivity.handleOnBackPressed: go back");
+//                    Log.runtime(TAG, "WebSettingsActivity.handleOnBackPressed: go back");
                     webView.goBack();
                 } else {
-                    Log.runtime(TAG, "WebSettingsActivity.handleOnBackPressed: save");
+//                    Log.runtime(TAG, "WebSettingsActivity.handleOnBackPressed: save");
                     save();
                     finish();
                 }
@@ -166,6 +166,13 @@ public class WebSettingsActivity extends BaseActivity {
         settings.setJavaScriptCanOpenWindowsAutomatically(true);
         settings.setLoadsImagesAutomatically(true);
         settings.setDefaultTextEncodingName(StandardCharsets.UTF_8.name());
+        
+        if (androidx.webkit.WebViewFeature.isFeatureSupported(androidx.webkit.WebViewFeature.FORCE_DARK)) {
+            boolean isDark = fansirsqi.xposed.sesame.ui.theme.app.HolidayTheme.INSTANCE.shouldUseDarkTheme();
+            androidx.webkit.WebSettingsCompat.setForceDark(settings, isDark ? 
+                androidx.webkit.WebSettingsCompat.FORCE_DARK_ON : 
+                androidx.webkit.WebSettingsCompat.FORCE_DARK_OFF);
+        }
         webView.setWebViewClient(new WebViewClient() {
             @Override
             public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {

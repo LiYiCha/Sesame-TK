@@ -842,7 +842,7 @@ fun FastScrollbar(
 
     val minThumbHeightPx = 40f
     // 放弃使用剧烈波动的 visibleItemsCount，改用相对固定的视野容量（如20行）计算出稳定的滑块大小
-    val thumbHeightPx = (trackHeightPx * (20f / totalItems.coerceAtLeast(20))).coerceIn(minThumbHeightPx, trackHeightPx / 2f)
+    val thumbHeightPx = (trackHeightPx * (20f / totalItems.coerceAtLeast(20))).coerceIn(minThumbHeightPx, maxOf(minThumbHeightPx, trackHeightPx / 2f))
     val maxThumbOffset = (trackHeightPx - thumbHeightPx).coerceAtLeast(0f)
 
     var localDragOffset by remember { mutableFloatStateOf(0f) }

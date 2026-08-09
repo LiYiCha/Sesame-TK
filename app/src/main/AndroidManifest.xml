@@ -45,6 +45,7 @@
             android:resource="@array/xposed_scopes" />
 
         <activity
+            android:configChanges="uiMode|screenSize"
             android:name="fansirsqi.xposed.sesame.ui.MainActivity"
             android:exported="true"
             android:resizeableActivity="true">
@@ -66,61 +67,75 @@
         </activity-alias>
 
         <activity
+            android:configChanges="uiMode|screenSize"
             android:name="fansirsqi.xposed.sesame.ui.ExtendActivity"
             android:exported="true"
             android:resizeableActivity="true" />
         <activity
+            android:configChanges="uiMode|screenSize"
             android:name="fansirsqi.xposed.sesame.ui.WebSettingsActivity"
             android:exported="true"
             android:resizeableActivity="true" />
         <activity
+            android:configChanges="uiMode|screenSize"
             android:name="fansirsqi.xposed.sesame.ui.SettingActivity"
             android:exported="true"
             android:resizeableActivity="true" />
         <activity
+            android:configChanges="uiMode|screenSize"
             android:name="fansirsqi.xposed.sesame.ui.logviewer.HtmlViewerActivity"
             android:exported="true"
             android:resizeableActivity="true" />
         <activity
+            android:configChanges="uiMode|screenSize"
             android:name="fansirsqi.xposed.sesame.ui.logviewer.LogViewerComposeActivity"
             android:exported="true"
             android:resizeableActivity="true" />
         <activity
+            android:configChanges="uiMode|screenSize"
             android:name="fansirsqi.xposed.sesame.ui.extra.activity.RpcDebugActivity"
             android:exported="true"
             android:resizeableActivity="true"
             android:windowSoftInputMode="adjustResize|stateHidden" />
         <activity
+            android:configChanges="uiMode|screenSize"
             android:name="fansirsqi.xposed.sesame.ui.extra.activity.HelpActivity"
             android:exported="true"
             android:resizeableActivity="true" />
         <activity
+            android:configChanges="uiMode|screenSize"
             android:name="fansirsqi.xposed.sesame.ui.extension.ExtensionListActivity"
             android:exported="true"
             android:resizeableActivity="true" />
         <activity
+            android:configChanges="uiMode|screenSize"
             android:name="fansirsqi.xposed.sesame.ui.skin.SkinActivity"
             android:exported="true"
             android:resizeableActivity="true" />
         <activity
+            android:configChanges="uiMode|screenSize"
             android:name="fansirsqi.xposed.sesame.ui.skin.SkinDetailActivity"
             android:exported="false"
             android:resizeableActivity="true" />
         <activity
+            android:configChanges="uiMode|screenSize"
             android:name="fansirsqi.xposed.sesame.ui.theme.ThemeActivity"
             android:exported="true"
             android:resizeableActivity="true" />
 
         <activity
+            android:configChanges="uiMode|screenSize"
             android:name="fansirsqi.xposed.sesame.ui.network.CaptureListActivity"
             android:exported="true"
             android:resizeableActivity="true" />
         <activity
+            android:configChanges="uiMode|screenSize"
             android:name="fansirsqi.xposed.sesame.ui.network.CaptureDetailActivity"
             android:exported="true"
             android:resizeableActivity="true" />
 
         <activity
+            android:configChanges="uiMode|screenSize"
             android:name="fansirsqi.xposed.sesame.ui.extension.SeckillActivity"
             android:exported="true"
             android:resizeableActivity="true" />

@@ -68,7 +68,7 @@ android {
         }
 
 
-        val versionNumber = "0.3.6"
+        val versionNumber = "0.3.7"
         val dateString = SimpleDateFormat("yyMMdd", Locale.CHINA).apply {
             timeZone = TimeZone.getTimeZone("GMT+8")
         }.format(Date())
@@ -230,6 +230,7 @@ dependencies {
 
     // Coil for image loading
     implementation("io.coil-kt:coil-compose:2.5.0")
+    implementation("io.coil-kt:coil-svg:2.5.0")
 
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.0")
 

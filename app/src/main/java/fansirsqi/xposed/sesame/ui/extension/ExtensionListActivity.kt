@@ -3,8 +3,10 @@ package fansirsqi.xposed.sesame.ui.extension
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.lightColorScheme
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 
 /**
@@ -34,23 +36,15 @@ class ExtensionListActivity : ComponentActivity() {
 
         // 设置 Compose UI
         setContent {
-            // 应用主题
-            MaterialTheme(
-                colorScheme = lightColorScheme(
-                    primary = Color(0xFF3F51B5),
-                    onPrimary = Color.White,
-                    primaryContainer = Color(0xFFE8EAF6),
-                    onPrimaryContainer = Color(0xFF131313),
-                    background = Color(0xFFF5F5F5),
-                    onBackground = Color.Black,
-                    surface = Color.White,
-                    onSurface = Color.Black,
-                    surfaceVariant = Color(0xFFE0E0E0),
-                    onSurfaceVariant = Color(0xFF616161)
-                )
-            ) {
-                // 渲染主屏幕
-                ExtensionListScreen(viewModel = viewModel)
+            // 使用全局统一的 SesameTheme
+            fansirsqi.xposed.sesame.ui.theme.app.SesameTheme {
+                androidx.compose.material3.Surface(
+                    modifier = Modifier.fillMaxSize(),
+                    color = MaterialTheme.colorScheme.background
+                ) {
+                    // 渲染主屏幕
+                    ExtensionListScreen(viewModel = viewModel)
+                }
             }
         }
     }

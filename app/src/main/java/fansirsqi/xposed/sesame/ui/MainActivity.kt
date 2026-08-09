@@ -53,6 +53,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.util.concurrent.CountDownLatch
+import androidx.compose.ui.graphics.toArgb
 
 
 //   欢迎自己打包 欢迎大佬pr
@@ -71,6 +72,47 @@ class MainActivity : BaseActivity() {
     private lateinit var titleRunner: Runnable
     private var userNickName: String = ""
     
+    private val mainActivityThemeObserver: () -> Unit = {
+        val mode = fansirsqi.xposed.sesame.ui.theme.app.HolidayTheme.getDarkMode()
+        val isSystemNight = (resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK) == android.content.res.Configuration.UI_MODE_NIGHT_YES
+        val isNightMode = when (mode) {
+            "light" -> false
+            "dark" -> true
+            "schedule" -> fansirsqi.xposed.sesame.ui.theme.app.HolidayTheme.shouldUseDarkTheme()
+            else -> isSystemNight
+        }
+        val themeMode = fansirsqi.xposed.sesame.ui.theme.app.HolidayTheme.getThemeMode()
+        val customColor = fansirsqi.xposed.sesame.ui.theme.app.HolidayTheme.getCustomColor()
+        val mainColor = when {
+            themeMode == "auto" -> {
+                val holiday = fansirsqi.xposed.sesame.ui.theme.app.HolidayTheme.checkTodayHoliday()
+                val themeColors = if (holiday == "default") fansirsqi.xposed.sesame.ui.theme.app.HolidayTheme.HOLIDAY_THEMES["default"] else fansirsqi.xposed.sesame.ui.theme.app.HolidayTheme.HOLIDAY_THEMES[holiday]
+                themeColors?.mainColor?.toArgb() ?: android.graphics.Color.parseColor("#4CAF50")
+            }
+            themeMode == "custom" -> {
+                try { android.graphics.Color.parseColor(customColor) } catch (e: Exception) { android.graphics.Color.parseColor("#4CAF50") }
+            }
+            else -> {
+                fansirsqi.xposed.sesame.ui.theme.app.HolidayTheme.HOLIDAY_THEMES[themeMode]?.mainColor?.toArgb() ?: android.graphics.Color.parseColor("#4CAF50")
+            }
+        }
+        val bgAlpha = if (isNightMode) 0.15f else 0.12f
+        val cardColorInt = if (isNightMode) android.graphics.Color.parseColor("#1E1E1E") else android.graphics.Color.WHITE
+        val blendedBgColor = androidx.core.graphics.ColorUtils.blendARGB(cardColorInt, mainColor, bgAlpha)
+        val colorStateList = android.content.res.ColorStateList.valueOf(blendedBgColor)
+        
+        val buttons = listOf(R.id.btn_forest_log, R.id.btn_farm_log, R.id.btn_other_log, R.id.btn_extend_function, R.id.btn_github, R.id.btn_settings)
+        buttons.forEach { id ->
+            val btn = findViewById<com.google.android.material.button.MaterialButton>(id)
+            btn?.backgroundTintList = colorStateList
+            btn?.backgroundTintMode = android.graphics.PorterDuff.Mode.SRC_IN
+            val textColor = if (isNightMode) android.graphics.Color.parseColor("#E0E0E0") else android.graphics.Color.parseColor("#212121")
+            btn?.setTextColor(android.content.res.ColorStateList.valueOf(textColor))
+        }
+        val cardColor = if (isNightMode) android.graphics.Color.parseColor("#1E1E1E") else android.graphics.Color.WHITE
+        findViewById<com.google.android.material.card.MaterialCardView>(R.id.grid_card)?.setCardBackgroundColor(cardColor)
+    }
+    
 
 
     @SuppressLint("SetTextI18n", "UnsafeDynamicallyLoadedCode")
@@ -86,6 +128,8 @@ class MainActivity : BaseActivity() {
         }
 
         setContentView(R.layout.activity_main)
+        fansirsqi.xposed.sesame.ui.theme.app.HolidayTheme.themeObservers.add(mainActivityThemeObserver)
+        mainActivityThemeObserver.invoke()
         val deviceInfo: ComposeView = findViewById(R.id.device_info)
         //val v = WatermarkView.install(this)
         deviceInfoState.value = DeviceInfoUtil.showInfo(verifyId, "未登录")
@@ -516,5 +560,10 @@ class MainActivity : BaseActivity() {
     fun updateSubTitle(runType: String) {
         baseTitle = ViewAppInfo.appTitle + "[" + runType + "]" + userNickName
         updateToolbarTheme()
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        fansirsqi.xposed.sesame.ui.theme.app.HolidayTheme.themeObservers.remove(mainActivityThemeObserver)
     }
 }

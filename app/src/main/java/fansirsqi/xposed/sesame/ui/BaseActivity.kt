@@ -47,14 +47,35 @@ open class BaseActivity : AppCompatActivity() {
             supportActionBar?.subtitle = value
         }
 
+    private var currentThemeVersion = 0
+
+    private val themeObserver: () -> Unit = {
+        val isDark = HolidayTheme.shouldUseDarkTheme()
+        val color = if (isDark) android.graphics.Color.parseColor("#121212") else android.graphics.Color.parseColor("#F5F5F5")
+        window.decorView.setBackgroundColor(color)
+        val root = findViewById<android.view.ViewGroup>(android.R.id.content)
+        if (root.childCount > 0) {
+            root.getChildAt(0).setBackgroundColor(color)
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
+        HolidayTheme.applyGlobalNightMode()
+        currentThemeVersion = HolidayTheme.themeVersion.intValue
         super.onCreate(savedInstanceState)
+        HolidayTheme.themeObservers.add(themeObserver)
+        themeObserver.invoke()
         if (PermissionUtil.checkFilePermissions(this)) {
             initialize()
         } else {
             PermissionUtil.checkOrRequestFilePermissions(this)
             ViewAppInfo.init(applicationContext)
         }
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        HolidayTheme.themeObservers.remove(themeObserver)
     }
 
     override fun onResume() {
