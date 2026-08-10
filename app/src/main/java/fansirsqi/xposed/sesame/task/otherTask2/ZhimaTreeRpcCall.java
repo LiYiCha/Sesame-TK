@@ -7,7 +7,7 @@ import org.json.JSONObject;
 public class ZhimaTreeRpcCall {
 
     private static final String PLAY_INFO = "SwbtxJSo8OOUrymAU%2FHnY2jyFRc%2BkCJ3";
-    private static final String REFER = "https://render.alipay.com/p/yuyan/180020010001269849/zmTree.html?caprMode=sync&chInfo=chInfo=ch_zmzltf__chsub_xinyongsyyingxiaowei";
+    private static final String REFER = "https://render.alipay.com/p/yuyan/180020010001288004/zmTree.html?caprMode=sync&chInfo=ch_zmzlzms__chsub_zlsy_icon";
 
     /**
      * 查询芝麻树首页
@@ -67,7 +67,7 @@ public class ZhimaTreeRpcCall {
             args.put("refer", REFER);
 
             JSONObject extInfo = new JSONObject();
-            extInfo.put("chInfo", "ch_share__chsub_ALPContact");
+            extInfo.put("chInfo", "ch_url-https://2021002135657012.hybrid.alipay-eco.com/index.html");
             extInfo.put("batchId", "");
             args.put("extInfo", extInfo);
 
@@ -90,7 +90,7 @@ public class ZhimaTreeRpcCall {
             args.put("refer", REFER);
 
             JSONObject extInfo = new JSONObject();
-            extInfo.put("chInfo", "ch_share__chsub_ALPContact");
+            extInfo.put("chInfo", "ch_url-https://2021002135657012.hybrid.alipay-eco.com/index.html");
             extInfo.put("taskId", taskId);
             extInfo.put("stageCode", stageCode);
             args.put("extInfo", extInfo);

@@ -162,6 +162,12 @@ class GoldBeanPark(private val enableManureExchange: Boolean = false) {
                         val finishRes = finishTaskAntOrchard(taskType, userId, taskSceneCode)
 
                         if (finishRes.optBoolean("success")) {
+                            val directIncCount = extractAwardBeanCount(finishRes)
+                            if (directIncCount > 0 || finishRes.has("awardInfo")) {
+                                Log.other(TAG, "完成[$title]+$directIncCount 金豆")
+                                hasWorkDone = true
+                                break
+                            }
                             delay(1000 + (0..1000).random().toLong())
                             var awardRes = receiveTaskAwardAntOrchard(taskType, taskSceneCode)
                             if (!awardRes.optBoolean("success") && taskSceneCode != "GOLDEN_BEAN_MASTER_TASK") {
@@ -325,6 +331,12 @@ class GoldBeanPark(private val enableManureExchange: Boolean = false) {
 
     private fun extractAwardBeanCount(res: JSONObject): Int {
         var count = res.optInt("beanDelta", res.optInt("incAwardCount", res.optInt("awardCount", res.optInt("awardAmount", res.optInt("amount", res.optInt("incBeanCount", 0))))))
+        if (count == 0 && res.has("awardInfo")) {
+            val awardInfo = res.optJSONObject("awardInfo")
+            if (awardInfo != null) {
+                count = awardInfo.optInt("deltaAwardCount", awardInfo.optInt("totalAwardCount", 0))
+            }
+        }
         if (count == 0 && res.has("data")) {
             val data = res.optJSONObject("data")
             if (data != null) {
@@ -465,7 +477,7 @@ class GoldBeanPark(private val enableManureExchange: Boolean = false) {
         }
 
         // 3. 标题关键字黑名单 (已知非 RPC 任务: 肥料兑换, 首页添加, 消息提醒, 支付, 攒钱, 余额宝)
-        val blackListKeywords = setOf("肥料", "首页", "提醒", "支付", "攒钱", "余额宝", "小游戏","逛一逛金猫矿工")
+        val blackListKeywords = setOf("肥料", "首页", "提醒", "支付", "攒钱", "余额宝", "小游戏")
         return blackListKeywords.any { title.contains(it) }
     }
 

@@ -37,20 +37,19 @@ class HelpActivity : BaseActivity() {
     }
 
     override fun onContentChanged() {
-        // 手动处理 Toolbar
+        super.onContentChanged()
+        
+        // 手动处理 Toolbar 的补充配置
         try {
             val toolbar = findViewById<Toolbar>(R.id.x_toolbar)
             if (toolbar != null) {
-                setSupportActionBar(toolbar)
-                toolbar.setContentInsetsAbsolute(0, 0)
-                toolbar.title = baseTitle
-                toolbar.subtitle = baseSubtitle
-                // 移除返回箭头显示
+                // 移除返回箭头显示 (由 HelpActivity 专属逻辑控制)
                 supportActionBar?.setDisplayHomeAsUpEnabled(false)
                 supportActionBar?.title = "帮助"
+                toolbar.title = "帮助"
             }
         } catch (e: Exception) {
-            Log.printStackTrace(e)
+            e.printStackTrace()
         }
     }
 

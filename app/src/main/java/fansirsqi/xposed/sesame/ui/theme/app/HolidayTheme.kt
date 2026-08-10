@@ -10,6 +10,28 @@ import androidx.appcompat.app.AppCompatDelegate
 import androidx.compose.runtime.mutableIntStateOf
 
 object HolidayTheme {
+
+    fun getCurrentTimePhase(): String {
+        val hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
+        return when (hour) {
+            in 5..8 -> "dawn"
+            in 9..16 -> "day"
+            in 17..19 -> "sunset"
+            else -> "midnight"
+        }
+    }
+
+    data class SkyColors(val top: Color, val bottom: Color, val surfaceAlpha: Float)
+    
+    fun getSkyColors(): SkyColors {
+        return when (getCurrentTimePhase()) {
+            "dawn" -> SkyColors(Color(0xFFFFE0B2), Color(0xFFF48FB1), 0.8f) // Pastel Pink to Soft Gold
+            "day" -> SkyColors(Color(0xFF81D4FA), Color(0xFFE1F5FE), 0.85f) // Azure to Pure White
+            "sunset" -> SkyColors(Color(0xFFCE93D8), Color(0xFFFF8A65), 0.75f) // Purple to Magenta to Orange
+            else -> SkyColors(Color(0xFF1A237E), Color(0xFF000000), 0.7f) // Navy to Black
+        }
+    }
+
     val themeVersion = mutableIntStateOf(0)
     val themeObservers = mutableListOf<() -> Unit>()
 

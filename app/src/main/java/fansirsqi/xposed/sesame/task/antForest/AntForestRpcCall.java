@@ -261,10 +261,15 @@ public class AntForestRpcCall {
 
     public static String queryTaskList() throws JSONException {
         JSONObject jo = new JSONObject();
-        jo.put("extend", new JSONObject());
+        JSONObject extend = new JSONObject();
+        extend.put("appMode", "student");
+        extend.put("nativeVersion", "12.12.1.8000");
+        extend.put("osType", "android");
+        extend.put("version", "20260109");
+        jo.put("extend", extend);
         jo.put("fromAct", "home_task_list");
         jo.put("source", "chInfo_ch_appcenter__chsub_9patch");
-        jo.put("version", VERSION);
+        jo.put("version", "20250821");
         return RequestManager.requestString("alipay.antforest.forest.h5.queryTaskList", new JSONArray().put(jo).toString());
     }
 
@@ -272,16 +277,21 @@ public class AntForestRpcCall {
     public static String queryTaskListV2(String firstTaskType) throws JSONException {
         JSONObject jo = new JSONObject();
         JSONObject extend = new JSONObject();
+        extend.put("appMode", "student");
         extend.put("firstTaskType", firstTaskType); // DNHZ_SL_college,DXS_BHZ，DXS_JSQ
+        extend.put("nativeVersion", "12.12.1.8000");
+        extend.put("osType", "android");
+        extend.put("version", "20260109");
         jo.put("extend", extend);
         jo.put("fromAct", "home_task_list");
         if (firstTaskType.equals("DNHZ_SL_college")) {
             jo.put("source", firstTaskType);
-        }
-        if (firstTaskType.equals("DXS_BHZ") || firstTaskType.equals("DXS_JSQ")) {
+        } else if (firstTaskType.equals("DXS_BHZ") || firstTaskType.equals("DXS_JSQ")) {
             jo.put("source", "202212TJBRW");
+        } else {
+            jo.put("source", "chInfo_ch_appcenter__chsub_9patch");
         }
-        jo.put("version", VERSION);
+        jo.put("version", "20250821");
         return RequestManager.requestString("alipay.antforest.forest.h5.queryTaskList", new JSONArray().put(jo).toString());
     }
 
@@ -307,7 +317,7 @@ public class AntForestRpcCall {
     }
 
     public static String finishTask(String sceneCode, String taskType) throws JSONException {
-        String outBizNo = taskType + "_" + RandomUtil.nextDouble();
+        String outBizNo = taskType + "_" + System.currentTimeMillis() + "_" + RandomUtil.getRandomString(8);
         JSONObject jo = new JSONObject();
         jo.put("outBizNo", outBizNo);
         jo.put("requestType", "H5");
@@ -722,14 +732,17 @@ public class AntForestRpcCall {
 
     /** 森林抽抽乐-请求任务列表（最终修复版） */
     public static String listTaskopengreen(String sceneCode, String source) throws JSONException {
-        // 根据抓包日志，正确的参数结构是直接传递，不需要requestData包装
         JSONObject requestData = new JSONObject();
+        JSONObject extend = new JSONObject();
+        extend.put("businessSource", "ANTFOREST-home_task_list");
+        extend.put("osType", "android");
+        extend.put("version", "20260109");
+        requestData.put("extend", extend);
         requestData.put("requestType", "RPC");
-        requestData.put("sceneCode", sceneCode); // 必须传递 sceneCode
-        requestData.put("source", source); // 必须传递 source
+        requestData.put("sceneCode", sceneCode);
+        requestData.put("source", source);
 
         String args = "[" + requestData + "]";
-        //Log.runtime("AntForestRpcCall", "listTaskopengreen - 场景: " + sceneCode + ", source: " + source);
         return RequestManager.requestString("com.alipay.antieptask.listTaskopengreen", args);
     }
 

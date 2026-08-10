@@ -40,6 +40,7 @@ import androidx.compose.ui.tooling.preview.PreviewParameterProvider
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import fansirsqi.xposed.sesame.BuildConfig
+import kotlinx.coroutines.launch
 
 class PreviewDeviceInfoProvider : PreviewParameterProvider<Map<String, String>> {
     override val values: Sequence<Map<String, String>> = sequenceOf(
@@ -196,18 +197,22 @@ fun DeviceInfoCard(info: Map<String, String>, oneWord: String? = null) {
         activity?.updateToolbarTheme()
     }
     
-    val holidayColors = remember(themeMode, customColor) {
-        val mode = themeMode
-        when {
-            mode == "auto" -> {
-                val holiday = HolidayTheme.checkTodayHoliday()
-                if (holiday == "default") HolidayTheme.HOLIDAY_THEMES["default"] else HolidayTheme.HOLIDAY_THEMES[holiday]
-            }
-            mode == "custom" -> {
-                HolidayTheme.createCustomThemeColors(customColor)
-            }
-            else -> {
-                HolidayTheme.HOLIDAY_THEMES[mode]
+    val holidayColors = remember(themeMode, customColor, darkMode) {
+        if (darkMode == "schedule") {
+            HolidayTheme.getTimeTheme()
+        } else {
+            val mode = themeMode
+            when {
+                mode == "auto" -> {
+                    val holiday = HolidayTheme.checkTodayHoliday()
+                    if (holiday == "default") HolidayTheme.HOLIDAY_THEMES["default"] else HolidayTheme.HOLIDAY_THEMES[holiday]
+                }
+                mode == "custom" -> {
+                    HolidayTheme.createCustomThemeColors(customColor)
+                }
+                else -> {
+                    HolidayTheme.HOLIDAY_THEMES[mode]
+                }
             }
         }
     }
@@ -216,6 +221,7 @@ fun DeviceInfoCard(info: Map<String, String>, oneWord: String? = null) {
         when (mode) {
             "light" -> false
             "dark" -> true
+            "schedule" -> HolidayTheme.shouldUseDarkTheme()
             else -> isSystemInDarkTheme()
         }
     }
@@ -271,29 +277,54 @@ fun DeviceInfoCard(info: Map<String, String>, oneWord: String? = null) {
             val pagerState = rememberPagerState(pageCount = { 3 })
 
             Column {
+                // 读取生态系统开关状态，强制 Compose 在此处订阅依赖
+                val isEcoEnabled = fansirsqi.xposed.sesame.ui.theme.app.EcosystemManager.isEcoEnabled
+                
                 HorizontalPager(
                     state = pagerState,
                     modifier = Modifier.fillMaxWidth().heightIn(min = 340.dp)
                 ) { page ->
                     when (page) {
                         0 -> {
-                            val holidayTitle = holidayColors?.title ?: "🎉 欢迎使用 Sesame-TK"
+                            val timePhase = fansirsqi.xposed.sesame.ui.theme.app.HolidayTheme.getCurrentTimePhase()
+                            val dynamicGreeting = when (timePhase) {
+                                "dawn" -> "🌅 晨光微露，早安！"
+                                "day" -> "☀️ 艳阳高照，午安！"
+                                "sunset" -> "🌇 晚霞绚烂，傍晚好！"
+                                "midnight" -> "🌌 夜深了，请注意休息。"
+                                else -> "🎉 欢迎使用 Sesame-TK"
+                            }
+                            val holidayTitle = holidayColors?.title ?: dynamicGreeting
                             val holidayStory = holidayColors?.story ?: "“岁月静好，芝麻常伴。” 模块已正常加载，愿您今天也有好心情！保持童心与好奇，探索生活的精彩。"
 
-                            var isIconAnimating by remember { mutableStateOf(false) }
-                            val iconScale by animateFloatAsState(
-                                targetValue = if (isIconAnimating) 1.25f else 1f,
-                                animationSpec = androidx.compose.animation.core.spring(dampingRatio = androidx.compose.animation.core.Spring.DampingRatioHighBouncy),
-                                finishedListener = { isIconAnimating = false }
-                            )
-                            var isAnimalAnimating by remember { mutableStateOf(false) }
-                            val animalScale by animateFloatAsState(
-                                targetValue = if (isAnimalAnimating) 1.25f else 1f,
-                                animationSpec = androidx.compose.animation.core.spring(dampingRatio = androidx.compose.animation.core.Spring.DampingRatioHighBouncy),
-                                finishedListener = { isAnimalAnimating = false }
-                            )
+                            val coroutineScope = rememberCoroutineScope()
+                            var animType by remember { mutableStateOf(0) }
+                            val iconScale = remember { androidx.compose.animation.core.Animatable(1f) }
+                            val iconRotation = remember { androidx.compose.animation.core.Animatable(0f) }
+                            val iconFlip = remember { androidx.compose.animation.core.Animatable(0f) }
 
-                            Column(modifier = Modifier.padding(16.dp)) {
+                            var animalAnimType by remember { mutableStateOf(0) }
+                            val animalScale = remember { androidx.compose.animation.core.Animatable(1f) }
+                            val animalRotation = remember { androidx.compose.animation.core.Animatable(0f) }
+                            val animalFlip = remember { androidx.compose.animation.core.Animatable(0f) }
+
+                            val sky = fansirsqi.xposed.sesame.ui.theme.app.HolidayTheme.getSkyColors()
+                            val isSchedule = darkMode == "schedule" || (darkMode == "auto" && themeMode == "auto")
+                            
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .then(
+                                        if (isSchedule) {
+                                            Modifier.background(
+                                                brush = androidx.compose.ui.graphics.Brush.verticalGradient(
+                                                    colors = listOf(sky.top.copy(alpha = 0.15f), sky.bottom.copy(alpha = 0.05f))
+                                                )
+                                            )
+                                        } else Modifier
+                                    )
+                            ) {
+                                Column(modifier = Modifier.padding(16.dp).fillMaxSize()) {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     Surface(
                                         color = containerColor,
@@ -301,11 +332,23 @@ fun DeviceInfoCard(info: Map<String, String>, oneWord: String? = null) {
                                         modifier = Modifier.size(40.dp)
                                     ) {
                                         Box(contentAlignment = Alignment.Center) {
-                                            if (fansirsqi.xposed.sesame.ui.theme.app.EcosystemManager.currentLineIcon != null) {
+                                            if (isEcoEnabled && fansirsqi.xposed.sesame.ui.theme.app.EcosystemManager.currentLineIcon != null) {
                                                 Box(
                                                     modifier = Modifier.pointerInput(Unit) {
                                                         detectTapGestures(
-                                                            onTap = { isIconAnimating = true },
+                                                            onTap = { 
+                                                                if (animType == 0) {
+                                                                    animType = (1..3).random()
+                                                                    coroutineScope.launch {
+                                                                        when (animType) {
+                                                                            1 -> { iconScale.animateTo(0.6f, androidx.compose.animation.core.tween(100)); iconScale.animateTo(1.3f, androidx.compose.animation.core.spring(dampingRatio = 0.4f)); iconScale.animateTo(1f) }
+                                                                            2 -> { iconRotation.animateTo(-30f, androidx.compose.animation.core.tween(50)); iconRotation.animateTo(30f, androidx.compose.animation.core.tween(100)); iconRotation.animateTo(0f, androidx.compose.animation.core.spring()) }
+                                                                            3 -> { iconFlip.animateTo(360f, androidx.compose.animation.core.tween(500)); iconFlip.snapTo(0f) }
+                                                                        }
+                                                                        animType = 0
+                                                                    }
+                                                                }
+                                                            },
                                                             onLongPress = { showLinePicker = true }
                                                         )
                                                     },
@@ -322,7 +365,7 @@ fun DeviceInfoCard(info: Map<String, String>, oneWord: String? = null) {
                                                             .build(),
                                                         contentDescription = null,
                                                         colorFilter = androidx.compose.ui.graphics.ColorFilter.tint(brandColor),
-                                                        modifier = Modifier.size(20.dp).graphicsLayer { scaleX = iconScale; scaleY = iconScale }
+                                                        modifier = Modifier.size(20.dp).graphicsLayer { scaleX = iconScale.value; scaleY = iconScale.value; rotationZ = iconRotation.value; rotationY = iconFlip.value }
                                                     )
                                                 }
                                             } else {
@@ -330,9 +373,21 @@ fun DeviceInfoCard(info: Map<String, String>, oneWord: String? = null) {
                                                     Icons.Rounded.Celebration,
                                                     contentDescription = null,
                                                     tint = brandColor,
-                                                    modifier = Modifier.size(20.dp).graphicsLayer { scaleX = iconScale; scaleY = iconScale }.pointerInput(Unit) {
+                                                    modifier = Modifier.size(20.dp).graphicsLayer { scaleX = iconScale.value; scaleY = iconScale.value; rotationZ = iconRotation.value; rotationY = iconFlip.value }.pointerInput(Unit) {
                                                         detectTapGestures(
-                                                            onTap = { isIconAnimating = true },
+                                                            onTap = { 
+                                                                if (animType == 0) {
+                                                                    animType = (1..3).random()
+                                                                    coroutineScope.launch {
+                                                                        when (animType) {
+                                                                            1 -> { iconScale.animateTo(0.6f, androidx.compose.animation.core.tween(100)); iconScale.animateTo(1.3f, androidx.compose.animation.core.spring(dampingRatio = 0.4f)); iconScale.animateTo(1f) }
+                                                                            2 -> { iconRotation.animateTo(-30f, androidx.compose.animation.core.tween(50)); iconRotation.animateTo(30f, androidx.compose.animation.core.tween(100)); iconRotation.animateTo(0f, androidx.compose.animation.core.spring()) }
+                                                                            3 -> { iconFlip.animateTo(360f, androidx.compose.animation.core.tween(500)); iconFlip.snapTo(0f) }
+                                                                        }
+                                                                        animType = 0
+                                                                    }
+                                                                }
+                                                            },
                                                             onLongPress = { showLinePicker = true }
                                                         )
                                                     }
@@ -381,15 +436,29 @@ fun DeviceInfoCard(info: Map<String, String>, oneWord: String? = null) {
                                             color = brandColor
                                         )
                                     }
-                                    Box(
-                                        modifier = Modifier.align(Alignment.BottomEnd).offset(x = 10.dp, y = 10.dp).pointerInput(Unit) {
-                                            detectTapGestures(
-                                                onTap = { isAnimalAnimating = true },
-                                                onLongPress = { showAnimalPicker = true }
-                                            )
+                                    if (isEcoEnabled) {
+                                        Box(
+                                            modifier = Modifier.align(Alignment.BottomEnd).offset(x = 10.dp, y = 10.dp).pointerInput(Unit) {
+                                                detectTapGestures(
+                                                    onTap = { 
+                                                        if (animalAnimType == 0) {
+                                                            animalAnimType = (1..3).random()
+                                                            coroutineScope.launch {
+                                                                when (animalAnimType) {
+                                                                    1 -> { animalScale.animateTo(0.6f, androidx.compose.animation.core.tween(100)); animalScale.animateTo(1.3f, androidx.compose.animation.core.spring(dampingRatio = 0.4f)); animalScale.animateTo(1f) }
+                                                                    2 -> { animalRotation.animateTo(-30f, androidx.compose.animation.core.tween(50)); animalRotation.animateTo(30f, androidx.compose.animation.core.tween(100)); animalRotation.animateTo(0f, androidx.compose.animation.core.spring()) }
+                                                                    3 -> { animalFlip.animateTo(360f, androidx.compose.animation.core.tween(500)); animalFlip.snapTo(0f) }
+                                                                }
+                                                                animalAnimType = 0
+                                                            }
+                                                        }
+                                                    },
+                                                    onLongPress = { showAnimalPicker = true }
+                                                )
+                                            }
+                                        ) {
+                                            fansirsqi.xposed.sesame.ui.theme.app.EcosystemCardDecorator(modifier = Modifier.graphicsLayer { scaleX = animalScale.value; scaleY = animalScale.value; rotationZ = animalRotation.value; rotationY = animalFlip.value })
                                         }
-                                    ) {
-                                        fansirsqi.xposed.sesame.ui.theme.app.EcosystemCardDecorator(modifier = Modifier.graphicsLayer { scaleX = animalScale; scaleY = animalScale })
                                     }
                                 }
 
@@ -468,6 +537,7 @@ fun DeviceInfoCard(info: Map<String, String>, oneWord: String? = null) {
                                     }
                                 }
                             }
+                            }
                         }
                         1 -> {
                             Column(modifier = Modifier.padding(16.dp)) {
@@ -510,12 +580,12 @@ fun DeviceInfoCard(info: Map<String, String>, oneWord: String? = null) {
                             }
                         }
                         2 -> {
-                            var isEcoAnimating by remember { mutableStateOf(false) }
-                            val ecoScale by animateFloatAsState(
-                                targetValue = if (isEcoAnimating) 1.25f else 1f,
-                                animationSpec = androidx.compose.animation.core.spring(dampingRatio = androidx.compose.animation.core.Spring.DampingRatioHighBouncy),
-                                finishedListener = { isEcoAnimating = false }
-                            )
+                            val coroutineScope = rememberCoroutineScope()
+                            var ecoAnimType by remember { mutableStateOf(0) }
+                            val ecoScale = remember { androidx.compose.animation.core.Animatable(1f) }
+                            val ecoRotation = remember { androidx.compose.animation.core.Animatable(0f) }
+                            val ecoFlip = remember { androidx.compose.animation.core.Animatable(0f) }
+
                             Column(modifier = Modifier.padding(16.dp)) {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     Surface(
@@ -530,7 +600,17 @@ fun DeviceInfoCard(info: Map<String, String>, oneWord: String? = null) {
                                                         detectTapGestures(
                                                             onTap = { 
                                                                 fansirsqi.xposed.sesame.ui.theme.app.EcosystemManager.shuffle()
-                                                                isEcoAnimating = true 
+                                                                if (ecoAnimType == 0) {
+                                                                    ecoAnimType = (1..3).random()
+                                                                    coroutineScope.launch {
+                                                                        when (ecoAnimType) {
+                                                                            1 -> { ecoScale.animateTo(0.6f, androidx.compose.animation.core.tween(100)); ecoScale.animateTo(1.3f, androidx.compose.animation.core.spring(dampingRatio = 0.4f)); ecoScale.animateTo(1f) }
+                                                                            2 -> { ecoRotation.animateTo(-30f, androidx.compose.animation.core.tween(50)); ecoRotation.animateTo(30f, androidx.compose.animation.core.tween(100)); ecoRotation.animateTo(0f, androidx.compose.animation.core.spring()) }
+                                                                            3 -> { ecoFlip.animateTo(360f, androidx.compose.animation.core.tween(500)); ecoFlip.snapTo(0f) }
+                                                                        }
+                                                                        ecoAnimType = 0
+                                                                    }
+                                                                }
                                                             },
                                                             onLongPress = { showAnimalPicker = true }
                                                         )
@@ -547,7 +627,7 @@ fun DeviceInfoCard(info: Map<String, String>, oneWord: String? = null) {
                                                             }
                                                             .build(),
                                                         contentDescription = null,
-                                                        modifier = Modifier.size(24.dp).graphicsLayer { scaleX = ecoScale; scaleY = ecoScale }
+                                                        modifier = Modifier.size(24.dp).graphicsLayer { scaleX = ecoScale.value; scaleY = ecoScale.value; rotationZ = ecoRotation.value; rotationY = ecoFlip.value }
                                                     )
                                                 }
                                             } else {
@@ -555,11 +635,21 @@ fun DeviceInfoCard(info: Map<String, String>, oneWord: String? = null) {
                                                     Icons.Rounded.Eco,
                                                     contentDescription = null,
                                                     tint = brandColor,
-                                                    modifier = Modifier.size(24.dp).graphicsLayer { scaleX = ecoScale; scaleY = ecoScale }.pointerInput(Unit) {
+                                                    modifier = Modifier.size(24.dp).graphicsLayer { scaleX = ecoScale.value; scaleY = ecoScale.value; rotationZ = ecoRotation.value; rotationY = ecoFlip.value }.pointerInput(Unit) {
                                                         detectTapGestures(
                                                             onTap = { 
                                                                 fansirsqi.xposed.sesame.ui.theme.app.EcosystemManager.shuffle()
-                                                                isEcoAnimating = true
+                                                                if (ecoAnimType == 0) {
+                                                                    ecoAnimType = (1..3).random()
+                                                                    coroutineScope.launch {
+                                                                        when (ecoAnimType) {
+                                                                            1 -> { ecoScale.animateTo(0.6f, androidx.compose.animation.core.tween(100)); ecoScale.animateTo(1.3f, androidx.compose.animation.core.spring(dampingRatio = 0.4f)); ecoScale.animateTo(1f) }
+                                                                            2 -> { ecoRotation.animateTo(-30f, androidx.compose.animation.core.tween(50)); ecoRotation.animateTo(30f, androidx.compose.animation.core.tween(100)); ecoRotation.animateTo(0f, androidx.compose.animation.core.spring()) }
+                                                                            3 -> { ecoFlip.animateTo(360f, androidx.compose.animation.core.tween(500)); ecoFlip.snapTo(0f) }
+                                                                        }
+                                                                        ecoAnimType = 0
+                                                                    }
+                                                                }
                                                             },
                                                             onLongPress = { showAnimalPicker = true }
                                                         )
@@ -582,6 +672,16 @@ fun DeviceInfoCard(info: Map<String, String>, oneWord: String? = null) {
                                             color = accentColor.copy(alpha = 0.6f)
                                         )
                                     }
+                                    Spacer(modifier = Modifier.weight(1f))
+                                    androidx.compose.material3.Switch(
+                                        checked = isEcoEnabled,
+                                        onCheckedChange = { fansirsqi.xposed.sesame.ui.theme.app.EcosystemManager.saveEcoEnabled(it) },
+                                        colors = androidx.compose.material3.SwitchDefaults.colors(
+                                            checkedThumbColor = brandColor,
+                                            checkedTrackColor = brandColor.copy(alpha = 0.3f)
+                                        ),
+                                        modifier = Modifier.scale(0.85f)
+                                    )
                                 }
                                 Spacer(modifier = Modifier.height(16.dp))
                                 Box(
@@ -601,7 +701,17 @@ fun DeviceInfoCard(info: Map<String, String>, oneWord: String? = null) {
                                             detectTapGestures(
                                                 onTap = { 
                                                     fansirsqi.xposed.sesame.ui.theme.app.EcosystemManager.shuffle()
-                                                    isEcoAnimating = true
+                                                    if (ecoAnimType == 0) {
+                                                        ecoAnimType = (1..3).random()
+                                                        coroutineScope.launch {
+                                                            when (ecoAnimType) {
+                                                                1 -> { ecoScale.animateTo(0.6f, androidx.compose.animation.core.tween(100)); ecoScale.animateTo(1.3f, androidx.compose.animation.core.spring(dampingRatio = 0.4f)); ecoScale.animateTo(1f) }
+                                                                2 -> { ecoRotation.animateTo(-30f, androidx.compose.animation.core.tween(50)); ecoRotation.animateTo(30f, androidx.compose.animation.core.tween(100)); ecoRotation.animateTo(0f, androidx.compose.animation.core.spring()) }
+                                                                3 -> { ecoFlip.animateTo(360f, androidx.compose.animation.core.tween(500)); ecoFlip.snapTo(0f) }
+                                                            }
+                                                            ecoAnimType = 0
+                                                        }
+                                                    }
                                                 },
                                                 onLongPress = { showAnimalPicker = true }
                                             )
@@ -618,7 +728,7 @@ fun DeviceInfoCard(info: Map<String, String>, oneWord: String? = null) {
                                         )
                                     )
                                     
-                                    val finalScale = ecoScale * breathScale
+                                    val finalScale = ecoScale.value * breathScale
                                     
                                     if (fansirsqi.xposed.sesame.ui.theme.app.EcosystemManager.currentAnimal != null) {
                                         coil.compose.AsyncImage(
@@ -631,14 +741,14 @@ fun DeviceInfoCard(info: Map<String, String>, oneWord: String? = null) {
                                                 }
                                                 .build(),
                                             contentDescription = "Ecosystem Centerpiece",
-                                            modifier = Modifier.size(80.dp).graphicsLayer { scaleX = finalScale; scaleY = finalScale }
+                                            modifier = Modifier.size(80.dp).graphicsLayer { scaleX = finalScale; scaleY = finalScale; rotationZ = ecoRotation.value; rotationY = ecoFlip.value }
                                         )
                                     } else {
                                         Icon(
                                             Icons.Rounded.Eco,
                                             contentDescription = null,
                                             tint = brandColor.copy(alpha = 0.7f),
-                                            modifier = Modifier.size(80.dp).graphicsLayer { scaleX = finalScale; scaleY = finalScale }
+                                            modifier = Modifier.size(80.dp).graphicsLayer { scaleX = finalScale; scaleY = finalScale; rotationZ = ecoRotation.value; rotationY = ecoFlip.value }
                                         )
                                     }
                                     
@@ -722,6 +832,23 @@ fun DeviceInfoCard(info: Map<String, String>, oneWord: String? = null) {
                                     )
                                 }
                             }
+                        }
+
+                        if (darkMode == "schedule" || (darkMode == "auto" && themeMode == "auto")) {
+                            val timePhase = fansirsqi.xposed.sesame.ui.theme.app.HolidayTheme.getCurrentTimePhase()
+                            val phaseName = when (timePhase) {
+                                "dawn" -> "🌅 晨曦"
+                                "day" -> "☀️ 白昼"
+                                "sunset" -> "🌇 晚霞"
+                                "midnight" -> "🌌 子夜"
+                                else -> "自动"
+                            }
+                            Text(
+                                "当前时段: $phaseName", 
+                                style = MaterialTheme.typography.labelSmall, 
+                                color = brandColor,
+                                modifier = Modifier.padding(start = 4.dp)
+                            )
                         }
 
                         Spacer(modifier = Modifier.height(4.dp))

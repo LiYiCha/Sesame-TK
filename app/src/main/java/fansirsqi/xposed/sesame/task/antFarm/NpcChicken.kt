@@ -163,20 +163,16 @@ class NpcChicken {
     /**
      * 领取小鸡奖励
      */
-    fun receiveAndSendBackAnimal(animalId: String,currentFarmId: String,masterFarmId: String){
-        val method = "com.alipay.antfarm.sendBackAnimal"
-        val params = "[{\"animalId\":\"$animalId\"," +
-                "\"currentFarmId\":\"$currentFarmId\"," +
-                "\"masterFarmId\":\"$masterFarmId\"," +
-                "\"receiveNPCReward\":true,\"requestType\":\"NORMAL\",\"sceneCode\":\"ANTFARM\",\"sendType\":\"NORMAL\",\"source\":\"H5\",\"version\":\"1.8.2302070202.46\"}]"
-        try{
-            val result = JSONObject(RequestManager.requestString(method, params))
+    fun receiveAndSendBackAnimal(animalId: String, currentFarmId: String, masterFarmId: String) {
+        try {
+            val resultStr = AntFarmRpcCall.sendBackAnimal("NORMAL", animalId, currentFarmId, masterFarmId, true)
+            val result = JSONObject(resultStr)
             if (result.optBoolean("success")) {
                 Log.farm("$TAG 领取NPC小鸡奖励成功")
-            }else{
+            } else {
                 Log.error("$TAG 领取NPC小鸡奖励失败:${result}")
             }
-        }catch (e: Exception){
+        } catch (e: Exception) {
             Log.error("$TAG.sendBackAnimal异常:$e")
         }
     }

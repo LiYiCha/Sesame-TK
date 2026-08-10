@@ -13,6 +13,7 @@ import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import coil.decode.SvgDecoder
 import coil.request.ImageRequest
+import fansirsqi.xposed.sesame.newutil.MMKVUtil
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -25,6 +26,18 @@ object EcosystemManager {
     var currentLineIcon: String? by mutableStateOf(null)
     var allAnimals: List<String> = emptyList()
     var allLines: List<String> = emptyList()
+
+    // 新增：全局生态守护舱开关
+    var isEcoEnabled by mutableStateOf(true)
+
+    fun saveEcoEnabled(enabled: Boolean) {
+        isEcoEnabled = enabled
+        try {
+            MMKVUtil.getMMKV("sesame-tk").encode("is_eco_enabled", enabled)
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
 
     suspend fun initAssets(context: Context) {
         if (initialized) return
@@ -40,6 +53,13 @@ object EcosystemManager {
                 if (allLines.isNotEmpty()) {
                     currentLineIcon = "file:///android_asset/ecosystem/lines/${allLines.random()}"
                 }
+                
+                try {
+                    isEcoEnabled = fansirsqi.xposed.sesame.newutil.MMKVUtil.getMMKV("sesame-tk").decodeBool("is_eco_enabled", true)
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                }
+                
                 initialized = true
             } catch (e: Exception) {
                 e.printStackTrace()

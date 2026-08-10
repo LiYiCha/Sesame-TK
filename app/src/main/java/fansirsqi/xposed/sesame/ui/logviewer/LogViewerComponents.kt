@@ -581,9 +581,9 @@ fun LogLineRow(
                 checked = isSelected,
                 onCheckedChange = onCheckedChange,
                 modifier = Modifier
-                    .padding(end = 4.dp)
-                    .height(0.dp) // 极简零高度占位
-                    .wrapContentHeight(unbounded = true) // 允许超出边界绘制而不撑高父 Row
+                    .padding(end = 2.dp)
+                    .size(width = 20.dp, height = 0.dp) // 极简占位：强制压缩宽高以缩小边距
+                    .wrapContentSize(unbounded = true) // 允许超出边界绘制而不撑高、撑宽父 Row
                     .scale(0.8f)
             )
         }
@@ -696,7 +696,12 @@ fun LogContent(
                         } while (event.changes.any { it.pressed })
                     }
                 }
-                .padding(start = 8.dp, end = 24.dp, top = 8.dp, bottom = 8.dp)
+                .padding(
+                    start = 8.dp, 
+                    end = 24.dp, 
+                    top = 8.dp, 
+                    bottom = if (uiState.isSelectionMode) 100.dp else 8.dp
+                )
         ) {
             itemsIndexed(
                 items = uiState.displayedLines,

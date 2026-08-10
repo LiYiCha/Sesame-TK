@@ -22,14 +22,14 @@ open class BaseActivity : AppCompatActivity() {
     companion object {
         private const val REQUEST_EXTERNAL_STORAGE = 1
     }
-    // Toolbar 安全获取：兼容 Compose 模式
-    protected val toolbar: MaterialToolbar? by lazy { 
-        try {
-            findViewById<MaterialToolbar>(R.id.x_toolbar)
-        } catch (e: Exception) {
-            null
+    protected val toolbar: MaterialToolbar?
+        get() {
+            return try {
+                findViewById(R.id.x_toolbar)
+            } catch (e: Exception) {
+                null
+            }
         }
-    }
 
     // 基础标题
     open var baseTitle: String?
@@ -50,12 +50,136 @@ open class BaseActivity : AppCompatActivity() {
     private var currentThemeVersion = 0
 
     private val themeObserver: () -> Unit = {
-        val isDark = HolidayTheme.shouldUseDarkTheme()
-        val color = if (isDark) android.graphics.Color.parseColor("#121212") else android.graphics.Color.parseColor("#F5F5F5")
-        window.decorView.setBackgroundColor(color)
+        val mode = HolidayTheme.getDarkMode()
+        val isSystemNight = (resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK) == android.content.res.Configuration.UI_MODE_NIGHT_YES
+        val isDark = when (mode) {
+            "light" -> false
+            "dark" -> true
+            "schedule" -> HolidayTheme.shouldUseDarkTheme()
+            else -> isSystemNight
+        }
+        
+        // 获取当前主题配色
+        val themeMode = HolidayTheme.getThemeMode()
+        val customColor = HolidayTheme.getCustomColor()
+        
+        var bgColorInt = if (isDark) android.graphics.Color.parseColor("#121212") else android.graphics.Color.parseColor("#F5F5F5")
+        var mainColorInt = if (isDark) android.graphics.Color.parseColor("#BB86FC") else android.graphics.Color.parseColor("#4CAF50")
+        var cardColorInt = if (isDark) android.graphics.Color.parseColor("#1E1E1E") else android.graphics.Color.WHITE
+        
+        if (mode == "schedule") {
+            HolidayTheme.getTimeTheme()?.let {
+                bgColorInt = if (isDark) it.cardBgColor.toArgb() else it.bgColor.toArgb()
+                mainColorInt = it.mainColor.toArgb()
+                cardColorInt = if (isDark) android.graphics.Color.parseColor("#1E1E1E") else it.cardBgColor.toArgb()
+            }
+        } else {
+            when (themeMode) {
+                "auto" -> {
+                    val holiday = HolidayTheme.checkTodayHoliday()
+                    if (holiday != "default") {
+                        val tc = HolidayTheme.HOLIDAY_THEMES[holiday]
+                        if (tc != null) {
+                            bgColorInt = if (isDark) tc.cardBgColor.toArgb() else tc.bgColor.toArgb()
+                            mainColorInt = tc.mainColor.toArgb()
+                            cardColorInt = if (isDark) android.graphics.Color.parseColor("#1E1E1E") else tc.cardBgColor.toArgb()
+                        }
+                    }
+                }
+                "custom" -> {
+                    try { mainColorInt = android.graphics.Color.parseColor(customColor) } catch (_: Exception) {}
+                }
+                else -> {
+                    val tc = HolidayTheme.HOLIDAY_THEMES[themeMode]
+                    if (tc != null) {
+                        bgColorInt = if (isDark) tc.cardBgColor.toArgb() else tc.bgColor.toArgb()
+                        mainColorInt = tc.mainColor.toArgb()
+                        cardColorInt = if (isDark) android.graphics.Color.parseColor("#1E1E1E") else tc.cardBgColor.toArgb()
+                    }
+                }
+            }
+        }
+        
+        // 降低背景饱和度，避免太刺眼
+        val finalBgColor = androidx.core.graphics.ColorUtils.blendARGB(
+            if (isDark) android.graphics.Color.parseColor("#1E1E1E") else android.graphics.Color.WHITE, 
+            mainColorInt, 
+            if (isDark) 0.1f else 0.05f
+        )
+        
+        window.decorView.setBackgroundColor(finalBgColor)
         val root = findViewById<android.view.ViewGroup>(android.R.id.content)
-        if (root.childCount > 0) {
-            root.getChildAt(0).setBackgroundColor(color)
+        if (root != null && root.childCount > 0) {
+            val contentView = root.getChildAt(0)
+            contentView.setBackgroundColor(finalBgColor)
+            applyThemeToViews(contentView, isDark, mainColorInt, finalBgColor, cardColorInt)
+        }
+        
+        // 委托给专业的 updateToolbarTheme 处理标题栏
+        updateToolbarTheme()
+    }
+
+    private fun applyThemeToViews(view: android.view.View, isNightMode: Boolean, mainColorInt: Int, finalBgColor: Int, cardColor: Int) {
+        try {
+            val defaultColorPrimary = androidx.core.content.ContextCompat.getColor(this, R.color.colorPrimary)
+            val defaultF5F5F5 = android.graphics.Color.parseColor("#F5F5F5")
+            val defaultBackground = androidx.core.content.ContextCompat.getColor(this, R.color.background)
+            
+            val textColor = if (isNightMode) android.graphics.Color.parseColor("#E0E0E0") else android.graphics.Color.parseColor("#212121")
+            
+            // 1. 按钮 (Button / MaterialButton) 染色
+            if (view is android.widget.Button) {
+                val bgAlpha = if (isNightMode) 0.15f else 0.12f
+                val blendedBgColor = androidx.core.graphics.ColorUtils.blendARGB(cardColor, mainColorInt, bgAlpha)
+                view.backgroundTintList = android.content.res.ColorStateList.valueOf(blendedBgColor)
+                view.setTextColor(android.content.res.ColorStateList.valueOf(textColor))
+                if (view is com.google.android.material.button.MaterialButton) {
+                    view.backgroundTintMode = android.graphics.PorterDuff.Mode.SRC_IN
+                }
+            }
+            
+            // 2. WebView 设为透明以露出底色
+            if (view is android.webkit.WebView) {
+                view.setBackgroundColor(android.graphics.Color.TRANSPARENT)
+            }
+            
+            // 3. 替换 CardView 颜色
+            if (view is androidx.cardview.widget.CardView) {
+                view.setCardBackgroundColor(cardColor)
+            }
+            
+            // 4. 替换文字主色调
+            if (view is android.widget.TextView && view !is android.widget.Button) {
+                if (view.currentTextColor == defaultColorPrimary) {
+                    view.setTextColor(mainColorInt)
+                }
+            }
+            
+            // 5. 修复硬编码的死板背景 (如 #F5F5F5 或 @color/background)
+            if (view.background is android.graphics.drawable.ColorDrawable) {
+                val bg = view.background as android.graphics.drawable.ColorDrawable
+                if (bg.color == defaultF5F5F5 || bg.color == defaultBackground) {
+                    // 对非根部的特定布局给一个融入主题的柔和区块颜色，否则透明化露出被我们染色的 contentView 底色
+                    if (view.id != android.view.View.NO_ID && view.id != android.R.id.content) {
+                        val softBlockColor = androidx.core.graphics.ColorUtils.blendARGB(
+                            if (isNightMode) android.graphics.Color.parseColor("#2B2B2B") else finalBgColor, 
+                            mainColorInt, 0.08f
+                        )
+                        view.setBackgroundColor(softBlockColor)
+                    } else {
+                        view.setBackgroundColor(android.graphics.Color.TRANSPARENT)
+                    }
+                }
+            }
+            
+            // 6. 递归遍历子节点
+            if (view is android.view.ViewGroup) {
+                for (i in 0 until view.childCount) {
+                    applyThemeToViews(view.getChildAt(i), isNightMode, mainColorInt, finalBgColor, cardColor)
+                }
+            }
+        } catch (e: Exception) {
+            fansirsqi.xposed.sesame.util.Log.printStackTrace(e)
         }
     }
 
@@ -113,6 +237,21 @@ open class BaseActivity : AppCompatActivity() {
         }
     }
 
+    override fun setContentView(layoutResID: Int) {
+        super.setContentView(layoutResID)
+        themeObserver.invoke()
+    }
+
+    override fun setContentView(view: android.view.View?) {
+        super.setContentView(view)
+        themeObserver.invoke()
+    }
+
+    override fun setContentView(view: android.view.View?, params: android.view.ViewGroup.LayoutParams?) {
+        super.setContentView(view, params)
+        themeObserver.invoke()
+    }
+
     override fun onContentChanged() {
         super.onContentChanged()
         
@@ -139,7 +278,7 @@ open class BaseActivity : AppCompatActivity() {
             mode == "schedule" -> HolidayTheme.shouldUseDarkTheme()
             else -> isSystemNight
         }
-        val holidayColors = HolidayTheme.getHolidayColors()
+        val holidayColors = if (mode == "schedule") HolidayTheme.getTimeTheme() else HolidayTheme.getHolidayColors()
         val argbColor = if (holidayColors != null) {
             holidayColors.bgColor.toArgb() // 使用浅色背景 (淡色)
         } else {

@@ -571,6 +571,11 @@ class AntOrchard : ModelTask() {
                     if (ResChecker.checkRes(TAG, finishResponse)) {
                         Log.farm("农场任务🧾[$title]")
                     } else {
+                        val errorCode = finishResponse.optString("code", "")
+                        val errorDesc = finishResponse.optString("desc", "")
+                        if (errorCode.isNotEmpty()) {
+                            TaskBlacklist.autoAddToBlacklist(groupId, title, errorCode, errorDesc)
+                        }
                         Log.error(TAG, "农场任务🧾[$title]${finishResponse.optString("desc")}")
                     }
                     continue
@@ -611,15 +616,13 @@ class AntOrchard : ModelTask() {
 
                     while (hasNextStage && currentRightsTimes < rightsTimesLimit) {
                         if (gameAppId.isNotEmpty()) {
-                            // 先发送游戏时长心跳与在线事件，确保服务端累积足够的在线时长
+                            // 提交游戏在线时长
                             val hbCount = if (currentRightsTimes >= 1) 2 else 1
                             var heartBeatOk = true
                             for (hb in 1..hbCount) {
                                 val durationRes = AntOrchardRpcCall.submitUserPlayDurationAction(gameAppId, 30)
-                                val eventRes = AntOrchardRpcCall.submitGameEvent(gameAppId, "GAME_PLAY_TIME", 30)
-                                // 任一请求系统异常或 success == false 时，停止后续心跳，避免无效重试
-                                if (!ResChecker.checkRes(TAG, durationRes) || !ResChecker.checkRes(TAG, eventRes)) {
-                                    Log.error(TAG, "农场试玩任务🎮[$title] 心跳发送失败，终止时长累积")
+                                if (!ResChecker.checkRes(TAG, durationRes)) {
+                                    Log.error(TAG, "农场试玩任务🎮[$title] 时长提交失败，终止处理")
                                     heartBeatOk = false
                                     break
                                 }

@@ -78,6 +78,8 @@ val defaultBlacklist = setOf(
     "ORCHARD_NORMAL_SHOUJISHUMAHUISHOU", // 数码回收
     "ORCHARD_NORMAL_TAB3_ZHIFA",    // 看视频领肥料
     "ORCHARD_NORMAL_AQ_XIAZAI",     // 下载AQ
+    "ORCHARD_NORMAL_SHOUYIJIA_500", // 500肥料奖励（不支持RPC）
+    "支付奖励1000肥料",            // 支付奖励1000肥料（不支持RPC）
 
     // 庄园任务
     "HEART_DONATION_ADVANCED_FOOD_V2",  //去买秋天第一杯奶茶

@@ -84,6 +84,10 @@ class MainActivity : BaseActivity() {
         val themeMode = fansirsqi.xposed.sesame.ui.theme.app.HolidayTheme.getThemeMode()
         val customColor = fansirsqi.xposed.sesame.ui.theme.app.HolidayTheme.getCustomColor()
         val mainColor = when {
+            mode == "schedule" -> {
+                val timeTheme = fansirsqi.xposed.sesame.ui.theme.app.HolidayTheme.getTimeTheme()
+                timeTheme?.mainColor?.toArgb() ?: android.graphics.Color.parseColor("#4CAF50")
+            }
             themeMode == "auto" -> {
                 val holiday = fansirsqi.xposed.sesame.ui.theme.app.HolidayTheme.checkTodayHoliday()
                 val themeColors = if (holiday == "default") fansirsqi.xposed.sesame.ui.theme.app.HolidayTheme.HOLIDAY_THEMES["default"] else fansirsqi.xposed.sesame.ui.theme.app.HolidayTheme.HOLIDAY_THEMES[holiday]
@@ -111,12 +115,15 @@ class MainActivity : BaseActivity() {
         }
         val cardColor = if (isNightMode) android.graphics.Color.parseColor("#1E1E1E") else android.graphics.Color.WHITE
         findViewById<com.google.android.material.card.MaterialCardView>(R.id.grid_card)?.setCardBackgroundColor(cardColor)
+        
+        fansirsqi.xposed.sesame.ui.theme.app.HolidayTheme.applyGlobalNightMode()
     }
     
 
 
     @SuppressLint("SetTextI18n", "UnsafeDynamicallyLoadedCode")
     override fun onCreate(savedInstanceState: Bundle?) {
+        fansirsqi.xposed.sesame.ui.theme.app.HolidayTheme.applyGlobalNightMode()
         super.onCreate(savedInstanceState)
         ToastUtil.init(this) // 初始化全局 Context
 

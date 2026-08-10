@@ -125,9 +125,14 @@ public class AntFarmRpcCall {
     }
 
     public static String sendBackAnimal(String sendType, String animalId, String currentFarmId, String masterFarmId) {
+        return sendBackAnimal(sendType, animalId, currentFarmId, masterFarmId, false);
+    }
+
+    public static String sendBackAnimal(String sendType, String animalId, String currentFarmId, String masterFarmId, boolean receiveNPCReward) {
         String args1 = "[{\"animalId\":\"" + animalId + "\",\"currentFarmId\":\""
                 + currentFarmId + "\",\"masterFarmId\":\"" + masterFarmId +
-                "\",\"requestType\":\"NORMAL\",\"sceneCode\":\"ANTFARM\",\"sendType\":\""
+                "\",\"receiveNPCReward\":" + receiveNPCReward +
+                ",\"requestType\":\"NORMAL\",\"sceneCode\":\"ANTFARM\",\"sendType\":\""
                 + sendType + "\",\"source\":\"H5\",\"version\":\""
                 + VERSION + "\"}]";
         return RequestManager.requestString("com.alipay.antfarm.sendBackAnimal", args1);

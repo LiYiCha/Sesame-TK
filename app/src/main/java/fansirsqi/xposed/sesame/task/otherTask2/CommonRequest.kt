@@ -124,39 +124,41 @@ class CommonRequest {
 
     //==============芝麻树==============
     private val playInfo:String ="SwbtxJSo8OOUrymAU%2FHnY2jyFRc%2BkCJ3";
+    private val zmTreeRefer:String = "https://render.alipay.com/p/yuyan/180020010001288004/zmTree.html?caprMode=sync&chInfo=ch_zmzlzms__chsub_zlsy_icon";
+    private val zmTreeChInfo:String = "ch_url-https://2021002135657012.hybrid.alipay-eco.com/index.html";
     //芝麻树获取任务列表
     fun sesameTaskList() :JSONObject{
         val method = "alipay.promoprod.play.trigger"
-        val params = "[{\"extInfo\":{\"batchId\":\"\",\"chInfo\":\"ch_zmzltf__chsub_xinyongsyyingxiaowei\"},\"operation\":\"RENT_GREEN_TASK_LIST_QUERY\",\"playInfo\":\"$playInfo\",\"refer\":\"https://render.alipay.com/p/yuyan/180020010001269849/zmTree.html?caprMode=sync&chInfo=chInfo=ch_zmzltf__chsub_xinyongsyyingxiaowei\"}]"
+        val params = "[{\"extInfo\":{\"batchId\":\"\",\"chInfo\":\"$zmTreeChInfo\"},\"operation\":\"RENT_GREEN_TASK_LIST_QUERY\",\"playInfo\":\"$playInfo\",\"refer\":\"$zmTreeRefer\"}]"
         return JSONObject(RequestManager.requestString(method, params))
     }
 
     //任务处理
     fun sesameTaskHandle(taskId: String,stagecode: String) :JSONObject{
         val method = "alipay.promoprod.play.trigger"
-        val params = "[{\"extInfo\":{\"chInfo\":\"ch_zmzltf__chsub_xinyongsyyingxiaowei\"," +
+        val params = "[{\"extInfo\":{\"chInfo\":\"$zmTreeChInfo\"," +
                 "\"stageCode\":\"$stagecode\",\"taskId\":\"$taskId\"}," +
-                "\"operation\":\"RENT_GREEN_TASK_FINISH\",\"playInfo\":\"$playInfo\",\"refer\":\"https://render.alipay.com/p/yuyan/180020010001269849/zmTree.html?caprMode=sync&chInfo=chInfo=ch_zmzltf__chsub_xinyongsyyingxiaowei\"}]"
+                "\"operation\":\"RENT_GREEN_TASK_FINISH\",\"playInfo\":\"$playInfo\",\"refer\":\"$zmTreeRefer\"}]"
         return JSONObject(RequestManager.requestString(method, params))
     }
     //首页？
     fun sesameHome() :JSONObject{
         val method = "alipay.promoprod.play.trigger"
-        val params = "[{\"extInfo\":{},\"operation\":\"RENT_HIGH_SCORE_HOME_PAGE\",\"playInfo\":\"SwbtxJSo8ONDP%2F2NlFy0H2DwfakQ0s%2FB\",\"refer\":\"https://fengdie.alipay.com/activity/team/3815\"}]"
+        val params = "[{\"extInfo\":{},\"operation\":\"RENT_HIGH_SCORE_HOME_PAGE\",\"playInfo\":\"SwbtxJSo8ONDP%2F2NlFy0H2DwfakQ0s%2FB\",\"refer\":\"pages/home/index\"}]"
         return JSONObject(RequestManager.requestString(method, params))
     }
 
     //芝麻树-森林能量查询
     fun sesameForestEnergy() :JSONObject{
         val method = "alipay.promoprod.play.trigger"
-        val params = "[{\"operation\":\"ZHIMA_TREE_FOREST_ENERGY_QUERY\",\"playInfo\":\"$playInfo\"}"
+        val params = "[{\"operation\":\"ZHIMA_TREE_FOREST_ENERGY_QUERY\",\"playInfo\":\"$playInfo\"}]"
         return JSONObject(RequestManager.requestString(method, params))
     }
 
     //查询芝麻树情况
     fun sesameTreeInfo() :JSONObject{
         val method = "alipay.promoprod.play.trigger"
-        val params = "[{\"extInfo\":{},\"operation\":\"ZHIMA_TREE_HOME_PAGE\",\"playInfo\":\"$playInfo\",\"refer\":\"https://render.alipay.com/p/yuyan/180020010001269849/zmTree.html?caprMode=sync&chInfo=chInfo=ch_zmzltf__chsub_xinyongsyyingxiaowei\"}]"
+        val params = "[{\"extInfo\":{},\"operation\":\"ZHIMA_TREE_HOME_PAGE\",\"playInfo\":\"$playInfo\",\"refer\":\"$zmTreeRefer\"}]"
         return JSONObject(RequestManager.requestString(method, params))
     }
 
@@ -165,13 +167,13 @@ class CommonRequest {
         val method = "alipay.promoprod.play.trigger"
         val params = "[{\"extInfo\":{\"clickNum\":\"1\",\"trashCampId\":\"$trashCampId\"," +
                 "\"trashCode\":\"$trashCode\",\"treeCode\":\"ZHIMA_TREE\"}," +
-                "\"operation\":\"ZHIMA_TREE_CLEAN_AND_PUSH\",\"playInfo\":\"$playInfo\",\"refer\":\"https://render.alipay.com/p/yuyan/180020010001269849/zmTree.html?caprMode=sync&chInfo=chInfo=ch_zmzltf__chsub_xinyongsyyingxiaowei\"}]"
+                "\"operation\":\"ZHIMA_TREE_CLEAN_AND_PUSH\",\"playInfo\":\"$playInfo\",\"refer\":\"$zmTreeRefer\"}]"
         return JSONObject(RequestManager.requestString(method, params))
     }
     //点击升级树，在没有垃圾的情况下
     fun sesameTreeClick() :JSONObject{
         val method = "alipay.promoprod.play.trigger"
-        val params = "[{\"extInfo\":{\"clickNum\":\"1\",\"treeCode\":\"ZHIMA_TREE\"},\"operation\":\"ZHIMA_TREE_CLEAN_AND_PUSH\",\"playInfo\":\""+playInfo+"\",\"refer\":\"https://render.alipay.com/p/yuyan/180020010001269849/zmTree.html?caprMode=sync&chInfo=chInfo=ch_zmzltf__chsub_xinyongsyyingxiaowei\"}]";
+        val params = "[{\"extInfo\":{\"clickNum\":\"1\",\"treeCode\":\"ZHIMA_TREE\"},\"operation\":\"ZHIMA_TREE_CLEAN_AND_PUSH\",\"playInfo\":\""+playInfo+"\",\"refer\":\"$zmTreeRefer\"}]";
         return JSONObject(RequestManager.requestString(method, params))
     }
 
