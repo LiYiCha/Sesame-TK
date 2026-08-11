@@ -20,7 +20,7 @@ import java.util.Locale
 /**
  * 金豆乐园 🎡
  */
-class GoldBeanPark(private val enableManureExchange: Boolean = false) {
+class GoldBeanPark(private val manureExchangeAmount: Int = -1) {
     private val TAG = "金豆乐园🎡"
 
     companion object {
@@ -484,7 +484,7 @@ class GoldBeanPark(private val enableManureExchange: Boolean = false) {
     // --- 肥料换豆 ---
 
     private suspend fun handleManureExchange() {
-        if (!enableManureExchange || Status.hasFlagToday("goldBeanPark::manureExchange")) return
+        if (manureExchangeAmount == 0 || Status.hasFlagToday("goldBeanPark::manureExchange")) return
         try {
             val indexRes = goldenBeanIndex()
             val exchangeInfo = indexRes.optJSONObject("manureExchangeInfo") ?: return
@@ -496,8 +496,14 @@ class GoldBeanPark(private val enableManureExchange: Boolean = false) {
             val remainQuota = exchangeInfo.optInt("remainQuota", 0)
 
             if (!farmOpened || !pageOpened || !taobaoBinding) return
-            if (minExchangeAmount <= 0 || remainQuota <= 0) return
-            val toExchange = minOf(minExchangeAmount, remainQuota)
+            if (remainQuota <= 0) return
+            // -1 全换，>0 按配置量（不超配额）
+            val toExchange = if (manureExchangeAmount == -1) {
+                if (minExchangeAmount <= 0) return
+                minOf(minExchangeAmount, remainQuota)
+            } else {
+                minOf(manureExchangeAmount, remainQuota)
+            }
             if (toExchange <= 0 || currentManure < toExchange) return
 
             val beforeRes = goldenBeanSync(listOf("JAR_INFO", "EXCHANGE_MANURE", "TASK_LIST"))

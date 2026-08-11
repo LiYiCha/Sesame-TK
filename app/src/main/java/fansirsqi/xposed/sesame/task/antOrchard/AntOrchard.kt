@@ -573,7 +573,8 @@ class AntOrchard : ModelTask() {
                     } else {
                         val errorCode = finishResponse.optString("code", "")
                         val errorDesc = finishResponse.optString("desc", "")
-                        if (errorCode.isNotEmpty()) {
+                        // 过滤不支持rpc和没有任务配置
+                        if (errorCode.equals("400000040")||errorCode.equals("400000001")) {
                             TaskBlacklist.autoAddToBlacklist(groupId, title, errorCode, errorDesc)
                         }
                         Log.error(TAG, "农场任务🧾[$title]${finishResponse.optString("desc")}")

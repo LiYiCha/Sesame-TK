@@ -144,7 +144,7 @@ class CommonRequest {
     //首页？
     fun sesameHome() :JSONObject{
         val method = "alipay.promoprod.play.trigger"
-        val params = "[{\"extInfo\":{},\"operation\":\"RENT_HIGH_SCORE_HOME_PAGE\",\"playInfo\":\"SwbtxJSo8ONDP%2F2NlFy0H2DwfakQ0s%2FB\",\"refer\":\"pages/home/index\"}]"
+        val params = "[{\"extInfo\":{},\"operation\":\"ZHIMA_TREE_HOME_PAGE\",\"playInfo\":\"$playInfo\",\"refer\":\"$zmTreeRefer\"}]"
         return JSONObject(RequestManager.requestString(method, params))
     }
 
@@ -334,7 +334,7 @@ class CommonRequest {
      */
     fun triggerPointPrize(): String {
         val param = "[{\"bizId\":\"DO_FEEDS_TASK\",\"sceneCode\":\"STUDENT_MONEY_CHECK_IN\"}]"
-        val method = "alipay.membertangram.biz.rpc.student.triggerPointPrize"
+        val method = "com.alipay.mobileopl.youthprivilege.rpc.mgw.triggerPointPrize"
         return requestString(method, param)
     }
 

@@ -30,9 +30,7 @@ class SesameTree {
     fun handle() {
         try {
             // 首页
-            if (!Status.hasFlagToday("sesameTree_queryHome")) {
-                queryHome()
-            }
+            queryHome()
             
             // 1. 执行首页的所有任务 (包括浏览任务和复访任务)
             doHomeTasks()
@@ -69,21 +67,11 @@ class SesameTree {
     private fun queryHome() {
         try {
             val home = CommonRequest().sesameHome()
-            if (home.optBoolean("success")) {
-                val extInfo = home.optJSONObject("extInfo")
-                val rentHighScoreHomePageResult = extInfo.optJSONObject("rentHighScoreHomePageResult")
-                val levelResult = rentHighScoreHomePageResult.optJSONObject("levelResult")
-                val normalZhiMaUser = levelResult.optBoolean("normalZhiMaUser")
-                val normalZmScore = levelResult.optInt("normalZmScore")
-                val scoreLevel = levelResult.optString("scoreLevel")
-                Log.runtime(TAG, "是否正常芝麻分数:${normalZmScore}，芝麻等级:${scoreLevel}，是否正常用户:${normalZhiMaUser}")
-            } else {
+            if (!home.optBoolean("success")) {
                 Log.error(TAG, "查询首页失败:${home}")
             }
         } catch (e: Exception) {
             Log.error(TAG, "查询首页异常:${e}")
-        } finally {
-            Status.setFlagToday("sesameTree_queryHome")
         }
     }
 

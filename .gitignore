@@ -15,6 +15,7 @@ bin/
 gen/
 out/
 scratch/
+key/
 
 
 # Gradle files
