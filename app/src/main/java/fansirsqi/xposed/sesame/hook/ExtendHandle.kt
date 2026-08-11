@@ -27,6 +27,7 @@ class ExtendHandle {
             try {
                 when (actionType) {
                     ACTION_RERUN -> {
+                        TaskScheduler.setStopped(false)
                         TaskScheduler.setPaused(false)
                         // 重新运行：强制启动任务
                         TaskScheduler.executeTask()
@@ -52,6 +53,7 @@ class ExtendHandle {
                         Toast.show("任务已暂停", true)
                     }
                     ACTION_STOP -> {
+                        TaskScheduler.setStopped(true)
                         TaskScheduler.shutdownExecutors()
                         fansirsqi.xposed.sesame.task.ModelTask.stopAllTask()
                         fansirsqi.xposed.sesame.task.antForest.EnergyWaitingManager.clearAllWaitingTasks()

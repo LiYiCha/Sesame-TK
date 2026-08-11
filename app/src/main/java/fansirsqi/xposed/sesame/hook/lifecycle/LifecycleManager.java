@@ -225,6 +225,7 @@ public class LifecycleManager {
 
             }
             offline = false;
+            TaskScheduler.setStopped(false);
             execHandler();
             init = true;
             return true;

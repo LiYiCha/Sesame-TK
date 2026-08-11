@@ -163,7 +163,9 @@ public class StringDialog {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
             parsedMsg = Html.fromHtml(msg, Html.FROM_HTML_MODE_LEGACY);
         } else {
-            parsedMsg = Html.fromHtml(msg);
+            @SuppressWarnings("deprecation")
+            CharSequence dep = Html.fromHtml(msg);
+            parsedMsg = dep;
         }
         // 创建 AlertDialog
         AlertDialog alertDialog = new AlertDialog.Builder(c)

@@ -43,6 +43,7 @@ public class TaskScheduler {
     private static final AtomicBoolean isScheduled = new AtomicBoolean(false);
     private static final AtomicBoolean isShuttingDown = new AtomicBoolean(false);
     private static final AtomicBoolean isPaused = new AtomicBoolean(false);
+    private static final AtomicBoolean isStopped = new AtomicBoolean(false);
 
     public static void setPaused(boolean paused) {
         isPaused.set(paused);
@@ -50,6 +51,17 @@ public class TaskScheduler {
 
     public static boolean isPaused() {
         return isPaused.get();
+    }
+
+    /**
+     * 设置停止状态，停止后阻止 executor 自动复活
+     */
+    public static void setStopped(boolean stopped) {
+        isStopped.set(stopped);
+    }
+
+    public static boolean isStopped() {
+        return isStopped.get();
     }
 
     // 最小执行间隔（毫秒）
@@ -63,7 +75,7 @@ public class TaskScheduler {
      * 获取单例任务执行器（双重检查锁定）
      */
     private static ExecutorService getTaskExecutor() {
-        if (isShuttingDown.get()) {
+        if (isShuttingDown.get() || isStopped.get()) {
             return null;
         }
 
@@ -90,7 +102,7 @@ public class TaskScheduler {
      * 获取单例调度器（双重检查锁定）
      */
     private static ScheduledExecutorService getScheduler() {
-        if (isShuttingDown.get()) {
+        if (isShuttingDown.get() || isStopped.get()) {
             return null;
         }
 
@@ -300,7 +312,7 @@ public class TaskScheduler {
      * 包装执行主任务的方法，处理线程安全
      */
     private static void executeTaskWrapper() {
-        if (isShuttingDown.get()) {
+        if (isShuttingDown.get() || isStopped.get()) {
             return;
         }
 
@@ -338,7 +350,7 @@ public class TaskScheduler {
      * 延迟执行任务（公共方法）
      */
     public static void executeDelayedTask(long delayMillis) {
-        if (isShuttingDown.get()) {
+        if (isShuttingDown.get() || isStopped.get()) {
             return;
         }
 

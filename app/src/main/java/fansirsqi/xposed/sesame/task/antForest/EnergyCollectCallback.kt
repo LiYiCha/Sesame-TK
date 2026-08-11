@@ -11,6 +11,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import org.json.JSONObject
@@ -225,7 +226,7 @@ object EnergyWaitingManager {
      */
     @JvmStatic
     fun clearAllWaitingTasks() {
-        managerScope.launch {
+        runBlocking {
             taskMutex.withLock {
                 waitingTasks.clear()
                 EnergyWaitingPersistence.clearTasks()

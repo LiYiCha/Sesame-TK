@@ -43,6 +43,7 @@ public class StudentAnswer {
         }
     }
 
+    @SuppressWarnings("unchecked")
     private void queryTaskList() {
         Set<String> blackCache = DataStore.INSTANCE.get("blacklistedTasks_stuAnswer", Set.class);
         if(blackCache==null){

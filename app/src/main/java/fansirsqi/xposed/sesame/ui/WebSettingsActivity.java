@@ -91,6 +91,7 @@ public class WebSettingsActivity extends BaseActivity {
 
     @SuppressLint({"MissingInflatedId", "SetJavaScriptEnabled"})
     @Override
+    @SuppressWarnings("deprecation")
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         context = this;
@@ -169,9 +170,10 @@ public class WebSettingsActivity extends BaseActivity {
         
         if (androidx.webkit.WebViewFeature.isFeatureSupported(androidx.webkit.WebViewFeature.FORCE_DARK)) {
             boolean isDark = fansirsqi.xposed.sesame.ui.theme.app.HolidayTheme.INSTANCE.shouldUseDarkTheme();
-            androidx.webkit.WebSettingsCompat.setForceDark(settings, isDark ? 
-                androidx.webkit.WebSettingsCompat.FORCE_DARK_ON : 
-                androidx.webkit.WebSettingsCompat.FORCE_DARK_OFF);
+            int forceDarkMode = isDark ?
+                androidx.webkit.WebSettingsCompat.FORCE_DARK_ON :
+                androidx.webkit.WebSettingsCompat.FORCE_DARK_OFF;
+            androidx.webkit.WebSettingsCompat.setForceDark(settings, forceDarkMode);
         }
         webView.setWebViewClient(new WebViewClient() {
             @Override

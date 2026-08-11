@@ -49,6 +49,7 @@ public class TravelDeals extends BaseCommTask {
             }
         }
     }
+    @SuppressWarnings("unchecked")
     private void initBlackList(){
         Set<String> blackList = DataStore.INSTANCE.get("travelDeals_blackList", Set.class);
         if (blackList != null) {

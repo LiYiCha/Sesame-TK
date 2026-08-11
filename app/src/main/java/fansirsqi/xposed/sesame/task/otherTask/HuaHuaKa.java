@@ -49,6 +49,7 @@ public class HuaHuaKa extends BaseCommTask {
         index();//翻牌
     }
     //初始化黑名单
+    @SuppressWarnings("unchecked")
     private void initBlackList() {
         //读取黑名单
         Set<String> getblackList = DataStore.INSTANCE.get("huahuaka_blackList", Set.class);

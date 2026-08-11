@@ -17,7 +17,6 @@ import lombok.Getter;
 public class AppContext {
     private static final String TAG = AppContext.class.getSimpleName();
 
-    @Getter
     private static ClassLoader classLoader = null;
 
     @Getter

@@ -633,18 +633,16 @@ abstract class ModelTask : Model() {
         }
 
         /**
-         * 停止所有任务（协程版本）
+         * 停止所有任务（同步执行，确保调用后任务立即停止）
          */
         @JvmStatic
         fun stopAllTask() {
-            globalTaskScope.launch {
-                for (model in modelArray) {
-                    if (model is ModelTask) {
-                        try {
-                            model.stopTask()
-                        } catch (e: Exception) {
-                            Log.printStackTrace("停止任务异常", e)
-                        }
+            for (model in modelArray) {
+                if (model is ModelTask) {
+                    try {
+                        model.stopTask()
+                    } catch (e: Exception) {
+                        Log.printStackTrace("停止任务异常", e)
                     }
                 }
             }

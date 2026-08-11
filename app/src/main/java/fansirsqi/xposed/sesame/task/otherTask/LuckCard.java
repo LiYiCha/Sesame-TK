@@ -42,6 +42,7 @@ public class LuckCard extends BaseCommTask {
         }
     }
 
+    @SuppressWarnings("unchecked")
     private void consult() throws Exception {
         Set<String> tasksLuckCard = DataStore.INSTANCE.get("blacklistedTasks_LuckCard", Set.class);
         if (tasksLuckCard==null){
@@ -131,6 +132,7 @@ public class LuckCard extends BaseCommTask {
         Status.setFlagToday(CompletedKeyEnum.LuckCard.name());
     }
 
+    @SuppressWarnings("unchecked")
     private void newQueryTask(){
         Set<String> tasksLuckCard = DataStore.INSTANCE.get("blacklistedTasks_LuckCard", Set.class);
         if (tasksLuckCard==null){
