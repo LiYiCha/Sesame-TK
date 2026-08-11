@@ -554,29 +554,10 @@ public class LifecycleManager {
                             if (LifecycleManager.isUselessRpc(Method)) {
                                 return;
                             }
-                            // args[4] 是 @BindingRequest JSONObject，包含完整请求体
-                            // 需要从中提取 requestData 字段获取真正的业务参数
-                            String paramsStr = "";
-                            try {
-                                Object requestJson = args[4];
-                                if (requestJson != null) {
-                                    // 先尝试提取 requestData 字段（真正的业务参数）
-                                    Object requestData = XposedHelpers.callMethod(requestJson, "get", "requestData");
-                                    if (requestData != null) {
-                                        paramsStr = String.valueOf(requestData);
-                                    } else {
-                                        // requestData 为 null，输出完整 JSONObject
-                                        paramsStr = String.valueOf(XposedHelpers.callMethod(requestJson, "toJSONString"));
-                                    }
-                                }
-                            } catch (Throwable t) {
-                                // 反射失败时回退到直接 toString
-                                paramsStr = args[4] != null ? args[4].toString() : "null";
-                            }
                             Object[] recordArray = new Object[4];
                             recordArray[0] = System.currentTimeMillis();
                             recordArray[1] = args[0];
-                            recordArray[2] = paramsStr;
+                            recordArray[2] = args[4];
                             rpcHookMap.put(object, recordArray);
                         }
                     });
