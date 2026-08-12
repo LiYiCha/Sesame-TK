@@ -207,6 +207,7 @@ public class SesameReceiver extends BroadcastReceiver {
         intentFilter.addAction("com.eg.android.AlipayGphone.sesame.fetchMemberGoodsList"); // 同步会员商品列表
         intentFilter.addAction("com.eg.android.AlipayGphone.sesame.syncSeckillTasks"); // 同步定时秒杀任务
         intentFilter.addAction("com.eg.android.AlipayGphone.sesame.queryBenefitDetail"); // 查询权益详情以捕获规格
+        intentFilter.addAction("com.eg.android.AlipayGphone.sesame.exportTheme"); // 主题即时导出（IPC广播）
         return intentFilter;
     }
 }

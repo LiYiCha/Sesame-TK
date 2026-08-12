@@ -42,9 +42,8 @@
         <item name="android:paddingTop">@dimen/space_lg</item>
         <item name="android:paddingBottom">@dimen/space_lg</item>
         <item name="android:textSize">@dimen/text_label_large</item>
-        <item name="android:layout_width">0dp</item>
+        <item name="android:layout_width">113dp</item>
         <item name="android:layout_height">wrap_content</item>
-        <item name="android:layout_weight">1</item>
         <item name="cornerRadius">16dp</item>
         <item name="elevation">1dp</item>
     </style>

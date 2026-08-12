@@ -313,7 +313,7 @@ fun DeviceInfoCard(info: Map<String, String>, oneWord: String? = null) {
                             
                             Box(
                                 modifier = Modifier
-                                    .fillMaxSize()
+                                    .fillMaxWidth()
                                     .then(
                                         if (isSchedule) {
                                             Modifier.background(
@@ -324,7 +324,7 @@ fun DeviceInfoCard(info: Map<String, String>, oneWord: String? = null) {
                                         } else Modifier
                                     )
                             ) {
-                                Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
+                                Column(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     Surface(
                                         color = containerColor,

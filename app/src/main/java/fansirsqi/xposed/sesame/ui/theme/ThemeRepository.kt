@@ -97,10 +97,14 @@ class ThemeRepository(private val context: Context) {
                     ctx.sendBroadcast(intent)
                     Pair(true, "⚡ 已发送 IPC 广播，触发主题即时导出")
                 } else {
-                    executeOperation(ThemeOperation.EXPORT)
+                    // TODO: 新方案验证通过后删除以下回退
+                    // executeOperation(ThemeOperation.EXPORT)
+                    Pair(false, "Context 不可用，导出失败")
                 }
             } catch (e: Exception) {
-                executeOperation(ThemeOperation.EXPORT)
+                // TODO: 新方案验证通过后删除以下回退
+                // executeOperation(ThemeOperation.EXPORT)
+                Pair(false, "导出异常: ${e.message}")
             }
         }
     }

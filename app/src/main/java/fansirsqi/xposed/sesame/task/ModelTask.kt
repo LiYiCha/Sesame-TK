@@ -306,14 +306,19 @@ abstract class ModelTask : Model() {
 
     /**
      * 顺序执行
+     * 使用 runInterruptible + runBlocking 桥接，确保阻塞的 run() 在协程取消时能被线程中断终止。
+     * run() 是 suspend 函数，runInterruptible 只接收非 suspend lambda，必须用 runBlocking 桥接。
+     * 取消时 runInterruptible 会中断执行线程，runBlocking 内的阻塞 IO 收到 InterruptedException 立即终止。
      */
     private suspend fun executeSequential(round: Int, stats: TaskExecutionStats) {
         stats.recordTaskStart("${getName()}-Round$round")
         try {
-            run()
+            runInterruptible(Dispatchers.IO) {
+                runBlocking { run() }
+            }
             stats.recordTaskEnd("${getName()}-Round$round", true)
         } catch (_: CancellationException) {
-            // 本轮被取消，记录为跳过而非失败
+            // 本轮被取消（协程取消或线程中断），记录为跳过而非失败
             stats.recordSkipped("${getName()}-Round$round")
             Log.runtime(TAG, "任务本轮被取消: ${getName()}-Round$round")
         } catch (e: Exception) {

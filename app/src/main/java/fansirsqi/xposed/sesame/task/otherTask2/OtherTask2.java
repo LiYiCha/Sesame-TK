@@ -5,6 +5,7 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.locks.ReentrantLock;
 
@@ -25,8 +26,10 @@ import lombok.Getter;
 
 public class OtherTask2 extends ModelTask {
     private static final String TAG = "⚔️其他任务2";
-    // 任务执行线程池
-    private static final ExecutorService taskExecutor = Executors.newSingleThreadExecutor();
+    // 任务执行线程池（懒创建，stopTask 时销毁）
+    private ExecutorService taskExecutor;
+    // 当前异步任务的 Future，用于 stopTask 时中断线程
+    private volatile Future<?> currentFuture;
     
     // 线程安全控制
     private final ReentrantLock executionLock = new ReentrantLock();
@@ -115,7 +118,12 @@ public class OtherTask2 extends ModelTask {
             return;
         }
         
-        taskExecutor.execute(() -> {
+        // 懒创建线程池（被 stop 销毁后重新创建）
+        if (taskExecutor == null || taskExecutor.isShutdown()) {
+            taskExecutor = Executors.newSingleThreadExecutor();
+        }
+        
+        currentFuture = taskExecutor.submit(() -> {
             executionLock.lock();
             try {
                 
@@ -269,6 +277,30 @@ public class OtherTask2 extends ModelTask {
                 executionLock.unlock();
             }
         });
+    }
+
+    // 停止当前异步任务，中断执行线程 + 销毁线程池
+    @Override
+    public void stopTask() {
+        // 1. 中断当前运行的任务
+        Future<?> future = currentFuture;
+        if (future != null && !future.isDone()) {
+            future.cancel(true);
+            currentFuture = null;
+        }
+
+        // 2. 销毁线程池（shutdownNow 会中断工作线程）
+        ExecutorService exec = taskExecutor;
+        if (exec != null) {
+            exec.shutdownNow();
+            taskExecutor = null;
+        }
+
+        // 3. 重置状态
+        isRunning.set(false);
+
+        // 4. 调用父类清理协程
+        super.stopTask();
     }
 
     // 任务组执行方法

@@ -168,7 +168,7 @@ public class TaskScheduler {
      */
     private static void executeMainTask() {
         try {
-            if (isShuttingDown.get()) {
+            if (isShuttingDown.get() || isStopped.get()) {
                 return;
             }
 

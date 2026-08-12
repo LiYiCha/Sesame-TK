@@ -4,8 +4,10 @@ import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
 import java.util.concurrent.LinkedBlockingQueue;
@@ -74,15 +76,11 @@ public class OtherTask extends ModelTask {
      * 🚶‍♂️💪 - 步行+肌肉（运动增强力量）
      * 🏋️✨ - 举重+星星（锻炼释放能量）
      */
-    // 固定大小线程池（根据设备CPU核心数调整）
+    // 固定大小线程池（根据设备CPU核心数调整，懒创建，stopTask 时销毁）
     private static final int CORE_POOL_SIZE = Math.max(2, Runtime.getRuntime().availableProcessors() - 1);
-    private static final ExecutorService executor = new ThreadPoolExecutor(
-            CORE_POOL_SIZE,
-            CORE_POOL_SIZE,
-            60L, TimeUnit.SECONDS,
-            new LinkedBlockingQueue<>(100), // 更大任务队列
-            new ThreadPoolExecutor.CallerRunsPolicy()
-    );
+    private ExecutorService executor;
+    // 跟踪所有已提交的 Future，stopTask 时统一中断
+    private final List<Future<?>> allFutures = new ArrayList<>();
 
 
 
@@ -196,63 +194,51 @@ public class OtherTask extends ModelTask {
 
     @Override
     public void runJava() {
-        executeIntervalInt = Math.max(executeInterval.getValue(), executeIntervalInt);
+        // 懒创建线程池（被 stopTask 销毁后重新创建）
+        if (executor == null || executor.isShutdown()) {
+            executor = new ThreadPoolExecutor(
+                    CORE_POOL_SIZE,
+                    CORE_POOL_SIZE,
+                    60L, TimeUnit.SECONDS,
+                    new LinkedBlockingQueue<>(100),
+                    new ThreadPoolExecutor.CallerRunsPolicy()
+            );
+        }
 
-//        // 分组执行任务
-//        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-//            CompletableFuture.runAsync(() -> executeGroup1(), executor);
-//        }else {
-//            new Thread(() -> executeGroup1()).start();
-//        }
-//        TimeUtil.sleep(RandomUtil.nextInt(5000,7000));
-//        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-//            CompletableFuture.runAsync(() -> executeGroup2(), executor);
-//        }else {
-//            new Thread(() -> executeGroup2()).start();
-//        }
-//        TimeUtil.sleep(RandomUtil.nextInt(7000,9000));
-//        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-//            CompletableFuture.runAsync(() -> executeGroup3(), executor);
-//        }else{
-//            new Thread(() -> executeGroup3()).start();
-//        }
-//        // 按优先级顺序执行
-//        executeGroup1(); // 高优先级任务
-//        executeGroup2(); // 中优先级任务
-//        TimeUtil.sleep(8000);
-//        executeGroup3(); // 低优先级任务
+        executeIntervalInt = Math.max(executeInterval.getValue(), executeIntervalInt);
+        allFutures.clear();
 
         //任务组之间完全并行，互不干扰
         if (executePair.getValue()) {
             // 任务组1：青春特权兑换、看视频领红包
-            executor.submit(() -> {
+            allFutures.add(executor.submit(() -> {
                 try {
                     executeGroup1();
                 } catch (Throwable t) {
                     Log.error(TAG + "任务组1--error:" + t.getMessage());
                     Log.printStackTrace(t);
                 }
-            });
+            }));
             TimeUtil.sleep(RandomUtil.nextLong(5500, 9600));
             // 任务组2：花呗金、好运卡等
-            executor.submit(() -> {
+            allFutures.add(executor.submit(() -> {
                 try {
                     executeGroup2();
                 } catch (Throwable t) {
                     Log.error(TAG + "任务组2--error:" + t.getMessage());
                     Log.printStackTrace(t);
                 }
-            });
+            }));
             TimeUtil.sleep(RandomUtil.nextLong(9500, 15600));
             // 任务组3：低优先级任务
-            executor.submit(() -> {
+            allFutures.add(executor.submit(() -> {
                 try {
                     executeGroup3();
                 } catch (Throwable t) {
                     Log.error(TAG + "任务组3--error:" + t.getMessage());
                     Log.printStackTrace(t);
                 }
-            });
+            }));
         }else {
             //顺序-------------------------------------------------------
             // 任务组1：青春特权兑换、看视频领红包
@@ -264,6 +250,7 @@ public class OtherTask extends ModelTask {
                     Log.printStackTrace(t);
                 }
             });
+            allFutures.add(future1);
 
             // 任务组2：花呗金、好运卡等
             Future<?> future2 = executor.submit(() -> {
@@ -274,6 +261,7 @@ public class OtherTask extends ModelTask {
                     Log.printStackTrace(t);
                 }
             });
+            allFutures.add(future2);
 
             // 任务组3：低优先级任务
             Future<?> future3 = executor.submit(() -> {
@@ -284,6 +272,7 @@ public class OtherTask extends ModelTask {
                     Log.printStackTrace(t);
                 }
             });
+            allFutures.add(future3);
 
             // 异步等待任务组完成，不阻塞主线程
             new Thread(() -> {
@@ -304,6 +293,28 @@ public class OtherTask extends ModelTask {
                 }
             }).start();
         }
+    }
+
+    // 停止所有异步任务，中断执行线程 + 销毁线程池
+    @Override
+    public void stopTask() {
+        // 1. 中断所有已提交的任务
+        for (Future<?> future : allFutures) {
+            if (future != null && !future.isDone()) {
+                future.cancel(true);
+            }
+        }
+        allFutures.clear();
+
+        // 2. 销毁线程池（shutdownNow 会中断工作线程）
+        ExecutorService exec = executor;
+        if (exec != null) {
+            exec.shutdownNow();
+            executor = null;
+        }
+
+        // 3. 调用父类清理协程
+        super.stopTask();
     }
 
     // 组1：青春特权兑换、看视频领红包
