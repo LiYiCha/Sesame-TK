@@ -14,21 +14,23 @@ object HolidayTheme {
     fun getCurrentTimePhase(): String {
         val hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
         return when (hour) {
-            in 5..8 -> "dawn"
-            in 9..16 -> "day"
-            in 17..19 -> "sunset"
-            else -> "midnight"
+            in 5..7 -> "dawn"         // 05:00-07:59
+            in 8..16 -> "day"          // 08:00-16:59
+            in 17..19 -> "sunset"      // 17:00-19:59
+            in 20..21 -> "dusk"        // 20:00-21:59
+            else -> "midnight"         // 22:00-04:59
         }
     }
 
-    data class SkyColors(val top: Color, val bottom: Color, val surfaceAlpha: Float)
+    data class SkyColors(val top: Color, val bottom: Color, val surfaceAlpha: Float = 0.8f)
     
     fun getSkyColors(): SkyColors {
         return when (getCurrentTimePhase()) {
-            "dawn" -> SkyColors(Color(0xFFFFE0B2), Color(0xFFF48FB1), 0.8f) // Pastel Pink to Soft Gold
-            "day" -> SkyColors(Color(0xFF81D4FA), Color(0xFFE1F5FE), 0.85f) // Azure to Pure White
-            "sunset" -> SkyColors(Color(0xFFCE93D8), Color(0xFFFF8A65), 0.75f) // Purple to Magenta to Orange
-            else -> SkyColors(Color(0xFF1A237E), Color(0xFF000000), 0.7f) // Navy to Black
+            "dawn" -> SkyColors(Color(0xFFB3E5FC), Color(0xFFFFAB91), 0.8f)
+            "day" -> SkyColors(Color(0xFF81D4FA), Color(0xFFE1F5FE), 0.85f)
+            "sunset" -> SkyColors(Color(0xFF7E57C2), Color(0xFFFF7043), 0.75f)
+            "dusk" -> SkyColors(Color(0xFF37474F), Color(0xFFFF5722), 0.7f)
+            else -> SkyColors(Color(0xFF1A237E), Color(0xFF0D0D2B), 0.7f)
         }
     }
 
@@ -69,7 +71,7 @@ object HolidayTheme {
             story = "“新元肇启，华章日新。” 告别旧岁，迎接崭新的旅程。Sesame-TK 伴您开启新的一年。"
         ),
         "valentine" to ThemeColors(
-            mainColor = Color(0xFFE91E63), bgColor = Color(0xFFFCE4EC), cardBgColor = Color.White, textColor = Color(0xFF4A0E17), activeColor = Color(0xFFF06292),
+            mainColor = Color(0xFFD81B60), bgColor = Color(0xFFFEF2F6), cardBgColor = Color.White, textColor = Color(0xFF4A0E17), activeColor = Color(0xFF42A5F5),
             title = "💖 浪漫相约 · 爱意满怀",
             story = "“执子之手，与子偕老。” 在温暖甜蜜的日子里，祝福每一份真挚的相伴。"
         ),
@@ -79,7 +81,7 @@ object HolidayTheme {
             story = "“民生在勤，勤则不匮。” 每一份汗水，都是对生活的热爱。今天，给自己放个松。"
         ),
         "mothers_day" to ThemeColors(
-            mainColor = Color(0xFFFF758F), bgColor = Color(0xFFFFF0F3), cardBgColor = Color.White, textColor = Color(0xFF3F0C1F), activeColor = Color(0xFFFF85A1),
+            mainColor = Color(0xFFE91E63), bgColor = Color(0xFFFFF5F7), cardBgColor = Color.White, textColor = Color(0xFF3F0C1F), activeColor = Color(0xFF26A69A),
             title = "🌸 感恩母爱 · 温馨港湾",
             story = "“谁言寸草心，报得三春晖。” 母爱无私，温润如水。别忘了向妈妈道声辛苦。"
         ),
@@ -89,7 +91,7 @@ object HolidayTheme {
             story = "“父爱无言，重如青山。” 他用宽阔的肩膀，为我们撑起了一片风雨无阻的天空。"
         ),
         "childrens_day" to ThemeColors(
-            mainColor = Color(0xFFFF6B8B), bgColor = Color(0xFFFFF0F2), cardBgColor = Color.White, textColor = Color(0xFF2B2B2B), activeColor = Color(0xFFFF8A9F),
+            mainColor = Color(0xFFFF4081), bgColor = Color(0xFFFFF5F8), cardBgColor = Color.White, textColor = Color(0xFF2B2B2B), activeColor = Color(0xFF7C4DFF),
             title = "🎈 六一相伴 · 童心未泯",
             story = "“愿你历尽沧桑，归来仍是少年。” 保持好奇，留住天真，祝童心不老的你节日快乐！"
         ),
@@ -99,7 +101,7 @@ object HolidayTheme {
             story = "“神州万里江山秀，红旗招展展宏图。” 祝伟大的祖国繁荣昌盛，国泰民安！"
         ),
         "spring_festival" to ThemeColors(
-            mainColor = Color(0xFFD00000), bgColor = Color(0xFFFFF3E0), cardBgColor = Color.White, textColor = Color(0xFF3E2723), activeColor = Color(0xFFFFB300),
+            mainColor = Color(0xFFB71C1C), bgColor = Color(0xFFFFF3F0), cardBgColor = Color.White, textColor = Color(0xFF3E2723), activeColor = Color(0xFFF9A825),
             title = "🧧 新春大吉 · 万事如意",
             story = "“千门万户曈曈日，总把新桃换旧符。” 新春新气象，祝您阖家幸福，万事顺遂！"
         ),
@@ -109,22 +111,22 @@ object HolidayTheme {
             story = "“一夜连双岁，五更分二年。” 辞旧迎新除夕夜，团团圆圆守岁时，祝岁岁常安！"
         ),
         "dragon_boat" to ThemeColors(
-            mainColor = Color(0xFF2C6E49), bgColor = Color(0xFFE8F5E9), cardBgColor = Color.White, textColor = Color(0xFF1C3A27), activeColor = Color(0xFF4F9D69),
+            mainColor = Color(0xFF2C6E49), bgColor = Color(0xFFE8F5E9), cardBgColor = Color.White, textColor = Color(0xFF1C3A27), activeColor = Color(0xFFF57F17),
             title = "🌿 端午安康 · 粽香四溢",
             story = "“轻汗微微透碧纨，明朝端午浴芳兰。” 挂艾草，吃香粽，享安康。"
         ),
         "qixi" to ThemeColors(
-            mainColor = Color(0xFFEC4899), bgColor = Color(0xFFFDF2F8), cardBgColor = Color.White, textColor = Color(0xFF47182F), activeColor = Color(0xFFF472B6),
+            mainColor = Color(0xFFEC4899), bgColor = Color(0xFFFDF2F8), cardBgColor = Color.White, textColor = Color(0xFF47182F), activeColor = Color(0xFF42A5F5),
             title = "🌌 七夕鹊桥 · 银河相会",
             story = "“两情若是久长时，又岂在朝朝暮暮。” 星汉灿烂，鹊桥飞架，愿深情不被辜负。"
         ),
         "mid_autumn" to ThemeColors(
-            mainColor = Color(0xFFFBC02D), bgColor = Color(0xFFFFFDE7), cardBgColor = Color.White, textColor = Color(0xFF1E1B4B), activeColor = Color(0xFFF1C40F),
+            mainColor = Color(0xFFF57F17), bgColor = Color(0xFFFFF8E1), cardBgColor = Color.White, textColor = Color(0xFF1E1B4B), activeColor = Color(0xFFF1C40F),
             title = "🌕 中秋团圆 · 月满人间",
             story = "“但愿人长久，千里共婵娟。” 桂花飘香，圆月高悬。无论身处何方，共赏此轮明月。"
         ),
         "double_ninth" to ThemeColors(
-            mainColor = Color(0xFFE65100), bgColor = Color(0xFFFFF3E0), cardBgColor = Color.White, textColor = Color(0xFF3E2723), activeColor = Color(0xFFFB8C00),
+            mainColor = Color(0xFFE65100), bgColor = Color(0xFFFFF3E0), cardBgColor = Color.White, textColor = Color(0xFF3E2723), activeColor = Color(0xFF2E7D32),
             title = "🍂 重阳登高 · 岁月敬老",
             story = "“遥知兄弟登高处，遍插茱萸少一人。” 岁岁重阳，今又重阳。祝老人们安康长寿。"
         )

@@ -2,4 +2,23 @@
 <resources>
     <dimen name="setting_item_padding">16dp</dimen>
     <dimen name="status_bar_height">30dp</dimen>
+
+    <!-- Material 3 Type Scale -->
+    <dimen name="text_display">32sp</dimen>
+    <dimen name="text_headline">24sp</dimen>
+    <dimen name="text_title_large">20sp</dimen>
+    <dimen name="text_title_medium">16sp</dimen>
+    <dimen name="text_body_large">16sp</dimen>
+    <dimen name="text_body_medium">14sp</dimen>
+    <dimen name="text_label_large">14sp</dimen>
+    <dimen name="text_label_medium">12sp</dimen>
+
+    <!-- 8pt Grid Spacing System -->
+    <dimen name="space_xxs">2dp</dimen>
+    <dimen name="space_xs">4dp</dimen>
+    <dimen name="space_sm">8dp</dimen>
+    <dimen name="space_md">12dp</dimen>
+    <dimen name="space_lg">16dp</dimen>
+    <dimen name="space_xl">24dp</dimen>
+    <dimen name="space_2xl">32dp</dimen>
 </resources>

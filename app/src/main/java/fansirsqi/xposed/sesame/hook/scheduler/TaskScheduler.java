@@ -230,6 +230,9 @@ public class TaskScheduler {
      * 调度定时执行（线程安全版本）
      */
     private static void scheduleNextExecution(long execTime) {
+        if (isShuttingDown.get() || isStopped.get()) {
+            return;
+        }
         // 防止重复调度
         if (!isScheduled.compareAndSet(false, true)) {
             return;

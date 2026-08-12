@@ -10,7 +10,7 @@
     <color name="main_button_pressed">#2C2C2C</color>
     <color name="orange">#FF7043</color>
     <color name="not_active_text">#EF5350</color>
-    <color name="active_text">#E0E0E0</color>
+    <color name="active_text">#FFFFFF</color>
     <color name="load_active_text">#757575</color>
     <color name="navigationBarColor">#CC000000</color>
     <color name="toast_text_color">#F5F5F5</color>

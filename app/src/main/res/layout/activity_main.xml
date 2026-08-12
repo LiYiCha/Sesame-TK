@@ -29,80 +29,67 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent">
 
-        <LinearLayout
+        <GridLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:orientation="vertical"
-            android:padding="12dp">
+            android:padding="@dimen/space_md"
+            android:columnCount="3"
+            android:rowCount="2">
 
-            <!-- 第一行：监控日志类 -->
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="horizontal">
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btn_forest_log"
+                style="@style/Widget.App.Button.Main"
+                android:layout_margin="@dimen/space_sm"
+                android:layout_columnWeight="1"
+                android:onClick="onClick"
+                android:text="@string/forest_log"
+                app:icon="@drawable/ic_forest" />
 
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/btn_forest_log"
-                    style="@style/Widget.App.Button.Main"
-                    android:layout_margin="6dp"
-                    android:backgroundTint="@color/grid_forest"
-                    android:onClick="onClick"
-                    android:text="@string/forest_log"
-                    app:icon="@drawable/ic_forest" />
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btn_farm_log"
+                style="@style/Widget.App.Button.Main"
+                android:layout_margin="@dimen/space_sm"
+                android:layout_columnWeight="1"
+                android:onClick="onClick"
+                android:text="@string/farm_log"
+                app:icon="@drawable/ic_farm" />
 
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/btn_farm_log"
-                    style="@style/Widget.App.Button.Main"
-                    android:layout_margin="6dp"
-                    android:backgroundTint="@color/grid_farm"
-                    android:onClick="onClick"
-                    android:text="@string/farm_log"
-                    app:icon="@drawable/ic_farm" />
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btn_other_log"
+                style="@style/Widget.App.Button.Main"
+                android:layout_margin="@dimen/space_sm"
+                android:layout_columnWeight="1"
+                android:onClick="onClick"
+                android:text="@string/other_log"
+                app:icon="@drawable/ic_all_log" />
 
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/btn_other_log"
-                    style="@style/Widget.App.Button.Main"
-                    android:layout_margin="6dp"
-                    android:backgroundTint="@color/grid_other"
-                    android:onClick="onClick"
-                    android:text="@string/other_log"
-                    app:icon="@drawable/ic_all_log" />
-            </LinearLayout>
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btn_extend_function"
+                style="@style/Widget.App.Button.Main"
+                android:layout_margin="@dimen/space_sm"
+                android:layout_columnWeight="1"
+                android:onClick="onClick"
+                android:text="@string/extend_function"
+                app:icon="@drawable/ic_extension" />
 
-            <!-- 第二行：系统工具类 -->
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="horizontal">
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btn_github"
+                style="@style/Widget.App.Button.Main"
+                android:layout_margin="@dimen/space_sm"
+                android:layout_columnWeight="1"
+                android:onClick="onClick"
+                android:text="@string/d_bug_log"
+                app:icon="@drawable/ic_github" />
 
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/btn_extend_function"
-                    style="@style/Widget.App.Button.Main"
-                    android:layout_margin="6dp"
-                    android:backgroundTint="@color/grid_extend"
-                    android:onClick="onClick"
-                    android:text="@string/extend_function"
-                    app:icon="@drawable/ic_extension" />
-
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/btn_github"
-                    style="@style/Widget.App.Button.Main"
-                    android:layout_margin="6dp"
-                    android:backgroundTint="@color/grid_github"
-                    android:onClick="onClick"
-                    android:text="@string/d_bug_log"
-                    app:icon="@drawable/ic_github" />
-
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/btn_settings"
-                    style="@style/Widget.App.Button.Main"
-                    android:layout_margin="6dp"
-                    android:backgroundTint="@color/grid_settings"
-                    android:onClick="onClick"
-                    android:text="@string/settings"
-                    app:icon="@drawable/ic_setting" />
-            </LinearLayout>
-        </LinearLayout>
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btn_settings"
+                style="@style/Widget.App.Button.Main"
+                android:layout_margin="@dimen/space_sm"
+                android:layout_columnWeight="1"
+                android:onClick="onClick"
+                android:text="@string/settings"
+                app:icon="@drawable/ic_setting" />
+        </GridLayout>
     </com.google.android.material.card.MaterialCardView>
 
     <!-- 滚动容器 (填充剩余空间) -->

@@ -28,14 +28,14 @@ fun SVGSelectorDialog(
     val items = when (type) {
         "lines" -> EcosystemManager.allLines
         "animal" -> EcosystemManager.allAnimals
-        "plant" -> EcosystemManager.allAnimals
+        "plants" -> EcosystemManager.allPlants
         else -> emptyList()
     }
     
     val title = when (type) {
         "lines" -> "选择极简线条"
         "animal" -> "选择陪伴精灵"
-        "plant" -> "选择植物精灵"
+        "plants" -> "选择植物精灵"
         else -> "选择资源"
     }
 
@@ -61,7 +61,7 @@ fun SVGSelectorDialog(
                         val isSelected = when (type) {
                             "lines" -> EcosystemManager.currentLineIcon == url
                             "animal" -> EcosystemManager.currentAnimal == url
-                            "plant" -> EcosystemManager.currentAnimal == url
+                            "plants" -> EcosystemManager.currentAnimal == url
                             else -> false
                         }
                         
@@ -74,7 +74,7 @@ fun SVGSelectorDialog(
                                     when (type) {
                                         "lines" -> EcosystemManager.currentLineIcon = url
                                         "animal" -> EcosystemManager.currentAnimal = url
-                                        "plant" -> EcosystemManager.currentAnimal = url
+                                        "plants" -> EcosystemManager.currentAnimal = url
                                     }
                                     onDismissRequest()
                                 },
@@ -98,8 +98,9 @@ fun SVGSelectorDialog(
                 }
             }
         },
-        confirmButton = {
-            Button(onClick = onDismissRequest) {
+        confirmButton = {},
+        dismissButton = {
+            TextButton(onClick = onDismissRequest) {
                 Text("关闭")
             }
         }

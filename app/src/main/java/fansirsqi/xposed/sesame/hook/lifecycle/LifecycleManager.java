@@ -105,6 +105,10 @@ public class LifecycleManager {
     @SuppressLint("WakelockTimeout")
     public static synchronized Boolean initHandler(Boolean force) {
         try {
+            if (TaskScheduler.isStopped() && (force == null || !force)) {
+                Log.runtime(TAG, "⏸ 任务已被用户停止，跳过 initHandler 自动重载与执行");
+                return false;
+            }
             TaskCommon.update();
             Service service = AppContext.getService();
             if (service == null) {
@@ -322,7 +326,7 @@ public class LifecycleManager {
     /**
      * 停止处理器
      */
-    private static void stopHandler() {
+    public static void stopHandler() {
         if (mainTask != null) {
             mainTask.stopTask();
         }
@@ -648,34 +652,30 @@ public class LifecycleManager {
                                 return;
                             }
                             
-                            // 序列化入参：对于 H5 RPC (executeRPC)，args[1] 为真正从 H5 传上来的 JSON 字符串 requestData！
+                            // 序列化入参
                             String paramsJson = "";
-                            if (isH5Rpc && rpcArgs != null && rpcArgs.length >= 2 && rpcArgs[1] != null) {
-                                paramsJson = String.valueOf(rpcArgs[1]);
-                            } else {
+                            try {
+                                if (rpcArgs != null) {
+                                    Class<?> jsonClass = cachedFastJsonClass;
+                                    if (jsonClass == null) {
+                                        jsonClass = classLoader.loadClass("com.alibaba.fastjson.JSON");
+                                        cachedFastJsonClass = jsonClass;
+                                    }
+                                    paramsJson = (String) XposedHelpers.callStaticMethod(jsonClass, "toJSONString", (Object) rpcArgs);
+                                }
+                            } catch (Throwable t) {
                                 try {
                                     if (rpcArgs != null) {
-                                        Class<?> jsonClass = cachedFastJsonClass;
-                                        if (jsonClass == null) {
-                                            jsonClass = classLoader.loadClass("com.alibaba.fastjson.JSON");
-                                            cachedFastJsonClass = jsonClass;
+                                        java.util.List<String> list = new java.util.ArrayList<>();
+                                        for (Object arg : rpcArgs) {
+                                            list.add(arg == null ? "null" : arg.toString());
                                         }
-                                        paramsJson = (String) XposedHelpers.callStaticMethod(jsonClass, "toJSONString", (Object) rpcArgs);
-                                    }
-                                } catch (Throwable t) {
-                                    try {
-                                        if (rpcArgs != null) {
-                                            java.util.List<String> list = new java.util.ArrayList<>();
-                                            for (Object arg : rpcArgs) {
-                                                list.add(arg == null ? "null" : arg.toString());
-                                            }
-                                            paramsJson = list.toString();
-                                        } else {
-                                            paramsJson = "[]";
-                                        }
-                                    } catch (Throwable ignored) {
+                                        paramsJson = list.toString();
+                                    } else {
                                         paramsJson = "[]";
                                     }
+                                } catch (Throwable ignored) {
+                                    paramsJson = "[]";
                                 }
                             }
                             XposedHelpers.setAdditionalInstanceField(param, "paramsJson", paramsJson);

@@ -318,13 +318,13 @@ fun DeviceInfoCard(info: Map<String, String>, oneWord: String? = null) {
                                         if (isSchedule) {
                                             Modifier.background(
                                                 brush = androidx.compose.ui.graphics.Brush.verticalGradient(
-                                                    colors = listOf(sky.top.copy(alpha = 0.15f), sky.bottom.copy(alpha = 0.05f))
+                                                    colors = listOf(sky.top.copy(alpha = 0.25f), sky.bottom.copy(alpha = 0.12f))
                                                 )
                                             )
                                         } else Modifier
                                     )
                             ) {
-                                Column(modifier = Modifier.padding(16.dp).fillMaxSize()) {
+                                Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     Surface(
                                         color = containerColor,
@@ -363,8 +363,9 @@ fun DeviceInfoCard(info: Map<String, String>, oneWord: String? = null) {
                                                                 }
                                                             }
                                                             .build(),
-                                                        contentDescription = null,
-                                                        colorFilter = androidx.compose.ui.graphics.ColorFilter.tint(brandColor),
+                                                        contentDescription = "Ecosystem Line Icon",
+                                                        colorFilter = androidx.compose.ui.graphics.ColorFilter.tint(MaterialTheme.colorScheme.onPrimaryContainer),
+                                                        alpha = 0.8f,
                                                         modifier = Modifier.size(20.dp).graphicsLayer { scaleX = iconScale.value; scaleY = iconScale.value; rotationZ = iconRotation.value; rotationY = iconFlip.value }
                                                     )
                                                 }
@@ -1112,7 +1113,7 @@ fun DeviceInfoCard(info: Map<String, String>, oneWord: String? = null) {
             fansirsqi.xposed.sesame.ui.theme.app.SVGSelectorDialog(type = "animal") { showAnimalPicker = false }
         }
         if (showPlantPicker) {
-            fansirsqi.xposed.sesame.ui.theme.app.SVGSelectorDialog(type = "zml") { showPlantPicker = false }
+            fansirsqi.xposed.sesame.ui.theme.app.SVGSelectorDialog(type = "plants") { showPlantPicker = false }
         }
     }
 }

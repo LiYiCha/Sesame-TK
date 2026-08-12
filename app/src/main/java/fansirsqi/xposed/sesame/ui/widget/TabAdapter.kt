@@ -21,13 +21,15 @@ class TabAdapter(private val context: Context, private val titles: MutableList<S
     override fun onBindViewHolder(holder: ViewHolder, position: Int) {
         holder.textView.text = titles[position]
         holder.textView.setTextColor(ContextCompat.getColor(context, R.color.textColorPrimary))
-        // 设置背景资源
-        if (selectedPosition == position) {
-            holder.textView.setTextColor(ContextCompat.getColor(context, R.color.orange))
-            holder.itemView.findViewById<View>(R.id.indicator_bar).setBackgroundResource(R.color.orange)
+        val isSelected = (selectedPosition == position)
+        holder.itemView.isSelected = isSelected
+        
+        if (isSelected) {
+            val typedValue = android.util.TypedValue()
+            context.theme.resolveAttribute(androidx.appcompat.R.attr.colorPrimary, typedValue, true)
+            holder.textView.setTextColor(typedValue.data)
         } else {
             holder.textView.setTextColor(ContextCompat.getColor(context, R.color.textColorPrimary))
-            holder.itemView.findViewById<View>(R.id.indicator_bar).setBackgroundResource(android.R.color.transparent)
         }
 
         holder.itemView.setOnClickListener { v: View ->

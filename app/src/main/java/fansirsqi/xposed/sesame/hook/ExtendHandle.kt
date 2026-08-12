@@ -54,9 +54,18 @@ class ExtendHandle {
                     }
                     ACTION_STOP -> {
                         TaskScheduler.setStopped(true)
+                        LifecycleManager.stopHandler()
                         TaskScheduler.shutdownExecutors()
                         fansirsqi.xposed.sesame.task.ModelTask.stopAllTask()
                         fansirsqi.xposed.sesame.task.antForest.EnergyWaitingManager.clearAllWaitingTasks()
+                        fansirsqi.xposed.sesame.hook.keepalive.SmartSchedulerManager.cancelAll()
+                        fansirsqi.xposed.sesame.hook.keepalive.SmartSchedulerManager.cleanup()
+                        fansirsqi.xposed.sesame.hook.scheduler.AlarmScheduler.unsetWakenAtTimeAlarm()
+                        fansirsqi.xposed.sesame.hook.scheduler.AlarmScheduler.cancelAllExactAlarms()
+                        try {
+                            fansirsqi.xposed.sesame.util.Notify.setStatusTextDisabled()
+                            fansirsqi.xposed.sesame.util.Notify.updateNextExecText(-1)
+                        } catch (t: Throwable) {}
                         Log.runtime("[StopRunReceiver]任务已清空并停止运行🛑")
                         Toast.show("任务已停止并清除", true)
                     }

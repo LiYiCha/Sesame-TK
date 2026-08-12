@@ -3188,7 +3188,7 @@ class AntForest : ModelTask(), EnergyCollectCallback {
                                 doubleCheck = true // 标记需要重新检查任务
                             } else {
                                 Log.error(TAG, "领取失败: $taskTitle") // 记录领取失败信息
-                                Log.runtime(joAward.toString()) // 打印奖励响应
+                                Log.error(joAward.toString()) // 打印奖励响应
                             }
                             GlobalThreadPools.sleepCompat(500)
                         } else if (TaskStatus.TODO.name == taskStatus) {
@@ -3250,6 +3250,75 @@ class AntForest : ModelTask(), EnergyCollectCallback {
                             }
                             GlobalThreadPools.sleepCompat(RandomUtil.nextInt(3000, 4001).toLong())
                         }
+                    }
+                }
+                if (!doubleCheck) break
+            }
+
+            // 新RPC接口任务 (com.alipay.antieptask.listTaskopengreen)
+            // 注意：listTaskopengreen查询的任务，finish和receive仍然使用老的H5接口
+            while (true) {
+                var doubleCheck = false
+                val s = AntForestRpcCall.listTaskopengreen(
+                    "ANTFOREST_VITALITY_TASK",
+                    "chInfo_ch_appcenter__chsub_9patch"
+                )
+                val jo = JSONObject(s)
+                if (!ResChecker.checkRes(TAG + "查询新森林任务失败:", jo)) {
+                    Log.error(jo.optString("desc", "未知错误"))
+                    break
+                }
+                val taskInfoList = jo.optJSONArray("taskInfoList")
+                if (taskInfoList == null || taskInfoList.length() == 0) break
+
+                for (j in 0..<taskInfoList.length()) {
+                    val taskInfo = taskInfoList.getJSONObject(j)
+                    val taskBaseInfo = taskInfo.optJSONObject("taskBaseInfo") ?: continue
+                    val taskType = taskBaseInfo.optString("taskType", "")
+                    val sceneCode = taskBaseInfo.optString("sceneCode", "")
+                    val taskStatus = taskBaseInfo.optString("taskStatus", "")
+                    if (taskType.isEmpty()) continue
+
+                    val bizInfoStr = taskBaseInfo.optString("bizInfo", "{}")
+                    val bizInfo = JSONObject(bizInfoStr)
+                    val taskTitle = bizInfo.optString("taskTitle", taskType)
+
+                    val taskRights = taskInfo.optJSONObject("taskRights") ?: JSONObject()
+                    val awardCount = taskRights.optInt("awardCount", 0)
+
+                    if (TaskStatus.FINISHED.name == taskStatus) {
+                        val joAward = JSONObject(
+                            AntForestRpcCall.receiveTaskAward(sceneCode, taskType)
+                        )
+                        if (ResChecker.checkRes(TAG + "领取新森林任务奖励失败:", joAward)) {
+                            Log.forest("森林奖励🎖️[$taskTitle]# $awardCount 活力值")
+                            doubleCheck = true
+                        } else {
+                            Log.error(TAG, "领取失败: $taskTitle")
+                            Log.runtime(joAward.toString())
+                        }
+                        GlobalThreadPools.sleepCompat(500)
+                    } else if (TaskStatus.TODO.name == taskStatus) {
+                        if (TaskBlacklist.isTaskInBlacklist(taskType)) continue
+                        val bizKey = sceneCode + "_" + taskType
+                        val count = forestTaskTryCount
+                            .computeIfAbsent(bizKey) { AtomicInteger(0) }
+                            .incrementAndGet()
+                        val joFinishTask = JSONObject(
+                            AntForestRpcCall.finishTask(sceneCode, taskType)
+                        )
+                        if (!ResChecker.checkRes(TAG + "完成新森林任务失败:", joFinishTask)) {
+                            val errorCode = joFinishTask.optString("code", "")
+                            val errorDesc = joFinishTask.optString("desc", "未知错误")
+                            TaskBlacklist.autoAddToBlacklist(taskType, taskTitle, errorCode, errorDesc)
+                            if (count > 1) {
+                                TaskBlacklist.addToBlacklist(taskType, taskTitle)
+                            }
+                        } else {
+                            Log.forest("森林任务🧾️[$taskTitle]")
+                            doubleCheck = true
+                        }
+                        GlobalThreadPools.sleepCompat(RandomUtil.nextInt(3000, 4001).toLong())
                     }
                 }
                 if (!doubleCheck) break

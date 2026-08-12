@@ -79,6 +79,9 @@ class LifecycleModule : HookModule {
 
     private fun handleActivityResume(activity: Activity) {
         try {
+            if (TaskScheduler.isStopped()) {
+                return
+            }
             val targetUid = AppContext.getUserId()
             if (targetUid == null) {
                 Log.runtime("用户未登录")

@@ -239,6 +239,22 @@ public class AlarmScheduler {
     }
 
     /**
+     * 取消所有精确唤醒任务
+     */
+    public static void cancelAllExactAlarms() {
+        try {
+            for (String taskId : exactAlarmPendingIntents.keySet()) {
+                cancelExactAlarm(taskId);
+            }
+            exactAlarmPendingIntents.clear();
+            exactAlarmCallbacks.clear();
+            Log.runtime("cancelAllExactAlarms: 已取消所有精确唤醒任务");
+        } catch (Throwable th) {
+            Log.error(TAG, "cancelAllExactAlarms err: " + th.getMessage());
+        }
+    }
+
+    /**
      * 处理精确闹钟触发（内部方法，由广播接收器调用）
      */
     public static void handleExactAlarmTrigger(String taskId) {

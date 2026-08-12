@@ -74,8 +74,8 @@ object SmartSchedulerManager {
      * @return 任务ID，可用于取消
      */
     fun schedule(delayMillis: Long, taskName: String = "未命名任务", block: () -> Unit): Int {
-        if (!isInitialized) {
-            Log.error(TAG, "调度失败：未初始化")
+        if (!isInitialized || fansirsqi.xposed.sesame.hook.scheduler.TaskScheduler.isStopped()) {
+            Log.runtime(TAG, "调度跳过：未初始化或已被用户停止 [$taskName]")
             return -1
         }
 

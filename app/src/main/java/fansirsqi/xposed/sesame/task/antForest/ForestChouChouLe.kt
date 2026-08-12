@@ -21,7 +21,7 @@ class ForestChouChouLe {
 
     companion object {
         private const val TAG = "ForestChouChouLe"
-        private const val SOURCE = "task_entry"
+        private const val SOURCE = "IPtask"
 
         // 场景代码常量
         private const val SCENE_NORMAL = "ANTFOREST_NORMAL_DRAW"
@@ -30,12 +30,16 @@ class ForestChouChouLe {
         // 屏蔽的任务类型关键词
         private val BLOCKED_TYPES = setOf(
             "FOREST_NORMAL_DRAW_SHARE",
-            "FOREST_ACTIVITY_DRAW_SHARE",
-            "FOREST_ACTIVITY_DRAW_XS" // 玩游戏得新机会
+            "FOREST_ACTIVITY_DRAW_SHARE"
         )
 
         // 屏蔽的任务名称关键词
-        private val BLOCKED_NAMES = setOf("玩游戏得", "开宝箱")
+        private val BLOCKED_NAMES = setOf("开宝箱")
+
+        // 游戏内达成类任务关键字（必须在游戏内杀怪/通关/付费，无法自动化）
+        private val IN_GAME_ACHIEVEMENT_KEYWORDS = setOf(
+            "击杀", "通关", "关卡", "合成", "怪物", "充值", "消费", "等级", "过关", "胜"
+        )
 
         // 无需重试的错误码（已完成/次数上限）
         private const val TASK_AWARD_ALREADY_FINISHED = "400000030"
@@ -256,11 +260,19 @@ class ForestChouChouLe {
         }
     }
 
-    private fun isBlockedTask(taskType: String, taskName: String): Boolean {
-        return BLOCKED_TYPES.any { taskType.contains(it) } ||
-                BLOCKED_NAMES.any { taskName.contains(it) } ||
-                TaskBlacklist.isTaskInBlacklist(taskType) ||
-                TaskBlacklist.isTaskInBlacklist(taskName)
+    private fun isBlockedTask(taskType: String, taskName: String, desc: String = "", taskProdPlayType: String = "", prodPlayParam: String = ""): Boolean {
+        if (BLOCKED_TYPES.any { taskType.contains(it) } ||
+            BLOCKED_NAMES.any { taskName.contains(it) } ||
+            TaskBlacklist.isTaskInBlacklist(taskType) ||
+            TaskBlacklist.isTaskInBlacklist(taskName)) {
+            return true
+        }
+
+        // 拦截游戏内达成类任务 (taskProdPlayType == "OTHER" 且属于游戏 IAP 或包含杀怪/通关关键字)
+        if (taskProdPlayType == "OTHER" && (prodPlayParam.contains("\"IAP\"") || IN_GAME_ACHIEVEMENT_KEYWORDS.any { desc.contains(it) || taskName.contains(it) })) {
+            return true
+        }
+        return false
     }
 
     /**
@@ -273,22 +285,33 @@ class ForestChouChouLe {
         val bizInfo = if (bizInfoStr.isNotEmpty()) JSONObject(bizInfoStr) else JSONObject()
 
         val taskName = bizInfo.optString("title", "未知任务")
+        val taskDesc = bizInfo.optString("desc", "")
         val taskCode = baseInfo.optString("sceneCode")
         val taskStatus = baseInfo.optString("taskStatus")
         val taskType = baseInfo.optString("taskType")
+        val taskProdPlayType = baseInfo.optString("taskProdPlayType", "")
+        val prodPlayParamStr = baseInfo.optString("prodPlayParam", "")
 
-        if (isBlockedTask(taskType, taskName)) return false
+        var timeCount = 0
+        if (prodPlayParamStr.isNotEmpty()) {
+            val paramJson = prodPlayParamStr.toJson()
+            if (paramJson != null) {
+                timeCount = paramJson.optInt("timeCount", 0)
+            }
+        }
+
+        if (isBlockedTask(taskType, taskName, taskDesc, taskProdPlayType, prodPlayParamStr)) return false
 
 //        Log.runtime("${s.name} 任务: $taskName [$taskStatus]")
 
         return when (taskStatus) {
-            TaskStatus.TODO.name -> handleTodoTask(s, taskName, taskCode, taskType)
+            TaskStatus.TODO.name -> handleTodoTask(s, taskName, taskCode, taskType, taskProdPlayType, timeCount)
             TaskStatus.FINISHED.name -> handleFinishedTask(s, taskName, taskCode, taskType)
             else -> false
         }
     }
 
-    private fun handleTodoTask(s: Scene, name: String, code: String, type: String): Boolean {
+    private fun handleTodoTask(s: Scene, name: String, code: String, type: String, playType: String = "", timeCount: Int = 0): Boolean {
         return if (type == "NORMAL_DRAW_EXCHANGE_VITALITY") {
             // 活力值兑换
             Log.runtime("${s.name} 兑换活力值: $name")
@@ -297,7 +320,32 @@ class ForestChouChouLe {
                 Log.forest("${s.name} 🧾 $name 兑换成功")
                 true
             } else false
-        } else if (type.startsWith("FOREST_NORMAL_DRAW") || type.startsWith("FOREST_ACTIVITY_DRAW")) {
+        } else if (playType == "VISIT_FLOAT_BALL" || timeCount > 0 || type.contains("LLRW")) {
+            // 游戏倒计时浏览任务 (如 玩一玩狂暴西游 浏览30s)
+            val waitSec = if (timeCount > 0) timeCount else 30
+            sleepCompat(waitSec * 1000L)
+
+            val result = AntForestRpcCall.finishTaskopengreen(type, code)
+            val resJson = result.toJson()
+            if (resJson != null && resJson.check()) {
+                Log.forest("${s.name} 🧾 浏览[$name]完成")
+                true
+            } else {
+                val errorCode = resJson?.optString("code", "") ?: ""
+                if (errorCode in listOf(TASK_AWARD_ALREADY_FINISHED, TASK_ALREADY_FINISHED, TASK_RIGHTS_LIMIT)) {
+                    return false
+                }
+                val count = taskTryCount.computeIfAbsent(type) { AtomicInteger(0) }.incrementAndGet()
+                Log.error(TAG, "${s.name} 任务失败($count): $name")
+                if (resJson != null) {
+                    val errorMsg = resJson.optString("desc", "")
+                    if (errorCode.isNotEmpty() || errorMsg.isNotEmpty()) {
+                        TaskBlacklist.autoAddToBlacklist(type, name, errorCode, errorMsg)
+                    }
+                }
+                false
+            }
+        } else if (type.startsWith("FOREST_NORMAL_DRAW") || type.startsWith("FOREST_ACTIVITY_DRAW") || type.endsWith("_ACTIVITY") || type.endsWith("_NORMAL")) {
             // 普通任务
            // Log.runtime("${s.name} 执行任务(模拟耗时): $name")
             sleepCompat(RandomUtil.nextInt(3000, 4001).toLong())

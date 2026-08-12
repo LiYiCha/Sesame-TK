@@ -26,6 +26,7 @@ object EcosystemManager {
     var currentLineIcon: String? by mutableStateOf(null)
     var allAnimals: List<String> = emptyList()
     var allLines: List<String> = emptyList()
+    var allPlants: List<String> = emptyList()
 
     // 新增：全局生态守护舱开关
     var isEcoEnabled by mutableStateOf(true)
@@ -46,6 +47,7 @@ object EcosystemManager {
                 // 读取 asserts 文件夹下的生态资源
                 allAnimals = context.assets.list("ecosystem/animal")?.toList() ?: emptyList()
                 allLines = context.assets.list("ecosystem/lines")?.toList() ?: emptyList()
+                allPlants = context.assets.list("ecosystem/plants")?.toList() ?: emptyList()
                 
                 if (allAnimals.isNotEmpty()) {
                     currentAnimal = "file:///android_asset/ecosystem/animal/${allAnimals.random()}"
