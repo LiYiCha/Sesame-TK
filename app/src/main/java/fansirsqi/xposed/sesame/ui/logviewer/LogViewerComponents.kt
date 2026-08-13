@@ -60,6 +60,7 @@ import android.text.SpannableString
 import android.text.style.ForegroundColorSpan
 import android.text.style.BackgroundColorSpan
 import android.text.style.StyleSpan
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.graphics.toArgb
 
@@ -485,7 +486,21 @@ fun LogLineRow(
     onLineLongClick: () -> Unit,
     onCheckedChange: (Boolean) -> Unit
 ) {
-    val lineAnnotatedString = remember(line, searchHighlightState) {
+    // 超长行截断保护：超过阈值时折叠显示，避免 Compose Text 布局计算卡死主线程
+    val MAX_DISPLAY_LENGTH = 2000
+    val isLongLine = line.length > MAX_DISPLAY_LENGTH
+    var isExpanded by remember(line) { mutableStateOf(false) }
+    val displayLine = if (isLongLine && !isExpanded) {
+        line.substring(0, MAX_DISPLAY_LENGTH)
+    } else {
+        line
+    }
+    // levelColor 只检查行首 200 字符，避免在超长行上做全文 contains
+    val colorCheckStr = if (line.length > 200) line.substring(0, 200) else line
+    // 根据主题深浅选择对比度合适的颜色
+    val isDarkTheme = isSystemInDarkTheme()
+
+    val lineAnnotatedString = remember(displayLine, searchHighlightState) {
         buildAnnotatedString {
             val keyword = searchHighlightState.keyword
             val results = searchHighlightState.results
@@ -493,23 +508,38 @@ fun LogLineRow(
             val currentResult = if (currentIndex in results.indices) results[currentIndex] else null
 
             val lineResults = if (results.isNotEmpty() && keyword.isNotEmpty()) {
-                results.filter { it.lineIndex == originalIndex }
+                results.filter { it.lineIndex == originalIndex && it.charIndex < displayLine.length }
             } else {
                 emptyList()
             }
 
             val levelColor = when {
-                line.contains("ERROR", ignoreCase = true) || line.contains("SEVERE", ignoreCase = true) || line.contains("FATAL", ignoreCase = true) -> Color(0xFFEF5350)
-                line.contains("WARN", ignoreCase = true) || line.contains("WARNING", ignoreCase = true) -> Color(0xFFFFB74D)
-                line.contains("DEBUG", ignoreCase = true) || line.contains("TRACE", ignoreCase = true) -> Color(0xFF90A4AE)
-                line.contains("INFO", ignoreCase = true) -> Color(0xFF81C784)
+                // 错误日志：printStackTrace 输出 "error:" / "Throwable error:" / "Exception error:" 前缀
+                colorCheckStr.contains("error:", ignoreCase = true) || 
+                colorCheckStr.contains("Throwable error:", ignoreCase = true) || 
+                colorCheckStr.contains("Exception error:", ignoreCase = true) -> 
+                    if (isDarkTheme) Color(0xFFEF9A9A) else Color(0xFFC62828)
+                // RPC 抓包标记行
+                colorCheckStr.startsWith("[BOTTOM]", ignoreCase = true) || 
+                colorCheckStr.startsWith("[H5]", ignoreCase = true) -> 
+                    if (isDarkTheme) Color(0xFF64B5F6) else Color(0xFF1565C0)
+                // RPC 结构行
+                colorCheckStr.startsWith("Method:", ignoreCase = true) -> 
+                    if (isDarkTheme) Color(0xFFA5D6A7) else Color(0xFF2E7D32)
+                colorCheckStr.startsWith("Data:", ignoreCase = true) -> 
+                    if (isDarkTheme) Color(0xFFCE93D8) else Color(0xFF6A1B9A)
+                colorCheckStr.startsWith("Params:", ignoreCase = true) -> 
+                    if (isDarkTheme) Color(0xFFFFCC80) else Color(0xFFE65100)
+                colorCheckStr.startsWith("TimeStamp:", ignoreCase = true) || 
+                colorCheckStr.startsWith("<===") -> 
+                    if (isDarkTheme) Color(0xFFB0BEC5) else Color(0xFF546E7A)
                 else -> Color.Unspecified
             }
 
             if (lineResults.isNotEmpty()) {
                 var lastCharIndex = 0
                 lineResults.sortedBy { it.charIndex }.forEach { result ->
-                    val preText = line.substring(lastCharIndex, result.charIndex)
+                    val preText = displayLine.substring(lastCharIndex, result.charIndex)
                     if (preText.isNotEmpty()) {
                         if (levelColor != Color.Unspecified) {
                             withStyle(style = SpanStyle(color = levelColor)) {
@@ -532,13 +562,13 @@ fun LogLineRow(
                             fontWeight = if (isCurrent) FontWeight.Bold else FontWeight.Normal
                         )
                     ) {
-                        append(line.substring(result.charIndex, result.charIndex + result.length))
+                        append(displayLine.substring(result.charIndex, result.charIndex + result.length))
                     }
                     lastCharIndex = result.charIndex + result.length
                 }
 
-                if (lastCharIndex < line.length) {
-                    val postText = line.substring(lastCharIndex)
+                if (lastCharIndex < displayLine.length) {
+                    val postText = displayLine.substring(lastCharIndex)
                     if (levelColor != Color.Unspecified) {
                         withStyle(style = SpanStyle(color = levelColor)) {
                             append(postText)
@@ -550,10 +580,17 @@ fun LogLineRow(
             } else {
                 if (levelColor != Color.Unspecified) {
                     withStyle(style = SpanStyle(color = levelColor)) {
-                        append(line)
+                        append(displayLine)
                     }
                 } else {
-                    append(line)
+                    append(displayLine)
+                }
+            }
+
+            // 截断提示
+            if (isLongLine && !isExpanded) {
+                withStyle(style = SpanStyle(color = Color(0xFFFFB74D), fontStyle = androidx.compose.ui.text.font.FontStyle.Italic)) {
+                    append("\n... [已截断 ${line.length - MAX_DISPLAY_LENGTH} 字符，点击展开全部]")
                 }
             }
         }
@@ -570,7 +607,11 @@ fun LogLineRow(
             .fillMaxWidth()
             .background(rowBgColor)
             .combinedClickable(
-                onClick = onLineClick,
+                onClick = {
+                    // 超长行点击切换展开/折叠
+                    if (isLongLine) isExpanded = !isExpanded
+                    onLineClick()
+                },
                 onLongClick = onLineLongClick
             )
             .padding(vertical = 2.dp, horizontal = 4.dp),

@@ -58,126 +58,6 @@ class PreviewDeviceInfoProvider : PreviewParameterProvider<Map<String, String>> 
     )
 }
 
-/**
- * 主题实时预览卡片 — 脉冲按钮 + 打字机故事 + 实时时钟
- */
-@Composable
-private fun LivePreviewCard(holidayColors: HolidayTheme.ThemeColors?, dark: Boolean) {
-    val main = holidayColors?.mainColor ?: if (dark) Color(0xFF90CAF9) else Color(0xFF1976D2)
-    val bg = holidayColors?.bgColor ?: if (dark) Color(0xFF1E3A5F) else Color(0xFFE3F2FD)
-    val textColor = holidayColors?.textColor ?: if (dark) Color(0xFFE0E0E0) else Color(0xFF212121)
-    val story = holidayColors?.story ?: ""
-    val title = holidayColors?.title ?: ""
-
-    // 实时时钟
-    var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
-    LaunchedEffect(Unit) { while (true) { now = System.currentTimeMillis(); kotlinx.coroutines.delay(1000) } }
-    val hour = java.util.Calendar.getInstance().apply { timeInMillis = now }.get(java.util.Calendar.HOUR_OF_DAY)
-    val min = java.util.Calendar.getInstance().apply { timeInMillis = now }.get(java.util.Calendar.MINUTE)
-    val periodName = when (hour) { in 5..7 -> "🌅 黎明"; in 8..11 -> "☀️ 上午"; in 12..13 -> "☀️ 正午"; in 14..17 -> "🌤️ 午后"; in 18..19 -> "🌅 黄昏"; else -> "🌙 夜晚" }
-    val timeStr = "${hour.toString().padStart(2,'0')}:${min.toString().padStart(2,'0')}"
-
-    // 打字机效果
-    var displayedChars by remember { mutableIntStateOf(0) }
-    LaunchedEffect(story) {
-        displayedChars = 0
-        story.forEachIndexed { i, _ ->
-            kotlinx.coroutines.delay(60)
-            displayedChars = i + 1
-        }
-    }
-
-    // 脉冲动画
-    val pulseScale by rememberInfiniteTransition(label = "pulse").animateFloat(
-        initialValue = 1f, targetValue = 1.04f,
-        animationSpec = infiniteRepeatable(tween(800, easing = FastOutSlowInEasing), RepeatMode.Reverse)
-    )
-
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = bg.copy(alpha = 0.5f)),
-        shape = RoundedCornerShape(14.dp)
-    ) {
-        Column(modifier = Modifier.padding(14.dp)) {
-            // 标题行：预览标签 + 实时时钟
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Text("实时预览", fontSize = 11.sp, color = textColor.copy(alpha = 0.5f))
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(periodName, fontSize = 11.sp, color = main, fontWeight = FontWeight.Medium)
-                    Text(" · $timeStr", fontSize = 11.sp, color = textColor.copy(alpha = 0.4f))
-                }
-            }
-            Spacer(Modifier.height(10.dp))
-
-            Surface(
-                color = bg,
-                shape = RoundedCornerShape(12.dp),
-                shadowElevation = 1.dp,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Column(modifier = Modifier.padding(14.dp)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text("🌳 蚂蚁森林", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = textColor)
-                        Surface(color = main.copy(alpha = 0.15f), shape = RoundedCornerShape(6.dp)) {
-                            Text("今日", modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp), fontSize = 11.sp, color = main)
-                        }
-                    }
-                    Spacer(Modifier.height(8.dp))
-
-                    // 打字机故事
-                    if (story.isNotEmpty()) {
-                        Text(
-                            story.take(displayedChars),
-                            fontSize = 12.sp,
-                            color = textColor.copy(alpha = 0.65f),
-                            lineHeight = 18.sp
-                        )
-                        if (displayedChars < story.length) {
-                            Text("▍", fontSize = 12.sp, color = main)
-                        }
-                        Spacer(Modifier.height(6.dp))
-                    }
-
-                    Text("已收集 158g 绿色能量", fontSize = 12.sp, color = textColor.copy(alpha = 0.7f))
-                    Spacer(Modifier.height(8.dp))
-                    Box(
-                        modifier = Modifier.fillMaxWidth().height(6.dp)
-                            .background(main.copy(alpha = 0.15f), RoundedCornerShape(3.dp))
-                    ) {
-                        Box(
-                            modifier = Modifier.fillMaxWidth(0.73f).height(6.dp)
-                                .background(main, RoundedCornerShape(3.dp))
-                        )
-                    }
-                    Spacer(Modifier.height(4.dp))
-                    Text("73%", fontSize = 10.sp, color = main, modifier = Modifier.align(Alignment.End))
-                    Spacer(Modifier.height(10.dp))
-
-                    // 脉冲按钮
-                    Surface(
-                        color = main,
-                        shape = RoundedCornerShape(8.dp),
-                        modifier = Modifier.align(Alignment.CenterHorizontally).scale(pulseScale)
-                    ) {
-                        Text(
-                            "去收集",
-                            modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp),
-                            fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color.White
-                        )
-                    }
-                }
-            }
-        }
-    }
-}
-
 @Composable
 fun DeviceInfoCard(info: Map<String, String>, oneWord: String? = null) {
     val currentThemeVersion = HolidayTheme.themeVersion.intValue
@@ -197,24 +77,8 @@ fun DeviceInfoCard(info: Map<String, String>, oneWord: String? = null) {
         activity?.updateToolbarTheme()
     }
     
-    val holidayColors = remember(themeMode, customColor, darkMode) {
-        if (darkMode == "schedule") {
-            HolidayTheme.getTimeTheme()
-        } else {
-            val mode = themeMode
-            when {
-                mode == "auto" -> {
-                    val holiday = HolidayTheme.checkTodayHoliday()
-                    if (holiday == "default") HolidayTheme.HOLIDAY_THEMES["default"] else HolidayTheme.HOLIDAY_THEMES[holiday]
-                }
-                mode == "custom" -> {
-                    HolidayTheme.createCustomThemeColors(customColor)
-                }
-                else -> {
-                    HolidayTheme.HOLIDAY_THEMES[mode]
-                }
-            }
-        }
+    val holidayColors: HolidayTheme.ThemeColors? = remember(themeMode, customColor, darkMode) {
+        HolidayTheme.getActiveThemeColors()
     }
     
     val darkTheme = darkMode.let { mode ->
@@ -225,41 +89,7 @@ fun DeviceInfoCard(info: Map<String, String>, oneWord: String? = null) {
             else -> isSystemInDarkTheme()
         }
     }
-    val localColorScheme = if (holidayColors != null) {
-        if (darkTheme) {
-            darkColorScheme(
-                primary = holidayColors.activeColor,
-                onPrimary = Color.Black,
-                primaryContainer = holidayColors.mainColor,
-                onPrimaryContainer = Color.White,
-                secondary = holidayColors.activeColor,
-                onSecondary = Color.Black,
-                background = Color(0xFF121212),
-                onBackground = Color(0xFFE0E0E0),
-                surface = Color(0xFF1E1E1E),
-                onSurface = Color(0xFFE0E0E0),
-                surfaceVariant = Color(0xFF2C2C2C),
-                onSurfaceVariant = Color(0xFFBDBDBD)
-            )
-        } else {
-            lightColorScheme(
-                primary = holidayColors.mainColor,
-                onPrimary = Color.White,
-                primaryContainer = holidayColors.bgColor,
-                onPrimaryContainer = holidayColors.mainColor,
-                secondary = holidayColors.activeColor,
-                onSecondary = Color.White,
-                background = holidayColors.bgColor,
-                onBackground = holidayColors.textColor,
-                surface = holidayColors.cardBgColor,
-                onSurface = holidayColors.textColor,
-                surfaceVariant = holidayColors.bgColor,
-                onSurfaceVariant = holidayColors.textColor.copy(alpha = 0.7f)
-            )
-        }
-    } else {
-        MaterialTheme.colorScheme
-    }
+    val localColorScheme = HolidayTheme.resolvePalette(darkTheme).toColorScheme()
 
     MaterialTheme(colorScheme = localColorScheme) {
         val accentColor = MaterialTheme.colorScheme.onSurface
@@ -288,14 +118,14 @@ fun DeviceInfoCard(info: Map<String, String>, oneWord: String? = null) {
                         0 -> {
                             val timePhase = fansirsqi.xposed.sesame.ui.theme.app.HolidayTheme.getCurrentTimePhase()
                             val dynamicGreeting = when (timePhase) {
-                                "dawn" -> "🌅 晨光微露，早安！"
-                                "day" -> "☀️ 艳阳高照，午安！"
-                                "sunset" -> "🌇 晚霞绚烂，傍晚好！"
-                                "midnight" -> "🌌 夜深了，请注意休息。"
-                                else -> "🎉 欢迎使用 Sesame-TK"
+                                "dawn" -> "早安"
+                                "day" -> "午安"
+                                "sunset" -> "傍晚好"
+                                "midnight" -> "夜深了"
+                                else -> "欢迎"
                             }
                             val holidayTitle = holidayColors?.title ?: dynamicGreeting
-                            val holidayStory = holidayColors?.story ?: "“岁月静好，芝麻常伴。” 模块已正常加载，愿您今天也有好心情！保持童心与好奇，探索生活的精彩。"
+                            val holidayStory = holidayColors?.story ?: "蒹葭苍苍，白露为霜。所谓伊人，在水一方。"
 
                             val coroutineScope = rememberCoroutineScope()
                             var animType by remember { mutableStateOf(0) }
@@ -308,21 +138,8 @@ fun DeviceInfoCard(info: Map<String, String>, oneWord: String? = null) {
                             val animalRotation = remember { androidx.compose.animation.core.Animatable(0f) }
                             val animalFlip = remember { androidx.compose.animation.core.Animatable(0f) }
 
-                            val sky = fansirsqi.xposed.sesame.ui.theme.app.HolidayTheme.getSkyColors()
-                            val isSchedule = darkMode == "schedule" || (darkMode == "auto" && themeMode == "auto")
-                            
                             Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .then(
-                                        if (isSchedule) {
-                                            Modifier.background(
-                                                brush = androidx.compose.ui.graphics.Brush.verticalGradient(
-                                                    colors = listOf(sky.top.copy(alpha = 0.25f), sky.bottom.copy(alpha = 0.12f))
-                                                )
-                                            )
-                                        } else Modifier
-                                    )
+                                modifier = Modifier.fillMaxWidth()
                             ) {
                                 Column(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -371,7 +188,7 @@ fun DeviceInfoCard(info: Map<String, String>, oneWord: String? = null) {
                                                 }
                                             } else {
                                                 Icon(
-                                                    Icons.Rounded.Celebration,
+                                                    Icons.Rounded.Spa,
                                                     contentDescription = null,
                                                     tint = brandColor,
                                                     modifier = Modifier.size(20.dp).graphicsLayer { scaleX = iconScale.value; scaleY = iconScale.value; rotationZ = iconRotation.value; rotationY = iconFlip.value }.pointerInput(Unit) {
@@ -790,17 +607,19 @@ fun DeviceInfoCard(info: Map<String, String>, oneWord: String? = null) {
         if (showDialog) {
             AlertDialog(
                 onDismissRequest = { showDialog = false },
-                title = { Text("主题样式与色彩配置", fontWeight = FontWeight.Bold, fontSize = 18.sp) },
+                title = {
+                    Column {
+                        Text("主题与配色", fontWeight = FontWeight.Bold, fontSize = 20.sp)
+                        Text("暗黑模式 · 节日主题 · 自定义色彩", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                },
                 text = {
                     Column(
                         modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState()),
                         verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
-                        // ========== 实时预览卡片 ==========
-                        LivePreviewCard(holidayColors, darkTheme)
-
                         // ========== 暗黑模式 ==========
-                        Text("暗黑模式：", style = MaterialTheme.typography.labelSmall, color = Color.Gray)
+                        Text("暗黑模式：", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -829,7 +648,7 @@ fun DeviceInfoCard(info: Map<String, String>, oneWord: String? = null) {
                                         textAlign = androidx.compose.ui.text.style.TextAlign.Center,
                                         fontSize = 13.sp,
                                         fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
-                                        color = if (selected) Color.White else MaterialTheme.colorScheme.onSurface
+                                        color = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
                                     )
                                 }
                             }
@@ -838,10 +657,10 @@ fun DeviceInfoCard(info: Map<String, String>, oneWord: String? = null) {
                         if (darkMode == "schedule" || (darkMode == "auto" && themeMode == "auto")) {
                             val timePhase = fansirsqi.xposed.sesame.ui.theme.app.HolidayTheme.getCurrentTimePhase()
                             val phaseName = when (timePhase) {
-                                "dawn" -> "🌅 晨曦"
-                                "day" -> "☀️ 白昼"
-                                "sunset" -> "🌇 晚霞"
-                                "midnight" -> "🌌 子夜"
+                                "dawn" -> "晨曦"
+                                "day" -> "白昼"
+                                "sunset" -> "晚霞"
+                                "midnight" -> "子夜"
                                 else -> "自动"
                             }
                             Text(
@@ -857,12 +676,12 @@ fun DeviceInfoCard(info: Map<String, String>, oneWord: String? = null) {
                         Spacer(modifier = Modifier.height(4.dp))
 
                         // Switch Options
-                        Text("功能开关：", style = MaterialTheme.typography.labelSmall, color = Color.Gray)
+                        Text("功能开关：", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         Column(
                             verticalArrangement = Arrangement.spacedBy(8.dp),
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .background(Color.LightGray.copy(alpha = 0.15f), RoundedCornerShape(10.dp))
+                                .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(10.dp))
                                 .padding(8.dp)
                         ) {
                             Row(
@@ -906,14 +725,14 @@ fun DeviceInfoCard(info: Map<String, String>, oneWord: String? = null) {
                             }
                         }
 
-                        // Option 1: Follow Today
+                        // Option 1: Follow Today（色卡风格）
                         Surface(
-                            color = if (themeMode == "auto") brandColor.copy(alpha = 0.15f) else Color.Transparent,
+                            color = if (themeMode == "auto") brandColor.copy(alpha = 0.10f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
                             border = androidx.compose.foundation.BorderStroke(
-                                1.dp, 
-                                if (themeMode == "auto") brandColor else Color.LightGray.copy(alpha = 0.5f)
+                                if (themeMode == "auto") 2.dp else 1.dp,
+                                if (themeMode == "auto") brandColor else MaterialTheme.colorScheme.outline
                             ),
-                            shape = RoundedCornerShape(10.dp),
+                            shape = RoundedCornerShape(14.dp),
                             modifier = Modifier.fillMaxWidth().clickable {
                                 themeMode = "auto"
                                 HolidayTheme.saveThemeConfigEx("auto", customColor, useHolidayIcons, useAnimalIcons)
@@ -923,12 +742,9 @@ fun DeviceInfoCard(info: Map<String, String>, oneWord: String? = null) {
                                 modifier = Modifier.padding(12.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                RadioButton(selected = themeMode == "auto", onClick = {
-                                    themeMode = "auto"
-                                    HolidayTheme.saveThemeConfigEx("auto", customColor, useHolidayIcons, useAnimalIcons)
-                                })
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Column {
+                                Icon(Icons.Rounded.AutoAwesome, contentDescription = null, tint = brandColor, modifier = Modifier.size(20.dp))
+                                Spacer(modifier = Modifier.width(10.dp))
+                                Column(modifier = Modifier.weight(1f)) {
                                     Text("自动跟随今日节日", fontWeight = FontWeight.Bold, fontSize = 14.sp)
                                     val todayHoliday = HolidayTheme.checkTodayHoliday()
                                     val names = mapOf(
@@ -938,75 +754,81 @@ fun DeviceInfoCard(info: Map<String, String>, oneWord: String? = null) {
                                         "new_years_eve" to "除夕", "dragon_boat" to "端午节", "qixi" to "七夕节",
                                         "mid_autumn" to "中秋节", "double_ninth" to "重阳节"
                                     )
-                                    Text("当前检测到: ${names[todayHoliday] ?: todayHoliday}", fontSize = 11.sp, color = Color.Gray)
+                                    Text("今日: ${names[todayHoliday] ?: todayHoliday}", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                }
+                                if (themeMode == "auto") {
+                                    Icon(Icons.Rounded.CheckCircle, contentDescription = null, tint = brandColor, modifier = Modifier.size(18.dp))
                                 }
                             }
                         }
                         
-                        // Option 2: Fixed Holidays
-                        Text("固定节日主题配色：", style = MaterialTheme.typography.labelSmall, color = Color.Gray)
+                        // ========== 节日主题色卡画廊 ==========
+                        Text("节日主题", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         val holidays = listOf(
                             "new_year" to "元旦",
-                            "valentine" to "情人",
-                            "labor_day" to "劳动",
-                            "childrens_day" to "儿童",
-                            "dragon_boat" to "端午",
-                            "mid_autumn" to "中秋",
+                            "valentine" to "情人节",
+                            "labor_day" to "劳动节",
+                            "mothers_day" to "母亲节",
+                            "fathers_day" to "父亲节",
+                            "childrens_day" to "儿童节",
+                            "national_day" to "国庆节",
                             "spring_festival" to "春节",
-                            "national_day" to "国庆"
+                            "new_years_eve" to "除夕",
+                            "dragon_boat" to "端午节",
+                            "qixi" to "七夕节",
+                            "mid_autumn" to "中秋节",
+                            "double_ninth" to "重阳节",
+                            "default" to "默认"
                         )
-                        
-                        val chunkedHolidays = holidays.chunked(3)
-                        chunkedHolidays.forEach { rowItems ->
+                        holidays.chunked(2).forEach { rowItems ->
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                horizontalArrangement = Arrangement.spacedBy(10.dp)
                             ) {
                                 rowItems.forEach { (code, name) ->
+                                    val tc = HolidayTheme.HOLIDAY_THEMES[code]
+                                    val cardBg = tc?.bgColor ?: MaterialTheme.colorScheme.surface
+                                    val cardMain = tc?.mainColor ?: brandColor
+                                    val cardText = tc?.textColor ?: MaterialTheme.colorScheme.onSurface
                                     val isSelected = themeMode == code
                                     Surface(
-                                        color = if (isSelected) brandColor.copy(alpha = 0.15f) else Color.Transparent,
+                                        color = cardBg,
                                         border = androidx.compose.foundation.BorderStroke(
-                                            1.dp,
-                                            if (isSelected) brandColor else Color.LightGray.copy(alpha = 0.5f)
+                                            if (isSelected) 2.dp else 1.dp,
+                                            if (isSelected) cardMain else MaterialTheme.colorScheme.outline
                                         ),
-                                        shape = RoundedCornerShape(8.dp),
+                                        shape = RoundedCornerShape(14.dp),
                                         modifier = Modifier.weight(1f).clickable {
                                             themeMode = code
                                             HolidayTheme.saveThemeConfigEx(code, customColor, useHolidayIcons, useAnimalIcons)
                                         }
                                     ) {
-                                        Column(
-                                            modifier = Modifier.padding(8.dp),
-                                            horizontalAlignment = Alignment.CenterHorizontally
+                                        Row(
+                                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 12.dp),
+                                            verticalAlignment = Alignment.CenterVertically
                                         ) {
-                                            Text(name, fontSize = 13.sp, fontWeight = FontWeight.Bold)
-                                            Spacer(modifier = Modifier.height(4.dp))
-                                            val holidayColor = HolidayTheme.HOLIDAY_THEMES[code]
-                                            if (holidayColor != null) {
-                                                Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
-                                                    Box(modifier = Modifier.size(8.dp).clip(CircleShape).background(holidayColor.mainColor))
-                                                    Box(modifier = Modifier.size(8.dp).clip(CircleShape).background(holidayColor.bgColor))
-                                                }
+                                            Box(modifier = Modifier.size(10.dp).clip(CircleShape).background(cardMain))
+                                            Spacer(modifier = Modifier.width(7.dp))
+                                            Text(name, fontSize = 13.sp, fontWeight = FontWeight.Bold, color = cardText, modifier = Modifier.weight(1f))
+                                            if (isSelected) {
+                                                Icon(Icons.Rounded.CheckCircle, contentDescription = null, tint = cardMain, modifier = Modifier.size(16.dp))
                                             }
                                         }
                                     }
                                 }
-                                if (rowItems.size < 3) {
-                                    repeat(3 - rowItems.size) {
-                                        Box(modifier = Modifier.weight(1f))
-                                    }
+                                if (rowItems.size < 2) {
+                                    Box(modifier = Modifier.weight(1f))
                                 }
                             }
                         }
                         
                         // Option 3: Custom Color
-                        Text("自定义色彩主题：", style = MaterialTheme.typography.labelSmall, color = Color.Gray)
+                        Text("自定义色彩主题：", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         Surface(
                             color = if (themeMode == "custom") brandColor.copy(alpha = 0.15f) else Color.Transparent,
                             border = androidx.compose.foundation.BorderStroke(
                                 1.dp,
-                                if (themeMode == "custom") brandColor else Color.LightGray.copy(alpha = 0.5f)
+                                if (themeMode == "custom") brandColor else MaterialTheme.colorScheme.outline
                             ),
                             shape = RoundedCornerShape(10.dp),
                             modifier = Modifier.fillMaxWidth().clickable {
@@ -1086,7 +908,7 @@ fun DeviceInfoCard(info: Map<String, String>, oneWord: String? = null) {
                                                     }
                                                     .let {
                                                         if (isCurrentColor && themeMode == "custom") {
-                                                            it.border(2.dp, Color.Black, RoundedCornerShape(6.dp))
+                                                            it.border(2.dp, MaterialTheme.colorScheme.onSurface, RoundedCornerShape(6.dp))
                                                         } else {
                                                             it
                                                         }

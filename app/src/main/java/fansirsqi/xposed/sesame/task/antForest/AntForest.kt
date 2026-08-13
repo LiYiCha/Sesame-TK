@@ -1375,7 +1375,7 @@ class AntForest : ModelTask(), EnergyCollectCallback {
                     try {
                         val response = AntForestRpcCall.queryFriendHomePage(uid, null)
                         val jo = JSONObject(response)
-                        if (ResChecker.checkRes(TAG, jo)) {
+                        if (ResChecker.checkRes("$TAG[queryFriendHome]", jo)) {
                             val bizNo = jo.getString("bizNo")
 
                             // ✅ 关键改动：传入通知开关
@@ -2914,7 +2914,7 @@ class AntForest : ModelTask(), EnergyCollectCallback {
                                 val propId = userUsingProp.getString("propId")
                                 val propType = userUsingProp.getString("propType")
                                 val jo = JSONObject(AntForestRpcCall.collectRobExpandEnergy(propId, propType))
-                                if (ResChecker.checkRes(TAG, jo)) {
+                                if (ResChecker.checkRes("$TAG[collectRobEnergy]", jo)) {
                                     val collectEnergy = jo.optInt("collectEnergy")
                                     Log.forest("翻倍能量🌳[" + collectEnergy + "g][$propName]")
                                 }
@@ -3812,7 +3812,7 @@ class AntForest : ModelTask(), EnergyCollectCallback {
                     Log.printStackTrace(TAG, "JSON解析错误: " + e.message, e)
                     return  // 解析失败，退出循环
                 }
-                if (!ResChecker.checkRes(TAG, jo)) {
+                if (!ResChecker.checkRes("$TAG[queryPropEvent]", jo)) {
                     Log.runtime(TAG, jo.getString("resultDesc"))
                     break
                 }
@@ -3856,7 +3856,7 @@ class AntForest : ModelTask(), EnergyCollectCallback {
         try {
             // 查询动物属性列表
             var jo = JSONObject(AntForestRpcCall.queryAnimalPropList())
-            if (!ResChecker.checkRes(TAG, jo)) {
+            if (!ResChecker.checkRes("$TAG[queryAnimalProp]", jo)) {
                 Log.runtime(TAG, jo.getString("resultDesc"))
                 return
             }
@@ -4691,7 +4691,7 @@ class AntForest : ModelTask(), EnergyCollectCallback {
             val jo = JSONObject(response)
 
             // 验证请求是否成功
-            if (!ResChecker.checkRes(TAG, jo)) {
+            if (!ResChecker.checkRes("$TAG[queryGameList]", jo)) {
                 Log.error(TAG, "queryGameList 失败: ${jo.optString("desc")}")
                 return
             }
@@ -4711,7 +4711,7 @@ class AntForest : ModelTask(), EnergyCollectCallback {
                 if (canUseCount > 0) {
                     Log.runtime(TAG, "正在一次性开启 $canUseCount 个宝箱...")
                     val drawResStr = AntForestRpcCall.drawGameCenterAward(canUseCount)
-                    if(!ResChecker.checkRes(TAG, drawResStr)){
+                    if(!ResChecker.checkRes("$TAG[drawAward]", drawResStr)){
                         //Log.error(TAG,"开启宝箱失败 Res:$drawResStr")
                         return
                     }

@@ -138,7 +138,7 @@ object WhackMole {
             delay(max(0L, 6000L - elapsedTime - 200L))
 
             val settleResp = JSONObject(AntForestRpcCall.oldsettlementWhackMole(token, remainingIds, SOURCE))
-            if (ResChecker.checkRes(TAG, settleResp)) {
+            if (ResChecker.checkRes("$TAG[settleCompat]", settleResp)) {
                 val total = settleResp.optInt("totalEnergy", 0)
                 Log.forest("森林能量⚡️[兼容模式完成(打${remainingIds.size + hitCount}个) 总能量+${total}g]")
             }
@@ -187,7 +187,7 @@ object WhackMole {
         try {
             // 标准接口调用
             val startResp = JSONObject(AntForestRpcCall.startWhackMole())
-            if (!ResChecker.checkRes(TAG, startResp)) return null
+            if (!ResChecker.checkRes("$TAG[startRound]", startResp)) return null
 
             if (!startResp.optBoolean("canPlayToday", true)) {
                 Status.setFlagToday(EXEC_FLAG)
@@ -206,7 +206,7 @@ object WhackMole {
         try {
             // 标准结算调用 (RPC 内部会自动处理 moleIdList 1-15)
             val resp = JSONObject(AntForestRpcCall.settlementWhackMole(session.token))
-            if (ResChecker.checkRes(TAG, resp)) {
+            if (ResChecker.checkRes("$TAG[settleRound]", resp)) {
                 return resp.optInt("totalEnergy", 0)
             }
         } catch (e: Exception) {

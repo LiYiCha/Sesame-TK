@@ -72,7 +72,7 @@ object EnergyRainCoroutine {
             do {
                 val joEnergyRainHome = JSONObject(AntForestRpcCall.queryEnergyRainHome())
                 randomDelay(250, 400) // 随机延迟 300-400ms
-                if (!ResChecker.checkRes(TAG, joEnergyRainHome)) {
+                if (!ResChecker.checkRes("$TAG[queryRainHome]", joEnergyRainHome)) {
                     Log.runtime(TAG, "查询能量雨状态失败")
                     break
                 }
@@ -113,7 +113,7 @@ object EnergyRainCoroutine {
                             if (giveEnergyRainSet.contains(uid)) {
                                 val rainJsonObj = JSONObject(AntForestRpcCall.grantEnergyRainChance(uid))
                                 Log.runtime(TAG, "尝试送能量雨给【${UserMap.getMaskName(uid)}】")
-                                if (ResChecker.checkRes(TAG, rainJsonObj)) {
+                                if (ResChecker.checkRes("$TAG[grantRain]", rainJsonObj)) {
                                     Log.forest("赠送能量雨机会给🌧️[${UserMap.getMaskName(uid)}]#${UserMap.getMaskName(UserMap.currentUid)}")
                                     randomDelay(300, 400) // 随机延迟 300-400ms
                                     granted = true
@@ -154,7 +154,7 @@ object EnergyRainCoroutine {
             Log.runtime("开始执行能量雨🌧️")
             val joStart = JSONObject(AntForestRpcCall.startEnergyRain())
 
-            if (ResChecker.checkRes(TAG, joStart)) {
+            if (ResChecker.checkRes("$TAG[startRain]", joStart)) {
                 val token = joStart.getString("token")
                 val bubbleEnergyList = joStart.getJSONObject("difficultyInfo").getJSONArray("bubbleEnergyList")
                 var sum = 0
@@ -166,7 +166,7 @@ object EnergyRainCoroutine {
                 randomDelay(5000, 5200) // 随机延迟 5-5.2秒，模拟真人玩游戏
                 val resultJson = JSONObject(AntForestRpcCall.energyRainSettlement(sum, token))
 
-                if (ResChecker.checkRes(TAG, resultJson)) {
+                if (ResChecker.checkRes("$TAG[settleRain]", resultJson)) {
                     val s = "收获能量雨🌧️[${sum}g]"
                     Toast.show(s)
                     Log.forest(s)
@@ -195,7 +195,7 @@ object EnergyRainCoroutine {
             val response = AntForestRpcCall.queryEnergyRainEndGameList()
             val jo = JSONObject(response)
 
-            if (!ResChecker.checkRes(TAG, jo)) {
+            if (!ResChecker.checkRes("$TAG[queryEndGame]", jo)) {
                 //Log.error(TAG, "查询能量雨游戏任务失败 $jo")
                 return
             }
@@ -204,7 +204,7 @@ object EnergyRainCoroutine {
             if (jo.optBoolean("needInitTask", false)) {
                 // Log.runtime(TAG, "检测到新任务，准备接入[森林救援队]...")
                 val initRes = JSONObject(AntForestRpcCall.initTask("GAME_DONE_SLJYD"))
-                if (ResChecker.checkRes(TAG, initRes)) {
+                if (ResChecker.checkRes("$TAG[initEndGame]", initRes)) {
                     // Log.runtime(TAG, "[森林救援队] 任务接入成功")
                     // 接入后需要重新请求一次列表来获取最新的 taskStatus，或者直接去执行
                 }

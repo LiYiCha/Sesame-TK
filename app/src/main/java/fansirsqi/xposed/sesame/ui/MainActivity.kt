@@ -73,48 +73,22 @@ class MainActivity : BaseActivity() {
     private var userNickName: String = ""
     
     private val mainActivityThemeObserver: () -> Unit = {
-        val mode = fansirsqi.xposed.sesame.ui.theme.app.HolidayTheme.getDarkMode()
         val isSystemNight = (resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK) == android.content.res.Configuration.UI_MODE_NIGHT_YES
-        val isNightMode = when (mode) {
-            "light" -> false
-            "dark" -> true
-            "schedule" -> fansirsqi.xposed.sesame.ui.theme.app.HolidayTheme.shouldUseDarkTheme()
-            else -> isSystemNight
-        }
-        val themeMode = fansirsqi.xposed.sesame.ui.theme.app.HolidayTheme.getThemeMode()
-        val customColor = fansirsqi.xposed.sesame.ui.theme.app.HolidayTheme.getCustomColor()
-        val mainColor = when {
-            mode == "schedule" -> {
-                val timeTheme = fansirsqi.xposed.sesame.ui.theme.app.HolidayTheme.getTimeTheme()
-                timeTheme?.mainColor?.toArgb() ?: android.graphics.Color.parseColor("#4CAF50")
-            }
-            themeMode == "auto" -> {
-                val holiday = fansirsqi.xposed.sesame.ui.theme.app.HolidayTheme.checkTodayHoliday()
-                val themeColors = if (holiday == "default") fansirsqi.xposed.sesame.ui.theme.app.HolidayTheme.HOLIDAY_THEMES["default"] else fansirsqi.xposed.sesame.ui.theme.app.HolidayTheme.HOLIDAY_THEMES[holiday]
-                themeColors?.mainColor?.toArgb() ?: android.graphics.Color.parseColor("#4CAF50")
-            }
-            themeMode == "custom" -> {
-                try { android.graphics.Color.parseColor(customColor) } catch (e: Exception) { android.graphics.Color.parseColor("#4CAF50") }
-            }
-            else -> {
-                fansirsqi.xposed.sesame.ui.theme.app.HolidayTheme.HOLIDAY_THEMES[themeMode]?.mainColor?.toArgb() ?: android.graphics.Color.parseColor("#4CAF50")
-            }
-        }
-        val bgAlpha = if (isNightMode) 0.15f else 0.12f
-        val cardColorInt = if (isNightMode) android.graphics.Color.parseColor("#1E1E1E") else android.graphics.Color.WHITE
-        val blendedBgColor = androidx.core.graphics.ColorUtils.blendARGB(cardColorInt, mainColor, bgAlpha)
-        val colorStateList = android.content.res.ColorStateList.valueOf(blendedBgColor)
+        // 单一数据源：与 BaseActivity / Compose 端共用同一调色板
+        val palette = fansirsqi.xposed.sesame.ui.theme.app.HolidayTheme.resolvePalette(isSystemNight)
+        val surfaceColorInt = palette.surface.toArgb()
+        val surfaceVariantInt = palette.surfaceVariant.toArgb()
+        val textColorInt = palette.onSurface.toArgb()
         
         val buttons = listOf(R.id.btn_forest_log, R.id.btn_farm_log, R.id.btn_other_log, R.id.btn_extend_function, R.id.btn_github, R.id.btn_settings)
         buttons.forEach { id ->
             val btn = findViewById<com.google.android.material.button.MaterialButton>(id)
-            btn?.backgroundTintList = colorStateList
+            btn?.backgroundTintList = android.content.res.ColorStateList.valueOf(surfaceVariantInt)
             btn?.backgroundTintMode = android.graphics.PorterDuff.Mode.SRC_IN
-            val textColor = if (isNightMode) android.graphics.Color.parseColor("#E0E0E0") else android.graphics.Color.parseColor("#212121")
-            btn?.setTextColor(android.content.res.ColorStateList.valueOf(textColor))
+            btn?.setTextColor(android.content.res.ColorStateList.valueOf(textColorInt))
         }
-        val cardColor = if (isNightMode) android.graphics.Color.parseColor("#1E1E1E") else android.graphics.Color.WHITE
-        findViewById<com.google.android.material.card.MaterialCardView>(R.id.grid_card)?.setCardBackgroundColor(cardColor)
+        // 六宫格卡片背景 = surface（与大卡片一致）
+        findViewById<com.google.android.material.card.MaterialCardView>(R.id.grid_card)?.setCardBackgroundColor(surfaceColorInt)
         
         fansirsqi.xposed.sesame.ui.theme.app.HolidayTheme.applyGlobalNightMode()
     }

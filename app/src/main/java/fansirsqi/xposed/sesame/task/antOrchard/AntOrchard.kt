@@ -427,7 +427,7 @@ class AntOrchard : ModelTask() {
             if (treeLevel == null) return
             val response = AntOrchardRpcCall.querySubplotsActivity(treeLevel!!)
             val json = JSONObject(response)
-            if (!ResChecker.checkRes(TAG, json)) return
+            if (!ResChecker.checkRes("$TAG[querySubplot]", json)) return
 
             val subplots = json.optJSONArray("subplotsActivityList") ?: return
             for (i in 0 until subplots.length()) {
@@ -551,7 +551,7 @@ class AntOrchard : ModelTask() {
 
                     for (cnt in 0 until timesToDo) {
                         val finishResponse = JSONObject(AntOrchardRpcCall.finishTask(userId, sceneCode, taskId))
-                        if (ResChecker.checkRes(TAG, finishResponse)) {
+                        if (ResChecker.checkRes("$TAG[finishAdTask]", finishResponse)) {
                             Log.farm("农场广告任务📺[$title] 第${rightsTimes + cnt + 1}次")
                         } else {
                             val errorCode = finishResponse.optString("code", "")
@@ -568,7 +568,7 @@ class AntOrchard : ModelTask() {
 
                 if (actionType == "TRIGGER" || actionType == "ADD_HOME" || actionType == "PUSH_SUBSCRIBE") {
                     val finishResponse = JSONObject(AntOrchardRpcCall.finishTask(userId, sceneCode, taskId))
-                    if (ResChecker.checkRes(TAG, finishResponse)) {
+                    if (ResChecker.checkRes("$TAG[finishTask]", finishResponse)) {
                         Log.farm("农场任务🧾[$title]")
                     } else {
                         val errorCode = finishResponse.optString("code", "")
@@ -589,7 +589,7 @@ class AntOrchard : ModelTask() {
                     // 跳过提交时长和 finishTask 步骤，直接调用 triggerTbTask 领取奖励！
                     if (taskStatus == "FINISHED") {
                         val joClaim = JSONObject(AntOrchardRpcCall.triggerTbTask(taskId, taskPlantType))
-                        if (ResChecker.checkRes(TAG, joClaim)) {
+                        if (ResChecker.checkRes("$TAG[triggerTbTask]", joClaim)) {
                             val incAward = joClaim.optInt("incAwardCount", 0)
                             Log.farm("农场试玩任务🎮[$title] 领取 +${incAward}g肥料")
                         } else {
@@ -618,23 +618,23 @@ class AntOrchard : ModelTask() {
                     while (hasNextStage && currentRightsTimes < rightsTimesLimit) {
                         if (gameAppId.isNotEmpty()) {
                             // 提交游戏在线时长
-                            val hbCount = if (currentRightsTimes >= 1) 2 else 1
+                            val hbCount = if (currentRightsTimes >= 1) 5 else 1
                             var heartBeatOk = true
                             for (hb in 1..hbCount) {
                                 val durationRes = AntOrchardRpcCall.submitUserPlayDurationAction(gameAppId, 30)
-                                if (!ResChecker.checkRes(TAG, durationRes)) {
+                                if (!ResChecker.checkRes("$TAG[submitTime]", durationRes)) {
                                     Log.error(TAG, "农场试玩任务🎮[$title] 时长提交失败，终止处理")
                                     heartBeatOk = false
                                     break
                                 }
-                                CoroutineUtils.sleepCompat(1000)
+                                CoroutineUtils.sleepCompat(5000)
                             }
                             if (!heartBeatOk) break
                         }
 
                         // 时长发够后提交 AntiEP 阶段试玩完成 (自动生成最新唯一时间戳 outBizNo)
                         val finishResponse = JSONObject(AntOrchardRpcCall.finishTask(userId, sceneCode, taskId))
-                        if (ResChecker.checkRes(TAG, finishResponse)) {
+                        if (ResChecker.checkRes("$TAG[finishStage]", finishResponse)) {
                             val awardVO = finishResponse.optJSONObject("finishAwardResultVO")
                             val delta = awardVO?.optInt("deltaAwardCount") ?: 0
                             val currentStage = awardVO?.optInt("stage") ?: (currentRightsTimes + 1)
@@ -687,7 +687,7 @@ class AntOrchard : ModelTask() {
             val response = AntOrchardRpcCall.smashedGoldenEgg(count)
             val jo = JSONObject(response)
 
-            if (ResChecker.checkRes(TAG, jo)) {
+            if (ResChecker.checkRes("$TAG[smashEgg]", jo)) {
                 val batchSmashedList = jo.getJSONArray("batchSmashedList")
                 for (i in 0 until batchSmashedList.length()) {
                     val smashedItem = batchSmashedList.getJSONObject(i)
@@ -747,7 +747,7 @@ class AntOrchard : ModelTask() {
                 val response = AntOrchardRpcCall.receiveOrchardVisitAward(diversionSource, source)
                 val jo = JSONObject(response)
 
-                if (!ResChecker.checkRes(TAG, response)) {
+                if (!ResChecker.checkRes("$TAG[visitAward]", response)) {
                     continue
                 }
 
@@ -779,7 +779,7 @@ class AntOrchard : ModelTask() {
             val wua = SecurityBodyHelper.getSecurityBodyData(4).toString()
             val response = AntOrchardRpcCall.orchardSyncIndex(wua)
             val root = JSONObject(response)
-            if (!ResChecker.checkRes(TAG, root)) return
+            if (!ResChecker.checkRes("$TAG[syncIndex]", root)) return
 
             val challenge = root.optJSONObject("limitedTimeChallenge") ?: return
             val currentRound = challenge.optInt("currentRound", 0)
@@ -798,7 +798,7 @@ class AntOrchard : ModelTask() {
             if (MtaskStatus == "FINISHED" && ongoing) {
                 val awardResp = AntOrchardRpcCall.receiveTaskAward("ORCHARD_LIMITED_TIME_CHALLENGE", MtaskId)
                 val joo = JSONObject(awardResp)
-                if (ResChecker.checkRes(TAG, joo)) {
+                if (ResChecker.checkRes("$TAG[receiveAward]", joo)) {
                     Log.farm("第 $currentRound 轮 限时任务🎁[肥料 * $MawardCount]")
                 }
                 return
@@ -834,7 +834,7 @@ class AntOrchard : ModelTask() {
                     }
                     "GAME_CENTER" -> {
                         val r = AntOrchardRpcCall.noticeGame("2021004165643274")
-                        if (ResChecker.checkRes(TAG, JSONObject(r))) {
+                        if (ResChecker.checkRes("$TAG[noticeGame]", JSONObject(r))) {
                             Log.runtime(TAG, "游戏任务触发成功")
                         }
                     }
@@ -863,7 +863,7 @@ class AntOrchard : ModelTask() {
 
                         val playEventInfo = infoListArray.getJSONObject(0)
                         val finishResult = XLightRpcCall.finishTask(playingBizId, playEventInfo, sceneCode, groupId)
-                        if (ResChecker.checkRes(TAG, JSONObject(finishResult))) {
+                        if (ResChecker.checkRes("$TAG[finishVisit]", JSONObject(finishResult))) {
                             Log.runtime(TAG, "浏览广告任务完成")
                         }
                     }
@@ -999,7 +999,7 @@ class AntOrchard : ModelTask() {
                 CoroutineUtils.sleepCompat(800)
                 val name = UserMap.getMaskName(uid)
 
-                if (!ResChecker.checkRes(TAG, str)) {
+                if (!ResChecker.checkRes("$TAG[assistP2P]", str)) {
                     val code = jsonObject.getString("code")
                     if (code == "600000027") {
                         Log.runtime(TAG, "农场助力💪今日助力他人次数上限")

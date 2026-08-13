@@ -5,7 +5,7 @@ import org.json.JSONArray
 import org.json.JSONObject
 
 object AntOrchardRpcCall {
-    private const val VERSION = "20251209.01"
+    private const val VERSION = "20260721.01"
 
     fun orchardIndex(): String {
         return RequestManager.requestString("com.alipay.antfarm.orchardIndex",
@@ -96,7 +96,7 @@ object AntOrchardRpcCall {
     fun orchardListTask(): String {
         return RequestManager.requestString(
             "com.alipay.antfarm.orchardListTask",
-            "[{\"plantHiddenMMC\":\"false\",\"requestType\":\"NORMAL\",\"sceneCode\":\"ORCHARD\",\"source\":\"zhifujianglizhitiao1000\",\"version\":\"$VERSION\"}]"
+            "[{\"plantHiddenMMC\":\"false\",\"requestType\":\"NORMAL\",\"sceneCode\":\"ORCHARD\",\"source\":\"ch_appcenter__chsub_9patch\",\"version\":\"$VERSION\"}]"
         )
     }
 
@@ -122,7 +122,7 @@ object AntOrchardRpcCall {
     }
 
     fun submitGameEvent(appId: String, eventCode: String = "GAME_PLAY_TIME", playDuration: Int = 30): String {
-        val extInfo = JSONObject().put("playDuration", playDuration).toString()
+        val extInfo = JSONObject().put("playDuration", playDuration)
         val data = JSONArray().put(
             JSONObject()
                 .put("appId", appId)

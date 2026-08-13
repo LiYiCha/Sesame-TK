@@ -123,7 +123,7 @@ private fun PreviewImageCard(themeInfo: ThemeInfo) {
             .height(200.dp),
         shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(
-            containerColor = Color.White
+            containerColor = MaterialTheme.colorScheme.surface
         )
     ) {
         if (themeInfo.previewImagePath != null) {
@@ -140,8 +140,8 @@ private fun PreviewImageCard(themeInfo: ThemeInfo) {
                     .background(
                         brush = Brush.verticalGradient(
                             colors = listOf(
-                                Color(0xFFE1D9D2),
-                                Color(0xFFD2FFFB)
+                                MaterialTheme.colorScheme.surface,
+                                MaterialTheme.colorScheme.primaryContainer
                             )
                         )
                     ),
@@ -150,7 +150,7 @@ private fun PreviewImageCard(themeInfo: ThemeInfo) {
                 Text(
                     text = "暂无预览图",
                     fontSize = 16.sp,
-                    color = Color(0xFF424242)
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
         }
@@ -166,7 +166,7 @@ private fun ThemeInfoCard(themeInfo: ThemeInfo) {
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(
-            containerColor = Color.White
+            containerColor = MaterialTheme.colorScheme.surface
         )
     ) {
         Column(
@@ -180,13 +180,13 @@ private fun ThemeInfoCard(themeInfo: ThemeInfo) {
                 Text(
                     text = "主题名称: ",
                     style = MaterialTheme.typography.bodyMedium,
-                    color = Color(0xFF616161)
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Text(
                     text = themeInfo.name,
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
-                    color = Color(0xFF131313)
+                    color = MaterialTheme.colorScheme.onSurface
                 )
             }
 
@@ -197,12 +197,12 @@ private fun ThemeInfoCard(themeInfo: ThemeInfo) {
                 Text(
                     text = "主题ID: ",
                     style = MaterialTheme.typography.bodyMedium,
-                    color = Color(0xFF616161)
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Text(
                     text = themeInfo.description.removePrefix("主题ID: ").removePrefix("文件夹: "),
                     style = MaterialTheme.typography.bodyMedium,
-                    color = Color(0xFF424242)
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
         }
@@ -218,7 +218,7 @@ private fun ResourceListCard(themeInfo: ThemeInfo) {
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(
-            containerColor = Color.White
+            containerColor = MaterialTheme.colorScheme.surface
         )
     ) {
         Column(
@@ -229,12 +229,12 @@ private fun ResourceListCard(themeInfo: ThemeInfo) {
                 text = "📋 主题包含的资源",
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,
-                color = Color(0xFF131313)
+                color = MaterialTheme.colorScheme.onSurface
             )
 
             Divider(
                 modifier = Modifier.padding(vertical = 8.dp),
-                color = Color(0xFFE0E0E0)
+                color = MaterialTheme.colorScheme.outlineVariant
             )
 
             // 资源项列表
@@ -250,7 +250,7 @@ private fun ResourceListCard(themeInfo: ThemeInfo) {
                 Text(
                     text = resource,
                     style = MaterialTheme.typography.bodyMedium,
-                    color = Color(0xFF424242),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(vertical = 4.dp)
                 )
             }
@@ -276,7 +276,7 @@ private fun ActionButtons(
             onClick = onApply,
             modifier = Modifier.weight(1f),
             colors = ButtonDefaults.buttonColors(
-                containerColor = Color(0xFF00BCD4)
+                containerColor = MaterialTheme.colorScheme.primary
             ),
             shape = RoundedCornerShape(12.dp)
         ) {
@@ -288,7 +288,7 @@ private fun ActionButtons(
             onClick = onDelete,
             modifier = Modifier.weight(1f),
             colors = ButtonDefaults.outlinedButtonColors(
-                contentColor = Color(0xFFE53935)
+                contentColor = MaterialTheme.colorScheme.error
             ),
             shape = RoundedCornerShape(12.dp)
         ) {

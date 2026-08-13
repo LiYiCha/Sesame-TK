@@ -95,40 +95,9 @@ fun SesameTheme(
     content: @Composable () -> Unit
 ) {
     val version = HolidayTheme.themeVersion.intValue
-    val mode = HolidayTheme.getDarkMode()
-    val resolvedDark = when {
-        mode == "light" -> false
-        mode == "dark" -> true
-        mode == "schedule" -> HolidayTheme.shouldUseDarkTheme()
-        else -> darkTheme
-    }
-    // 调度模式下优先使用时段主题，否则走节日主题
-    val holidayScheme = if (mode == "schedule") {
-        HolidayTheme.getTimeTheme()?.let { colors ->
-            if (resolvedDark) {
-                darkColorScheme(
-                    primary = colors.activeColor, onPrimary = Color.Black,
-                    primaryContainer = colors.mainColor, onPrimaryContainer = Color.White,
-                    secondary = colors.activeColor, onSecondary = Color.Black,
-                    background = Color(0xFF121212), onBackground = Color(0xFFE0E0E0),
-                    surface = Color(0xFF1E1E1E), onSurface = Color(0xFFE0E0E0),
-                    surfaceVariant = Color(0xFF2C2C2C), onSurfaceVariant = Color(0xFFBDBDBD)
-                )
-            } else {
-                lightColorScheme(
-                    primary = colors.mainColor, onPrimary = Color.White,
-                    primaryContainer = colors.bgColor, onPrimaryContainer = colors.mainColor,
-                    secondary = colors.activeColor, onSecondary = Color.White,
-                    background = colors.bgColor, onBackground = colors.textColor,
-                    surface = colors.cardBgColor, onSurface = colors.textColor,
-                    surfaceVariant = colors.bgColor, onSurfaceVariant = colors.textColor.copy(alpha = 0.7f)
-                )
-            }
-        }
-    } else {
-        HolidayTheme.getHolidayColorScheme(resolvedDark)
-    }
-    val colorScheme = holidayScheme ?: (if (resolvedDark) DarkColorScheme else LightColorScheme)
+    val palette = HolidayTheme.resolvePalette(darkTheme)
+    val colorScheme = palette.toColorScheme()
+    val resolvedDark = palette.isDark
     
     MaterialTheme(
         colorScheme = colorScheme,
@@ -159,7 +128,7 @@ fun SesameTheme(
 private fun TwinklingStars(tint: Color) {
     data class Star(val x: Float, val y: Float, val period: Float, val radius: Float)
     val stars = remember {
-        List(18) {
+        List(12) {
             Star(
                 x = kotlin.random.Random.nextFloat(),
                 y = kotlin.random.Random.nextFloat(),
@@ -171,7 +140,7 @@ private fun TwinklingStars(tint: Color) {
     val time = remember { mutableFloatStateOf(0f) }
     LaunchedEffect(Unit) {
         while (true) {
-            delay(50)
+            delay(120)
             time.floatValue += 0.02f
             if (time.floatValue > 1000f) time.floatValue = 0f
         }

@@ -228,7 +228,7 @@ class LogViewerViewModel : ViewModel() {
     }
 
     /**
-     * 从文件加载日志（流式读取，防OOM）
+     * 从文件加载日志（流式读取，定期检查协程取消状态，防止 Activity 销毁后继续读文件导致内存泄漏）
      */
     fun loadFile(file: File) {
         viewModelScope.launch(Dispatchers.IO) {
@@ -240,6 +240,11 @@ class LogViewerViewModel : ViewModel() {
 
                 file.bufferedReader(Charsets.UTF_8).useLines { sequence ->
                     sequence.forEach { line ->
+                        // 定期检查协程是否已取消（Activity 销毁时会 cancel viewModelScope）
+                        // useLines.forEach 非 suspend，必须手动检查
+                        if (!isActive) {
+                            throw kotlinx.coroutines.CancellationException("loadFile cancelled")
+                        }
                         if (line.contains("[H5] ========================>")) {
                             hasH5 = true
                         }
@@ -277,6 +282,8 @@ class LogViewerViewModel : ViewModel() {
                     )
                 }
                 applyFilters()
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                Log.runtime(TAG, "loadFile 被取消（Activity 已销毁），停止读取")
             } catch (e: Exception) {
                 Log.error(TAG, "加载文件失败: ${e.message}")
                 _uiState.update { it.copy(isLoading = false, statusMessage = "加载失败: ${e.message}") }

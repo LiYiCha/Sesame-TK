@@ -185,8 +185,8 @@ private fun TopHeader() {
             .background(
                 brush = Brush.horizontalGradient(
                     colors = listOf(
-                        Color(0xFFE1D9D2), // RGB 225/217/210
-                        Color(0xFFD2FFFB)  // RGB 210/255/251
+                        MaterialTheme.colorScheme.surface,
+                        MaterialTheme.colorScheme.primaryContainer
                     )
                 )
             )
@@ -197,13 +197,13 @@ private fun TopHeader() {
                 text = "皮肤管理",
                 fontSize = 28.sp,
                 fontWeight = FontWeight.Bold,
-                color = Color(0xFF131313) // 深蓝色，在浅色背景上清晰可见
+                color = MaterialTheme.colorScheme.onSurface // 深蓝色，在浅色背景上清晰可见
             )
             Spacer(modifier = Modifier.height(4.dp))
             Text(
                 text = "自定义支付宝付款码皮肤",
                 fontSize = 14.sp,
-                color = Color(0xFF424242) // 深灰色
+                color = MaterialTheme.colorScheme.onSurfaceVariant // 深灰色
             )
         }
     }
@@ -229,14 +229,14 @@ private fun VersionCard() {
             Icon(
                 imageVector = Icons.Default.Info,
                 contentDescription = null,
-                tint = Color(0xFF2FE7D6),
+                tint = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.size(20.dp)
             )
             Spacer(modifier = Modifier.width(8.dp))
             Text(
                 text = "Version: ${BuildConfig.VERSION_NAME}",
                 fontSize = 14.sp,
-                color = Color(0xFF616161)
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
     }
@@ -276,7 +276,7 @@ private fun MemberGradeCard(
                     text = "会员等级",
                     fontSize = 18.sp,
                     fontWeight = FontWeight.Bold,
-                    color = Color(0xFF131313)
+                    color = MaterialTheme.colorScheme.onSurface
                 )
             }
 
@@ -287,7 +287,7 @@ private fun MemberGradeCard(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(12.dp))
-                    .background(Color(0xFFF5F5F5))
+                    .background(MaterialTheme.colorScheme.surfaceVariant)
                     .clickable { expanded = true }
                     .padding(16.dp)
             ) {
@@ -299,12 +299,12 @@ private fun MemberGradeCard(
                     Text(
                         text = selectedGrade.displayName,
                         fontSize = 16.sp,
-                        color = Color(0xFF131313)
+                        color = MaterialTheme.colorScheme.onSurface
                     )
                     Icon(
                         imageVector = if (expanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
                         contentDescription = null,
-                        tint = Color(0xFF7E57C2)
+                        tint = MaterialTheme.colorScheme.primary
                     )
                 }
 

@@ -186,7 +186,7 @@ fun ThemeScreen(
                                 } else {
                                     "查看全部 ${state.availableThemes.size} 个主题 ▼"
                                 },
-                                color = Color(0xFF00BCD4)
+                                color = MaterialTheme.colorScheme.primary
                             )
                         }
                     }
@@ -199,7 +199,7 @@ fun ThemeScreen(
                     onClick = { zipPickerLauncher.launch("application/zip") },
                     modifier = Modifier.fillMaxWidth(),
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = Color(0xFF00BCD4)
+                        containerColor = MaterialTheme.colorScheme.primary
                     )
                 ) {
                     Text("导入主题包 (ZIP)")
@@ -212,7 +212,7 @@ fun ThemeScreen(
                     onClick = { directoryPickerLauncher.launch(null) },
                     modifier = Modifier.fillMaxWidth(),
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = Color(0xFF00BCD4)
+                        containerColor = MaterialTheme.colorScheme.primary
                     )
                 ) {
                     Text("导入主题目录")
@@ -224,7 +224,7 @@ fun ThemeScreen(
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     colors = CardDefaults.cardColors(
-                        containerColor = Color(0xFFE3F2FD)
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant
                     )
                 ) {
                     Column(
@@ -252,7 +252,7 @@ fun ThemeScreen(
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     colors = CardDefaults.cardColors(
-                        containerColor = Color(0xFFFFF3E0)
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant
                     )
                 ) {
                     Column(
@@ -324,7 +324,7 @@ private fun ThemeItem(
             .shadow(
                 elevation = animatedElevation,
                 shape = RoundedCornerShape(20.dp),
-                spotColor = Color(0xFFD2FFFB).copy(alpha = 0.3f)
+                spotColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.25f)
             )
             .clickable(onClick = onSelect),
         shape = RoundedCornerShape(20.dp),
@@ -357,8 +357,8 @@ private fun ThemeItem(
                         .background(
                             brush = Brush.verticalGradient(
                                 colors = listOf(
-                                    Color(0xFFE1D9D2),
-                                    Color(0xFFD2FFFB)
+                                    MaterialTheme.colorScheme.surface,
+                                    MaterialTheme.colorScheme.primaryContainer
                                 )
                             )
                         ),
@@ -367,7 +367,7 @@ private fun ThemeItem(
                     Text(
                         text = "主题",
                         fontSize = 12.sp,
-                        color = Color(0xFF424242)
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             }
@@ -382,7 +382,7 @@ private fun ThemeItem(
                     text = theme.name,
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
-                    color = Color(0xFF131313)
+                    color = MaterialTheme.colorScheme.onSurface
                 )
 
                 if (theme.description.isNotEmpty()) {
@@ -390,7 +390,7 @@ private fun ThemeItem(
                     Text(
                         text = theme.description,
                         style = MaterialTheme.typography.bodySmall,
-                        color = Color(0xFF616161),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 2
                     )
                 }
@@ -404,7 +404,7 @@ private fun ThemeItem(
                 Icon(
                     imageVector = Icons.Default.Delete,
                     contentDescription = "删除主题",
-                    tint = Color(0xFFFF5722)
+                    tint = MaterialTheme.colorScheme.error
                 )
             }
 
@@ -413,7 +413,7 @@ private fun ThemeItem(
                 Icon(
                     imageVector = Icons.Default.CheckCircle,
                     contentDescription = "已选中",
-                    tint = Color(0xFF00BCD4),
+                    tint = MaterialTheme.colorScheme.primary,
                     modifier = Modifier
                         .size(24.dp)
                         .align(Alignment.CenterVertically)

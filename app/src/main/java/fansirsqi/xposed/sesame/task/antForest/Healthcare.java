@@ -20,7 +20,7 @@ public class Healthcare {
     public static void queryForestEnergy(String scene) {
         try {
             JSONObject jo = new JSONObject(AntForestRpcCall.queryForestEnergy(scene));
-            if (!ResChecker.checkRes(TAG, jo)) {
+            if (!ResChecker.checkRes(TAG + "[queryEnergy]", jo)) {
                 return;
             }
             jo = jo.getJSONObject("data").getJSONObject("response");
@@ -46,7 +46,7 @@ public class Healthcare {
         JSONArray energyGeneratedList = new JSONArray();
         try {
             JSONObject jo = new JSONObject(AntForestRpcCall.produceForestEnergy(scene));
-            if (ResChecker.checkRes(TAG, jo)) {
+            if (ResChecker.checkRes(TAG + "[produceEnergy]", jo)) {
                 jo = jo.getJSONObject("data").getJSONObject("response");
                 energyGeneratedList = jo.getJSONArray("energyGeneratedList");
                 if (energyGeneratedList.length() > 0) {
@@ -65,7 +65,7 @@ public class Healthcare {
     private static Boolean harvestForestEnergy(String scene, JSONArray bubbles) {
         try {
             JSONObject jo = new JSONObject(AntForestRpcCall.harvestForestEnergy(scene, bubbles));
-            if (!ResChecker.checkRes(TAG, jo)) {
+            if (!ResChecker.checkRes(TAG + "[harvestEnergy]", jo)) {
                 return false;
             }
             jo = jo.getJSONObject("data").getJSONObject("response");

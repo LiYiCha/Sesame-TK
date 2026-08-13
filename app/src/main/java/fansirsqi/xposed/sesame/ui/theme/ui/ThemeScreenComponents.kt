@@ -53,7 +53,7 @@ fun OperationsCard(
             Text(
                 text = "注意：操作将在下次打开付款码时自动执行",
                 style = MaterialTheme.typography.bodySmall,
-                color = androidx.compose.ui.graphics.Color(0xFF616161)
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
     }
@@ -71,7 +71,7 @@ private fun OperationButton(
         onClick = onExecute,
         modifier = Modifier.fillMaxWidth(),
         colors = ButtonDefaults.buttonColors(
-            containerColor = androidx.compose.ui.graphics.Color(0xFF00BCD4)
+            containerColor = MaterialTheme.colorScheme.primary
         )
     ) {
         Text(operation.displayName)

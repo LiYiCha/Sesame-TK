@@ -334,7 +334,7 @@ class CommonRequest {
      */
     fun triggerPointPrize(): String {
         val param = "[{\"bizId\":\"DO_FEEDS_TASK\",\"sceneCode\":\"STUDENT_MONEY_CHECK_IN\"}]"
-        val method = "com.alipay.mobileopl.youthprivilege.rpc.mgw.triggerPointPrize"
+        val method = "alipay.membertangram.biz.rpc.student.triggerPointPrize"
         return requestString(method, param)
     }
 

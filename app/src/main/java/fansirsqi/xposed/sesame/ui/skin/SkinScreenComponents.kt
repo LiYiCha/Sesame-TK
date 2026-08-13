@@ -51,7 +51,7 @@ fun OperationsCard(
                 Icon(
                     imageVector = Icons.Default.Settings,
                     contentDescription = null,
-                    tint = Color(0xFF3FEADB),
+                    tint = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.size(24.dp)
                 )
                 Spacer(modifier = Modifier.width(12.dp))
@@ -59,7 +59,7 @@ fun OperationsCard(
                     text = "皮肤操作",
                     fontSize = 18.sp,
                     fontWeight = FontWeight.Bold,
-                    color = Color(0xFF131313)
+                    color = MaterialTheme.colorScheme.onSurface
                 )
             }
 
@@ -86,7 +86,7 @@ fun OperationsCard(
             Text(
                 text = "点击按钮立即创建操作请求，切换到支付宝应用时自动执行",
                 fontSize = 12.sp,
-                color = Color(0xFF757575)
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
 
             Spacer(modifier = Modifier.height(16.dp))
@@ -117,7 +117,7 @@ private fun ActivateSkinSwitch(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(12.dp))
-            .background(Color(0xFFF5F5F5))
+            .background(MaterialTheme.colorScheme.surfaceVariant)
             .padding(16.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
@@ -129,7 +129,7 @@ private fun ActivateSkinSwitch(
             Icon(
                 imageVector = Icons.Default.Palette,
                 contentDescription = null,
-                tint = if (isActivated) Color(0xFF4CAF50) else Color(0xFF9E9E9E),
+                tint = if (isActivated) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.size(24.dp)
             )
             Spacer(modifier = Modifier.width(12.dp))
@@ -138,13 +138,13 @@ private fun ActivateSkinSwitch(
                     text = "启用自定义皮肤",
                     fontSize = 15.sp,
                     fontWeight = FontWeight.Medium,
-                    color = Color(0xFF131313)
+                    color = MaterialTheme.colorScheme.onSurface
                 )
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
                     text = if (isActivated) "自定义皮肤系统已启用" else "自定义皮肤系统已禁用",
                     fontSize = 12.sp,
-                    color = Color(0xFF757575)
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
         }
@@ -154,10 +154,10 @@ private fun ActivateSkinSwitch(
             checked = isActivated,
             onCheckedChange = { onToggle() },
             colors = SwitchDefaults.colors(
-                checkedThumbColor = Color.White,
-                checkedTrackColor = Color(0xFF4CAF50),
-                uncheckedThumbColor = Color.White,
-                uncheckedTrackColor = Color(0xFFBDBDBD)
+                checkedThumbColor = MaterialTheme.colorScheme.onPrimary,
+                checkedTrackColor = MaterialTheme.colorScheme.primary,
+                uncheckedThumbColor = MaterialTheme.colorScheme.onPrimary,
+                uncheckedTrackColor = MaterialTheme.colorScheme.outline
             )
         )
     }
@@ -179,12 +179,12 @@ private fun OperationButton(
         shape = RoundedCornerShape(12.dp),
         colors = ButtonDefaults.buttonColors(
             containerColor = when (operation) {
-                SkinOperation.EXPORT -> Color(0xFF2196F3)
-                SkinOperation.DELETE -> Color(0xFFF44336)
-                SkinOperation.UPDATE -> Color(0xFF4CAF50)
-                else -> Color(0xFF9E9E9E)
+                SkinOperation.EXPORT -> MaterialTheme.colorScheme.primary
+                SkinOperation.DELETE -> MaterialTheme.colorScheme.error
+                SkinOperation.UPDATE -> MaterialTheme.colorScheme.primary
+                else -> MaterialTheme.colorScheme.onSurfaceVariant
             },
-            contentColor = Color.White
+            contentColor = MaterialTheme.colorScheme.onPrimary
         )
     ) {
         Row(
@@ -215,7 +215,7 @@ private fun OperationButton(
                 Text(
                     text = getOperationDescription(operation),
                     fontSize = 11.sp,
-                    color = Color.White.copy(alpha = 0.9f)
+                    color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.9f)
                 )
             }
         }
@@ -259,7 +259,7 @@ fun DownloadCard(
                 Icon(
                     imageVector = Icons.Default.Download,
                     contentDescription = null,
-                    tint = Color(0xFF2FE7D6),
+                    tint = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.size(24.dp)
                 )
                 Spacer(modifier = Modifier.width(12.dp))
@@ -267,7 +267,7 @@ fun DownloadCard(
                     text = "资源包管理",
                     fontSize = 18.sp,
                     fontWeight = FontWeight.Bold,
-                    color = Color(0xFF131313)
+                    color = MaterialTheme.colorScheme.onSurface
                 )
             }
 
@@ -281,10 +281,10 @@ fun DownloadCard(
                     .height(56.dp),
                 shape = RoundedCornerShape(12.dp),
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = Color(0xFF00BCD4), // 鲜明的青色
-                    contentColor = Color.White, // 白色文字，高对比度
-                    disabledContainerColor = Color(0xFFE0E0E0),
-                    disabledContentColor = Color(0xFF9E9E9E)
+                    containerColor = MaterialTheme.colorScheme.primary, // 鲜明的青色
+                    contentColor = MaterialTheme.colorScheme.onPrimary, // 白色文字，高对比度
+                    disabledContainerColor = MaterialTheme.colorScheme.surfaceVariant,
+                    disabledContentColor = MaterialTheme.colorScheme.onSurfaceVariant
                 ),
                 enabled = downloadState !is DownloadState.Downloading
             ) {
@@ -305,7 +305,7 @@ fun DownloadCard(
                     is DownloadState.Downloading -> {
                         CircularProgressIndicator(
                             modifier = Modifier.size(24.dp),
-                            color = Color.White
+                            color = MaterialTheme.colorScheme.onPrimary
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
@@ -357,8 +357,8 @@ fun DownloadCard(
                             .fillMaxWidth()
                             .height(8.dp)
                             .clip(RoundedCornerShape(4.dp)),
-                        color = Color(0xFF00BCD4), // 鲜明的青色
-                        trackColor = Color(0xFFE0E0E0)
+                        color = MaterialTheme.colorScheme.primary, // 鲜明的青色
+                        trackColor = MaterialTheme.colorScheme.surfaceVariant
                     )
                 }
             }
@@ -368,7 +368,7 @@ fun DownloadCard(
             Text(
                 text = "从 GitHub 下载资源包需要 SD 卡权限",
                 fontSize = 12.sp,
-                color = Color(0xFF9E9E9E)
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
     }
@@ -395,12 +395,12 @@ fun BottomActions(
                 .height(48.dp),
             shape = RoundedCornerShape(12.dp),
             colors = ButtonDefaults.outlinedButtonColors(
-                contentColor = Color(0xFF00BCD4), // 鲜明的青色
-                disabledContentColor = Color(0xFFBDBDBD)
+                contentColor = MaterialTheme.colorScheme.primary, // 鲜明的青色
+                disabledContentColor = MaterialTheme.colorScheme.outline
             ),
             border = androidx.compose.foundation.BorderStroke(
                 width = 2.dp,
-                color = if (isResourceInstalled) Color(0xFF00BCD4) else Color(0xFFE0E0E0)
+                color = if (isResourceInstalled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant
             ),
             enabled = isResourceInstalled
         ) {
@@ -421,14 +421,14 @@ fun BottomActions(
             onClick = onOpenGithub,
             modifier = Modifier.fillMaxWidth(),
             colors = ButtonDefaults.textButtonColors(
-                contentColor = Color(0xFF00BCD4) // 鲜明的青色
+                contentColor = MaterialTheme.colorScheme.primary // 鲜明的青色
             )
         ) {
             Icon(
                 imageVector = Icons.Default.Link,
                 contentDescription = null,
                 modifier = Modifier.size(18.dp),
-                tint = Color(0xFF2FE7D6)
+                tint = MaterialTheme.colorScheme.primary
             )
             Spacer(modifier = Modifier.width(8.dp))
             Text(
@@ -442,7 +442,7 @@ fun BottomActions(
         Text(
             text = "重新打开付款码以使更改生效",
             fontSize = 12.sp,
-            color = Color(0xFF9E9E9E),
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(horizontal = 16.dp)
         )
     }

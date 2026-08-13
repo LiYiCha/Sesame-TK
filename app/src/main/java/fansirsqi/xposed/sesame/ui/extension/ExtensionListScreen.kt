@@ -93,8 +93,8 @@ private fun ModernTopBar() {
             .background(
                 brush = Brush.horizontalGradient(
                     colors = listOf(
-                        Color(0xFFE1D9D2), // RGB 225/217/210
-                        Color(0xFFD2FFFB)  // RGB 210/255/251
+                        MaterialTheme.colorScheme.surface,
+                        MaterialTheme.colorScheme.primaryContainer
                     )
                 )
             )
@@ -105,13 +105,13 @@ private fun ModernTopBar() {
                 text = "扩展功能",
                 fontSize = 32.sp,
                 fontWeight = FontWeight.Bold,
-                color = Color(0xFF131313)  
+                color = MaterialTheme.colorScheme.onSurface
             )
             Spacer(modifier = Modifier.height(4.dp))
             Text(
                 text = "管理你的功能模块",
                 fontSize = 14.sp,
-                color = Color(0xFF424242) // 深灰色
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
     }
@@ -149,7 +149,7 @@ private fun ModernExtensionCard(
             .shadow(
                 elevation = animatedElevation,
                 shape = RoundedCornerShape(20.dp),
-                spotColor = Color(0xFFD2FFFB).copy(alpha = 0.3f) // 使用新的青色
+                spotColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.25f)
             ),
         shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(
@@ -180,8 +180,8 @@ private fun ModernExtensionCard(
                             .background(
                                 brush = Brush.linearGradient(
                                     colors = listOf(
-                                        Color(0xFFD2FFFB), // RGB 210/255/251
-                                        Color(0xFF2FE7D6)  // 稍深的青色
+                                        MaterialTheme.colorScheme.primary,
+                                        MaterialTheme.colorScheme.primary.copy(alpha = 0.72f)
                                     )
                                 )
                             ),
@@ -190,7 +190,7 @@ private fun ModernExtensionCard(
                         Icon(
                             imageVector = Icons.Outlined.Palette,
                             contentDescription = null,
-                            tint = Color.Black, // 图标底色有渐变背景，文字用黑色更清晰
+                            tint = MaterialTheme.colorScheme.onPrimary,
                             modifier = Modifier.size(32.dp)
                         )
                     }
@@ -225,10 +225,10 @@ private fun ModernExtensionCard(
                         checked = moduleState.isEnabled,
                         onCheckedChange = onToggle,
                         colors = SwitchDefaults.colors(
-                            checkedThumbColor = Color.White,
-                            checkedTrackColor = Color(0xFF2FE7D6),
-                            uncheckedThumbColor = Color.White,
-                            uncheckedTrackColor = Color(0xFFBDBDBD)
+                            checkedThumbColor = MaterialTheme.colorScheme.onPrimary,
+                            checkedTrackColor = MaterialTheme.colorScheme.primary,
+                            uncheckedThumbColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                            uncheckedTrackColor = MaterialTheme.colorScheme.surfaceVariant
                         )
                     )
                 }
@@ -251,8 +251,8 @@ private fun ModernExtensionCard(
                             .height(48.dp),
                         shape = RoundedCornerShape(12.dp),
                         colors = ButtonDefaults.buttonColors(
-                            containerColor = Color(0xFFD2FFFB), // RGB 210/255/251
-                            contentColor = Color(0xFF131313) // 深蓝色文字
+                            containerColor = MaterialTheme.colorScheme.primary,
+                            contentColor = MaterialTheme.colorScheme.onPrimary
                         )
                     ) {
                         Icon(

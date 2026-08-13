@@ -71,7 +71,7 @@ fun SkinSelectorCard(
                     text = "选择皮肤",
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
-                    color = Color(0xFF131313) // 深蓝色，清晰可见
+                    color = MaterialTheme.colorScheme.onSurface // 深蓝色，清晰可见
                 )
 
                 Row(
@@ -82,8 +82,8 @@ fun SkinSelectorCard(
                         onClick = onImport,
                         contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
                         colors = ButtonDefaults.filledTonalButtonColors(
-                            containerColor = Color(0xFF00BCD4), // 鲜明的青色
-                            contentColor = Color.White // 白色文字
+                            containerColor = MaterialTheme.colorScheme.primary, // 鲜明的青色
+                            contentColor = MaterialTheme.colorScheme.onPrimary // 白色文字
                         )
                     ) {
                         Icon(
@@ -100,8 +100,8 @@ fun SkinSelectorCard(
                         onClick = onImportDirectory,
                         contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
                         colors = ButtonDefaults.filledTonalButtonColors(
-                            containerColor = Color(0xFF00BCD4), // 鲜明的青色
-                            contentColor = Color.White // 白色文字
+                            containerColor = MaterialTheme.colorScheme.primary, // 鲜明的青色
+                            contentColor = MaterialTheme.colorScheme.onPrimary // 白色文字
                         )
                     ) {
                         Icon(
@@ -116,7 +116,7 @@ fun SkinSelectorCard(
                     TextButton(
                         onClick = onRefresh,
                         colors = ButtonDefaults.textButtonColors(
-                            contentColor = Color(0xFF00BCD4) // 鲜明的青色
+                            contentColor = MaterialTheme.colorScheme.primary // 鲜明的青色
                         )
                     ) {
                         Text("刷新", fontWeight = FontWeight.Medium)
@@ -131,7 +131,7 @@ fun SkinSelectorCard(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(12.dp))
-                    .background(Color(0xFFF5F5F5)) // 浅灰色背景，区分容器
+                    .background(MaterialTheme.colorScheme.surfaceVariant) // 浅灰色背景，区分容器
                     .padding(12.dp)
             ) {
                 if (availableSkins.isEmpty()) {
@@ -176,15 +176,15 @@ private fun SkinItem(
 ) {
     // 选中状态使用鲜明的青色，未选中使用浅灰色
     val borderColor = if (isSelected) {
-        Color(0xFF00BCD4) // 鲜明的青色
+        MaterialTheme.colorScheme.primary // 鲜明的青色
     } else {
-        Color(0xFFE0E0E0) // 浅灰色
+        MaterialTheme.colorScheme.outline // 浅灰色
     }
 
     val backgroundColor = if (isSelected) {
-        Color(0xFFE0F7FA) // 浅青色背景
+        MaterialTheme.colorScheme.primaryContainer // 浅青色背景
     } else {
-        Color.White
+        MaterialTheme.colorScheme.surface
     }
 
     Card(
@@ -250,7 +250,7 @@ private fun SkinItem(
                     Icon(
                         imageVector = Icons.Default.CheckCircle,
                         contentDescription = "已选中",
-                        tint = Color(0xFF00BCD4), // 鲜明的青色
+                        tint = MaterialTheme.colorScheme.primary, // 鲜明的青色
                         modifier = Modifier
                             .size(24.dp)
                             .align(Alignment.CenterVertically)
@@ -265,7 +265,7 @@ private fun SkinItem(
                     .align(Alignment.End)
                     .padding(horizontal = 12.dp, vertical = 4.dp),
                 colors = ButtonDefaults.textButtonColors(
-                    contentColor = Color(0xFF00BCD4) // 鲜明的青色
+                    contentColor = MaterialTheme.colorScheme.primary // 鲜明的青色
                 )
             ) {
                 Text(

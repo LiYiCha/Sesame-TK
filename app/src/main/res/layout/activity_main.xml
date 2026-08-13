@@ -39,7 +39,7 @@
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/btn_forest_log"
                 style="@style/Widget.App.Button.Main"
-                android:layout_margin="@dimen/space_sm"
+                android:layout_margin="6dp"
                 android:layout_columnWeight="1"
                 android:onClick="onClick"
                 android:text="@string/forest_log"
@@ -48,7 +48,7 @@
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/btn_farm_log"
                 style="@style/Widget.App.Button.Main"
-                android:layout_margin="@dimen/space_sm"
+                android:layout_margin="6dp"
                 android:layout_columnWeight="1"
                 android:onClick="onClick"
                 android:text="@string/farm_log"
@@ -57,7 +57,7 @@
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/btn_other_log"
                 style="@style/Widget.App.Button.Main"
-                android:layout_margin="@dimen/space_sm"
+                android:layout_margin="6dp"
                 android:layout_columnWeight="1"
                 android:onClick="onClick"
                 android:text="@string/other_log"
@@ -66,7 +66,7 @@
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/btn_extend_function"
                 style="@style/Widget.App.Button.Main"
-                android:layout_margin="@dimen/space_sm"
+                android:layout_margin="6dp"
                 android:layout_columnWeight="1"
                 android:onClick="onClick"
                 android:text="@string/extend_function"
@@ -75,7 +75,7 @@
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/btn_github"
                 style="@style/Widget.App.Button.Main"
-                android:layout_margin="@dimen/space_sm"
+                android:layout_margin="6dp"
                 android:layout_columnWeight="1"
                 android:onClick="onClick"
                 android:text="@string/d_bug_log"
@@ -84,7 +84,7 @@
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/btn_settings"
                 style="@style/Widget.App.Button.Main"
-                android:layout_margin="@dimen/space_sm"
+                android:layout_margin="6dp"
                 android:layout_columnWeight="1"
                 android:onClick="onClick"
                 android:text="@string/settings"
