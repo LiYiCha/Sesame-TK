@@ -26,13 +26,13 @@ class TabAdapter(private val context: Context, private val titles: MutableList<S
         
         if (isSelected) {
             val typedValue = android.util.TypedValue()
-            context.theme.resolveAttribute(androidx.appcompat.R.attr.colorPrimary, typedValue, true)
+            context.theme.resolveAttribute(android.R.attr.colorPrimary, typedValue, true)
             holder.textView.setTextColor(typedValue.data)
         } else {
             holder.textView.setTextColor(ContextCompat.getColor(context, R.color.textColorPrimary))
         }
 
-        holder.itemView.setOnClickListener { v: View ->
+        holder.itemView.setOnClickListener { _: View ->
             if (position != selectedPosition) {
                 listener.onTabClick(position)
                 setSelectedPosition(position)
