@@ -1,6 +1,7 @@
 package fansirsqi.xposed.sesame.ui.theme
 
 import android.content.Context
+import android.content.Intent
 import android.content.SharedPreferences
 import android.net.Uri
 import fansirsqi.xposed.sesame.util.JsonUtil
@@ -23,89 +24,43 @@ class ThemeRepository(private val context: Context) {
 
 
     /**
-     * 执行主题操作
+     * 执行主题操作（统一广播方案）
      *
-     * 创建操作请求文件夹，操作将在支付宝启动时执行
+     * 三个操作（导出/删除/更新）统一通过 IPC 广播发送到支付宝 Hook 进程执行。
+     * 先尝试同进程直接执行（部分场景 UI 进程与支付宝进程同进程，可直接成功），
+     * 失败则发送广播，由支付宝进程内的 SesameReceiver 收到后执行。
      *
      * @param operation 操作类型
      * @return Pair<Boolean, String> 成功标志和提示消息
      */
-    suspend fun executeOperation(operation: ThemeOperation): Pair<Boolean, String> = withContext(Dispatchers.IO) {
-        try {
-            // 确保父目录存在
-            File(ThemeConstants.EXTERNAL_STORAGE_PATH).mkdirs()
+    suspend fun executeThemeAction(operation: ThemeOperation): Pair<Boolean, String> = withContext(Dispatchers.IO) {
+        val directResult = when (operation) {
+            ThemeOperation.EXPORT -> fansirsqi.xposed.sesame.hook.theme.ThemeManager.exportThemesDirectly()
+            ThemeOperation.DELETE -> fansirsqi.xposed.sesame.hook.theme.ThemeManager.deleteThemeCacheDirectly()
+            ThemeOperation.UPDATE -> fansirsqi.xposed.sesame.hook.theme.ThemeManager.applyThemeDirectly()
+        }
 
-            // 先清理所有旧的操作文件夹，避免多个操作同时执行
-            ThemeOperation.values().forEach { op ->
-                val oldFile = File(op.filePath)
-                if (oldFile.exists()) {
-                    oldFile.deleteRecursively()
-                }
-            }
-
-            // 创建当前操作请求文件夹
-            val file = File(operation.filePath)
-            file.mkdirs()
-
-            // 根据操作类型返回不同的提示消息
-            val message = when (operation) {
-                ThemeOperation.EXPORT -> "导出请求已创建\n打开支付宝时自动执行\n导出路径: ${ThemeConstants.EXTERNAL_STORAGE_PATH}/${ThemeConstants.EXPORTED_THEMES_FOLDER}"
-                ThemeOperation.DELETE -> "删除请求已创建\n打开支付宝时自动执行"
-                ThemeOperation.UPDATE -> "更新请求已创建\n打开支付宝时自动执行"
-            }
-
-            Pair(true, message)
-        } catch (e: Exception) {
-            Pair(false, "操作失败: ${e.message}")
+        if (directResult.first) {
+            directResult
+        } else {
+            sendThemeActionBroadcast(operation)
         }
     }
 
     /**
-     * 获取操作的当前状态
+     * 发送主题操作 IPC 广播
      *
-     * @param operation 操作类型
-     * @return true=已启用，false=未启用
+     * 统一 action + extra 区分操作
      */
-    fun getOperationState(operation: ThemeOperation): Boolean {
-        return File(operation.filePath).exists()
-    }
-
-    /**
-     * 获取所有操作的状态
-     */
-    fun getAllOperationStates(): Map<ThemeOperation, Boolean> {
-        return ThemeOperation.values().associateWith { getOperationState(it) }
-    }
-
-    /**
-     * 立即导出主题
-     *
-     * 点击时直接尝试导出，无需等待或依赖去到特定页面
-     *
-     * @return Pair<Boolean, String> 成功标志和提示消息
-     */
-    suspend fun exportThemeNow(context: Context? = null): Pair<Boolean, String> = withContext(Dispatchers.IO) {
-        val directResult = fansirsqi.xposed.sesame.hook.theme.ThemeManager.exportThemesDirectly()
-        if (directResult.first) {
-            directResult
-        } else {
-            // 如果在宿主/UI进程由于进程权限无法直接读取，发送 IPC 广播触发支付宝 Hook 进程直接导出
-            try {
-                val ctx = context ?: fansirsqi.xposed.sesame.hook.context.AppContext.getAppContext()
-                if (ctx != null) {
-                    val intent = android.content.Intent("com.eg.android.AlipayGphone.sesame.exportTheme")
-                    ctx.sendBroadcast(intent)
-                    Pair(true, "⚡ 已发送 IPC 广播，触发主题即时导出")
-                } else {
-                    // TODO: 新方案验证通过后删除以下回退
-                    // executeOperation(ThemeOperation.EXPORT)
-                    Pair(false, "Context 不可用，导出失败")
-                }
-            } catch (e: Exception) {
-                // TODO: 新方案验证通过后删除以下回退
-                // executeOperation(ThemeOperation.EXPORT)
-                Pair(false, "导出异常: ${e.message}")
-            }
+    private fun sendThemeActionBroadcast(operation: ThemeOperation): Pair<Boolean, String> {
+        return try {
+            val intent = Intent(ThemeConstants.THEME_OPERATION_ACTION)
+                .putExtra(ThemeConstants.EXTRA_OPERATION, operation.name)
+            context.sendBroadcast(intent)
+            Pair(true, "已发送${operation.displayName}请求")
+        } catch (e: Exception) {
+            Log.error("ThemeRepository", "发送${operation.displayName}广播失败: ${e.message}")
+            Pair(false, "${operation.displayName}失败: ${e.message}")
         }
     }
 

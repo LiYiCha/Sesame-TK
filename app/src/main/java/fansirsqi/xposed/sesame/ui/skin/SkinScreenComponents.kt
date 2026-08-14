@@ -227,9 +227,9 @@ private fun OperationButton(
  */
 private fun getOperationDescription(operation: SkinOperation): String {
     return when (operation) {
-        SkinOperation.EXPORT -> "从支付宝导出当前使用的皮肤到SD卡"
-        SkinOperation.DELETE -> "删除支付宝的皮肤缓存，强制重新加载"
-        SkinOperation.UPDATE -> "将选中的皮肤推送到支付宝缓存"
+        SkinOperation.EXPORT -> "从目标应用导出当前使用的皮肤到SD卡"
+        SkinOperation.DELETE -> "删除目标应用的皮肤缓存，强制重新加载"
+        SkinOperation.UPDATE -> "将选中的皮肤推送到目标应用缓存"
         SkinOperation.ACTIVATE -> "启用自定义皮肤系统（必须开启）"
     }
 }

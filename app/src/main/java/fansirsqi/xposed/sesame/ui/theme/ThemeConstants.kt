@@ -16,14 +16,6 @@ object ThemeConstants {
     // 主题文件夹路径
     const val THEMES_FOLDER = "themes"
 
-    // 操作标记文件路径
-    val EXPORT_PATH: String
-        get() = "$EXTERNAL_STORAGE_PATH/export"
-    val DELETE_PATH: String
-        get() = "$EXTERNAL_STORAGE_PATH/delete"
-    val UPDATE_PATH: String
-        get() = "$EXTERNAL_STORAGE_PATH/update"
-
     // 选中的主题文件
     const val SELECTED_THEME_FILE = "selected_theme"
 
@@ -33,13 +25,20 @@ object ThemeConstants {
 
     // 导出目录
     const val EXPORTED_THEMES_FOLDER = "exported_themes"
+
+    // 主题操作 IPC 广播（统一 action，extra 区分操作）
+    const val THEME_OPERATION_ACTION = "com.eg.android.AlipayGphone.sesame.themeOperation"
+    const val EXTRA_OPERATION = "operation"
 }
 
 /**
  * 主题操作类型
+ *
+ * 通过 IPC 广播从 UI 进程发送到支付宝 Hook 进程执行。
+ * 所有操作共用同一个广播 action，用 extra "operation" 区分具体操作。
  */
-enum class ThemeOperation(val displayName: String, val filePath: String) {
-    EXPORT("导出主题", ThemeConstants.EXPORT_PATH),
-    DELETE("删除主题缓存", ThemeConstants.DELETE_PATH),
-    UPDATE("更新主题缓存", ThemeConstants.UPDATE_PATH)
+enum class ThemeOperation(val displayName: String) {
+    EXPORT("导出主题"),
+    DELETE("删除主题缓存"),
+    UPDATE("更新主题缓存")
 }

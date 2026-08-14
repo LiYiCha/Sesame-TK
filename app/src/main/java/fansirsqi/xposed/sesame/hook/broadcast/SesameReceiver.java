@@ -93,14 +93,9 @@ public class SesameReceiver extends BroadcastReceiver {
                         Log.printStackTrace(TAG, th);
                     }
                     break;
-                case "com.eg.android.AlipayGphone.sesame.exportTheme":
-                    try {
-                        String userId = intent.getStringExtra("userId");
-                        kotlin.Pair<Boolean, String> res = fansirsqi.xposed.sesame.hook.theme.ThemeManager.INSTANCE.exportThemesDirectly(userId);
-                        Log.other("ThemeManager", "⚡ 收到 UI 跨进程 IPC 广播，主题导出结果: " + res.getSecond());
-                    } catch (Throwable th) {
-                        Log.error("ThemeManager", "❌ 跨进程 IPC 导出主题异常: " + th.getMessage());
-                    }
+                case "com.eg.android.AlipayGphone.sesame.themeOperation":
+                    // 统一的主题操作广播，用 extra "operation" 区分具体操作
+                    handleThemeOperation(intent);
                     break;
                 case "com.eg.android.AlipayGphone.sesame.rerun":
                     // 处理重新运行或继续运行逻辑
@@ -160,6 +155,44 @@ public class SesameReceiver extends BroadcastReceiver {
     }
 
     /**
+     * 处理统一的主题操作广播
+     *
+     * 用 extra "operation" 区分具体操作（EXPORT/DELETE/UPDATE），
+     * 根据操作类型调用 ThemeManager 对应的直接执行方法。
+     *
+     * @param intent 广播 Intent
+     */
+    private static void handleThemeOperation(Intent intent) {
+        String operation = intent.getStringExtra("operation");
+        if (operation == null || operation.isEmpty()) {
+            Log.error("ThemeManager", "主题操作广播缺少 operation 参数");
+            return;
+        }
+        String userId = intent.getStringExtra("userId");
+
+        try {
+            kotlin.Pair<Boolean, String> res;
+            switch (operation) {
+                case "EXPORT":
+                    res = fansirsqi.xposed.sesame.hook.theme.ThemeManager.INSTANCE.exportThemesDirectly(userId);
+                    break;
+                case "DELETE":
+                    res = fansirsqi.xposed.sesame.hook.theme.ThemeManager.INSTANCE.deleteThemeCacheDirectly(userId);
+                    break;
+                case "UPDATE":
+                    res = fansirsqi.xposed.sesame.hook.theme.ThemeManager.INSTANCE.applyThemeDirectly(userId);
+                    break;
+                default:
+                    Log.error("ThemeManager", "未知的主题操作: " + operation);
+                    return;
+            }
+            Log.runtime("ThemeManager", "主题操作 [" + operation + "]: " + res.getSecond());
+        } catch (Throwable th) {
+            Log.error("ThemeManager", "主题操作 [" + operation + "] 异常: " + th.getMessage());
+        }
+    }
+
+    /**
      * 注册广播接收器以监听支付宝相关动作
      *
      * @param context 应用程序上下文
@@ -207,7 +240,7 @@ public class SesameReceiver extends BroadcastReceiver {
         intentFilter.addAction("com.eg.android.AlipayGphone.sesame.fetchMemberGoodsList"); // 同步会员商品列表
         intentFilter.addAction("com.eg.android.AlipayGphone.sesame.syncSeckillTasks"); // 同步定时秒杀任务
         intentFilter.addAction("com.eg.android.AlipayGphone.sesame.queryBenefitDetail"); // 查询权益详情以捕获规格
-        intentFilter.addAction("com.eg.android.AlipayGphone.sesame.exportTheme"); // 主题即时导出（IPC广播）
+        intentFilter.addAction("com.eg.android.AlipayGphone.sesame.themeOperation"); // 主题操作（导出/删除/更新，IPC广播）
         return intentFilter;
     }
 }

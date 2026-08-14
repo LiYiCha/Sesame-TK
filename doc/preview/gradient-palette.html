@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>柔和双色渐变 · 与 #8FC9BD → #EEDDF9 同风格</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+    background: #F6F6F9;
+    color: #333;
+    padding: 48px clamp(16px, 5vw, 64px);
+  }
+  header { max-width: 1200px; margin: 0 auto 40px; }
+  header h1 { font-size: clamp(22px, 3.5vw, 30px); font-weight: 700; letter-spacing: -0.01em; color: #222; }
+  header p { color: #777; margin-top: 8px; font-size: 15px; }
+  header p b { color: #444; }
+  section { max-width: 1200px; margin: 0 auto 40px; }
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap: 20px;
+  }
+  .card {
+    background: #fff;
+    border: 1px solid rgba(0,0,0,0.06);
+    border-radius: 20px;
+    overflow: hidden;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.05);
+    transition: transform 200ms ease, box-shadow 200ms ease;
+  }
+  .card:hover { transform: translateY(-4px); box-shadow: 0 8px 24px rgba(0,0,0,0.1); }
+  .card.base { box-shadow: 0 0 0 2px #8FC9BD, 0 8px 24px rgba(143,201,189,0.25); }
+  .swatch {
+    height: 150px;
+    position: relative;
+  }
+  .swatch .name {
+    position: absolute;
+    bottom: 12px; left: 12px;
+    font-size: 13px;
+    font-weight: 600;
+    color: #333;
+    background: rgba(255,255,255,0.75);
+    backdrop-filter: blur(4px);
+    padding: 4px 10px;
+    border-radius: 999px;
+  }
+  .swatch .base-tag {
+    position: absolute;
+    top: 12px; left: 12px;
+    font-size: 11px;
+    font-weight: 700;
+    color: #fff;
+    background: #8FC9BD;
+    padding: 4px 10px;
+    border-radius: 999px;
+  }
+  .info { padding: 12px 16px 14px; }
+  .codes {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-family: Consolas, "SF Mono", monospace;
+    font-size: 12px;
+    color: #666;
+  }
+  .codes .dot { display: inline-block; width: 12px; height: 12px; border-radius: 50%; margin-right: 6px; vertical-align: -2px; border: 1px solid rgba(0,0,0,0.12); }
+  .codes .arrow { color: #bbb; }
+  footer { max-width: 1200px; margin: 0 auto; padding-top: 20px; border-top: 1px solid rgba(0,0,0,0.08); color: #999; font-size: 13px; line-height: 1.8; }
+</style>
+</head>
+<body>
+<header>
+  <h1>柔和双色渐变 · 与 #8FC9BD → #EEDDF9 同风格</h1>
+  <p>全部为 <b>双色跨色相 + 高明度低饱和</b> 的淡雅渐变，和你的基准款一个路数 · 135° 对角线</p>
+</header>
+
+<section>
+  <div class="grid">
+    <div class="card base">
+      <div class="swatch" style="background: linear-gradient(135deg, #8FC9BD 0%, #EEDDF9 100%);">
+        <span class="base-tag">你的基准款</span><span class="name">青碧 → 雾紫</span>
+      </div>
+      <div class="info">
+        <div class="codes"><span><span class="dot" style="background:#8FC9BD"></span>8FC9BD</span><span class="arrow">→</span><span><span class="dot" style="background:#EEDDF9"></span>EEDDF9</span></div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="swatch" style="background: linear-gradient(135deg, #FFFFD0 0%, #D2CDFF 100%);">
+        <span class="name">奶黄 → 淡紫</span>
+      </div>
+      <div class="info">
+        <div class="codes"><span><span class="dot" style="background:#FFFFD0"></span>FFFFD0</span><span class="arrow">→</span><span><span class="dot" style="background:#D2CDFF"></span>D2CDFF</span></div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="swatch" style="background: linear-gradient(135deg, #FFD6E0 0%, #B8D8F0 100%);">
+        <span class="name">樱花 → 雾蓝</span>
+      </div>
+      <div class="info">
+        <div class="codes"><span><span class="dot" style="background:#FFD6E0"></span>FFD6E0</span><span class="arrow">→</span><span><span class="dot" style="background:#B8D8F0"></span>B8D8F0</span></div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="swatch" style="background: linear-gradient(135deg, #FFE3C8 0%, #FF9E9E 100%);">
+        <span class="name">蜜杏 → 珊瑚</span>
+      </div>
+      <div class="info">
+        <div class="codes"><span><span class="dot" style="background:#FFE3C8"></span>FFE3C8</span><span class="arrow">→</span><span><span class="dot" style="background:#FF9E9E"></span>FF9E9E</span></div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="swatch" style="background: linear-gradient(135deg, #BDE8DC 0%, #DEC9F5 100%);">
+        <span class="name">薄荷 → 薰衣草</span>
+      </div>
+      <div class="info">
+        <div class="codes"><span><span class="dot" style="background:#BDE8DC"></span>BDE8DC</span><span class="arrow">→</span><span><span class="dot" style="background:#DEC9F5"></span>DEC9F5</span></div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="swatch" style="background: linear-gradient(135deg, #F8C8DC 0%, #A6C8F5 100%);">
+        <span class="name">蔷薇 → 天蓝</span>
+      </div>
+      <div class="info">
+        <div class="codes"><span><span class="dot" style="background:#F8C8DC"></span>F8C8DC</span><span class="arrow">→</span><span><span class="dot" style="background:#A6C8F5"></span>A6C8F5</span></div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="swatch" style="background: linear-gradient(135deg, #F6F0C4 0%, #C9E8A8 100%);">
+        <span class="name">柠檬 → 青柠</span>
+      </div>
+      <div class="info">
+        <div class="codes"><span><span class="dot" style="background:#F6F0C4"></span>F6F0C4</span><span class="arrow">→</span><span><span class="dot" style="background:#C9E8A8"></span>C9E8A8</span></div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="swatch" style="background: linear-gradient(135deg, #C9E4F7 0%, #E0CFF5 100%);">
+        <span class="name">冰蓝 → 淡紫</span>
+      </div>
+      <div class="info">
+        <div class="codes"><span><span class="dot" style="background:#C9E4F7"></span>C9E4F7</span><span class="arrow">→</span><span><span class="dot" style="background:#E0CFF5"></span>E0CFF5</span></div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="swatch" style="background: linear-gradient(135deg, #C4DCC8 0%, #F0C8D4 100%);">
+        <span class="name">鼠尾草 → 玫瑰</span>
+      </div>
+      <div class="info">
+        <div class="codes"><span><span class="dot" style="background:#C4DCC8"></span>C4DCC8</span><span class="arrow">→</span><span><span class="dot" style="background:#F0C8D4"></span>F0C8D4</span></div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="swatch" style="background: linear-gradient(135deg, #FFF0C9 0%, #F7C0CE 100%);">
+        <span class="name">淡金 → 暖粉</span>
+      </div>
+      <div class="info">
+        <div class="codes"><span><span class="dot" style="background:#FFF0C9"></span>FFF0C9</span><span class="arrow">→</span><span><span class="dot" style="background:#F7C0CE"></span>F7C0CE</span></div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="swatch" style="background: linear-gradient(135deg, #BDE3E8 0%, #C9EBCB 100%);">
+        <span class="name">湖水 → 薄荷</span>
+      </div>
+      <div class="info">
+        <div class="codes"><span><span class="dot" style="background:#BDE3E8"></span>BDE3E8</span><span class="arrow">→</span><span><span class="dot" style="background:#C9EBCB"></span>C9EBCB</span></div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="swatch" style="background: linear-gradient(135deg, #D4C8F5 0%, #AFC8EE 100%);">
+        <span class="name">紫藤 → 雾蓝</span>
+      </div>
+      <div class="info">
+        <div class="codes"><span><span class="dot" style="background:#D4C8F5"></span>D4C8F5</span><span class="arrow">→</span><span><span class="dot" style="background:#AFC8EE"></span>AFC8EE</span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2 style="font-size:14px;font-weight:600;color:#999;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:20px;">高级灰系 · 灰中带色相 · 克制内敛</h2>
+  <div class="grid">
+    <div class="card base">
+      <div class="swatch" style="background: linear-gradient(135deg, #FCE5D7 0%, #728B9A 100%);">
+        <span class="base-tag">你的参考款</span><span class="name">暖杏 → 灰蓝</span>
+      </div>
+      <div class="info">
+        <div class="codes"><span><span class="dot" style="background:#FCE5D7"></span>FCE5D7</span><span class="arrow">→</span><span><span class="dot" style="background:#728B9A"></span>728B9A</span></div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="swatch" style="background: linear-gradient(135deg, #A9BCCB 0%, #E4EAF0 100%);">
+        <span class="name">烟灰蓝 → 云白</span>
+      </div>
+      <div class="info">
+        <div class="codes"><span><span class="dot" style="background:#A9BCCB"></span>A9BCCB</span><span class="arrow">→</span><span><span class="dot" style="background:#E4EAF0"></span>E4EAF0</span></div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="swatch" style="background: linear-gradient(135deg, #C2BDD9 0%, #EEEAF6 100%);">
+        <span class="name">雾紫灰 → 淡紫</span>
+      </div>
+      <div class="info">
+        <div class="codes"><span><span class="dot" style="background:#C2BDD9"></span>C2BDD9</span><span class="arrow">→</span><span><span class="dot" style="background:#EEEAF6"></span>EEEAF6</span></div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="swatch" style="background: linear-gradient(135deg, #BDC9C1 0%, #ECEFEA 100%);">
+        <span class="name">鼠尾草灰 → 米白</span>
+      </div>
+      <div class="info">
+        <div class="codes"><span><span class="dot" style="background:#BDC9C1"></span>BDC9C1</span><span class="arrow">→</span><span><span class="dot" style="background:#ECEFEA"></span>ECEFEA</span></div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="swatch" style="background: linear-gradient(135deg, #D8C1C7 0%, #F2E9EB 100%);">
+        <span class="name">干枯玫瑰 → 暖粉白</span>
+      </div>
+      <div class="info">
+        <div class="codes"><span><span class="dot" style="background:#D8C1C7"></span>D8C1C7</span><span class="arrow">→</span><span><span class="dot" style="background:#F2E9EB"></span>F2E9EB</span></div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="swatch" style="background: linear-gradient(135deg, #D4CCC0 0%, #F1EDE6 100%);">
+        <span class="name">暖卡其 → 米黄白</span>
+      </div>
+      <div class="info">
+        <div class="codes"><span><span class="dot" style="background:#D4CCC0"></span>D4CCC0</span><span class="arrow">→</span><span><span class="dot" style="background:#F1EDE6"></span>F1EDE6</span></div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="swatch" style="background: linear-gradient(135deg, #A4ABB6 0%, #DFE3E8 100%);">
+        <span class="name">石墨灰 → 银白</span>
+      </div>
+      <div class="info">
+        <div class="codes"><span><span class="dot" style="background:#A4ABB6"></span>A4ABB6</span><span class="arrow">→</span><span><span class="dot" style="background:#DFE3E8"></span>DFE3E8</span></div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="swatch" style="background: linear-gradient(135deg, #B3B8CF 0%, #DDE3EF 100%);">
+        <span class="name">雾蓝灰 → 浅银蓝</span>
+      </div>
+      <div class="info">
+        <div class="codes"><span><span class="dot" style="background:#B3B8CF"></span>B3B8CF</span><span class="arrow">→</span><span><span class="dot" style="background:#DDE3EF"></span>DDE3EF</span></div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="swatch" style="background: linear-gradient(135deg, #CFBDB4 0%, #F0EAE6 100%);">
+        <span class="name">陶土灰 → 米白</span>
+      </div>
+      <div class="info">
+        <div class="codes"><span><span class="dot" style="background:#CFBDB4"></span>CFBDB4</span><span class="arrow">→</span><span><span class="dot" style="background:#F0EAE6"></span>F0EAE6</span></div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="swatch" style="background: linear-gradient(135deg, #BAC8D2 0%, #E8EDF2 100%);">
+        <span class="name">冷灰蓝 → 雾白</span>
+      </div>
+      <div class="info">
+        <div class="codes"><span><span class="dot" style="background:#BAC8D2"></span>BAC8D2</span><span class="arrow">→</span><span><span class="dot" style="background:#E8EDF2"></span>E8EDF2</span></div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="swatch" style="background: linear-gradient(135deg, #D6CCD8 0%, #F0ECF1 100%);">
+        <span class="name">藕灰紫 → 淡藕白</span>
+      </div>
+      <div class="info">
+        <div class="codes"><span><span class="dot" style="background:#D6CCD8"></span>D6CCD8</span><span class="arrow">→</span><span><span class="dot" style="background:#F0ECF1"></span>F0ECF1</span></div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="swatch" style="background: linear-gradient(135deg, #C6CDC4 0%, #EAEEEA 100%);">
+        <span class="name">灰绿 → 雾白</span>
+      </div>
+      <div class="info">
+        <div class="codes"><span><span class="dot" style="background:#C6CDC4"></span>C6CDC4</span><span class="arrow">→</span><span><span class="dot" style="background:#EAEEEA"></span>EAEEEA</span></div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="swatch" style="background: linear-gradient(135deg, #ADB7C3 0%, #E0E5EA 100%);">
+        <span class="name">烟灰 → 银白</span>
+      </div>
+      <div class="info">
+        <div class="codes"><span><span class="dot" style="background:#ADB7C3"></span>ADB7C3</span><span class="arrow">→</span><span><span class="dot" style="background:#E0E5EA"></span>E0E5EA</span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<footer>
+  全部渐变均为双色 135° 对角线渐变，颜色采用「跨色相 + 高明度低饱和」淡雅组合，与 #8FC9BD → #EEDDF9 同一风格。
+</footer>
+</body>
+</html>

@@ -6,7 +6,6 @@ import fansirsqi.xposed.sesame.util.JsonUtil
 import fansirsqi.xposed.sesame.util.Log
 import fansirsqi.xposed.sesame.util.maps.UserMap
 import java.io.File
-import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * 主题管理器
@@ -27,22 +26,10 @@ object ThemeManager {
     private val EXTERNAL_STORAGE_PATH: String
         get() = "${android.os.Environment.getExternalStorageDirectory().absolutePath}/Android/media/com.eg.android.AlipayGphone/000_HOHO_THEME_CENTER"
 
-    // 操作标记文件路径
-    private val EXPORT_PATH: String
-        get() = "$EXTERNAL_STORAGE_PATH/export"
-    private val DELETE_PATH: String
-        get() = "$EXTERNAL_STORAGE_PATH/delete"
-    private val UPDATE_PATH: String
-        get() = "$EXTERNAL_STORAGE_PATH/update"
-
     // 主题文件夹路径
     private const val THEMES_FOLDER = "themes"
     private const val EXPORTED_THEMES_FOLDER = "exported_themes"
     private const val SELECTED_THEME_FILE = "selected_theme"
-
-    // 线程安全标志
-    private val isOperationRunning = AtomicBoolean(false)
-
 
     /**
      * 获取当前用户ID
@@ -84,85 +71,9 @@ object ThemeManager {
     }
 
     /**
-     * 处理主题操作
-     *
-     * 在应用启动时检查操作标记文件夹并执行相应操作
-     */
-    fun handleThemeOperations() {
-        // 线程安全保护
-        if (!isOperationRunning.compareAndSet(false, true)) {
-            return
-        }
-
-        try {
-            val userId = getCurrentUserId()
-            if (userId == null) {
-                Log.runtime(TAG, "无法获取用户ID，跳过主题操作")
-                return
-            }
-
-            val userThemeDir = File(INTERNAL_STORAGE_PATH, userId)
-            if (!userThemeDir.exists()) {
-                Log.runtime(TAG, "用户主题目录不存在: ${userThemeDir.absolutePath}")
-                return
-            }
-
-            // 检查并执行操作
-            checkAndExecuteOperations(userId, userThemeDir)
-        } catch (e: Exception) {
-            Log.runtime(TAG, "处理主题操作时出错: ${e.message}")
-            e.printStackTrace()
-        } finally {
-            isOperationRunning.set(false)
-        }
-    }
-
-    /**
-     * 检查并执行操作
-     */
-    private fun checkAndExecuteOperations(userId: String, userThemeDir: File) {
-        // 检查删除操作
-        val deleteFile = File(DELETE_PATH)
-        if (deleteFile.exists()) {
-            executeDeleteOperation(userThemeDir)
-            deleteFile.deleteRecursively()
-        }
-
-        // 检查导出操作
-        val exportFile = File(EXPORT_PATH)
-        if (exportFile.exists()) {
-            executeExportOperation(userId, userThemeDir)
-            exportFile.deleteRecursively()
-        }
-
-        // 检查更新操作
-        val updateFile = File(UPDATE_PATH)
-        if (updateFile.exists()) {
-            applyTheme(userId, userThemeDir)
-            updateFile.deleteRecursively()
-        }
-    }
-
-    /**
-     * 执行删除操作
-     *
-     * 删除支付宝内部的主题缓存
-     */
-    private fun executeDeleteOperation(userThemeDir: File) {
-        try {
-            if (userThemeDir.exists()) {
-                userThemeDir.deleteRecursively()
-                Log.runtime(TAG, "✓ 主题缓存已删除")
-            }
-        } catch (e: Exception) {
-            Log.runtime(TAG, "✗ 主题删除失败: ${e.message}")
-        }
-    }
-
-    /**
      * 立即直接导出主题
      *
-     * 响应 UI 层的导出按钮点击，无需等待特定页面或标记文件轮询
+     * 响应 UI 层导出操作，由 IPC 广播触发，无需等待特定页面
      */
     fun exportThemesDirectly(targetUserId: String? = null): Pair<Boolean, String> {
         return try {
@@ -177,6 +88,52 @@ object ThemeManager {
             executeExportOperation(userId, userThemeDir)
         } catch (e: Exception) {
             Pair(false, "导出失败: ${e.message}")
+        }
+    }
+
+    /**
+     * 立即直接删除主题缓存
+     *
+     * 响应 UI 层删除操作，由 IPC 广播触发
+     */
+    fun deleteThemeCacheDirectly(targetUserId: String? = null): Pair<Boolean, String> {
+        return try {
+            val userId = targetUserId ?: getCurrentUserId()
+            if (userId == null) {
+                return Pair(false, "无法获取用户ID")
+            }
+            val userThemeDir = File(INTERNAL_STORAGE_PATH, userId)
+            if (!userThemeDir.exists()) {
+                return Pair(false, "主题目录不存在: ${userThemeDir.absolutePath}")
+            }
+            userThemeDir.deleteRecursively()
+            Log.runtime(TAG, "✓ 主题缓存已删除")
+            Pair(true, "主题缓存已删除")
+        } catch (e: Exception) {
+            Pair(false, "删除失败: ${e.message}")
+        }
+    }
+
+    /**
+     * 立即直接应用（更新）主题
+     *
+     * 响应 UI 层更新操作，由 IPC 广播触发
+     */
+    fun applyThemeDirectly(targetUserId: String? = null): Pair<Boolean, String> {
+        return try {
+            val userId = targetUserId ?: getCurrentUserId()
+            if (userId == null) {
+                return Pair(false, "无法获取用户ID")
+            }
+            val userThemeDir = File(INTERNAL_STORAGE_PATH, userId)
+            if (!userThemeDir.exists()) {
+                return Pair(false, "主题目录不存在: ${userThemeDir.absolutePath}")
+            }
+            // 静默执行，结果由 UI 层提示
+            applyTheme(userId, userThemeDir, quiet = true)
+            Pair(true, "主题更新已执行")
+        } catch (e: Exception) {
+            Pair(false, "更新失败: ${e.message}")
         }
     }
 

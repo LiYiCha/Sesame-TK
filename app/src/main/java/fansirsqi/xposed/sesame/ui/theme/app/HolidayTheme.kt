@@ -68,72 +68,72 @@ object HolidayTheme {
         "default" to ThemeColors(
             mainColor = Color(0xFF4F7A5C), bgColor = Color(0xFFE0EEE8), cardBgColor = Color(0xFFE0EEE8), textColor = Color(0xFF2D3436), activeColor = Color(0xFF8AA88E),
             title = "欢迎",
-            story = "种豆南山下，草盛豆苗稀。"
+            story = "种豆南山下，草盛豆苗稀。晨兴理荒秽，带月荷锄归。"
         ),
         "new_year" to ThemeColors(
             mainColor = Color(0xFF5B8DB8), bgColor = Color(0xFFD6ECF0), cardBgColor = Color(0xFFD6ECF0), textColor = Color(0xFF37474F), activeColor = Color(0xFF8FB0C8),
             title = "元旦",
-            story = "千门万户曈曈日，总把新桃换旧符。"
+            story = "律回岁晚冰霜少，春到人间草木知。便觉眼前生意满，东风吹水绿参差。"
         ),
         "valentine" to ThemeColors(
             mainColor = Color(0xFFDB7093), bgColor = Color(0xFFFFF0F5), cardBgColor = Color(0xFFFFF0F5), textColor = Color(0xFFDB7093), activeColor = Color(0xFFF8BBD0),
             title = "情人节",
-            story = "愿得一人心，白首不相离。"
+            story = "相见时难别亦难，东风无力百花残。春蚕到死丝方尽，蜡炬成灰泪始干。"
         ),
         "labor_day" to ThemeColors(
             mainColor = Color(0xFFC09A5E), bgColor = Color(0xFFFFF3E0), cardBgColor = Color(0xFFFFF3E0), textColor = Color(0xFF5C4A32), activeColor = Color(0xFF9A8A6E),
             title = "劳动节",
-            story = "谁知盘中餐，粒粒皆辛苦。"
+            story = "锄禾日当午，汗滴禾下土。谁知盘中餐，粒粒皆辛苦。"
         ),
         "mothers_day" to ThemeColors(
             mainColor = Color(0xFFC87888), bgColor = Color(0xFFFBE9E7), cardBgColor = Color(0xFFFBE9E7), textColor = Color(0xFF5C3A3A), activeColor = Color(0xFFA890A0),
             title = "母亲节",
-            story = "谁言寸草心，报得三春晖。"
+            story = "慈母手中线，游子身上衣。谁言寸草心，报得三春晖。"
         ),
         "fathers_day" to ThemeColors(
             mainColor = Color(0xFF6E8494), bgColor = Color(0xFFECEFF1), cardBgColor = Color(0xFFECEFF1), textColor = Color(0xFF37474F), activeColor = Color(0xFF9E8A7A),
             title = "父亲节",
-            story = "哀哀父母，生我劬劳。"
+            story = "哀哀父母，生我劬劳。欲报之德，昊天罔极。"
         ),
         "childrens_day" to ThemeColors(
             mainColor = Color(0xFF5CA8D8), bgColor = Color(0xFFFDEAF2), cardBgColor = Color(0xFFFDEAF2), textColor = Color(0xFF3D3D3D), activeColor = Color(0xFFF5A8C8),
             title = "儿童节",
-            story = "儿童散学归来早，忙趁东风放纸鸢。"
+            story = "草长莺飞二月天，拂堤杨柳醉春烟。儿童散学归来早，忙趁东风放纸鸢。"
         ),
         "national_day" to ThemeColors(
             mainColor = Color(0xFFB22222), bgColor = Color(0xFFFFF1F0), cardBgColor = Color(0xFFFFF1F0), textColor = Color(0xFF600000), activeColor = Color(0xFFFF4D4F),
             title = "国庆",
-            story = "江山如此多娇，引无数英雄竞折腰。"
+            story = "江山如此多娇，引无数英雄竞折腰。俱往矣，数风流人物，还看今朝。"
         ),
         "spring_festival" to ThemeColors(
             mainColor = Color(0xFFB22222), bgColor = Color(0xFFFFF1F0), cardBgColor = Color(0xFFFFF1F0), textColor = Color(0xFF600000), activeColor = Color(0xFFFF4D4F),
             title = "春节",
-            story = "爆竹声中一岁除，春风送暖入屠苏。"
+            story = "爆竹声中一岁除，春风送暖入屠苏。千门万户曈曈日，总把新桃换旧符。"
         ),
         "new_years_eve" to ThemeColors(
             mainColor = Color(0xFFA83A3A), bgColor = Color(0xFFFFE8E8), cardBgColor = Color(0xFFFFE8E8), textColor = Color(0xFF4E2A2A), activeColor = Color(0xFFC08A50),
             title = "除夕",
-            story = "寒随一夜去，春逐五更来。"
+            story = "今岁今宵尽，明年明日催。寒随一夜去，春逐五更来。"
         ),
         "dragon_boat" to ThemeColors(
             mainColor = Color(0xFF6A994E), bgColor = Color(0xFFCAD2C5), cardBgColor = Color(0xFFCAD2C5), textColor = Color(0xFF354F52), activeColor = Color(0xFF84A98C),
             title = "端午",
-            story = "路漫漫其修远兮，吾将上下而求索。"
+            story = "亦余心之所善兮，虽九死其犹未悔。路漫漫其修远兮，吾将上下而求索。"
         ),
         "qixi" to ThemeColors(
             mainColor = Color(0xFF9A7CB8), bgColor = Color(0xFFF3E5F5), cardBgColor = Color(0xFFF3E5F5), textColor = Color(0xFF4A3A5C), activeColor = Color(0xFFC07888),
             title = "七夕",
-            story = "金风玉露一相逢，便胜却人间无数。"
+            story = "金风玉露一相逢，便胜却人间无数。两情若是久长时，又岂在朝朝暮暮。"
         ),
         "mid_autumn" to ThemeColors(
             mainColor = Color(0xFFF9773B), bgColor = Color(0xFFFFF7E6), cardBgColor = Color(0xFFFFF7E6), textColor = Color(0xFF5F2700), activeColor = Color(0xFFFCA452),
             title = "中秋",
-            story = "但愿人长久，千里共婵娟。"
+            story = "人有悲欢离合，月有阴晴圆缺。但愿人长久，千里共婵娟。"
         ),
         "double_ninth" to ThemeColors(
             mainColor = Color(0xFFC08A50), bgColor = Color(0xFFFFF3E0), cardBgColor = Color(0xFFFFF3E0), textColor = Color(0xFF5C4030), activeColor = Color(0xFF8A9E6E),
             title = "重阳",
-            story = "遥知兄弟登高处，遍插茱萸少一人。"
+            story = "独在异乡为异客，每逢佳节倍思亲。遥知兄弟登高处，遍插茱萸少一人。"
         )
     )
 
@@ -615,22 +615,46 @@ private fun buildLightPalette(colors: HolidayTheme.ThemeColors): ThemePalette {
 }
 
 /**
- * 深色调色板（对齐网页版墨色风格）：
- * - 背景/卡片 = 极低饱和墨色（几乎黑，不再有强烈色相）
- * - 强调色 primary = 各节日传统色原色（浅色，深底上的晶莹点缀）
- * - 强调文字 onPrimary = 深色
+ * 深色调色板（主题色浸染式）：
+ * - 背景/卡片 = 当前主题色的「低亮度深调」（深红→深红黑、深绿→深绿黑、深蓝→深蓝黑），
+ *   整个深色界面由主题色贯穿，不再使用固定墨绿，避免与主题色色相割裂
+ * - 文字 = 带主题色相的浅色，与背景同色系
+ * - 强调色 primary = 主题色亮化版（按钮/开关/链接/图标，大面积透出主题色）
+ * - onPrimary = 页面背景色，按钮文字与整体呼应
  */
 private fun buildDarkPalette(colors: HolidayTheme.ThemeColors): ThemePalette {
-    val background = Color(0xFF0F1513)   // 墨色
-    val surface = Color(0xFF1A2420)      // 墨色浮层
-    val surfaceVariant = Color(0xFF24302A)
+    val mainHsl = colors.mainColor.rgbToHsl()
+    val h = mainHsl[0]
+    val s = mainHsl[1]
+
+    // 背景与卡片：主题色低亮度深调，保留色相与中等饱和
+    val background = hslToColor(h, (s * 0.55f).coerceIn(0f, 1f), 0.05f)
+    val surface = hslToColor(h, (s * 0.50f).coerceIn(0f, 1f), 0.10f)
+    val surfaceVariant = hslToColor(h, (s * 0.45f).coerceIn(0f, 1f), 0.17f)
+
+    // 文字：浅色、低饱和、带主题色相
+    val onDark = hslToColor(h, (s * 0.22f).coerceIn(0f, 1f), 0.90f)
+    val onSurfaceVariant = hslToColor(h, (s * 0.30f).coerceIn(0f, 1f), 0.72f)
+
+    // 强调色：主题色亮化（按钮/开关/链接）
+    val primary = hslToColor(h, (s * 0.85f).coerceIn(0f, 1f), 0.70f)
+    val onPrimary = background   // 按钮文字用页面背景色，全局呼应
+
+    // 容器：主题色原色
+    val primaryContainer = colors.mainColor
+    val onPrimaryContainer = if (HolidayTheme.isColorLight(primaryContainer)) Color(0xFF101010) else onDark
+
+    // 辅助色：主题色中调
+    val secondary = hslToColor(h, (s * 0.65f).coerceIn(0f, 1f), 0.55f)
+    val onSecondary = background
+
     return ThemePalette(
         isDark = true,
-        primary = colors.bgColor, onPrimary = Color(0xFF1A1A1A),
-        primaryContainer = colors.mainColor, onPrimaryContainer = colors.bgColor,
-        secondary = colors.activeColor, onSecondary = Color(0xFF1A1A1A),
-        background = background, onBackground = Color(0xFFE0EEE8),
-        surface = surface, onSurface = Color(0xFFE0EEE8),
-        surfaceVariant = surfaceVariant, onSurfaceVariant = Color(0xFF9AB0A8)
+        primary = primary, onPrimary = onPrimary,
+        primaryContainer = primaryContainer, onPrimaryContainer = onPrimaryContainer,
+        secondary = secondary, onSecondary = onSecondary,
+        background = background, onBackground = onDark,
+        surface = surface, onSurface = onDark,
+        surfaceVariant = surfaceVariant, onSurfaceVariant = onSurfaceVariant
     )
 }

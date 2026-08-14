@@ -32,7 +32,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.rememberAsyncImagePainter
 import fansirsqi.xposed.sesame.ui.theme.ThemeInfo
-import fansirsqi.xposed.sesame.ui.theme.ThemeOperation
 import fansirsqi.xposed.sesame.ui.theme.ThemeViewModel
 
 /**
@@ -46,7 +45,6 @@ fun ThemeScreen(
 ) {
     val context = LocalContext.current
     val state by viewModel.state.collectAsState()
-    val operationStates by viewModel.operationStates.collectAsState()
 
     // 导航状态：当前查看的主题详情
     var selectedThemeForDetail by remember { mutableStateOf<ThemeInfo?>(null) }
@@ -122,9 +120,8 @@ fun ThemeScreen(
             // 操作卡片
             item {
                 OperationsCard(
-                    operationStates = operationStates,
                     onExecute = { operation ->
-                        viewModel.executeOperation(operation) { success, message ->
+                        viewModel.executeThemeAction(operation) { success, message ->
                             Toast.makeText(context, message, Toast.LENGTH_LONG).show()
                         }
                     }

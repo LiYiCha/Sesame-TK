@@ -17,7 +17,6 @@ import fansirsqi.xposed.sesame.ui.theme.ThemeOperation
  */
 @Composable
 fun OperationsCard(
-    operationStates: Map<ThemeOperation, Boolean>,
     onExecute: (ThemeOperation) -> Unit
 ) {
     Card(
@@ -51,7 +50,7 @@ fun OperationsCard(
             )
 
             Text(
-                text = "注意：操作将在下次打开付款码时自动执行",
+                text = "注意：操作将通过广播立即在支付宝进程执行",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )

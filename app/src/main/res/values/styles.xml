@@ -39,8 +39,12 @@
         <item name="iconGravity">top</item>
         <item name="android:insetTop">0dp</item>
         <item name="android:insetBottom">0dp</item>
+        <item name="android:minWidth">0dp</item>
+        <item name="android:minHeight">0dp</item>
         <item name="android:paddingTop">@dimen/space_lg</item>
         <item name="android:paddingBottom">@dimen/space_lg</item>
+        <item name="android:paddingStart">8dp</item>
+        <item name="android:paddingEnd">8dp</item>
         <item name="android:textSize">@dimen/text_label_large</item>
         <item name="android:layout_width">0dp</item>
         <item name="android:layout_height">wrap_content</item>

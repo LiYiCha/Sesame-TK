@@ -4,7 +4,6 @@ import android.os.Environment
 import de.robv.android.xposed.XC_MethodHook
 import de.robv.android.xposed.XposedHelpers
 import fansirsqi.xposed.sesame.hook.context.AppContext
-import fansirsqi.xposed.sesame.hook.theme.ThemeManager
 import fansirsqi.xposed.sesame.util.JsonUtil
 import fansirsqi.xposed.sesame.util.Log
 import java.io.File
@@ -250,13 +249,6 @@ object SkinHook {
                     override fun afterHookedMethod(param: MethodHookParam) {
                         val skinDirInAlipay = File(SKIN_DIR_IN_ALIPAY)
                         val skinActivated = File(EXTERNAL_STORAGE_PATH, "actived")
-
-                        // 处理主题操作（导出、删除、更新）
-                        try {
-                            ThemeManager.handleThemeOperations()
-                        } catch (e: Exception) {
-                            Log.runtime(TAG, "主题操作处理异常: ${e.message}")
-                        }
 
                         // 处理皮肤操作（导出、删除、更新）
                         handleSkinOperations(skinDirInAlipay)

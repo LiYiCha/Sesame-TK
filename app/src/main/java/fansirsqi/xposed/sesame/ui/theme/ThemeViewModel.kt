@@ -18,12 +18,8 @@ class ThemeViewModel(private val repository: ThemeRepository) : ViewModel() {
     private val _state = MutableStateFlow(ThemeState())
     val state: StateFlow<ThemeState> = _state.asStateFlow()
 
-    private val _operationStates = MutableStateFlow<Map<ThemeOperation, Boolean>>(emptyMap())
-    val operationStates: StateFlow<Map<ThemeOperation, Boolean>> = _operationStates.asStateFlow()
-
     init {
         loadAvailableThemes()
-        loadOperationStates()
     }
 
     /**
@@ -55,16 +51,6 @@ class ThemeViewModel(private val repository: ThemeRepository) : ViewModel() {
     }
 
     /**
-     * 加载操作状态
-     */
-    private fun loadOperationStates() {
-        viewModelScope.launch {
-            val states = repository.getAllOperationStates()
-            _operationStates.update { states }
-        }
-    }
-
-    /**
      * 选择主题
      *
      * 优化：只更新选中状态，不重新扫描所有主题
@@ -92,13 +78,12 @@ class ThemeViewModel(private val repository: ThemeRepository) : ViewModel() {
     }
 
     /**
-     * 执行主题操作
+     * 执行主题操作（统一广播方案）
      */
-    fun executeOperation(operation: ThemeOperation, callback: (Boolean, String) -> Unit) {
+    fun executeThemeAction(operation: ThemeOperation, callback: (Boolean, String) -> Unit) {
         viewModelScope.launch {
-            val (success, message) = repository.executeOperation(operation)
+            val (success, message) = repository.executeThemeAction(operation)
             callback(success, message)
-            loadOperationStates()
         }
     }
 
