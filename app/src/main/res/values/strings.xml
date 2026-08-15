@@ -116,7 +116,7 @@ If you purchased it, please contact the seller for a refund or report the seller
     <string name="use_double_card_time_desc">For example: (0000–0100, 0700–0730) represents 0 to 1 p.m. and 7 to 7:30 a.m., when there is energy and the card is automatically used without using double click</string>
     <string name="animal_sleep_time">Animal sleep time</string>
     <string name="visit_github">Visit GitHub</string>
-    <string name="d_bug_log">D bug Log</string>
+    <string name="d_bug_log">Debug Log</string>
     <string name="exchange_energy_double_click">Exchange energy double click</string>
     <string name="exchange_energy_double_click_count">Exchange energy double click count</string>
     <string name="reserve">Reserve</string>
