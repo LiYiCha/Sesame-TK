@@ -3918,10 +3918,10 @@ class AntFarm : ModelTask() {
         // 2. 检查产出奖励是否达标
         val currentReward = animalJson?.optDouble("npcBizReward", 0.0) ?: 0.0
         val isLimit = animalJson?.optBoolean("reachNpcBizRewardLimit", false) ?: false
-        // 判定满额逻辑：部分NPC有明确标记，芝麻鸽通常是88粒，黄金鸡为2888
-        val isFull = isLimit
-                || (config == NpcConfig.ZHIMA_PIGEON && currentReward >= 88.0)
-                || (config == NpcConfig.GOLD_CHICKEN && currentReward >= 2888.0)
+        // 判定满额逻辑：优先信任服务端标记 reachNpcBizRewardLimit；
+        // 阈值兜底读取动态配置，避免硬编码阈值过时导致误判（0 阈值视为无阈值）
+        val dynamicThreshold = NpcChicken.NpcRepository.getMergedNpcConfigs()[config.nickName]?.rewardThreshold ?: 0.0
+        val isFull = isLimit || (dynamicThreshold > 0.0 && currentReward >= dynamicThreshold)
 
         if (isFull) {
             Log.farm("NPC小鸡🤖[${config.nickName}产出已满($currentReward)，领取并重雇]")

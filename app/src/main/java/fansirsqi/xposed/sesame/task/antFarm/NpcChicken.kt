@@ -371,7 +371,7 @@ class NpcChicken {
 
         // 默认预置项（保证页面初始展示：黄金鸡、芝麻大表鸽、农场小鸡、到店红包）
         private val DEFAULT_NPC_MAP = linkedMapOf(
-            "黄金鸡" to NpcSmartConfig("20250725105101013088000000000004", "licaixiaoji_2025_1", "黄金鸡", "ANTFARM_CAIFU_NPC_TASK", 4, 2888.0),
+            "黄金鸡" to NpcSmartConfig("20250725105101013088000000000004", "npc_task_source", "黄金鸡", "ANTFARM_CAIFU_NPC_TASK", 4, 1088.0),
             "芝麻大表鸽" to NpcSmartConfig("20250901105101013088000000000006", "zhimaxiaoji_lianjin", "芝麻大表鸽", "ANTFARM_ZHIMA_NPC_TASK", 1, 88.0),
             "农场小鸡" to NpcSmartConfig("20250613105101013088000000000002", "feiliaoji_202507", "农场小鸡", "ANTFARM_ORCHARD_NPC_TASK", 7, 500.0),
             "到店红包" to NpcSmartConfig("20260115105101013088000000000013", "offfarm_npc_task", "到店红包", "ANTFARM_OFFLINE_PAY_NPC_TASK", 1, 100.0)
@@ -585,8 +585,10 @@ class NpcChicken {
             return
         }
 
-        // 检查是否满产
-        val isFull = currentReward >= currentConfig.rewardThreshold
+        // 检查是否满产：优先信任服务端标记 reachNpcBizRewardLimit；
+        // 阈值比较仅作兜底（rewardThreshold 为 0 时视为无阈值，避免恒满产误判）
+        val reachLimit = currentNpc.optBoolean("reachNpcBizRewardLimit", false)
+        val isFull = reachLimit || (currentConfig.rewardThreshold > 0.0 && currentReward >= currentConfig.rewardThreshold)
 
         if (isFull) {
             Log.farm("智能调度🤖[$currentName 已满产($currentReward/${currentConfig.rewardThreshold})，领取并切换]")
@@ -612,7 +614,8 @@ class NpcChicken {
                 val updatedNpc = getCurrentNpc()
                 if (updatedNpc != null) {
                     val updatedReward = updatedNpc.optDouble("npcBizReward", 0.0)
-                    if (updatedReward >= currentConfig.rewardThreshold) {
+                    val updatedReachLimit = updatedNpc.optBoolean("reachNpcBizRewardLimit", false)
+                    if (updatedReachLimit || (currentConfig.rewardThreshold > 0.0 && updatedReward >= currentConfig.rewardThreshold)) {
                         Log.farm("智能调度🤖[$currentName 完成任务后已满产，领取并切换]")
                         sendBackNpcAndRecord(updatedNpc, currentConfig)
                         GlobalThreadPools.sleep(2000)

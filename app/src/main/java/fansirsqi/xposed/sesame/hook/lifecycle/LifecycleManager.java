@@ -500,20 +500,20 @@ public class LifecycleManager {
 
     private static String resolveRpcOperation(String opType, String paramsJson) {
         if (opType == null) return "";
-        String resolved = opType;
-        if ("alipay.client.executerpc".equalsIgnoreCase(opType) && paramsJson != null) {
-            try {
-                java.util.regex.Matcher matcher = java.util.regex.Pattern
-                        .compile("\\[\\s*\\\"([^\\\"]+)\\\"")
-                        .matcher(paramsJson);
-                if (matcher.find()) {
-                    resolved = matcher.group(1);
+        if ("alipay.client.executerpc".equalsIgnoreCase(opType) || "alipay.client.executerpc.bytes".equalsIgnoreCase(opType)) {
+            if (paramsJson != null && !paramsJson.isEmpty()) {
+                try {
+                    java.util.regex.Matcher matcher = java.util.regex.Pattern
+                            .compile("\\[\\s*\\\"([^\\\"]+)\\\"")
+                            .matcher(paramsJson);
+                    if (matcher.find()) {
+                        return matcher.group(1);
+                    }
+                } catch (Throwable ignored) {
                 }
-            } catch (Throwable ignored) {
-                // Ignore
             }
         }
-        return resolved == null ? "" : resolved;
+        return opType;
     }
 
     private static boolean isUselessRpcLog(String logMessage) {
@@ -528,7 +528,12 @@ public class LifecycleManager {
                     params = line.substring("Params: ".length()).trim();
                 }
             }
-            return isUselessRpc(method, params);
+            if (method.isEmpty()) return false;
+            // 如果方法名已经是具体的业务方法（非包装类），直接按业务方法名过滤
+            if (!"alipay.client.executerpc".equalsIgnoreCase(method) && !"alipay.client.executerpc.bytes".equalsIgnoreCase(method)) {
+                return isUselessRpc(method);
+            }
+            return isUselessRpc(resolveRpcOperation(method, params));
         } catch (Throwable ignored) {
             return false;
         }
@@ -664,8 +669,14 @@ public class LifecycleManager {
                             XposedHelpers.setAdditionalInstanceField(param, "opType", realOpType);
                             XposedHelpers.setAdditionalInstanceField(param, "startTime", System.currentTimeMillis());
                             
-                            if (LifecycleManager.isUselessRpc(opType) || LifecycleManager.isUselessRpc(realOpType)) {
-                                return;
+                            if (isH5Rpc) {
+                                if (LifecycleManager.isUselessRpc(realOpType)) {
+                                    return;
+                                }
+                            } else {
+                                if (LifecycleManager.isUselessRpc(opType)) {
+                                    return;
+                                }
                             }
                             
                             // 序列化入参
