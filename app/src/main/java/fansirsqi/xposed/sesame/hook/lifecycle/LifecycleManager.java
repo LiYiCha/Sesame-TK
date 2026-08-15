@@ -540,36 +540,49 @@ public class LifecycleManager {
     @SuppressLint("WakelockTimeout")
     public static void setupRpcDebugHooks() {
         registerCaptureLogReceiver();
+        
+        // 1. Hook H5/小程序层 RpcBridgeExtension 的所有 rpc 重载方法
         try {
             ClassLoader classLoader = AppContext.getClassLoader();
+            XC_MethodHook h5RpcHook = new XC_MethodHook() {
+                @SuppressLint("WakelockTimeout")
+                @Override
+                protected void beforeHookedMethod(MethodHookParam param) {
+                    Object[] args = param.args;
+                    if (args == null || args.length == 0) return;
+                    String method = String.valueOf(args[0]);
+                    if (LifecycleManager.isUselessRpc(method)) {
+                        return;
+                    }
+                    Object callback = args[args.length - 1];
+                    Object requestContext = args.length > 4 ? args[4] : null;
+                    
+                    Object[] recordArray = new Object[3];
+                    recordArray[0] = System.currentTimeMillis();
+                    recordArray[1] = method;
+                    recordArray[2] = requestContext;
+                    rpcHookMap.put(callback, recordArray);
+                }
+            };
 
-            rpcRequestUnhook = XposedHelpers.findAndHookMethod(
-                    "com.alibaba.ariver.commonability.network.rpc.RpcBridgeExtension", classLoader
-                    , "rpc"
-                    , String.class, boolean.class, boolean.class, String.class, classLoader.loadClass(General.JSON_OBJECT_NAME), String.class, classLoader.loadClass(General.JSON_OBJECT_NAME), boolean.class, boolean.class, int.class, boolean.class, String.class, classLoader.loadClass("com.alibaba" +
-                            ".ariver.app.api.App"), classLoader.loadClass("com.alibaba.ariver.app.api.Page"), classLoader.loadClass("com.alibaba.ariver.engine.api.bridge.model.ApiContext"), classLoader.loadClass("com.alibaba.ariver.engine.api.bridge.extension.BridgeCallback")
-                    , new XC_MethodHook() {
-                        @SuppressLint("WakelockTimeout")
-                        @Override
-                        protected void beforeHookedMethod(MethodHookParam param) {
-                            Object[] args = param.args;
-                            Object object = args[15];
-                            String Method = String.valueOf(args[0]);
-                            if (LifecycleManager.isUselessRpc(Method)) {
-                                return;
-                            }
-                            Object[] recordArray = new Object[4];
-                            recordArray[0] = System.currentTimeMillis();
-                            recordArray[1] = args[0];
-                            recordArray[2] = args[4];
-                            rpcHookMap.put(object, recordArray);
-                        }
-                    });
-            Log.runtime(TAG, "hook record request successfully");
+            String[] bridgeClasses = new String[] {
+                    "com.alibaba.ariver.commonability.network.rpc.RpcBridgeExtension",
+                    "com.alibaba.ariver.jsapi.rpc.RpcBridgeExtension"
+            };
+
+            for (String clsName : bridgeClasses) {
+                Class<?> cls = XposedHelpers.findClassIfExists(clsName, classLoader);
+                if (cls != null) {
+                    de.robv.android.xposed.XposedBridge.hookAllMethods(cls, "rpc", h5RpcHook);
+                    Log.runtime(TAG, "hook " + clsName + ".rpc successfully");
+                }
+            }
         } catch (Throwable t) {
             Log.runtime(TAG, "hook record request err:");
             Log.printStackTrace(TAG, t);
         }
+
+        // 2. Hook H5/小程序层 DefaultBridgeCallback 回调
         try {
             ClassLoader classLoader = AppContext.getClassLoader();
             rpcResponseUnhook = XposedHelpers.findAndHookMethod(
@@ -584,20 +597,20 @@ public class LifecycleManager {
                             Object[] recordArray = rpcHookMap.remove(callback);
 
                             if (recordArray != null && param.args.length > 0 && param.args[0] != null) {
-                                String TimeStamp = String.valueOf(recordArray[0]);
-                                String Method = String.valueOf(recordArray[1]);
-                                String Params = String.valueOf(recordArray[2]);
+                                String timeStamp = String.valueOf(recordArray[0]);
+                                String method = String.valueOf(recordArray[1]);
+                                String params = String.valueOf(recordArray[2]);
                                 String rawData = param.args[0].toString();
 
                                 // 处理RPC响应数据并提取关键信息
                                 if (BaseModel.getAutoTokenEnabled().getValue()) {
-                                    RpcResponseHandler.handle(Method, rawData);
+                                    RpcResponseHandler.handle(method, rawData);
                                 }
 
                                 String logMessage = "\n[H5] ========================>\n" + 
-                                        "TimeStamp: " + TimeStamp + "\n" + 
-                                        "Method: " + Method + "\n" + 
-                                        "Params: " + Params + "\n" + 
+                                        "TimeStamp: " + timeStamp + "\n" + 
+                                        "Method: " + method + "\n" + 
+                                        "Params: " + params + "\n" + 
                                         "Data: " + rawData + "\n" + 
                                         "<========================\n";
                                 writeCaptureLog(logMessage);
@@ -609,7 +622,8 @@ public class LifecycleManager {
             Log.runtime(TAG, "hook record response err:");
             Log.printStackTrace(TAG, t);
         }
-        // Hook底层的 RpcInvocationHandler (拦截小游戏等底层RPC请求)
+
+        // 3. Hook底层的 RpcInvocationHandler (拦截小游戏等底层RPC请求)
         try {
             ClassLoader classLoader = AppContext.getClassLoader();
             Class<?> rpcHandlerClass = XposedHelpers.findClassIfExists("com.alipay.mobile.common.rpc.RpcInvocationHandler", classLoader);
@@ -637,7 +651,9 @@ public class LifecycleManager {
                             }
                             String realOpType = opType;
                             Object[] rpcArgs = (Object[]) param.args[2];
-                            boolean isH5Rpc = "alipay.client.executerpc".equalsIgnoreCase(opType) || "executeRPC".equalsIgnoreCase(method.getName());
+                            boolean isH5Rpc = "alipay.client.executerpc".equalsIgnoreCase(opType) 
+                                    || "alipay.client.executerpc.bytes".equalsIgnoreCase(opType) 
+                                    || "executeRPC".equalsIgnoreCase(method.getName());
 
                             if (isH5Rpc && rpcArgs != null && rpcArgs.length > 0 && rpcArgs[0] != null) {
                                 try {
@@ -655,28 +671,56 @@ public class LifecycleManager {
                             // 序列化入参
                             String paramsJson = "";
                             try {
-                                if (rpcArgs != null) {
+                                if (isH5Rpc && rpcArgs != null && rpcArgs.length >= 2 && rpcArgs[1] != null) {
+                                    Object reqData = rpcArgs[1];
+                                    if (reqData instanceof String) {
+                                        paramsJson = (String) reqData;
+                                    } else if (reqData instanceof byte[]) {
+                                        try {
+                                            paramsJson = new String((byte[]) reqData, java.nio.charset.StandardCharsets.UTF_8);
+                                        } catch (Throwable e) {
+                                            paramsJson = reflectDump(reqData);
+                                        }
+                                    } else {
+                                        try {
+                                            Class<?> jsonClass = cachedFastJsonClass;
+                                            if (jsonClass == null) {
+                                                jsonClass = classLoader.loadClass("com.alibaba.fastjson.JSON");
+                                                cachedFastJsonClass = jsonClass;
+                                            }
+                                            paramsJson = (String) XposedHelpers.callStaticMethod(jsonClass, "toJSONString", reqData);
+                                        } catch (Throwable e) {
+                                            paramsJson = reflectDump(reqData);
+                                        }
+                                    }
+                                } else if (rpcArgs != null && rpcArgs.length > 0) {
                                     Class<?> jsonClass = cachedFastJsonClass;
                                     if (jsonClass == null) {
                                         jsonClass = classLoader.loadClass("com.alibaba.fastjson.JSON");
                                         cachedFastJsonClass = jsonClass;
                                     }
-                                    paramsJson = (String) XposedHelpers.callStaticMethod(jsonClass, "toJSONString", (Object) rpcArgs);
-                                }
-                            } catch (Throwable t) {
-                                try {
-                                    if (rpcArgs != null) {
+                                    try {
+                                        paramsJson = (String) XposedHelpers.callStaticMethod(jsonClass, "toJSONString", (Object) rpcArgs);
+                                    } catch (Throwable e) {
                                         java.util.List<String> list = new java.util.ArrayList<>();
                                         for (Object arg : rpcArgs) {
-                                            list.add(arg == null ? "null" : arg.toString());
+                                            if (arg == null) {
+                                                list.add("null");
+                                            } else {
+                                                try {
+                                                    list.add(reflectDump(arg));
+                                                } catch (Throwable ex) {
+                                                    list.add("[DumpFailed: " + arg.getClass().getName() + "]");
+                                                }
+                                            }
                                         }
                                         paramsJson = list.toString();
-                                    } else {
-                                        paramsJson = "[]";
                                     }
-                                } catch (Throwable ignored) {
+                                } else {
                                     paramsJson = "[]";
                                 }
+                            } catch (Throwable t) {
+                                paramsJson = "[]";
                             }
                             XposedHelpers.setAdditionalInstanceField(param, "paramsJson", paramsJson);
                         }
@@ -768,6 +812,77 @@ public class LifecycleManager {
                 || lower.contains("monitor")
                 || lower.contains("alipay.client")
                 || lower.contains("telemetry");
+    }
+
+    private static String reflectDump(Object obj) {
+        return reflectDump(obj, 0);
+    }
+
+    private static String reflectDump(Object obj, int depth) {
+        if (obj == null) return "null";
+        if (depth > 3) return "\"[MAX_DEPTH]\"";
+        try {
+            if (obj instanceof String) return "\"" + obj + "\"";
+            if (obj instanceof Number || obj instanceof Boolean) return obj.toString();
+            if (obj.getClass().isEnum()) return "\"" + obj.toString() + "\"";
+
+            if (obj.getClass().isArray()) {
+                StringBuilder sb = new StringBuilder("[");
+                int length = java.lang.reflect.Array.getLength(obj);
+                for (int i = 0; i < length; i++) {
+                    if (i > 0) sb.append(", ");
+                    sb.append(reflectDump(java.lang.reflect.Array.get(obj, i), depth + 1));
+                }
+                sb.append("]");
+                return sb.toString();
+            }
+
+            if (obj instanceof java.util.Collection) {
+                StringBuilder sb = new StringBuilder("[");
+                boolean first = true;
+                for (Object item : (java.util.Collection<?>) obj) {
+                    if (!first) sb.append(", ");
+                    sb.append(reflectDump(item, depth + 1));
+                    first = false;
+                }
+                sb.append("]");
+                return sb.toString();
+            }
+
+            if (obj instanceof java.util.Map) {
+                StringBuilder sb = new StringBuilder("{");
+                boolean first = true;
+                for (java.util.Map.Entry<?, ?> entry : ((java.util.Map<?, ?>) obj).entrySet()) {
+                    if (!first) sb.append(", ");
+                    sb.append("\"").append(String.valueOf(entry.getKey())).append("\": ");
+                    sb.append(reflectDump(entry.getValue(), depth + 1));
+                    first = false;
+                }
+                sb.append("}");
+                return sb.toString();
+            }
+
+            StringBuilder sb = new StringBuilder("{");
+            Class<?> clazz = obj.getClass();
+            boolean first = true;
+            while (clazz != null && clazz != Object.class) {
+                java.lang.reflect.Field[] fields = clazz.getDeclaredFields();
+                for (java.lang.reflect.Field field : fields) {
+                    if (java.lang.reflect.Modifier.isStatic(field.getModifiers())) continue;
+                    field.setAccessible(true);
+                    Object val = field.get(obj);
+                    if (!first) sb.append(", ");
+                    sb.append("\"").append(field.getName()).append("\": ");
+                    sb.append(reflectDump(val, depth + 1));
+                    first = false;
+                }
+                clazz = clazz.getSuperclass();
+            }
+            sb.append("}");
+            return sb.toString();
+        } catch (Throwable t) {
+            return "\"[Exception in reflectDump: " + t.getMessage() + "]\"";
+        }
     }
 
     /**
