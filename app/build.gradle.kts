@@ -68,7 +68,7 @@ android {
         }
 
 
-        val versionNumber = "0.3.9"
+        val versionNumber = "0.4.0"
         val dateString = SimpleDateFormat("yyMMdd", Locale.CHINA).apply {
             timeZone = TimeZone.getTimeZone("GMT+8")
         }.format(Date())

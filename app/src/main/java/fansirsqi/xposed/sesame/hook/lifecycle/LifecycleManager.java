@@ -529,7 +529,8 @@ public class LifecycleManager {
                 }
             }
             if (method.isEmpty()) return false;
-            // 如果方法名已经是具体的业务方法（非包装类），直接按业务方法名过滤
+            // 说明：如果日志中的 Method 已经被解析为具体的业务接口（如 com.alipay.xxx），
+            // 直接校验该业务接口是否在黑名单中，避免被通用包装类名（alipay.client.executerpc）中的 "alipay.client" 误杀。
             if (!"alipay.client.executerpc".equalsIgnoreCase(method) && !"alipay.client.executerpc.bytes".equalsIgnoreCase(method)) {
                 return isUselessRpc(method);
             }
@@ -669,6 +670,10 @@ public class LifecycleManager {
                             XposedHelpers.setAdditionalInstanceField(param, "opType", realOpType);
                             XposedHelpers.setAdditionalInstanceField(param, "startTime", System.currentTimeMillis());
                             
+                            // 注意：对于 H5/小程序通用 RPC（alipay.client.executerpc），
+                            // rpcArgs[0] 才是真正的业务 operationType（如 com.alipay.gameevent.biz.rpc.submitEvent）。
+                            // 必须先提取 realOpType，且仅对 realOpType 做黑名单过滤。
+                            // 若直接对 opType("alipay.client.executerpc") 进行过滤，会命中黑名单关键词 "alipay.client" 导致所有 H5 请求被误杀！
                             if (isH5Rpc) {
                                 if (LifecycleManager.isUselessRpc(realOpType)) {
                                     return;
@@ -679,7 +684,7 @@ public class LifecycleManager {
                                 }
                             }
                             
-                            // 序列化入参
+                            // 序列化入参：有值则尽最大努力保留（FastJSON -> reflectDump -> 原值 toString），只有真正无入参时才为 "[]"
                             String paramsJson = "";
                             try {
                                 if (isH5Rpc && rpcArgs != null && rpcArgs.length >= 2 && rpcArgs[1] != null) {
@@ -690,7 +695,7 @@ public class LifecycleManager {
                                         try {
                                             paramsJson = new String((byte[]) reqData, java.nio.charset.StandardCharsets.UTF_8);
                                         } catch (Throwable e) {
-                                            paramsJson = reflectDump(reqData);
+                                            paramsJson = String.valueOf(reqData);
                                         }
                                     } else {
                                         try {
@@ -701,16 +706,23 @@ public class LifecycleManager {
                                             }
                                             paramsJson = (String) XposedHelpers.callStaticMethod(jsonClass, "toJSONString", reqData);
                                         } catch (Throwable e) {
-                                            paramsJson = reflectDump(reqData);
+                                            try {
+                                                paramsJson = reflectDump(reqData);
+                                            } catch (Throwable ex) {
+                                                paramsJson = String.valueOf(reqData);
+                                            }
                                         }
                                     }
-                                } else if (rpcArgs != null && rpcArgs.length > 0) {
-                                    Class<?> jsonClass = cachedFastJsonClass;
-                                    if (jsonClass == null) {
-                                        jsonClass = classLoader.loadClass("com.alibaba.fastjson.JSON");
-                                        cachedFastJsonClass = jsonClass;
+                                    if (paramsJson == null || paramsJson.isEmpty()) {
+                                        paramsJson = String.valueOf(reqData);
                                     }
+                                } else if (rpcArgs != null && rpcArgs.length > 0) {
                                     try {
+                                        Class<?> jsonClass = cachedFastJsonClass;
+                                        if (jsonClass == null) {
+                                            jsonClass = classLoader.loadClass("com.alibaba.fastjson.JSON");
+                                            cachedFastJsonClass = jsonClass;
+                                        }
                                         paramsJson = (String) XposedHelpers.callStaticMethod(jsonClass, "toJSONString", (Object) rpcArgs);
                                     } catch (Throwable e) {
                                         java.util.List<String> list = new java.util.ArrayList<>();
@@ -719,9 +731,10 @@ public class LifecycleManager {
                                                 list.add("null");
                                             } else {
                                                 try {
-                                                    list.add(reflectDump(arg));
+                                                    String dumped = reflectDump(arg);
+                                                    list.add(dumped != null ? dumped : String.valueOf(arg));
                                                 } catch (Throwable ex) {
-                                                    list.add("[DumpFailed: " + arg.getClass().getName() + "]");
+                                                    list.add(String.valueOf(arg));
                                                 }
                                             }
                                         }
@@ -731,7 +744,20 @@ public class LifecycleManager {
                                     paramsJson = "[]";
                                 }
                             } catch (Throwable t) {
-                                paramsJson = "[]";
+                                // 最终兜底：只要入参对象存在，就使用原值（String.valueOf），绝不误降级为 "[]"
+                                if (rpcArgs != null && rpcArgs.length > 0) {
+                                    try {
+                                        java.util.List<String> list = new java.util.ArrayList<>();
+                                        for (Object arg : rpcArgs) {
+                                            list.add(arg == null ? "null" : String.valueOf(arg));
+                                        }
+                                        paramsJson = list.toString();
+                                    } catch (Throwable ignored) {
+                                        paramsJson = "[]";
+                                    }
+                                } else {
+                                    paramsJson = "[]";
+                                }
                             }
                             XposedHelpers.setAdditionalInstanceField(param, "paramsJson", paramsJson);
                         }
