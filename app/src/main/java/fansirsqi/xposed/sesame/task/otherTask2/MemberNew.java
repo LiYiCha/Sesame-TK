@@ -164,12 +164,18 @@ public class MemberNew extends BaseCommTask {
             }
 
         } catch (Throwable th) {
-            Log.error(TAG, "任务执行异常: " + th.getMessage());
-            sleepRandomTime();
+            if (th instanceof java.util.concurrent.CancellationException || th instanceof InterruptedException || (th.getCause() instanceof InterruptedException)) {
+                Log.runtime(TAG, "会员积分任务已停止运行");
+            } else {
+                Log.error(TAG, "任务执行异常: " + th.getMessage());
+                sleepRandomTime();
+            }
         } finally {
             isRunning.set(false);
             executionLock.unlock();
-            TimeUtil.sleep((long) this.executeIntervalInt);
+            if (!Thread.currentThread().isInterrupted()) {
+                TimeUtil.sleep((long) this.executeIntervalInt);
+            }
         }
     }
 

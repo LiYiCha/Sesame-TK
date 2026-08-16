@@ -9,6 +9,7 @@ class MyApplication : Application() {
         // 全局初始化 ViewAppInfo，包含 MMKVUtil 和 DataStore 的初始化，
         // 确保无论从任何组件（包括 RpcDebugActivity）直接拉起，MMKV 均已初始化完毕。
         ViewAppInfo.init(this)
+        fansirsqi.xposed.sesame.util.ToastUtil.init(this)
         fansirsqi.xposed.sesame.ui.theme.app.HolidayTheme.applyGlobalNightMode()
     }
 }

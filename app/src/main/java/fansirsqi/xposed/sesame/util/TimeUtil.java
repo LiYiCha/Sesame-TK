@@ -173,10 +173,7 @@ public class TimeUtil {
         try {
             Thread.sleep(millis);
         } catch (InterruptedException e) {
-            Log.system("线程错误："+e);
-            Log.error("线程错误："+e);
-            Log.other("线程错误："+e);
-            throw new RuntimeException(e);
+            Thread.currentThread().interrupt();
         }
     }
     /**

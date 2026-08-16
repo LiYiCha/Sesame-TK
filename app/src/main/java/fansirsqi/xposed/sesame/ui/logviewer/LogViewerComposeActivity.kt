@@ -148,7 +148,7 @@ class LogViewerComposeActivity : ComponentActivity() {
             val exportFile = Files.exportFile(File(path), true)
 
             if (exportFile?.exists() == true) {
-                ToastUtil.showToast("文件已导出: ${exportFile.path}")
+                ToastUtil.showToast(this, "文件已导出: ${exportFile.path}")
             } else {
                 Log.runtime(TAG, "导出失败")
             }
@@ -394,8 +394,12 @@ fun LogViewerScreen(
         ) {
             var webViewInstance by remember { mutableStateOf<android.webkit.WebView?>(null) }
 
-            // 搜索面板
-            if (uiState.showSearchPanel) {
+            // 紧凑搜索栏（平滑展开/收起）
+            androidx.compose.animation.AnimatedVisibility(
+                visible = uiState.showSearchPanel,
+                enter = androidx.compose.animation.expandVertically() + androidx.compose.animation.fadeIn(),
+                exit = androidx.compose.animation.shrinkVertically() + androidx.compose.animation.fadeOut()
+            ) {
                 SearchPanel(
                     viewModel = viewModel,
                     uiState = uiState,
@@ -403,8 +407,12 @@ fun LogViewerScreen(
                 )
             }
 
-            // 筛选面板
-            if (showFilterPanel) {
+            // 紧凑筛选栏（平滑展开/收起）
+            androidx.compose.animation.AnimatedVisibility(
+                visible = showFilterPanel,
+                enter = androidx.compose.animation.expandVertically() + androidx.compose.animation.fadeIn(),
+                exit = androidx.compose.animation.shrinkVertically() + androidx.compose.animation.fadeOut()
+            ) {
                 FilterPanel(
                     viewModel = viewModel,
                     uiState = uiState,

@@ -28,7 +28,20 @@ public class ToastUtil {
      */
     private static Context getContext() {
         if (appContext == null) {
-            throw new IllegalStateException("ToastUtil is not initialized. Call ToastUtil.init(context) in Application.");
+            try {
+                Context ctx = fansirsqi.xposed.sesame.hook.context.AppContext.getAppContext();
+                if (ctx != null) {
+                    appContext = ctx.getApplicationContext();
+                }
+            } catch (Throwable ignored) {}
+        }
+        if (appContext == null) {
+            try {
+                Context ctx = fansirsqi.xposed.sesame.hook.ApplicationHook.getAppContext();
+                if (ctx != null) {
+                    appContext = ctx.getApplicationContext();
+                }
+            } catch (Throwable ignored) {}
         }
         return appContext;
     }
@@ -38,7 +51,12 @@ public class ToastUtil {
      * @param message 显示的消息
      */
     public static void showToast(String message) {
-        showToast(getContext(), message);
+        Context ctx = getContext();
+        if (ctx != null) {
+            showToast(ctx, message);
+        } else {
+            Log.runtime("ToastUtil", "Context 未初始化，无法弹出 Toast: " + message);
+        }
     }
     /**
      * 显示自定义 Toast
@@ -49,6 +67,13 @@ public class ToastUtil {
     @SuppressLint("InflateParams")
     @SuppressWarnings("deprecation")
     public static void showToast(Context context, String message) {
+        if (context == null) {
+            context = getContext();
+        }
+        if (context == null) {
+            Log.runtime("ToastUtil", "Context 为空，无法弹出 Toast: " + message);
+            return;
+        }
         Log.runtime("try showToast: " + message);
         try {
             LayoutInflater inflater = (LayoutInflater) context.getSystemService(Context.LAYOUT_INFLATER_SERVICE);
@@ -64,7 +89,9 @@ public class ToastUtil {
         } catch (Exception e) {
             Log.printStackTrace(e);
             // 回退到原生Toast
-            Toast.makeText(context, message, Toast.LENGTH_SHORT).show();
+            try {
+                Toast.makeText(context, message, Toast.LENGTH_SHORT).show();
+            } catch (Throwable ignored) {}
         }
     }
     /**
@@ -87,6 +114,13 @@ public class ToastUtil {
      */
     @SuppressWarnings("deprecation")
     public static Toast makeText(Context context, String message, int duration) {
+        if (context == null) {
+            context = getContext();
+        }
+        if (context == null) {
+            Log.runtime("ToastUtil", "Context 为空，无法创建 Toast: " + message);
+            return null;
+        }
         try {
             LayoutInflater inflater = (LayoutInflater) context.getSystemService(Context.LAYOUT_INFLATER_SERVICE);
             @SuppressLint("InflateParams")

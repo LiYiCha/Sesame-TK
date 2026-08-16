@@ -133,32 +133,72 @@ public class Log {
         capture("[" + TAG + "]: " + message);
     }
 
+    public static boolean isCancellationOrInterrupt(Throwable th) {
+        if (th == null) return false;
+        Throwable curr = th;
+        int depth = 0;
+        while (curr != null && depth++ < 10) {
+            if (curr instanceof java.util.concurrent.CancellationException
+                    || curr instanceof InterruptedException
+                    || curr.getClass().getName().contains("CancellationException")
+                    || curr.getClass().getName().contains("InterruptedException")) {
+                return true;
+            }
+            curr = curr.getCause();
+        }
+        return false;
+    }
+
     public static void printStackTrace(Throwable th) {
+        if (isCancellationOrInterrupt(th)) {
+            runtime("任务已取消/中断: " + th.getClass().getSimpleName());
+            return;
+        }
         String stackTrace = "error: " + android.util.Log.getStackTraceString(th);
         error(stackTrace);
     }
 
     public static void printStackTrace(String msg, Throwable th) {
+        if (isCancellationOrInterrupt(th)) {
+            runtime("[" + msg + "] 任务已取消/中断");
+            return;
+        }
         String stackTrace = "Throwable error: " + android.util.Log.getStackTraceString(th);
         error(msg, stackTrace);
     }
 
     public static void printStackTrace(String TAG, String msg, Throwable th) {
+        if (isCancellationOrInterrupt(th)) {
+            runtime("[" + TAG + "] " + msg + " 任务已取消/中断");
+            return;
+        }
         String stackTrace = "[" + TAG + "] Throwable error: " + android.util.Log.getStackTraceString(th);
         error(msg, stackTrace);
     }
 
     public static void printStackTrace(Exception e) {
+        if (isCancellationOrInterrupt(e)) {
+            runtime("任务已取消/中断: " + e.getClass().getSimpleName());
+            return;
+        }
         String stackTrace = "Exception error: " + android.util.Log.getStackTraceString(e);
         error(stackTrace);
     }
 
     public static void printStackTrace(String msg, Exception e) {
+        if (isCancellationOrInterrupt(e)) {
+            runtime("[" + msg + "] 任务已取消/中断");
+            return;
+        }
         String stackTrace = "Throwable error: " + android.util.Log.getStackTraceString(e);
         error(msg, stackTrace);
     }
 
     public static void printStackTrace(String TAG, String msg, Exception e) {
+        if (isCancellationOrInterrupt(e)) {
+            runtime("[" + TAG + "] " + msg + " 任务已取消/中断");
+            return;
+        }
         String stackTrace = "[" + TAG + "] Throwable error: " + android.util.Log.getStackTraceString(e);
         error(msg, stackTrace);
     }

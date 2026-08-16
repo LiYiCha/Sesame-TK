@@ -7,14 +7,10 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
-import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
-import androidx.compose.foundation.gestures.draggable
-import androidx.compose.foundation.gestures.rememberDraggableState
 import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -35,7 +31,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChanged
 import androidx.compose.ui.layout.onSizeChanged
@@ -51,21 +46,21 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.unit.IntOffset
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.Job
 import kotlin.math.roundToInt
-import android.widget.TextView
-import android.util.TypedValue
 import android.graphics.Typeface
 import android.text.SpannableString
 import android.text.style.ForegroundColorSpan
 import android.text.style.BackgroundColorSpan
 import android.text.style.StyleSpan
 import androidx.compose.foundation.isSystemInDarkTheme
-import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.graphics.toArgb
 
+import androidx.compose.ui.tooling.preview.Preview
+import android.content.res.Configuration
+import fansirsqi.xposed.sesame.ui.theme.app.SesameTheme
+
 /**
- * 搜索面板（重设计 — 蓝色装饰条）
+ * 精致 2 行紧凑搜索栏（高度约 72dp，清晰整洁，极大释放屏幕空间）
  */
 @Composable
 fun SearchPanel(
@@ -73,119 +68,241 @@ fun SearchPanel(
     uiState: LogViewerViewModel.UiState,
     onDismiss: () -> Unit
 ) {
-    var searchText by remember { mutableStateOf(uiState.searchKeyword) }
-    val accentColor = MaterialTheme.colorScheme.primary
+    SearchPanelContent(
+        searchKeyword = uiState.searchKeyword,
+        isRegexSearch = uiState.isRegexSearch,
+        isCaseSensitive = uiState.isCaseSensitive,
+        currentSearchIndex = uiState.currentSearchIndex,
+        totalSearchResults = uiState.searchResults.size,
+        onSearchChange = { keyword ->
+            viewModel.setSearchKeyword(keyword)
+            if (keyword.isNotEmpty()) {
+                viewModel.performSearch()
+            } else {
+                viewModel.clearSearch()
+            }
+        },
+        onToggleRegex = {
+            viewModel.toggleRegexSearch()
+            if (uiState.searchKeyword.isNotEmpty()) viewModel.performSearch()
+        },
+        onToggleCase = {
+            viewModel.toggleCaseSensitive()
+            if (uiState.searchKeyword.isNotEmpty()) viewModel.performSearch()
+        },
+        onSearchPrev = { viewModel.searchPrev() },
+        onSearchNext = { viewModel.searchNext() },
+        onClearSearch = { viewModel.clearSearch() },
+        onDismiss = onDismiss
+    )
+}
+
+/**
+ * 搜索栏无状态 2 行内容组件（用于业务调用与 Compose @Preview 预览）
+ */
+@Composable
+fun SearchPanelContent(
+    searchKeyword: String,
+    isRegexSearch: Boolean,
+    isCaseSensitive: Boolean,
+    currentSearchIndex: Int,
+    totalSearchResults: Int,
+    onSearchChange: (String) -> Unit,
+    onToggleRegex: () -> Unit,
+    onToggleCase: () -> Unit,
+    onSearchPrev: () -> Unit,
+    onSearchNext: () -> Unit,
+    onClearSearch: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    var searchText by remember(searchKeyword) { mutableStateOf(searchKeyword) }
+    val primaryColor = MaterialTheme.colorScheme.primary
+    val containerColor = MaterialTheme.colorScheme.surfaceColorAtElevation(3.dp)
 
     Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 8.dp, vertical = 6.dp),
-        color = MaterialTheme.colorScheme.surface,
-        tonalElevation = 2.dp,
-        shape = RoundedCornerShape(12.dp)
+            .padding(horizontal = 8.dp, vertical = 3.dp),
+        color = containerColor,
+        tonalElevation = 3.dp,
+        shadowElevation = 2.dp,
+        shape = RoundedCornerShape(10.dp),
+        border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
     ) {
-        Row(modifier = Modifier.fillMaxWidth().height(IntrinsicSize.Min)) {
-            // 左侧浅色装饰条
-            Box(
-                modifier = Modifier
-                    .width(4.dp)
-                    .fillMaxHeight()
-                    .background(accentColor.copy(alpha = 0.15f), RoundedCornerShape(topStart = 12.dp, bottomStart = 12.dp))
-            )
-            Column(
-                modifier = Modifier
-                    .weight(1f)
-                    .padding(16.dp)
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 10.dp, vertical = 6.dp)
+        ) {
+            // 第一行：输入框 + 清除 + 关闭
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text("搜索", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                    IconButton(onClick = onDismiss, modifier = Modifier.size(28.dp)) {
-                        Icon(Icons.Default.Close, "关闭", modifier = Modifier.size(18.dp))
-                    }
-                }
-                Spacer(Modifier.height(12.dp))
-
-                OutlinedTextField(
-                    value = searchText,
-                    onValueChange = { searchText = it },
-                    modifier = Modifier.fillMaxWidth(),
-                    placeholder = { Text("输入搜索关键字…", style = MaterialTheme.typography.bodyMedium) },
-                    singleLine = true,
-                    textStyle = MaterialTheme.typography.bodyMedium,
-                    shape = RoundedCornerShape(10.dp)
+                Icon(
+                    Icons.Rounded.Search,
+                    contentDescription = null,
+                    tint = primaryColor,
+                    modifier = Modifier.size(18.dp)
                 )
-                Spacer(Modifier.height(10.dp))
 
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    FilterChip(
-                        selected = uiState.isRegexSearch,
-                        onClick = {
-                            viewModel.toggleRegexSearch()
-                            if (uiState.searchKeyword.isNotEmpty()) viewModel.performSearch()
-                        },
-                        label = { Text("正则", fontSize = 12.sp) },
-                        shape = RoundedCornerShape(20.dp)
-                    )
-                    FilterChip(
-                        selected = uiState.isCaseSensitive,
-                        onClick = {
-                            viewModel.toggleCaseSensitive()
-                            if (uiState.searchKeyword.isNotEmpty()) viewModel.performSearch()
-                        },
-                        label = { Text("区分大小写", fontSize = 12.sp) },
-                        shape = RoundedCornerShape(20.dp)
-                    )
-                }
-                Spacer(Modifier.height(12.dp))
+                Spacer(Modifier.width(8.dp))
 
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .padding(vertical = 4.dp),
+                    contentAlignment = Alignment.CenterStart
                 ) {
-                    Button(
-                        onClick = {
-                            viewModel.setSearchKeyword(searchText)
-                            viewModel.performSearch()
+                    if (searchText.isEmpty()) {
+                        Text(
+                            "输入搜索关键字 (实时查找)...",
+                            style = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.sp),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                        )
+                    }
+                    androidx.compose.foundation.text.BasicTextField(
+                        value = searchText,
+                        onValueChange = {
+                            searchText = it
+                            onSearchChange(it)
                         },
-                        modifier = Modifier.weight(1f).height(42.dp),
-                        shape = RoundedCornerShape(10.dp)
-                    ) {
-                        Icon(Icons.Default.Search, null, modifier = Modifier.size(16.dp))
-                        Spacer(Modifier.width(6.dp))
-                        Text("搜索", fontSize = 13.sp)
-                    }
-                    IconButton(
-                        onClick = { viewModel.searchPrev() },
-                        enabled = uiState.searchResults.isNotEmpty(),
-                        modifier = Modifier.size(40.dp)
-                    ) {
-                        Icon(Icons.Default.KeyboardArrowUp, "上一个", modifier = Modifier.size(22.dp))
-                    }
-                    IconButton(
-                        onClick = { viewModel.searchNext() },
-                        enabled = uiState.searchResults.isNotEmpty(),
-                        modifier = Modifier.size(40.dp)
-                    ) {
-                        Icon(Icons.Default.KeyboardArrowDown, "下一个", modifier = Modifier.size(22.dp))
-                    }
-                    TextButton(
-                        onClick = { viewModel.clearSearch() },
-                        modifier = Modifier.height(42.dp)
-                    ) { Text("清除", fontSize = 12.sp) }
+                        singleLine = true,
+                        textStyle = MaterialTheme.typography.bodyMedium.copy(
+                            fontSize = 13.sp,
+                            color = MaterialTheme.colorScheme.onSurface
+                        ),
+                        cursorBrush = androidx.compose.ui.graphics.SolidColor(primaryColor),
+                        modifier = Modifier.fillMaxWidth()
+                    )
                 }
 
-                if (uiState.searchResults.isNotEmpty()) {
-                    Spacer(Modifier.height(8.dp))
-                    Text(
-                        "${uiState.currentSearchIndex + 1}/${uiState.searchResults.size}",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.primary
+                if (searchText.isNotEmpty()) {
+                    IconButton(
+                        onClick = {
+                            searchText = ""
+                            onClearSearch()
+                        },
+                        modifier = Modifier.size(26.dp)
+                    ) {
+                        Icon(
+                            Icons.Rounded.Close,
+                            contentDescription = "清除输入",
+                            modifier = Modifier.size(15.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+
+                IconButton(
+                    onClick = onDismiss,
+                    modifier = Modifier.size(26.dp)
+                ) {
+                    Icon(
+                        Icons.Rounded.Close,
+                        contentDescription = "关闭搜索",
+                        modifier = Modifier.size(16.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
                     )
+                }
+            }
+
+            Spacer(Modifier.height(6.dp))
+
+            // 第二行：控制胶囊 + 匹配导航
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // 左侧开关：正则 & 大小写
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Surface(
+                        modifier = Modifier.clickable { onToggleRegex() },
+                        shape = RoundedCornerShape(6.dp),
+                        color = if (isRegexSearch) primaryColor.copy(alpha = 0.18f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+                        border = BorderStroke(
+                            0.5.dp,
+                            if (isRegexSearch) primaryColor.copy(alpha = 0.6f) else Color.Transparent
+                        )
+                    ) {
+                        Text(
+                            ".* 正则",
+                            fontSize = 11.5.sp,
+                            fontWeight = if (isRegexSearch) FontWeight.Bold else FontWeight.Normal,
+                            color = if (isRegexSearch) primaryColor else MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                        )
+                    }
+
+                    Surface(
+                        modifier = Modifier.clickable { onToggleCase() },
+                        shape = RoundedCornerShape(6.dp),
+                        color = if (isCaseSensitive) primaryColor.copy(alpha = 0.18f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+                        border = BorderStroke(
+                            0.5.dp,
+                            if (isCaseSensitive) primaryColor.copy(alpha = 0.6f) else Color.Transparent
+                        )
+                    ) {
+                        Text(
+                            "Aa 区分大小写",
+                            fontSize = 11.5.sp,
+                            fontWeight = if (isCaseSensitive) FontWeight.Bold else FontWeight.Normal,
+                            color = if (isCaseSensitive) primaryColor else MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                        )
+                    }
+                }
+
+                // 右侧：匹配结果计数与上一条/下一条
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(2.dp)
+                ) {
+                    if (totalSearchResults > 0) {
+                        Surface(
+                            color = primaryColor.copy(alpha = 0.12f),
+                            shape = RoundedCornerShape(10.dp)
+                        ) {
+                            Text(
+                                "${currentSearchIndex + 1}/$totalSearchResults",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = primaryColor,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.5.dp)
+                            )
+                        }
+                    } else if (searchText.isNotEmpty()) {
+                        Text("无匹配", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f))
+                    }
+
+                    Spacer(Modifier.width(4.dp))
+
+                    IconButton(
+                        onClick = onSearchPrev,
+                        enabled = totalSearchResults > 0,
+                        modifier = Modifier.size(28.dp)
+                    ) {
+                        Icon(
+                            Icons.Rounded.KeyboardArrowUp,
+                            contentDescription = "上一个",
+                            modifier = Modifier.size(18.dp),
+                            tint = if (totalSearchResults > 0) primaryColor else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f)
+                        )
+                    }
+
+                    IconButton(
+                        onClick = onSearchNext,
+                        enabled = totalSearchResults > 0,
+                        modifier = Modifier.size(28.dp)
+                    ) {
+                        Icon(
+                            Icons.Rounded.KeyboardArrowDown,
+                            contentDescription = "下一个",
+                            modifier = Modifier.size(18.dp),
+                            tint = if (totalSearchResults > 0) primaryColor else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f)
+                        )
+                    }
                 }
             }
         }
@@ -193,7 +310,7 @@ fun SearchPanel(
 }
 
 /**
- * 筛选面板（左侧浅绿色装饰条）
+ * 筛选面板
  */
 @Composable
 fun FilterPanel(
@@ -201,165 +318,351 @@ fun FilterPanel(
     uiState: LogViewerViewModel.UiState,
     onDismiss: () -> Unit
 ) {
-    var filterText by remember { mutableStateOf(uiState.filterKeyword) }
-    val accentColor = Color(0xFF10B981)
+    FilterPanelContent(
+        filterKeyword = uiState.filterKeyword,
+        isCaptureLog = uiState.isCaptureLog,
+        showH5 = uiState.showH5,
+        showBottom = uiState.showBottom,
+        onFilterChange = { viewModel.setFilterKeyword(it) },
+        onToggleH5 = { viewModel.toggleShowH5() },
+        onToggleBottom = { viewModel.toggleShowBottom() },
+        onClearFilter = { viewModel.clearFilter() },
+        onDismiss = onDismiss
+    )
+}
+
+/**
+ * 筛选栏无状态 2 行内容组件（用于业务调用与 Compose @Preview 预览）
+ */
+@Composable
+fun FilterPanelContent(
+    filterKeyword: String,
+    isCaptureLog: Boolean,
+    showH5: Boolean,
+    showBottom: Boolean,
+    onFilterChange: (String) -> Unit,
+    onToggleH5: () -> Unit,
+    onToggleBottom: () -> Unit,
+    onClearFilter: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    var filterText by remember(filterKeyword) { mutableStateOf(filterKeyword) }
+    val filterColor = MaterialTheme.colorScheme.primary
+    val containerColor = MaterialTheme.colorScheme.surfaceColorAtElevation(3.dp)
 
     Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 8.dp, vertical = 6.dp),
-        color = MaterialTheme.colorScheme.surface,
-        tonalElevation = 2.dp,
-        shape = RoundedCornerShape(12.dp)
+            .padding(horizontal = 8.dp, vertical = 3.dp),
+        color = containerColor,
+        tonalElevation = 3.dp,
+        shadowElevation = 2.dp,
+        shape = RoundedCornerShape(10.dp),
+        border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
     ) {
-        Row(modifier = Modifier.fillMaxWidth().height(IntrinsicSize.Min)) {
-            Box(
-                modifier = Modifier
-                    .width(4.dp)
-                    .fillMaxHeight()
-                    .background(accentColor.copy(alpha = 0.15f), RoundedCornerShape(topStart = 12.dp, bottomStart = 12.dp))
-            )
-            Column(
-                modifier = Modifier
-                    .weight(1f)
-                    .padding(16.dp)
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 10.dp, vertical = 6.dp)
+        ) {
+            // 第一行：关键字过滤输入框 + 清空 + 关闭
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text("筛选", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                    IconButton(onClick = onDismiss, modifier = Modifier.size(28.dp)) {
-                        Icon(Icons.Default.Close, "关闭", modifier = Modifier.size(18.dp))
-                    }
-                }
-                Spacer(Modifier.height(12.dp))
-
-                OutlinedTextField(
-                    value = filterText,
-                    onValueChange = { filterText = it },
-                    modifier = Modifier.fillMaxWidth(),
-                    placeholder = { Text("输入筛选关键字…", style = MaterialTheme.typography.bodyMedium) },
-                    singleLine = true,
-                    textStyle = MaterialTheme.typography.bodyMedium,
-                    shape = RoundedCornerShape(10.dp)
+                Icon(
+                    Icons.Rounded.FilterList,
+                    contentDescription = null,
+                    tint = filterColor,
+                    modifier = Modifier.size(18.dp)
                 )
 
-                if (uiState.isCaptureLog) {
-                    Spacer(Modifier.height(12.dp))
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(16.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                Spacer(Modifier.width(8.dp))
+
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .padding(vertical = 4.dp),
+                    contentAlignment = Alignment.CenterStart
+                ) {
+                    if (filterText.isEmpty()) {
+                        Text(
+                            "按关键字实时过滤日志行...",
+                            style = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.sp),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                        )
+                    }
+                    androidx.compose.foundation.text.BasicTextField(
+                        value = filterText,
+                        onValueChange = {
+                            filterText = it
+                            onFilterChange(it)
+                        },
+                        singleLine = true,
+                        textStyle = MaterialTheme.typography.bodyMedium.copy(
+                            fontSize = 13.sp,
+                            color = MaterialTheme.colorScheme.onSurface
+                        ),
+                        cursorBrush = androidx.compose.ui.graphics.SolidColor(filterColor),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+
+                if (filterText.isNotEmpty()) {
+                    IconButton(
+                        onClick = {
+                            filterText = ""
+                            onClearFilter()
+                        },
+                        modifier = Modifier.size(26.dp)
                     ) {
-                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.clickable { viewModel.toggleShowH5() }) {
-                            Checkbox(checked = uiState.showH5, onCheckedChange = { viewModel.toggleShowH5() }, modifier = Modifier.size(20.dp))
-                            Spacer(Modifier.width(6.dp))
-                            Text("H5 容器", fontSize = 12.sp)
-                        }
-                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.clickable { viewModel.toggleShowBottom() }) {
-                            Checkbox(checked = uiState.showBottom, onCheckedChange = { viewModel.toggleShowBottom() }, modifier = Modifier.size(20.dp))
-                            Spacer(Modifier.width(6.dp))
-                            Text("底层 RPC", fontSize = 12.sp)
-                        }
+                        Icon(
+                            Icons.Rounded.Close,
+                            contentDescription = "清除关键字",
+                            modifier = Modifier.size(15.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     }
                 }
 
-                Spacer(Modifier.height(12.dp))
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                IconButton(
+                    onClick = onDismiss,
+                    modifier = Modifier.size(26.dp)
                 ) {
-                    Button(
-                        onClick = { viewModel.setFilterKeyword(filterText) },
-                        modifier = Modifier.weight(1f).height(42.dp),
-                        shape = RoundedCornerShape(10.dp)
-                    ) { Text("应用筛选", fontSize = 13.sp) }
-                    TextButton(
-                        onClick = {
-                            filterText = ""
-                            viewModel.clearFilter()
-                        },
-                        modifier = Modifier.height(42.dp)
-                    ) { Text("清除", fontSize = 12.sp) }
+                    Icon(
+                        Icons.Rounded.Close,
+                        contentDescription = "关闭筛选",
+                        modifier = Modifier.size(16.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+
+            Spacer(Modifier.height(6.dp))
+
+            // 第二行：抓包分类切换胶囊 & 状态
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                if (isCaptureLog) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Surface(
+                            modifier = Modifier.clickable { onToggleH5() },
+                            shape = RoundedCornerShape(6.dp),
+                            color = if (showH5) MaterialTheme.colorScheme.primary.copy(alpha = 0.18f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+                            border = BorderStroke(0.5.dp, if (showH5) MaterialTheme.colorScheme.primary.copy(alpha = 0.6f) else Color.Transparent)
+                        ) {
+                            Text(
+                                "🌐 H5 容器",
+                                fontSize = 11.5.sp,
+                                fontWeight = if (showH5) FontWeight.Bold else FontWeight.Normal,
+                                color = if (showH5) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                            )
+                        }
+
+                        Surface(
+                            modifier = Modifier.clickable { onToggleBottom() },
+                            shape = RoundedCornerShape(6.dp),
+                            color = if (showBottom) MaterialTheme.colorScheme.primary.copy(alpha = 0.18f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+                            border = BorderStroke(0.5.dp, if (showBottom) MaterialTheme.colorScheme.primary.copy(alpha = 0.6f) else Color.Transparent)
+                        ) {
+                            Text(
+                                "⚡ 底层 RPC",
+                                fontSize = 11.5.sp,
+                                fontWeight = if (showBottom) FontWeight.Bold else FontWeight.Normal,
+                                color = if (showBottom) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                            )
+                        }
+                    }
+                } else {
+                    Text(
+                        if (filterText.isEmpty()) "支持输入任意文本实时过滤" else "已应用过滤",
+                        fontSize = 11.5.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                    )
+                }
+
+                if (filterText.isNotEmpty()) {
+                    Text(
+                        "重置过滤",
+                        fontSize = 11.5.sp,
+                        color = filterColor,
+                        fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier
+                            .clickable {
+                                filterText = ""
+                                onClearFilter()
+                            }
+                            .padding(4.dp)
+                    )
                 }
             }
         }
     }
 }
 
-/**
- * 日志级别过滤面板（左侧浅琥珀色装饰条）
- */
-@Composable
-fun LogLevelFilterPanel(
-    viewModel: LogViewerViewModel,
-    uiState: LogViewerViewModel.UiState,
-    onDismiss: () -> Unit
-) {
-    val accentColor = Color(0xFFF59E0B)
+// =========================================================================
+// Jetpack Compose @Preview 预览组（支持 Android Studio 实时视觉预览）
+// =========================================================================
 
-    Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 8.dp, vertical = 6.dp),
-        color = MaterialTheme.colorScheme.surface,
-        tonalElevation = 2.dp,
-        shape = RoundedCornerShape(12.dp)
-    ) {
-        Row(modifier = Modifier.fillMaxWidth().height(IntrinsicSize.Min)) {
-            Box(
-                modifier = Modifier
-                    .width(4.dp)
-                    .fillMaxHeight()
-                    .background(accentColor.copy(alpha = 0.15f), RoundedCornerShape(topStart = 12.dp, bottomStart = 12.dp))
+@Preview(name = "2行搜索栏 - 浅色模式", showBackground = true)
+@Preview(name = "2行搜索栏 - 深色模式", uiMode = Configuration.UI_MODE_NIGHT_YES, showBackground = true)
+@Composable
+fun PreviewSearchPanel() {
+    SesameTheme {
+        Box(modifier = Modifier.fillMaxWidth().padding(8.dp)) {
+            SearchPanelContent(
+                searchKeyword = "MemberNew",
+                isRegexSearch = true,
+                isCaseSensitive = false,
+                currentSearchIndex = 1,
+                totalSearchResults = 4,
+                onSearchChange = {},
+                onToggleRegex = {},
+                onToggleCase = {},
+                onSearchPrev = {},
+                onSearchNext = {},
+                onClearSearch = {},
+                onDismiss = {}
             )
-            Column(
-                modifier = Modifier
-                    .weight(1f)
-                    .padding(16.dp)
+        }
+    }
+}
+
+@Preview(name = "2行筛选栏 - 浅色模式", showBackground = true)
+@Preview(name = "2行筛选栏 - 深色模式", uiMode = Configuration.UI_MODE_NIGHT_YES, showBackground = true)
+@Composable
+fun PreviewFilterPanel() {
+    SesameTheme {
+        Box(modifier = Modifier.fillMaxWidth().padding(8.dp)) {
+            FilterPanelContent(
+                filterKeyword = "Exception",
+                isCaptureLog = true,
+                showH5 = true,
+                showBottom = false,
+                onFilterChange = {},
+                onToggleH5 = {},
+                onToggleBottom = {},
+                onClearFilter = {},
+                onDismiss = {}
+            )
+        }
+    }
+}
+
+@Preview(name = "日志界面完整视图 - 深色", uiMode = Configuration.UI_MODE_NIGHT_YES, showBackground = true, heightDp = 640)
+@Preview(name = "日志界面完整视图 - 浅色", showBackground = true, heightDp = 640)
+@Composable
+fun PreviewLogViewerFullMock() {
+    SesameTheme {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(MaterialTheme.colorScheme.background)
+        ) {
+            // 模拟 TopBar
+            Surface(
+                color = MaterialTheme.colorScheme.primaryContainer,
+                modifier = Modifier.fillMaxWidth().height(48.dp)
             ) {
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier.fillMaxSize().padding(horizontal = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(
+                        "日志查看器",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Icon(Icons.Rounded.Search, null, tint = MaterialTheme.colorScheme.onPrimaryContainer, modifier = Modifier.size(20.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Icon(Icons.Rounded.FilterList, null, tint = MaterialTheme.colorScheme.onPrimaryContainer, modifier = Modifier.size(20.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Icon(Icons.Rounded.MoreVert, null, tint = MaterialTheme.colorScheme.onPrimaryContainer, modifier = Modifier.size(20.dp))
+                    }
+                }
+            }
+
+            // 2行紧凑搜索栏
+            SearchPanelContent(
+                searchKeyword = "MemberNew",
+                isRegexSearch = false,
+                isCaseSensitive = false,
+                currentSearchIndex = 0,
+                totalSearchResults = 3,
+                onSearchChange = {},
+                onToggleRegex = {},
+                onToggleCase = {},
+                onSearchPrev = {},
+                onSearchNext = {},
+                onClearSearch = {},
+                onDismiss = {}
+            )
+
+            // 2行紧凑筛选栏
+            FilterPanelContent(
+                filterKeyword = "",
+                isCaptureLog = false,
+                showH5 = false,
+                showBottom = false,
+                onFilterChange = {},
+                onToggleH5 = {},
+                onToggleBottom = {},
+                onClearFilter = {},
+                onDismiss = {}
+            )
+
+            // 状态栏
+            Surface(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 2.dp),
+                color = MaterialTheme.colorScheme.surface,
+                shape = RoundedCornerShape(8.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 4.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text("日志级别", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                    IconButton(onClick = onDismiss, modifier = Modifier.size(28.dp)) {
-                        Icon(Icons.Default.Close, "关闭", modifier = Modifier.size(18.dp))
+                    Text("共 142 行日志 · 找到 3 个结果", style = MaterialTheme.typography.labelSmall)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.VerticalAlignTop, null, modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.primary)
+                        Spacer(Modifier.width(6.dp))
+                        Icon(Icons.Default.VerticalAlignBottom, null, modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.primary)
                     }
                 }
-                Spacer(Modifier.height(10.dp))
+            }
 
-                LogViewerViewModel.LogLevel.entries.forEach { level ->
-                    val levelColor = when (level) {
-                        LogViewerViewModel.LogLevel.ERROR -> Color(0xFFEF4444)
-                        LogViewerViewModel.LogLevel.WARN -> Color(0xFFF59E0B)
-                        LogViewerViewModel.LogLevel.INFO -> Color(0xFF10B981)
-                        LogViewerViewModel.LogLevel.DEBUG -> Color(0xFF6B7280)
-                    }
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { viewModel.toggleLogLevel(level) }
-                            .padding(vertical = 6.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Checkbox(
-                            checked = level in uiState.enabledLogLevels,
-                            onCheckedChange = { viewModel.toggleLogLevel(level) },
-                            modifier = Modifier.size(20.dp)
-                        )
-                        Spacer(Modifier.width(10.dp))
-                        Box(
-                            modifier = Modifier
-                                .size(8.dp)
-                                .background(levelColor, RoundedCornerShape(4.dp))
-                        )
-                        Spacer(Modifier.width(8.dp))
-                        Text(level.displayName, fontSize = 13.sp)
-                    }
+            // 模拟日志列表区域（占据绝大部分屏幕）
+            Surface(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth()
+                    .padding(8.dp),
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
+                shape = RoundedCornerShape(8.dp),
+                border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+            ) {
+                Column(modifier = Modifier.padding(8.dp)) {
+                    Text("19:30:01.12 [beta2026] [蚂蚁新农场]: queryOrchardTask: 获取到 8 个待完成任务", fontSize = 11.sp, fontFamily = FontFamily.Monospace)
+                    Spacer(Modifier.height(4.dp))
+                    Text("19:30:03.01 [beta2026] [⚔️其他任务2]: 启动并行任务: 会员任务 (MemberNew)", fontSize = 11.sp, fontFamily = FontFamily.Monospace, color = MaterialTheme.colorScheme.primary)
+                    Spacer(Modifier.height(4.dp))
+                    Text("19:30:03.25 [beta2026] [MemberNew]: MemberNew.handle() 初始化会员中心...", fontSize = 11.sp, fontFamily = FontFamily.Monospace)
+                    Spacer(Modifier.height(4.dp))
+                    Text("19:30:04.10 [beta2026] [⚔️其他任务2]: 执行常规任务: 芝麻炼金 (SesameAlchemy)", fontSize = 11.sp, fontFamily = FontFamily.Monospace)
+                    Spacer(Modifier.height(4.dp))
+                    Text("19:30:05.80 [beta2026] [MemberNew]: 成功领取每日积分 15 粒", fontSize = 11.sp, fontFamily = FontFamily.Monospace)
+                    Spacer(Modifier.height(4.dp))
+                    Text("19:30:08.50 [beta2026] [MemberNew]: 触发部分任务限流，进入等待", fontSize = 11.sp, fontFamily = FontFamily.Monospace, color = MaterialTheme.colorScheme.tertiary)
+                    Spacer(Modifier.height(4.dp))
+                    Text("19:30:15.00 [beta2026] [⚔️其他任务2]: 收到 ACTION_STOP 停止信号 -> 统一中断全部并行任务", fontSize = 11.sp, fontFamily = FontFamily.Monospace, color = MaterialTheme.colorScheme.primary)
                 }
             }
         }

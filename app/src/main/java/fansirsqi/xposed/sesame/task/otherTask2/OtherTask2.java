@@ -30,6 +30,8 @@ public class OtherTask2 extends ModelTask {
     private ExecutorService taskExecutor;
     // 当前异步任务的 Future，用于 stopTask 时中断线程
     private volatile Future<?> currentFuture;
+    // 所有并行子任务的 Future 列表，用于 stopTask 时统一中断
+    private final List<Future<?>> allFutures = new java.util.concurrent.CopyOnWriteArrayList<>();
     
     // 线程安全控制
     private final ReentrantLock executionLock = new ReentrantLock();
@@ -118,10 +120,11 @@ public class OtherTask2 extends ModelTask {
             return;
         }
         
-        // 懒创建线程池（被 stop 销毁后重新创建）
+        // 懒创建支持并发的线程池（被 stop 销毁后重新创建）
         if (taskExecutor == null || taskExecutor.isShutdown()) {
-            taskExecutor = Executors.newSingleThreadExecutor();
+            taskExecutor = Executors.newCachedThreadPool();
         }
+        allFutures.clear();
         
         currentFuture = taskExecutor.submit(() -> {
             executionLock.lock();
@@ -130,7 +133,7 @@ public class OtherTask2 extends ModelTask {
                 // 定义任务组
                 List<TaskGroup> taskGroups = new ArrayList<>();
 
-                // 第一组：核心任务
+                // 第一组：核心任务（会员任务设为并行执行，受 stopTask 统一控制）
                 taskGroups.add(new TaskGroup("核心任务", Arrays.asList(
                         new TaskWrapper("会员任务", () -> {
                             if (memberTaskNew.getValue()) {
@@ -138,7 +141,7 @@ public class OtherTask2 extends ModelTask {
                                     new MemberNew().handle();
                                 }
                             }
-                        }),
+                        }, true),
                         new TaskWrapper("芝麻炼金", () -> {
                             if (sesameAlchemyMy.getValue()) {
                                 new SesameAlchemy().run();
@@ -270,8 +273,12 @@ public class OtherTask2 extends ModelTask {
                 Log.runtime(TAG, "其他任务2执行完成");
 
             } catch (Throwable t) {
-                Log.error(TAG+"运行出错："+t);
-                Log.printStackTrace(t);
+                if (t instanceof java.util.concurrent.CancellationException || t instanceof InterruptedException || (t.getCause() instanceof InterruptedException)) {
+                    Log.runtime(TAG, "其他任务2已停止运行");
+                } else {
+                    Log.error(TAG + "运行出错：" + t);
+                    Log.printStackTrace(t);
+                }
             } finally {
                 isRunning.set(false);
                 executionLock.unlock();
@@ -282,24 +289,32 @@ public class OtherTask2 extends ModelTask {
     // 停止当前异步任务，中断执行线程 + 销毁线程池
     @Override
     public void stopTask() {
-        // 1. 中断当前运行的任务
+        // 1. 中断所有正在运行的并行任务
+        for (Future<?> f : allFutures) {
+            if (f != null && !f.isDone()) {
+                f.cancel(true);
+            }
+        }
+        allFutures.clear();
+
+        // 2. 中断当前运行的主任务
         Future<?> future = currentFuture;
         if (future != null && !future.isDone()) {
             future.cancel(true);
             currentFuture = null;
         }
 
-        // 2. 销毁线程池（shutdownNow 会中断工作线程）
+        // 3. 销毁线程池（shutdownNow 会中断所有工作线程）
         ExecutorService exec = taskExecutor;
         if (exec != null) {
             exec.shutdownNow();
             taskExecutor = null;
         }
 
-        // 3. 重置状态
+        // 4. 重置状态
         isRunning.set(false);
 
-        // 4. 调用父类清理协程
+        // 5. 调用父类清理协程
         super.stopTask();
     }
 
@@ -309,6 +324,9 @@ public class OtherTask2 extends ModelTask {
         int completedGroups = 0;
         
         for (int i = 0; i < totalGroups; i++) {
+            if (Thread.currentThread().isInterrupted()) {
+                break;
+            }
             TaskGroup group = taskGroups.get(i);
             try {
                 // 更新通知显示当前执行的组
@@ -318,11 +336,35 @@ public class OtherTask2 extends ModelTask {
                 int completedTasks = 0;
                 // 执行组内所有任务
                 for (TaskWrapper task : group.getTasks()) {
+                    if (Thread.currentThread().isInterrupted()) {
+                        break;
+                    }
                     try {
-                        //Log.runtime(TAG, "执行任务: " + task.taskName());
-                        task.execute();
+                        if (task.isAsync()) {
+                            // 并行异步执行
+                            Log.runtime(TAG, "启动并行任务: " + task.taskName());
+                            Future<?> asyncFuture = taskExecutor.submit(() -> {
+                                try {
+                                    task.task().run();
+                                } catch (Throwable t) {
+                                    if (t instanceof java.util.concurrent.CancellationException || t instanceof InterruptedException || (t.getCause() instanceof InterruptedException)) {
+                                        Log.runtime(TAG, "并行任务[" + task.taskName() + "]已停止");
+                                    } else {
+                                        Log.error(TAG, "并行任务[" + task.taskName() + "]异常: " + t.getMessage());
+                                        Log.printStackTrace(t);
+                                    }
+                                }
+                            });
+                            allFutures.add(asyncFuture);
+                        } else {
+                            // 顺序同步执行
+                            task.execute();
+                        }
                         completedTasks++;
                     } catch (Exception e) {
+                        if (e instanceof java.util.concurrent.CancellationException || e instanceof InterruptedException) {
+                            break;
+                        }
                         Log.error(TAG, "执行任务[" + task.taskName() + "]异常: " + e.getMessage());
                         // 继续执行其他任务，不因单个任务失败而中断
                     }
@@ -336,11 +378,14 @@ public class OtherTask2 extends ModelTask {
                     Thread.sleep(5000); // 休息时间
                 } catch (InterruptedException e) {
                     Thread.currentThread().interrupt();
-                    Log.error(TAG, "任务组间休息被中断");
+                    Log.runtime(TAG, "任务已终止 (任务组间休息被中断)");
                     break;
                 }
                 
             } catch (Exception e) {
+                if (e instanceof java.util.concurrent.CancellationException || e instanceof InterruptedException) {
+                    break;
+                }
                 Log.error(TAG, "执行任务组[" + group.getGroupName() + "]异常: " + e.getMessage());
                 // 继续执行下一个任务组
             }
@@ -360,20 +405,22 @@ public class OtherTask2 extends ModelTask {
 
     }
 
-        // 任务包装类
-        private record TaskWrapper(@Getter String taskName, Runnable task) {
-        public void execute() {
-                try {
-                    if (task != null) {
-                        task.run();
-                    }
-                } catch (Exception e) {
-                    Log.error(TAG, "任务[" + taskName + "]执行异常: " + e.getMessage());
-                    throw e; // 重新抛出异常以便上层处理
-                }
-            }
+    // 任务包装类（支持标记是否并行执行）
+    private record TaskWrapper(@Getter String taskName, Runnable task, boolean isAsync) {
+        public TaskWrapper(String taskName, Runnable task) {
+            this(taskName, task, false);
         }
 
-
+        public void execute() {
+            try {
+                if (task != null) {
+                    task.run();
+                }
+            } catch (Exception e) {
+                Log.error(TAG, "任务[" + taskName + "]执行异常: " + e.getMessage());
+                throw e; // 重新抛出异常以便上层处理
+            }
+        }
+    }
 
 }

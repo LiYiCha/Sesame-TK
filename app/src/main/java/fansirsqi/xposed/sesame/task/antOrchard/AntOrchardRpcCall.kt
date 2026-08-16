@@ -1,6 +1,7 @@
 package fansirsqi.xposed.sesame.task.antOrchard
 
 import fansirsqi.xposed.sesame.hook.RequestManager
+import fansirsqi.xposed.sesame.util.RandomUtil
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -114,6 +115,14 @@ object AntOrchardRpcCall {
         )
     }
 
+    fun finishTaskH5(sceneCode: String, taskType: String): String {
+        val outBizNo = "${taskType}_${System.currentTimeMillis()}_${RandomUtil.getRandomString(8)}"
+        return RequestManager.requestString(
+            "com.alipay.antiep.finishTask",
+            "[{\"outBizNo\":\"$outBizNo\",\"requestType\":\"H5\",\"sceneCode\":\"$sceneCode\",\"source\":\"H5\",\"taskType\":\"$taskType\"}]"
+        )
+    }
+
     fun submitUserPlayDurationAction(gameAppId: String, playTime: Int = 30, source: String = "bbnc_mc_xbioen04"): String {
         return RequestManager.requestString(
             "com.alipay.gamecenteruprod.biz.rpc.v3.submitUserPlayDurationAction",
@@ -133,10 +142,10 @@ object AntOrchardRpcCall {
         return RequestManager.requestString("com.alipay.gameevent.biz.rpc.submitEvent", data)
     }
 
-    fun triggerTbTask(taskId: String, taskPlantType: String = "ANTIEP"): String {
+    fun triggerTbTask(taskId: String, taskPlantType: String = "ANTIEP", source: String = "ch_appcenter__chsub_commonapp"): String {
         return RequestManager.requestString(
             "com.alipay.antfarm.triggerTbTask",
-            "[{\"requestType\":\"NORMAL\",\"sceneCode\":\"ORCHARD\",\"source\":\"ch_appcenter__chsub_9patch\",\"taskId\":\"$taskId\",\"taskPlantType\":\"$taskPlantType\",\"version\":\"$VERSION\"}]"
+            "[{\"requestType\":\"NORMAL\",\"sceneCode\":\"ORCHARD\",\"source\":\"$source\",\"taskId\":\"$taskId\",\"taskPlantType\":\"$taskPlantType\",\"version\":\"$VERSION\"}]"
         )
     }
 

@@ -20,10 +20,16 @@ object CoroutineUtils {
     suspend fun delayCompat(millis: Long) {
         try {
             kotlinx.coroutines.delay(millis)
+        } catch (ce: CancellationException) {
+            throw ce
         } catch (e: Exception) {
             Log.printStackTrace("协程延迟异常", e)
             // 如果协程延迟失败，降级到线程休眠
-            Thread.sleep(millis)
+            try {
+                Thread.sleep(millis)
+            } catch (ie: InterruptedException) {
+                Thread.currentThread().interrupt()
+            }
         }
     }
     
