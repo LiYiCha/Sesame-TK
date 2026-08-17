@@ -9,7 +9,6 @@ plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
-    alias(libs.plugins.rikka.tools.refine)
 }
 var isCIBuild: Boolean = System.getenv("CI").toBoolean()
 // 随机字符串和数字
@@ -102,9 +101,7 @@ android {
         buildConfig = true
         compose = true
     }
-    composeOptions {
-        kotlinCompilerExtensionVersion = "1.5.8"
-    }
+
 
 
     flavorDimensions += "default"
@@ -209,35 +206,31 @@ android {
 dependencies {
     // Shizuku
     implementation(libs.rikka.shizuku.api)
-    implementation(libs.rikka.shizuku.provider)
-    implementation(libs.rikka.refine)
-    implementation(libs.ui.tooling.preview.android)
 
-    val composeBom = platform("androidx.compose:compose-bom:2025.05.00")
-    implementation(composeBom)
-    testImplementation(composeBom)
-    androidTestImplementation(composeBom)
-    implementation("androidx.compose.material3:material3")
-    implementation("androidx.compose.material:material-icons-extended")
-    implementation("androidx.compose.ui:ui-tooling-preview")
-    debugImplementation("androidx.compose.ui:ui-tooling")
+    // Compose
+    implementation(platform(libs.compose.bom))
+    implementation(libs.compose.material3)
+    implementation(libs.compose.material.icons.extended)
+    implementation(libs.compose.ui.tooling.preview)
+    debugImplementation(libs.compose.ui.tooling)
 
-    implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.5")
-    implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.5")
-    implementation("androidx.lifecycle:lifecycle-viewmodel-ktx:2.8.5")
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.8.1")
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
+    // Lifecycle
+    implementation(libs.lifecycle.viewmodel.compose)
+    implementation(libs.lifecycle.runtime.ktx)
+    implementation(libs.lifecycle.viewmodel.ktx)
+
+    // Coroutines
+    implementation(libs.coroutines.core)
+    implementation(libs.coroutines.android)
 
     // Coil for image loading
-    implementation("io.coil-kt:coil-compose:2.5.0")
-    implementation("io.coil-kt:coil-svg:2.5.0")
+    implementation(libs.coil.compose)
+    implementation(libs.coil.svg)
 
-    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.0")
+    // Serialization
+    implementation(libs.kotlinx.serialization.json)
 
-    implementation("androidx.lifecycle:lifecycle-livedata-ktx:2.6.2")
-    implementation("androidx.compose.runtime:runtime-livedata")
-    implementation("org.nanohttpd:nanohttpd:2.3.1")
-
+    implementation(libs.nanohttpd)
 
     implementation(libs.androidx.constraintlayout)
 
@@ -257,22 +250,18 @@ dependencies {
 
     compileOnly(files("libs/api-100.aar"))
     implementation(files("libs/service-100-1.0.0.aar"))
-//    implementation(libs.libxposed.service)
-//    implementation(files("libs/framework.jar"))
 
     compileOnly(libs.lombok)
     annotationProcessor(libs.lombok)
     implementation(libs.okhttp)
     implementation(libs.dexkit)
     implementation(libs.jackson.kotlin)
-    
-    // Retrofit2 依赖
-    implementation("com.squareup.retrofit2:retrofit:2.9.0")
-    implementation("com.tencent:mmkv:2.2.2")
-    implementation("net.lingala.zip4j:zip4j:2.11.5")
+
+    implementation(libs.mmkv)
+    implementation(libs.zip4j)
+    implementation(libs.documentfile)
 
     coreLibraryDesugaring(libs.desugar)
-    implementation("org.lsposed.hiddenapibypass:hiddenapibypass:+")
 
     add("normalImplementation", libs.jackson.core)
     add("normalImplementation", libs.jackson.databind)

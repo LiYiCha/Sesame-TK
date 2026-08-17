@@ -10,7 +10,7 @@ object AntOrchardRpcCall {
 
     fun orchardIndex(): String {
         return RequestManager.requestString("com.alipay.antfarm.orchardIndex",
-            "[{\"inHomepage\":\"true\",\"requestType\":\"NORMAL\",\"sceneCode\":\"ORCHARD\",\"source\":\"ch_appcenter__chsub_9patch\",\"version\":\""
+            "[{\"inHomepage\":\"true\",\"requestType\":\"NORMAL\",\"sceneCode\":\"ORCHARD\",\"source\":\"ch_appcenter__chsub_commonapp\",\"version\":\""
                     + VERSION + "\"}]");
     }
 
@@ -21,14 +21,14 @@ object AntOrchardRpcCall {
     fun extraInfoGet(from: String = "entry"): String {
         return RequestManager.requestString(
             "com.alipay.antorchard.extraInfoGet",
-            "[{\"from\":\"$from\",\"requestType\":\"NORMAL\",\"sceneCode\":\"FUGUO\",\"source\":\"ch_appcenter__chsub_9patch\",\"version\":\"$VERSION\"}]"
+            "[{\"from\":\"$from\",\"requestType\":\"NORMAL\",\"sceneCode\":\"FUGUO\",\"source\":\"ch_appcenter__chsub_commonapp\",\"version\":\"$VERSION\"}]"
         )
     }
 
     fun extraInfoSet(): String {
         return RequestManager.requestString(
             "com.alipay.antorchard.extraInfoSet",
-            "[{\"bizCode\":\"fertilizerPacket\",\"bizParam\":{\"action\":\"queryCollectFertilizerPacket\"},\"requestType\":\"NORMAL\",\"sceneCode\":\"ORCHARD\",\"source\":\"ch_appcenter__chsub_9patch\",\"version\":\"$VERSION\"}]"
+            "[{\"bizCode\":\"fertilizerPacket\",\"bizParam\":{\"action\":\"queryCollectFertilizerPacket\"},\"requestType\":\"NORMAL\",\"sceneCode\":\"ORCHARD\",\"source\":\"ch_appcenter__chsub_commonapp\",\"version\":\"$VERSION\"}]"
         )
     }
 
@@ -36,21 +36,21 @@ object AntOrchardRpcCall {
     fun querySubplotsActivity(treeLevel: String): String {
         return RequestManager.requestString(
             "com.alipay.antorchard.querySubplotsActivity",
-            "[{\"activityType\":[\"WISH\",\"BATTLE\",\"HELP_FARMER\",\"DEFOLIATION\",\"CAMP_TAKEOVER\",\"LIMITED_TIME_CHALLENGE\",\"LOTTERY_PLUS\"],\"inHomepage\":false,\"requestType\":\"NORMAL\",\"sceneCode\":\"ORCHARD\",\"source\":\"ch_appcenter__chsub_9patch\",\"treeLevel\":\"$treeLevel\",\"version\":\"$VERSION\"}]"
+            "[{\"activityType\":[\"WISH\",\"BATTLE\",\"HELP_FARMER\",\"DEFOLIATION\",\"CAMP_TAKEOVER\",\"LIMITED_TIME_CHALLENGE\",\"LOTTERY_PLUS\"],\"inHomepage\":false,\"requestType\":\"NORMAL\",\"sceneCode\":\"ORCHARD\",\"source\":\"ch_appcenter__chsub_commonapp\",\"treeLevel\":\"$treeLevel\",\"version\":\"$VERSION\"}]"
         )
     }
 
     fun triggerSubplotsActivity(activityId: String, activityType: String, optionKey: String): String {
         return RequestManager.requestString(
             "com.alipay.antorchard.triggerSubplotsActivity",
-            "[{\"activityId\":\"$activityId\",\"activityType\":\"$activityType\",\"optionKey\":\"$optionKey\",\"requestType\":\"NORMAL\",\"sceneCode\":\"ORCHARD\",\"source\":\"ch_appcenter__chsub_9patch\",\"version\":\"$VERSION\"}]"
+            "[{\"activityId\":\"$activityId\",\"activityType\":\"$activityType\",\"optionKey\":\"$optionKey\",\"requestType\":\"NORMAL\",\"sceneCode\":\"ORCHARD\",\"source\":\"ch_appcenter__chsub_commonapp\",\"version\":\"$VERSION\"}]"
         )
     }
 
     fun receiveOrchardRights(activityId: String, activityType: String): String {
         return RequestManager.requestString(
             "com.alipay.antorchard.receiveOrchardRights",
-            "[{\"activityId\":\"$activityId\",\"activityType\":\"$activityType\",\"requestType\":\"NORMAL\",\"sceneCode\":\"ORCHARD\",\"source\":\"ch_appcenter__chsub_9patch\",\"version\":\"$VERSION\"}]"
+            "[{\"activityId\":\"$activityId\",\"activityType\":\"$activityType\",\"requestType\":\"NORMAL\",\"sceneCode\":\"ORCHARD\",\"source\":\"ch_appcenter__chsub_commonapp\",\"version\":\"$VERSION\"}]"
         )
     }
 
@@ -58,7 +58,7 @@ object AntOrchardRpcCall {
     fun drawLottery(): String {
         return RequestManager.requestString(
             "com.alipay.antorchard.drawLottery",
-            "[{\"lotteryScene\":\"receiveLotteryPlus\",\"requestType\":\"NORMAL\",\"sceneCode\":\"ORCHARD\",\"source\":\"ch_appcenter__chsub_9patch\",\"version\":\"$VERSION\"}]"
+            "[{\"lotteryScene\":\"receiveLotteryPlus\",\"requestType\":\"NORMAL\",\"sceneCode\":\"ORCHARD\",\"source\":\"ch_appcenter__chsub_commonapp\",\"version\":\"$VERSION\"}]"
         )
     }
 
@@ -69,7 +69,7 @@ object AntOrchardRpcCall {
     fun switchPlantScene(plantScene: String): String {
         return RequestManager.requestString(
             "com.alipay.antorchard.switchPlantScene",
-            "[{\"plantScene\":\"$plantScene\",\"requestType\":\"NORMAL\",\"sceneCode\":\"ORCHARD\",\"source\":\"ch_appcenter__chsub_9patch\",\"version\":\"$VERSION\"}]"
+            "[{\"plantScene\":\"$plantScene\",\"requestType\":\"NORMAL\",\"sceneCode\":\"ORCHARD\",\"source\":\"ch_appcenter__chsub_commonapp\",\"version\":\"$VERSION\"}]"
         )
     }
 
@@ -97,21 +97,21 @@ object AntOrchardRpcCall {
     fun orchardListTask(): String {
         return RequestManager.requestString(
             "com.alipay.antfarm.orchardListTask",
-            "[{\"plantHiddenMMC\":\"false\",\"requestType\":\"NORMAL\",\"sceneCode\":\"ORCHARD\",\"source\":\"ch_appcenter__chsub_9patch\",\"version\":\"$VERSION\"}]"
+            "[{\"addWidget\":false,\"appMode\":\"normal\",\"enableSwitchSceneList\":[\"main\",\"yeb\"],\"enableTeamType\":[\"help\",\"team\"],\"hasYebActivityEntrance\":true,\"plantHiddenMMC\":\"false\",\"requestType\":\"NORMAL\",\"sceneCode\":\"ORCHARD\",\"source\":\"ch_appcenter__chsub_commonapp\",\"version\":\"$VERSION\"}]"
         )
     }
 
     fun orchardSign(): String {
         return RequestManager.requestString(
             "com.alipay.antfarm.orchardSign",
-            "[{\"requestType\":\"NORMAL\",\"sceneCode\":\"ORCHARD\",\"signScene\":\"ANTFARM_ORCHARD_SIGN_V2\",\"source\":\"ch_appcenter__chsub_9patch\",\"version\":\"$VERSION\"}]"
+            "[{\"requestType\":\"NORMAL\",\"sceneCode\":\"ORCHARD\",\"signScene\":\"ANTFARM_ORCHARD_SIGN_V2\",\"source\":\"ch_appcenter__chsub_commonapp\",\"version\":\"$VERSION\"}]"
         )
     }
 
     fun finishTask(userId: String, sceneCode: String, taskType: String): String {
         return RequestManager.requestString(
             "com.alipay.antiep.finishTask",
-            "[{\"outBizNo\":\"${userId}${System.currentTimeMillis()}\",\"requestType\":\"NORMAL\",\"sceneCode\":\"$sceneCode\",\"source\":\"ch_appcenter__chsub_9patch\",\"taskType\":\"$taskType\",\"userId\":\"$userId\",\"version\":\"$VERSION\"}]"
+            "[{\"outBizNo\":\"${userId}${System.currentTimeMillis()}\",\"requestType\":\"NORMAL\",\"sceneCode\":\"$sceneCode\",\"source\":\"ch_appcenter__chsub_commonapp\",\"taskType\":\"$taskType\",\"userId\":\"$userId\",\"version\":\"$VERSION\"}]"
         )
     }
 
@@ -168,6 +168,31 @@ object AntOrchardRpcCall {
         return RequestManager.requestString("com.alipay.charitygamecenter.queryOptionalPlay", data)
     }
 
+    /**
+     * 查询浮动球试玩任务（FLOATING_BALL）的梯队配置。
+     * 返回 floatingBallPlayInfo.taskList[].multiStageVisitFloatBallParams，
+     * 各梯队 timeCount 依次为 0/15/15/30/60/60/60/300（以服务端实际返回为准）。
+     */
+    fun queryOptionalPlayFloatingBall(gameAppId: String, chInfo: String): String {
+        val data = """
+            [{
+                "chinfo":"$chInfo",
+                "commonDegradeFilterRequest":{
+                    "appMode":"normal",
+                    "deviceLevel":"high",
+                    "unityDeviceLevel":"high"
+                },
+                "currentGameAppId":"$gameAppId",
+                "playTypeList":["FLOATING_BALL"],
+                "requestType":"PRC",
+                "sceneCode":"FLOATING_BALL_$chInfo",
+                "source":"H5",
+                "version":"1.0"
+            }]
+        """.trimIndent()
+        return RequestManager.requestString("com.alipay.charitygamecenter.queryOptionalPlay", data)
+    }
+
     fun finishTaskLeyuan(taskType: String, sceneCode: String, outBizNo: String): String {
         val data = """
             [{
@@ -203,7 +228,7 @@ object AntOrchardRpcCall {
                 "batchSmashCount": $count,
                 "requestType": "NORMAL",
                 "sceneCode": "ORCHARD",
-                "source": "ch_appcenter__chsub_9patch",
+                "source": "ch_appcenter__chsub_commonapp",
                 "version": "$VERSION"
             }
         ]
@@ -244,9 +269,32 @@ object AntOrchardRpcCall {
          [{
              "requestType": "NORMAL",
              "sceneCode": "ORCHARD",
-             "source": "ch_appcenter__chsub_9patch",
+             "source": "ch_appcenter__chsub_commonapp",
              "syncIndexTypes": "LIMITED_TIME_CHALLENGE",
              "useWua": true,
+             "version": "$VERSION",
+             "wua": "$Wua"
+         }]
+    """.trimIndent()
+
+        return RequestManager.requestString(
+            "com.alipay.antorchard.orchardSyncIndex",
+            jsonArgs
+        )
+    }
+
+    /**
+     * 限时挑战同步索引（commonapp 渠道版，供限时挑战含 GAME_CENTER 玩游戏子任务使用）。
+     * 参数对齐支付宝 H5 页面实际请求（含 appMode，不含 useWua）。
+     */
+    fun orchardSyncIndexCommonApp(Wua: String): String {
+        val jsonArgs = """
+         [{
+             "appMode": "normal",
+             "requestType": "NORMAL",
+             "sceneCode": "ORCHARD",
+             "source": "ch_appcenter__chsub_commonapp",
+             "syncIndexTypes": "LIMITED_TIME_CHALLENGE",
              "version": "$VERSION",
              "wua": "$Wua"
          }]
@@ -264,7 +312,7 @@ object AntOrchardRpcCall {
              "appId": "2021004165643274",
              "requestType": "NORMAL",
              "sceneCode": "ORCHARD",
-             "source": "ch_appcenter__chsub_9patch",
+             "source": "ch_appcenter__chsub_commonapp",
              "version": "$VERSION"
          }]
     """.trimIndent()
@@ -291,7 +339,7 @@ object AntOrchardRpcCall {
     }
     fun newQueryGameCenter(): String {
         val method = "com.alipay.antorchard.queryGameCenter";
-        val params = "[{\"queryGameCenterTheme\":true,\"requestType\":\"NORMAL\",\"sceneCode\":\"ORCHARD\",\"source\":\"ch_appcenter__chsub_9patch\",\"version\":\""+VERSION+"\"}]";
+        val params = "[{\"queryGameCenterTheme\":true,\"requestType\":\"NORMAL\",\"sceneCode\":\"ORCHARD\",\"source\":\"ch_appcenter__chsub_commonapp\",\"version\":\""+VERSION+"\"}]";
         return RequestManager.requestString(method, params);
     }
 

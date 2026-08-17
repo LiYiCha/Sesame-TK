@@ -18,6 +18,7 @@ import fansirsqi.xposed.sesame.util.RandomUtil
 import fansirsqi.xposed.sesame.util.ResChecker
 import fansirsqi.xposed.sesame.util.TaskBlacklist
 import fansirsqi.xposed.sesame.util.maps.UserMap
+import org.json.JSONArray
 import org.json.JSONObject
 import java.util.Calendar
 import androidx.core.net.toUri
@@ -516,7 +517,7 @@ class AntOrchard : ModelTask() {
                 val taskId = task.optString("taskId")
                 val groupId = task.optString("groupId")
 
-                val title = if (task.has("taskDisplayConfig")) {
+                var title = if (task.has("taskDisplayConfig")) {
                     task.getJSONObject("taskDisplayConfig").optString("title", "未知任务")
                 } else {
                     "未知任务"
@@ -617,14 +618,37 @@ class AntOrchard : ModelTask() {
                         }
                     }
 
-                    // 动态提取梯队配置列表
-                    val stageList = try {
-                        val prodPlayParamStr = task.optString("prodPlayParam", "")
-                        if (prodPlayParamStr.isNotEmpty()) {
-                            JSONObject(prodPlayParamStr).optJSONArray("miniGameMultiVisitFloatBallConfigList")
-                        } else null
-                    } catch (t: Throwable) {
-                        null
+                    // 动态提取梯队配置列表：从 queryOptionalPlay 的 FLOATING_BALL 配置获取
+                    // floatingBallPlayInfo.taskList[].multiStageVisitFloatBallParams（各梯队 timeCount）
+                    var stageList: JSONArray? = null
+                    if (gameAppId.isNotEmpty()) {
+                        try {
+                            val optionalRes = AntOrchardRpcCall.queryOptionalPlayFloatingBall(gameAppId, chInfo)
+                            val optionalJson = JSONObject(optionalRes)
+                            val optionalTaskList = optionalJson.optJSONObject("floatingBallPlayInfo")?.optJSONArray("taskList")
+                            if (optionalTaskList != null) {
+                                for (k in 0 until optionalTaskList.length()) {
+                                    val optionalTask = optionalTaskList.optJSONObject(k) ?: continue
+                                    if (optionalTask.optString("taskType") == taskId ||
+                                        optionalTask.optJSONObject("bizInfo")?.optString("algTaskId") == taskId
+                                    ) {
+                                        stageList = optionalTask.optJSONArray("multiStageVisitFloatBallParams")
+                                        // taskDisplayConfig 缺 title 时（如 FLOATBALL1），用 bizInfo.title 兜底
+                                        if (title == "未知任务") {
+                                            val bizTitle = optionalTask.optJSONObject("bizInfo")?.optString("title", "")
+                                            bizTitle?.let {
+                                                if (it.isNotEmpty()) {
+                                                    title = bizTitle
+                                                }
+                                            }
+                                        }
+                                        break
+                                    }
+                                }
+                            }
+                        } catch (t: Throwable) {
+                            // ignore
+                        }
                     }
 
                     var hasNextStage = true
@@ -799,7 +823,7 @@ class AntOrchard : ModelTask() {
     private fun limitedTimeChallenge() {
         try {
             val wua = SecurityBodyHelper.getSecurityBodyData(4).toString()
-            val response = AntOrchardRpcCall.orchardSyncIndex(wua)
+            val response = AntOrchardRpcCall.orchardSyncIndexCommonApp(wua)
             val root = JSONObject(response)
             if (!ResChecker.checkRes("$TAG[syncIndex]", root)) return
 
