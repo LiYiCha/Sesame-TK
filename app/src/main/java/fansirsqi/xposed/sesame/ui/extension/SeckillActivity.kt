@@ -195,7 +195,8 @@ class SeckillActivity : ComponentActivity() {
                         onRefresh = { deliveryId, page ->
                             isRefreshing.value = true
                             currentCategory.value = deliveryId
-                            val intent = Intent("com.eg.android.AlipayGphone.sesame.fetchMemberGoodsList").apply {
+                            val intent = Intent("com.eg.android.AlipayGphone.sesame.memberOperation").apply {
+                                putExtra("operation", "FETCH_GOODS_LIST")
                                 putExtra("deliveryId", deliveryId)
                                 putExtra("pageNum", page)
                             }
@@ -511,7 +512,9 @@ fun SeckillScreen(
             newTasks.forEach { ja.put(it) }
             Files.write2File(ja.toString(), file)
             seckillTasks = newTasks
-            context.sendBroadcast(Intent("com.eg.android.AlipayGphone.sesame.syncSeckillTasks"))
+            context.sendBroadcast(Intent("com.eg.android.AlipayGphone.sesame.memberOperation").apply {
+                putExtra("operation", "SYNC_SECKILL_TASKS")
+            })
         } catch (e: Exception) {
             e.printStackTrace()
         }
@@ -780,7 +783,8 @@ fun SeckillScreen(
                                             // Trigger automatic background SKU lookup
                                             if (good.skuId == "-1") {
                                                 Toast.makeText(context, "正在查询规格...", Toast.LENGTH_SHORT).show()
-                                                val intent = Intent("com.eg.android.AlipayGphone.sesame.queryBenefitDetail").apply {
+                                                val intent = Intent("com.eg.android.AlipayGphone.sesame.memberOperation").apply {
+                                                    putExtra("operation", "QUERY_BENEFIT_DETAIL")
                                                     putExtra("benefitId", good.benefitId)
                                                 }
                                                 context.sendBroadcast(intent)
@@ -852,7 +856,8 @@ fun SeckillScreen(
                                                 
                                                 // Trigger background SKU resolution
                                                 if (good.skuId == "-1") {
-                                                    val intent = Intent("com.eg.android.AlipayGphone.sesame.queryBenefitDetail").apply {
+                                                    val intent = Intent("com.eg.android.AlipayGphone.sesame.memberOperation").apply {
+                                                        putExtra("operation", "QUERY_BENEFIT_DETAIL")
                                                         putExtra("benefitId", good.benefitId)
                                                     }
                                                     context.sendBroadcast(intent)

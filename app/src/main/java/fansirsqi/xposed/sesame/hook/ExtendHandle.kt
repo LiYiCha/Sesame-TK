@@ -4,6 +4,7 @@ import android.content.Context
 import fansirsqi.xposed.sesame.hook.context.AppContext
 import fansirsqi.xposed.sesame.hook.lifecycle.LifecycleManager
 import fansirsqi.xposed.sesame.hook.scheduler.TaskScheduler
+import fansirsqi.xposed.sesame.hook.theme.ThemeManager
 import android.content.Intent
 import fansirsqi.xposed.sesame.util.Log
 import fansirsqi.xposed.sesame.util.Files
@@ -18,6 +19,63 @@ class ExtendHandle {
         private const val ACTION_CONTINUE = "continue" // 继续运行
         private const val ACTION_PAUSE = "pause" // 暂停运行
         private const val ACTION_STOP = "stop" // 停止运行
+
+        /**
+         * 处理统一的主题操作广播
+         *
+         * 用 extra "operation" 区分具体操作（EXPORT/DELETE/UPDATE），
+         * 根据操作类型调用 ThemeManager 对应的直接执行方法。
+         */
+        @JvmStatic
+        fun handleThemeOperation(intent: Intent) {
+            val operation = intent.getStringExtra("operation")
+            if (operation.isNullOrEmpty()) {
+                Log.error("ThemeManager", "主题操作广播缺少 operation 参数")
+                return
+            }
+            val userId = intent.getStringExtra("userId")
+            try {
+                val res: Pair<Boolean, String> = when (operation) {
+                    "EXPORT" -> ThemeManager.exportThemesDirectly(userId)
+                    "DELETE" -> ThemeManager.deleteThemeCacheDirectly(userId)
+                    "UPDATE" -> ThemeManager.applyThemeDirectly(userId)
+                    else -> {
+                        Log.runtime("ThemeManager", "未知的主题操作: $operation")
+                        return
+                    }
+                }
+                Log.runtime("ThemeManager", "主题操作 [$operation]: ${res.second}")
+            } catch (th: Throwable) {
+                Log.error("ThemeManager", "主题操作 [$operation] 异常: ${th.message}")
+            }
+        }
+
+        /**
+         * 统一处理会员/秒杀类操作（同步商品列表/查询权益详情/同步秒杀任务）
+         *
+         * 用 extra "operation" 区分具体操作，参数解析、判空、异常统一收口于此。
+         */
+        @JvmStatic
+        fun handleMemberOperation(context: Context, intent: Intent) {
+            when (intent.getStringExtra("operation")) {
+                "FETCH_GOODS_LIST" -> {
+                    val deliveryId = intent.getStringExtra("deliveryId")?.takeIf { it.isNotEmpty() }
+                        ?: "94000SR2025120515775004"
+                    val pageNum = intent.getIntExtra("pageNum", 1)
+                    handleFetchMemberGoodsList(context, deliveryId, pageNum)
+                }
+                "QUERY_BENEFIT_DETAIL" -> {
+                    val benefitId = intent.getStringExtra("benefitId")
+                    if (benefitId.isNullOrEmpty()) {
+                        Log.error("查询规格详情异常: 缺少 benefitId 参数")
+                    } else {
+                        handleQueryBenefitDetail(context, benefitId)
+                    }
+                }
+                "SYNC_SECKILL_TASKS" -> fansirsqi.xposed.sesame.task.otherTask2.SeckillScheduler.syncTasks(context)
+                else -> Log.runtime("未知的会员操作: ${intent.getStringExtra("operation")}")
+            }
+        }
 
         /**
          * 处理重新运行或继续运行逻辑
