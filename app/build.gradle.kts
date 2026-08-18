@@ -28,16 +28,16 @@ android {
             useLegacyPackaging = true
         }
     }
-    val gitCommitCount: Int = runCatching {
-        val process = ProcessBuilder("git", "rev-list", "--count", "HEAD")
-                .redirectErrorStream(true)
-                .start()
-        val output = process.inputStream.bufferedReader().use { it.readText().trim() }
-        output.toInt()
-    }.getOrElse {
-        println("获取 git 提交数失败: ${it.message}")
-        1
-    }
+//    val gitCommitCount: Int = runCatching {
+//        val process = ProcessBuilder("git", "rev-list", "--count", "HEAD")
+//                .redirectErrorStream(true)
+//                .start()
+//        val output = process.inputStream.bufferedReader().use { it.readText().trim() }
+//        output.toInt()
+//    }.getOrElse {
+//        println("获取 git 提交数失败: ${it.message}")
+//        1
+//    }
     defaultConfig {
         vectorDrawables.useSupportLibrary = true
         applicationId = "fansirsqi.xposed.sesame"
@@ -67,7 +67,7 @@ android {
         }
 
 
-        val versionNumber = "0.4.0"
+        val versionNumber = "0.4.1"
         val dateString = SimpleDateFormat("yyMMdd", Locale.CHINA).apply {
             timeZone = TimeZone.getTimeZone("GMT+8")
         }.format(Date())
