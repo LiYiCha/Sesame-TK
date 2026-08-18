@@ -523,8 +523,8 @@ class AntOrchard : ModelTask() {
                     "未知任务"
                 }
 
-                if (TaskBlacklist.isTaskInBlacklist(groupId)) {
-                    //Log.runtime(TAG, "跳过黑名单任务[$title] groupId=$groupId")
+                if (TaskBlacklist.isTaskInBlacklist(taskId)) {
+                    //Log.runtime(TAG, "跳过黑名单任务[$title] taskId=$taskId")
                     continue
                 }
 
@@ -558,7 +558,7 @@ class AntOrchard : ModelTask() {
                             val errorCode = finishResponse.optString("code", "")
                             val errorDesc = finishResponse.optString("desc", "")
                             if (!errorCode.isEmpty()) {
-                                TaskBlacklist.autoAddToBlacklist(groupId, title, errorCode, errorDesc)
+                                TaskBlacklist.autoAddToBlacklist(taskId, title, errorCode, errorDesc)
                             }
                             break
                         }
@@ -576,7 +576,7 @@ class AntOrchard : ModelTask() {
                         val errorDesc = finishResponse.optString("desc", "")
                         // 过滤不支持rpc和没有任务配置
                         if (errorCode.equals("400000040")||errorCode.equals("400000001")) {
-                            TaskBlacklist.autoAddToBlacklist(groupId, title, errorCode, errorDesc)
+                            TaskBlacklist.autoAddToBlacklist(taskId, title, errorCode, errorDesc)
                         }
                         Log.error(TAG, "农场任务🧾[$title]${finishResponse.optString("desc")}")
                     }
