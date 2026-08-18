@@ -2050,13 +2050,11 @@ class AntMember : ModelTask() {
                     val toast = data.optString("toast", "")
                     Log.runtime(TAG, "芝麻炼金⚗️[领取成功] 获得芝麻粒=$zmlNum 提示=$toast")
                 }
-            } else { // 其他状态
-                Log.runtime(TAG, "芝麻炼金⚗️[当前不可领取] 任务=$taskName")
             }
 
 
             // ================= Step 3: 自动做任务 =================
-            Log.runtime(TAG, "芝麻炼金⚗️[开始扫描任务列表]")
+//            Log.runtime(TAG, "芝麻炼金⚗️[开始扫描任务列表]")
             val listRes = AntMemberRpcCall.Zmxy.Alchemy.alchemyQueryListV3()
             val listJo = JSONObject(listRes)
 

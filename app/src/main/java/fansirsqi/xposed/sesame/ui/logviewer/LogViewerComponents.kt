@@ -1,5 +1,8 @@
 package fansirsqi.xposed.sesame.ui.logviewer
 
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -16,10 +19,8 @@ import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -35,7 +36,6 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChanged
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
@@ -47,20 +47,15 @@ import androidx.compose.ui.unit.IntOffset
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
-import android.graphics.Typeface
-import android.text.SpannableString
-import android.text.style.ForegroundColorSpan
-import android.text.style.BackgroundColorSpan
-import android.text.style.StyleSpan
 import androidx.compose.foundation.isSystemInDarkTheme
-import androidx.compose.ui.graphics.toArgb
-
-import androidx.compose.ui.tooling.preview.Preview
-import android.content.res.Configuration
-import fansirsqi.xposed.sesame.ui.theme.app.SesameTheme
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontStyle
+import fansirsqi.xposed.sesame.util.ToastUtil
 
 /**
- * 精致 2 行紧凑搜索栏（高度约 72dp，清晰整洁，极大释放屏幕空间）
+ * 搜索栏
  */
 @Composable
 fun SearchPanel(
@@ -98,7 +93,7 @@ fun SearchPanel(
 }
 
 /**
- * 搜索栏无状态 2 行内容组件（用于业务调用与 Compose @Preview 预览）
+ * 搜索栏无状态 2 行内容组件
  */
 @Composable
 fun SearchPanelContent(
@@ -161,7 +156,7 @@ fun SearchPanelContent(
                             color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
                         )
                     }
-                    androidx.compose.foundation.text.BasicTextField(
+                    BasicTextField(
                         value = searchText,
                         onValueChange = {
                             searchText = it
@@ -172,7 +167,7 @@ fun SearchPanelContent(
                             fontSize = 13.sp,
                             color = MaterialTheme.colorScheme.onSurface
                         ),
-                        cursorBrush = androidx.compose.ui.graphics.SolidColor(primaryColor),
+                        cursorBrush = SolidColor(primaryColor),
                         modifier = Modifier.fillMaxWidth()
                     )
                 }
@@ -332,7 +327,7 @@ fun FilterPanel(
 }
 
 /**
- * 筛选栏无状态 2 行内容组件（用于业务调用与 Compose @Preview 预览）
+ * 筛选栏无状态 2 行内容组件
  */
 @Composable
 fun FilterPanelContent(
@@ -392,7 +387,7 @@ fun FilterPanelContent(
                             color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
                         )
                     }
-                    androidx.compose.foundation.text.BasicTextField(
+                    BasicTextField(
                         value = filterText,
                         onValueChange = {
                             filterText = it
@@ -403,7 +398,7 @@ fun FilterPanelContent(
                             fontSize = 13.sp,
                             color = MaterialTheme.colorScheme.onSurface
                         ),
-                        cursorBrush = androidx.compose.ui.graphics.SolidColor(filterColor),
+                        cursorBrush = SolidColor(filterColor),
                         modifier = Modifier.fillMaxWidth()
                     )
                 }
@@ -505,172 +500,8 @@ fun FilterPanelContent(
     }
 }
 
-// =========================================================================
-// Jetpack Compose @Preview 预览组（支持 Android Studio 实时视觉预览）
-// =========================================================================
-
-@Preview(name = "2行搜索栏 - 浅色模式", showBackground = true)
-@Preview(name = "2行搜索栏 - 深色模式", uiMode = Configuration.UI_MODE_NIGHT_YES, showBackground = true)
-@Composable
-fun PreviewSearchPanel() {
-    SesameTheme {
-        Box(modifier = Modifier.fillMaxWidth().padding(8.dp)) {
-            SearchPanelContent(
-                searchKeyword = "MemberNew",
-                isRegexSearch = true,
-                isCaseSensitive = false,
-                currentSearchIndex = 1,
-                totalSearchResults = 4,
-                onSearchChange = {},
-                onToggleRegex = {},
-                onToggleCase = {},
-                onSearchPrev = {},
-                onSearchNext = {},
-                onClearSearch = {},
-                onDismiss = {}
-            )
-        }
-    }
-}
-
-@Preview(name = "2行筛选栏 - 浅色模式", showBackground = true)
-@Preview(name = "2行筛选栏 - 深色模式", uiMode = Configuration.UI_MODE_NIGHT_YES, showBackground = true)
-@Composable
-fun PreviewFilterPanel() {
-    SesameTheme {
-        Box(modifier = Modifier.fillMaxWidth().padding(8.dp)) {
-            FilterPanelContent(
-                filterKeyword = "Exception",
-                isCaptureLog = true,
-                showH5 = true,
-                showBottom = false,
-                onFilterChange = {},
-                onToggleH5 = {},
-                onToggleBottom = {},
-                onClearFilter = {},
-                onDismiss = {}
-            )
-        }
-    }
-}
-
-@Preview(name = "日志界面完整视图 - 深色", uiMode = Configuration.UI_MODE_NIGHT_YES, showBackground = true, heightDp = 640)
-@Preview(name = "日志界面完整视图 - 浅色", showBackground = true, heightDp = 640)
-@Composable
-fun PreviewLogViewerFullMock() {
-    SesameTheme {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(MaterialTheme.colorScheme.background)
-        ) {
-            // 模拟 TopBar
-            Surface(
-                color = MaterialTheme.colorScheme.primaryContainer,
-                modifier = Modifier.fillMaxWidth().height(48.dp)
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxSize().padding(horizontal = 12.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Text(
-                        "日志查看器",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer
-                    )
-                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Icon(Icons.Rounded.Search, null, tint = MaterialTheme.colorScheme.onPrimaryContainer, modifier = Modifier.size(20.dp))
-                        Spacer(Modifier.width(8.dp))
-                        Icon(Icons.Rounded.FilterList, null, tint = MaterialTheme.colorScheme.onPrimaryContainer, modifier = Modifier.size(20.dp))
-                        Spacer(Modifier.width(8.dp))
-                        Icon(Icons.Rounded.MoreVert, null, tint = MaterialTheme.colorScheme.onPrimaryContainer, modifier = Modifier.size(20.dp))
-                    }
-                }
-            }
-
-            // 2行紧凑搜索栏
-            SearchPanelContent(
-                searchKeyword = "MemberNew",
-                isRegexSearch = false,
-                isCaseSensitive = false,
-                currentSearchIndex = 0,
-                totalSearchResults = 3,
-                onSearchChange = {},
-                onToggleRegex = {},
-                onToggleCase = {},
-                onSearchPrev = {},
-                onSearchNext = {},
-                onClearSearch = {},
-                onDismiss = {}
-            )
-
-            // 2行紧凑筛选栏
-            FilterPanelContent(
-                filterKeyword = "",
-                isCaptureLog = false,
-                showH5 = false,
-                showBottom = false,
-                onFilterChange = {},
-                onToggleH5 = {},
-                onToggleBottom = {},
-                onClearFilter = {},
-                onDismiss = {}
-            )
-
-            // 状态栏
-            Surface(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 2.dp),
-                color = MaterialTheme.colorScheme.surface,
-                shape = RoundedCornerShape(8.dp)
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 4.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text("共 142 行日志 · 找到 3 个结果", style = MaterialTheme.typography.labelSmall)
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.VerticalAlignTop, null, modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.primary)
-                        Spacer(Modifier.width(6.dp))
-                        Icon(Icons.Default.VerticalAlignBottom, null, modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.primary)
-                    }
-                }
-            }
-
-            // 模拟日志列表区域（占据绝大部分屏幕）
-            Surface(
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxWidth()
-                    .padding(8.dp),
-                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
-                shape = RoundedCornerShape(8.dp),
-                border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
-            ) {
-                Column(modifier = Modifier.padding(8.dp)) {
-                    Text("19:30:01.12 [beta2026] [蚂蚁新农场]: queryOrchardTask: 获取到 8 个待完成任务", fontSize = 11.sp, fontFamily = FontFamily.Monospace)
-                    Spacer(Modifier.height(4.dp))
-                    Text("19:30:03.01 [beta2026] [⚔️其他任务2]: 启动并行任务: 会员任务 (MemberNew)", fontSize = 11.sp, fontFamily = FontFamily.Monospace, color = MaterialTheme.colorScheme.primary)
-                    Spacer(Modifier.height(4.dp))
-                    Text("19:30:03.25 [beta2026] [MemberNew]: MemberNew.handle() 初始化会员中心...", fontSize = 11.sp, fontFamily = FontFamily.Monospace)
-                    Spacer(Modifier.height(4.dp))
-                    Text("19:30:04.10 [beta2026] [⚔️其他任务2]: 执行常规任务: 芝麻炼金 (SesameAlchemy)", fontSize = 11.sp, fontFamily = FontFamily.Monospace)
-                    Spacer(Modifier.height(4.dp))
-                    Text("19:30:05.80 [beta2026] [MemberNew]: 成功领取每日积分 15 粒", fontSize = 11.sp, fontFamily = FontFamily.Monospace)
-                    Spacer(Modifier.height(4.dp))
-                    Text("19:30:08.50 [beta2026] [MemberNew]: 触发部分任务限流，进入等待", fontSize = 11.sp, fontFamily = FontFamily.Monospace, color = MaterialTheme.colorScheme.tertiary)
-                    Spacer(Modifier.height(4.dp))
-                    Text("19:30:15.00 [beta2026] [⚔️其他任务2]: 收到 ACTION_STOP 停止信号 -> 统一中断全部并行任务", fontSize = 11.sp, fontFamily = FontFamily.Monospace, color = MaterialTheme.colorScheme.primary)
-                }
-            }
-        }
-    }
-}
-
 /**
- * 状态栏（重设计）
+ * 状态栏
  */
 @Composable
 fun StatusBar(
@@ -724,42 +555,6 @@ fun StatusBar(
     }
 }
 
-/**
- * 转换 Compose AnnotatedString 到 Android 原生 SpannableString
- */
-fun AnnotatedString.toSpannableString(): SpannableString {
-    val spannable = SpannableString(this.text)
-    this.spanStyles.forEach { range ->
-        val start = range.start
-        val end = range.end
-        val style = range.item
-        if (style.color != Color.Unspecified) {
-            spannable.setSpan(
-                ForegroundColorSpan(style.color.toArgb()),
-                start,
-                end,
-                SpannableString.SPAN_EXCLUSIVE_EXCLUSIVE
-            )
-        }
-        if (style.background != Color.Unspecified) {
-            spannable.setSpan(
-                BackgroundColorSpan(style.background.toArgb()),
-                start,
-                end,
-                SpannableString.SPAN_EXCLUSIVE_EXCLUSIVE
-            )
-        }
-        if (style.fontWeight == FontWeight.Bold) {
-            spannable.setSpan(
-                StyleSpan(Typeface.BOLD),
-                start,
-                end,
-                SpannableString.SPAN_EXCLUSIVE_EXCLUSIVE
-            )
-        }
-    }
-    return spannable
-}
 
 /**
  * 搜索高亮状态数据类
@@ -892,7 +687,7 @@ fun LogLineRow(
 
             // 截断提示
             if (isLongLine && !isExpanded) {
-                withStyle(style = SpanStyle(color = Color(0xFFFFB74D), fontStyle = androidx.compose.ui.text.font.FontStyle.Italic)) {
+                withStyle(style = SpanStyle(color = Color(0xFFFFB74D), fontStyle = FontStyle.Italic)) {
                     append("\n... [已截断 ${line.length - MAX_DISPLAY_LENGTH} 字符，点击展开全部]")
                 }
             }
@@ -1303,7 +1098,7 @@ fun FastScrollbar(
         )
 
         // 滑块
-        val density = androidx.compose.ui.platform.LocalDensity.current
+        val density = LocalDensity.current
 
         Box(
             modifier = Modifier
@@ -1321,162 +1116,6 @@ fun FastScrollbar(
     }
 }
 
-/**
- * 快速滚动条组件（基于 ScrollState）
- * - 拖拽滑块快速定位
- * - 滚动时自动显示，空闲后自动隐藏
- */
-@Composable
-fun FastScrollbar(
-    scrollState: ScrollState,
-    modifier: Modifier = Modifier
-) {
-    val coroutineScope = rememberCoroutineScope()
-    val density = LocalDensity.current
-
-    var trackHeightPx by remember { mutableIntStateOf(0) }
-    val maxValue = scrollState.maxValue
-
-    // 无法滚动时，仅通过 Box 占位测量高度
-    if (maxValue <= 0 || trackHeightPx <= 0) {
-        Box(
-            modifier = modifier
-                .width(24.dp)
-                .fillMaxHeight()
-                .onSizeChanged { trackHeightPx = it.height }
-        )
-        if (maxValue <= 0) return
-    }
-
-    val totalHeightPx = maxValue + trackHeightPx
-    val visibleRatio = trackHeightPx.toFloat() / totalHeightPx
-    if (visibleRatio >= 0.99f) return
-
-    val scrollFraction = (scrollState.value.toFloat() / maxValue).coerceIn(0f, 1f)
-
-    // 自动隐藏逻辑
-    val isScrolling = scrollState.isScrollInProgress
-    var isDragging by remember { mutableStateOf(false) }
-    var showScrollbar by remember { mutableStateOf(true) }
-
-    LaunchedEffect(isScrolling, isDragging) {
-        if (isScrolling || isDragging) {
-            showScrollbar = true
-        } else {
-            delay(2000L)
-            showScrollbar = false
-        }
-    }
-
-    val alpha by animateFloatAsState(
-        targetValue = if (showScrollbar || isDragging) 0.85f else 0f,
-        animationSpec = tween(durationMillis = if (showScrollbar || isDragging) 150 else 600),
-        label = "scrollbar_alpha"
-    )
-
-    // 滑块尺寸
-    val minThumbHeightPx = with(density) { 40.dp.toPx() }
-    val thumbHeightPx = (visibleRatio * trackHeightPx).coerceAtLeast(minThumbHeightPx)
-    val maxThumbOffset = (trackHeightPx - thumbHeightPx).coerceAtLeast(0f)
-
-    var localDragOffset by remember { mutableFloatStateOf(0f) }
-
-    val thumbOffset = if (isDragging) {
-        localDragOffset.coerceIn(0f, maxThumbOffset)
-    } else {
-        scrollFraction * maxThumbOffset
-    }
-
-    // 未拖动时同步滚动进度
-    LaunchedEffect(scrollFraction, maxThumbOffset, isDragging) {
-        if (!isDragging) {
-            localDragOffset = scrollFraction * maxThumbOffset
-        }
-    }
-
-    val currentMaxThumbOffset by rememberUpdatedState(maxThumbOffset)
-    val currentMaxValue by rememberUpdatedState(maxValue)
-    val currentThumbHeightPx by rememberUpdatedState(thumbHeightPx)
-
-    Box(
-        modifier = modifier
-            .width(24.dp)
-            .onSizeChanged { trackHeightPx = it.height }
-            .alpha(alpha)
-            .pointerInput(Unit) {
-                awaitEachGesture {
-                    val down = awaitFirstDown(requireUnconsumed = false)
-                    isDragging = true
-                    showScrollbar = true
-
-                    val initialY = down.position.y
-                    val halfThumb = currentThumbHeightPx / 2
-                    var currentY = (initialY - halfThumb).coerceIn(0f, currentMaxThumbOffset)
-                    localDragOffset = currentY
-
-                    val initialFraction = if (currentMaxThumbOffset > 0) currentY / currentMaxThumbOffset else 0f
-                    val targetScrollValue = (initialFraction * currentMaxValue).roundToInt().coerceIn(0, currentMaxValue)
-                    coroutineScope.launch {
-                        scrollState.scrollTo(targetScrollValue)
-                    }
-
-                    var dragEvent = down
-                    do {
-                        val event = awaitPointerEvent()
-                        val dragChange = event.changes.firstOrNull { it.id == dragEvent.id }
-                        if (dragChange != null && dragChange.pressed) {
-                            if (dragChange.positionChanged()) {
-                                dragChange.consume()
-                                val diffY = dragChange.position.y - dragEvent.position.y
-                                currentY = (currentY + diffY).coerceIn(0f, currentMaxThumbOffset)
-                                localDragOffset = currentY
-
-                                val fraction = if (currentMaxThumbOffset > 0) currentY / currentMaxThumbOffset else 0f
-                                val scrollValue = (fraction * currentMaxValue).roundToInt().coerceIn(0, currentMaxValue)
-                                coroutineScope.launch {
-                                    scrollState.scrollTo(scrollValue)
-                                }
-                            }
-                            dragEvent = dragChange
-                        }
-                    } while (event.changes.any { it.pressed })
-
-                    isDragging = false
-                }
-            }
-    ) {
-        // 轨道背景
-        Box(
-            modifier = Modifier
-                .width(3.dp)
-                .fillMaxHeight()
-                .align(Alignment.Center)
-                .background(
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f),
-                    shape = RoundedCornerShape(1.5.dp)
-                )
-        )
-
-        // 滑块
-        val thumbWidthDp = if (isDragging) 8.dp else 4.dp
-        val thumbHeightDp = with(density) { thumbHeightPx.toDp() }
-        val thumbOffsetDp = with(density) { thumbOffset.toDp() }
-
-        Box(
-            modifier = Modifier
-                .width(thumbWidthDp)
-                .height(thumbHeightDp)
-                .offset(y = thumbOffsetDp)
-                .align(Alignment.TopCenter)
-                .background(
-                    color = MaterialTheme.colorScheme.primary.copy(
-                        alpha = if (isDragging) 0.95f else 0.6f
-                    ),
-                    shape = RoundedCornerShape(thumbWidthDp / 2)
-                )
-        )
-    }
-}
 
 /**
  * RPC 抓包结构与解析助手
@@ -1543,7 +1182,7 @@ fun LineDetailDialog(
     block: RpcBlock?,
     onDismiss: () -> Unit
 ) {
-    val context = androidx.compose.ui.platform.LocalContext.current
+    val context = LocalContext.current
     AlertDialog(
         onDismissRequest = onDismiss,
         title = {
@@ -1602,8 +1241,9 @@ fun LineDetailDialog(
                                     onDismiss()
                                 },
                                 modifier = Modifier.weight(1f),
-                                shape = RoundedCornerShape(10.dp)
-                            ) { Text("复制请求") }
+                                shape = RoundedCornerShape(10.dp),
+                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                            ) { Text("复制请求", maxLines = 1, style = MaterialTheme.typography.labelMedium) }
                         }
                         if (!block.method.isNullOrEmpty()) {
                             OutlinedButton(
@@ -1612,8 +1252,9 @@ fun LineDetailDialog(
                                     onDismiss()
                                 },
                                 modifier = Modifier.weight(1f),
-                                shape = RoundedCornerShape(10.dp)
-                            ) { Text("复制 Method") }
+                                shape = RoundedCornerShape(10.dp),
+                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                            ) { Text("复制 Method", maxLines = 1, style = MaterialTheme.typography.labelMedium) }
                         }
                         if (!block.params.isNullOrEmpty()) {
                             OutlinedButton(
@@ -1622,8 +1263,9 @@ fun LineDetailDialog(
                                     onDismiss()
                                 },
                                 modifier = Modifier.weight(1f),
-                                shape = RoundedCornerShape(10.dp)
-                            ) { Text("复制 Params") }
+                                shape = RoundedCornerShape(10.dp),
+                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                            ) { Text("复制 Params", maxLines = 1, style = MaterialTheme.typography.labelMedium) }
                         }
                     }
                     // 第二行：次要操作
@@ -1638,8 +1280,9 @@ fun LineDetailDialog(
                                     onDismiss()
                                 },
                                 modifier = Modifier.weight(1f),
-                                shape = RoundedCornerShape(10.dp)
-                            ) { Text("复制 Data") }
+                                shape = RoundedCornerShape(10.dp),
+                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                            ) { Text("复制 Data", maxLines = 1, style = MaterialTheme.typography.labelMedium) }
                         }
                         OutlinedButton(
                             onClick = {
@@ -1647,8 +1290,9 @@ fun LineDetailDialog(
                                 onDismiss()
                             },
                             modifier = Modifier.weight(1f),
-                            shape = RoundedCornerShape(10.dp)
-                        ) { Text("复制全文") }
+                            shape = RoundedCornerShape(10.dp),
+                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                        ) { Text("复制全文", maxLines = 1, style = MaterialTheme.typography.labelMedium) }
                     }
                     // 第三行：搜索操作
                     Row(
@@ -1662,8 +1306,9 @@ fun LineDetailDialog(
                                     viewModel.performSearch()
                                     onDismiss()
                                 },
-                                modifier = Modifier.weight(1f)
-                            ) { Text("搜索 Method") }
+                                modifier = Modifier.weight(1f),
+                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                            ) { Text("搜索 Method", maxLines = 1, style = MaterialTheme.typography.labelMedium) }
                         }
                         if (!block.params.isNullOrEmpty()) {
                             TextButton(
@@ -1673,8 +1318,9 @@ fun LineDetailDialog(
                                     viewModel.performSearch()
                                     onDismiss()
                                 },
-                                modifier = Modifier.weight(1f)
-                            ) { Text("搜索 Params") }
+                                modifier = Modifier.weight(1f),
+                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                            ) { Text("搜索 Params", maxLines = 1, style = MaterialTheme.typography.labelMedium) }
                         }
                     }
                 } else {
@@ -1685,8 +1331,9 @@ fun LineDetailDialog(
                         Button(
                             onClick = { copyToClipboard(context, line); onDismiss() },
                             modifier = Modifier.weight(1f),
-                            shape = RoundedCornerShape(10.dp)
-                        ) { Text("复制整行") }
+                            shape = RoundedCornerShape(10.dp),
+                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                        ) { Text("复制整行", maxLines = 1, style = MaterialTheme.typography.labelMedium) }
                         OutlinedButton(
                             onClick = {
                                 val searchKey = if (line.length > 50) line.take(50) else line
@@ -1695,11 +1342,16 @@ fun LineDetailDialog(
                                 onDismiss()
                             },
                             modifier = Modifier.weight(1f),
-                            shape = RoundedCornerShape(10.dp)
-                        ) { Text("搜索整行") }
+                            shape = RoundedCornerShape(10.dp),
+                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                        ) { Text("搜索整行", maxLines = 1, style = MaterialTheme.typography.labelMedium) }
                     }
                 }
-                TextButton(onClick = onDismiss, modifier = Modifier.fillMaxWidth()) { Text("关闭") }
+                TextButton(
+                    onClick = onDismiss,
+                    modifier = Modifier.fillMaxWidth(),
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                ) { Text("关闭", maxLines = 1, style = MaterialTheme.typography.labelMedium) }
             }
         }
     )
@@ -1724,11 +1376,11 @@ private fun DetailSection(label: String, content: String) {
     }
 }
 
-private fun copyToClipboard(context: android.content.Context, text: String) {
+private fun copyToClipboard(context: Context, text: String) {
     try {
-        val cm = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
-        cm.setPrimaryClip(android.content.ClipData.newPlainText("copied_text", text))
-        fansirsqi.xposed.sesame.util.ToastUtil.showToast(context, "已复制到剪贴板")
+        val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+        cm.setPrimaryClip(ClipData.newPlainText("copied_text", text))
+        ToastUtil.showToast(context, "已复制到剪贴板")
     } catch (e: Exception) {
         // ignore
     }
@@ -1967,7 +1619,7 @@ fun SelectionActionBar(
     modifier: Modifier = Modifier
 ) {
     if (!uiState.isSelectionMode) return
-    val context = androidx.compose.ui.platform.LocalContext.current
+    val context = LocalContext.current
 
     Surface(
         modifier = modifier
@@ -2032,14 +1684,4 @@ fun SelectionActionBar(
             }
         }
     }
-}
-
-/**
- * 根据 Y 坐标查找 LazyList 中对应 item 的显示索引
- * 用于拖拽多选时判断手指下方是哪个日志行
- */
-private fun findItemIndexAtY(state: LazyListState, y: Float): Int? {
-    return state.layoutInfo.visibleItemsInfo
-        .firstOrNull { y >= it.offset && y <= it.offset + it.size }
-        ?.index
 }

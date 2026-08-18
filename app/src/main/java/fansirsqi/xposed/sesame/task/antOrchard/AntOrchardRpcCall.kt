@@ -108,6 +108,16 @@ object AntOrchardRpcCall {
         )
     }
 
+    /**
+     * 农场去到金豆首页领取100金豆
+     */
+    fun orchardToGoldenBeanIndex(): String{
+        return RequestManager.requestString(
+            "com.alipay.goldenbean.index",
+            "[{\"bizType\":\"MASTER\",\"darwinSceneList\":[\"indexLayoutTwo\",\"indexPreRequestCacheAB\",\"taskFlowHandGuide\"],\"source\":\"babafarm\",\"version\":\"20260803.01\"}]"
+        )
+    }
+
     fun finishTask(userId: String, sceneCode: String, taskType: String): String {
         return RequestManager.requestString(
             "com.alipay.antiep.finishTask",

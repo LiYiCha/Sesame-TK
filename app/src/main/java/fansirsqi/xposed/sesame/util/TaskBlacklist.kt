@@ -147,9 +147,10 @@ object TaskBlacklist {
         val isInvalidArgument = errorCode == "ILLEGAL_ARGUMENT" || errorMsg.contains("不是有效入参") || errorMsg.contains("不是有效的入参")
         val isTemplateNotExist = errorCode == "PROMISE_TEMPLATE_NOT_EXIST" || errorMsg.contains("生活记录模板不存在")
         val isPromoProdError = errorCode == "10000005" || errorMsg.contains("promoprod不允许完成事件规则任务")
+        val isNoTaskConfig = errorCode == "400000001" || errorMsg.contains("任务全局配置不存在")
         
         // 第一步：判断当前错误码是否需要自动加入黑名单
-        val shouldAutoAdd = isUnsupportedRpc || isInvalidArgument || isTemplateNotExist || isPromoProdError || when (errorCode) {
+        val shouldAutoAdd = isUnsupportedRpc || isInvalidArgument || isTemplateNotExist || isPromoProdError || isNoTaskConfig || when (errorCode) {
             "CAMP_TRIGGER_ERROR",
             "104",
             "OP_REPEAT_CHECK",
@@ -168,6 +169,7 @@ object TaskBlacklist {
                 isInvalidArgument -> "不是有效入参"
                 isTemplateNotExist -> "生活记录模板不存在"
                 isPromoProdError -> "参数错误(promoprod)"
+                isNoTaskConfig -> "任务全局配置不存在"
                 errorCode == "CAMP_TRIGGER_ERROR" -> "海豚活动触发错误"
                 errorCode == "OP_REPEAT_CHECK" -> "操作太频繁"
                 errorCode == "104" || errorCode == "PROMISE_HAS_PROCESSING_TEMPLATE" -> "存在进行中的生活记录"

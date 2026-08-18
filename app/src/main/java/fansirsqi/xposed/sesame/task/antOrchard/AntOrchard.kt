@@ -557,7 +557,8 @@ class AntOrchard : ModelTask() {
                         } else {
                             val errorCode = finishResponse.optString("code", "")
                             val errorDesc = finishResponse.optString("desc", "")
-                            if (!errorCode.isEmpty()) {
+                            // 过滤不支持rpc和任务全局配置不存在
+                            if (errorCode.equals("400000040")||errorCode.equals("400000001")) {
                                 TaskBlacklist.autoAddToBlacklist(taskId, title, errorCode, errorDesc)
                             }
                             break
@@ -574,7 +575,7 @@ class AntOrchard : ModelTask() {
                     } else {
                         val errorCode = finishResponse.optString("code", "")
                         val errorDesc = finishResponse.optString("desc", "")
-                        // 过滤不支持rpc和没有任务配置
+                        // 过滤不支持rpc和任务全局配置不存在
                         if (errorCode.equals("400000040")||errorCode.equals("400000001")) {
                             TaskBlacklist.autoAddToBlacklist(taskId, title, errorCode, errorDesc)
                         }
@@ -720,8 +721,12 @@ class AntOrchard : ModelTask() {
                 } else {
                     Log.runtime(TAG, joSign.toString())
                 }
-            } else {
-//                Log.runtime(TAG, "农场今日已签到")
+
+                // 访问金豆乐园
+                val joBean = JSONObject(AntOrchardRpcCall.orchardToGoldenBeanIndex())
+                if (!joBean.optBoolean("success")){
+                    Log.error(TAG,"农场访问金豆乐园失败:[$joBean]")
+                }
             }
         } catch (t: Throwable) {
             Log.printStackTrace(TAG, "orchardSign err:", t)
