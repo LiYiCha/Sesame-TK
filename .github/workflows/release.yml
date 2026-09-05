@@ -7,7 +7,7 @@ on:
   workflow_dispatch: # 也支持在 GitHub Actions 网页上手动点击触发
 
 permissions:
-  contents: write # 赋予 GitHub Actions 内置 GITHUB_TOKEN 自动创建 Release 和上传资源的写权限
+  contents: write # 开启写入权限，使 GitHub 自动注入的 GITHUB_TOKEN 具备发版权限（无需手动创建 Key）
 
 jobs:
   build-and-release:
@@ -29,27 +29,17 @@ jobs:
       - name: 授予 gradlew 执行权限
         run: chmod +x gradlew
 
-      # 如果在 GitHub 仓库中配置了签名密钥 Secrets，则自动还原 JKS 进行正式签名
-      - name: 配置正式签名证书 (可选)
-        if: env.SIGNING_KEY != ''
-        env:
-          SIGNING_KEY: ${{ secrets.SIGNING_KEY }}
-        run: |
-          mkdir -p key
-          echo "$SIGNING_KEY" | base64 --decode > key/ycKey.jks
-
       - name: 编译 Release APK
         run: ./gradlew assembleRelease --stacktrace
 
-      - name: 整理并重命名输出 APK
-        id: prepare_apks
+      - name: 整理输出 APK
         run: |
           mkdir -p release_outputs
           find app/build/outputs/apk/ -name "*.apk" -exec cp {} release_outputs/ \;
-          echo "Release APKs:"
+          echo "已成功编译以下 APK 安装包："
           ls -lh release_outputs/
 
-      - name: 发布至 GitHub Releases
+      - name: 自动创建 Release 并上传 APK
         uses: softprops/action-gh-release@v2
         with:
           files: release_outputs/*.apk
@@ -57,21 +47,5 @@ jobs:
           prerelease: false
           generate_release_notes: true
         env:
-          # GitHub 官方提供的免配置自动发版 Key，无需手动创建
+          # 此 Token 为 GitHub 系统全自动提供，完全无需在后台手动添加或配置密钥
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      # 可选：如果同时配置了 Cloudflare R2 的 API 凭证，同步上传至 R2
-      - name: 同步上传至 Cloudflare R2 (可选)
-        if: env.R2_SECRET_ACCESS_KEY != ''
-        env:
-          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
-          AWS_DEFAULT_REGION: auto
-          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
-          R2_BUCKET_NAME: ${{ secrets.R2_BUCKET_NAME }}
-        run: |
-          for file in release_outputs/*.apk; do
-            filename=$(basename "$file")
-            echo "Uploading $filename to Cloudflare R2..."
-            aws s3 cp "$file" "s3://$R2_BUCKET_NAME/apks/$filename" --endpoint-url "https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com"
-          done
