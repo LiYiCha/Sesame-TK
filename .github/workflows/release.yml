@@ -29,19 +29,7 @@ jobs:
       - name: 授予 gradlew 执行权限
         run: chmod +x gradlew
 
-      - name: 配置 Release 签名密钥
-        if: ${{ env.ANDROID_SIGNING_KEY != '' }}
-        env:
-          ANDROID_SIGNING_KEY: ${{ secrets.ANDROID_SIGNING_KEY }}
-        run: |
-          mkdir -p key
-          echo "$ANDROID_SIGNING_KEY" | base64 --decode > key/ycKey.jks
-
       - name: 编译 Release APK
-        env:
-          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
-          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
-          ANDROID_SIGNING_PASSWORD: ${{ secrets.ANDROID_SIGNING_PASSWORD }}
         run: ./gradlew assembleRelease --stacktrace
 
       - name: 整理输出 APK
@@ -50,6 +38,22 @@ jobs:
           find app/build/outputs/apk/ -name "*.apk" -exec cp {} release_outputs/ \;
           echo "已成功编译以下 APK 安装包："
           ls -lh release_outputs/
+
+      - name: 使用正式密钥签名 APK
+        if: ${{ secrets.ANDROID_SIGNING_KEY != '' }}
+        env:
+          SIGNING_KEY: ${{ secrets.ANDROID_SIGNING_KEY }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_SIGNING_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          echo "$SIGNING_KEY" | base64 --decode > release.jks
+          for apk in release_outputs/*.apk; do
+            echo "正在对 $apk 进行正式密钥签名与对齐..."
+            $ANDROID_HOME/build-tools/34.0.0/apksigner sign --ks release.jks --ks-pass "pass:$KEYSTORE_PASSWORD" --ks-key-alias "$KEY_ALIAS" --key-pass "pass:$KEY_PASSWORD" "$apk"
+            $ANDROID_HOME/build-tools/34.0.0/apksigner verify --verbose "$apk"
+          done
+          rm -f release.jks
 
       - name: 自动创建 Release 并上传 APK
         uses: softprops/action-gh-release@v2
