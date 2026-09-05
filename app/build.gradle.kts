@@ -158,6 +158,20 @@ android {
     signingConfigs {
         getByName("debug") {
         }
+        val keyFile = rootProject.file("key/ycKey.jks")
+        val envStorePass = System.getenv("ANDROID_SIGNING_PASSWORD")
+        val envKeyAlias = System.getenv("ANDROID_KEY_ALIAS")
+        val envKeyPass = System.getenv("ANDROID_KEY_PASSWORD")
+        if (keyFile.exists() && !envStorePass.isNullOrBlank() && !envKeyAlias.isNullOrBlank() && !envKeyPass.isNullOrBlank()) {
+            create("release") {
+                storeFile = keyFile
+                storePassword = envStorePass
+                keyAlias = envKeyAlias
+                keyPassword = envKeyPass
+                enableV1Signing = true
+                enableV2Signing = true
+            }
+        }
     }
 
     buildTypes {
@@ -174,7 +188,7 @@ android {
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.findByName("release") ?: signingConfigs.getByName("debug")
         }
     }
 

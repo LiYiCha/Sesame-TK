@@ -29,7 +29,19 @@ jobs:
       - name: 授予 gradlew 执行权限
         run: chmod +x gradlew
 
+      - name: 配置 Release 签名密钥
+        if: ${{ env.ANDROID_SIGNING_KEY != '' }}
+        env:
+          ANDROID_SIGNING_KEY: ${{ secrets.ANDROID_SIGNING_KEY }}
+        run: |
+          mkdir -p key
+          echo "$ANDROID_SIGNING_KEY" | base64 --decode > key/ycKey.jks
+
       - name: 编译 Release APK
+        env:
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          ANDROID_SIGNING_PASSWORD: ${{ secrets.ANDROID_SIGNING_PASSWORD }}
         run: ./gradlew assembleRelease --stacktrace
 
       - name: 整理输出 APK
