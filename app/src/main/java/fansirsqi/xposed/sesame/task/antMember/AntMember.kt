@@ -1910,11 +1910,74 @@ class AntMember : ModelTask() {
     }
 
     /**
+     * 芝麻炼金 - 检查并使用体力药水
+     */
+    private suspend fun checkAndUseStamina(): Unit = CoroutineUtils.run {
+        try {
+            val itemsRes = AntMemberRpcCall.Zmxy.Alchemy.queryAvailableItems()
+            val itemsJo = JSONObject(itemsRes)
+            if (ResChecker.checkRes(TAG, itemsJo)) {
+                val data = itemsJo.optJSONObject("data") ?: return@run
+                val items = data.optJSONArray("items") ?: return@run
+                for (i in 0 until items.length()) {
+                    val item = items.optJSONObject(i) ?: continue
+                    val itemId = item.optString("itemId")
+                    val itemType = item.optString("itemType")
+                    if (itemType == "BOTTLE" && itemId.isNotEmpty()) {
+                        val useRes = AntMemberRpcCall.Zmxy.Alchemy.useItem(itemId, itemType)
+                        val useJo = JSONObject(useRes)
+                        if (ResChecker.checkRes(TAG, useJo) && useJo.optJSONObject("data")?.optBoolean("success") == true) {
+                            Log.other("芝麻炼金⚗️[使用体力药水成功]#恢复体力🚀")
+                        } else {
+                            Log.runtime(TAG, "芝麻炼金⚗️使用体力药水失败: ${useJo.optString("resultView")}")
+                        }
+                        delay(1000)
+                    }
+                }
+            }
+        } catch (t: Throwable) {
+            Log.printStackTrace("$TAG.checkAndUseStamina", t)
+        }
+    }
+
+    /**
+     * 芝麻炼金 - 开启宝箱
+     */
+    private suspend fun openTreasureBox(): Unit = CoroutineUtils.run {
+        try {
+            val queryRes = AntMemberRpcCall.Zmxy.Alchemy.queryTreasureBox()
+            val queryJo = JSONObject(queryRes)
+            if (ResChecker.checkRes(TAG, queryJo)) {
+                val data = queryJo.optJSONObject("data") ?: return@run
+                val hasBox = data.optBoolean("hasBox", false)
+                val rewardAmountStr = data.optString("rewardAmount", "0")
+                val rewardAmount = rewardAmountStr.toIntOrNull() ?: data.optInt("rewardAmount", 0)
+                if (hasBox && rewardAmount > 0) {
+                    val openRes = AntMemberRpcCall.Zmxy.Alchemy.openTreasureBox()
+                    val openJo = JSONObject(openRes)
+                    if (ResChecker.checkRes(TAG, openJo)) {
+                        val openData = openJo.optJSONObject("data")
+                        val got = openData?.optInt("rewardAmount", rewardAmount) ?: rewardAmount
+                        Log.other("芝麻炼金⚗️[开启宝箱成功]#获得芝麻粒 +$got")
+                    } else {
+                        Log.runtime(TAG, "芝麻炼金⚗️开启宝箱失败: ${openJo.optString("resultView")}")
+                    }
+                }
+            }
+        } catch (t: Throwable) {
+            Log.printStackTrace("$TAG.openTreasureBox", t)
+        }
+    }
+
+    /**
      * 芝麻炼金
      */
     private suspend fun doSesameAlchemy(): Unit = CoroutineUtils.run {
         try {
             Log.runtime(TAG, "开始执行芝麻炼金⚗️")
+
+            // 检查并使用体力药水
+            checkAndUseStamina()
 
             // ================= Step 1: 自动炼金 (消耗芝麻粒升级) =================
             val homeRes = AntMemberRpcCall.Zmxy.Alchemy.alchemyQueryHome()
@@ -1922,6 +1985,11 @@ class AntMember : ModelTask() {
             if (ResChecker.checkRes(TAG, homeJo)) {
                 val data = homeJo.optJSONObject("data")
                 if (data != null) {
+                    val staminaStatus = data.optString("staminaStatus", "")
+                    val staminaCurrent = data.optInt("staminaCurrent", 0)
+                    if (staminaStatus == "EXHAUSTED" || staminaCurrent == 0) {
+                        checkAndUseStamina()
+                    }
                     var zmlBalance = data.optInt("zmlBalance", 0) // 当前芝麻粒
                     val cost = data.optInt("alchemyCostZml", 5) // 单次消耗
                     var capReached = data.optBoolean("capReached", false) // 是否达到上限
@@ -2080,9 +2148,15 @@ class AntMember : ModelTask() {
                 }
             }
 
+            // 任务完成后再次检查体力药水
+            checkAndUseStamina()
+
             // ================= Step 4: [新增] 任务完成后一键收取芝麻粒 =================
-            Log.runtime(TAG, "芝麻炼金⚗️[任务处理完毕，准备收取芝麻粒]")
+            Log.runtime(TAG, "芝麻炼金⚗️[任务处理完毕，准备开启宝箱及收取芝麻粒]")
             delay(2000) // 稍作等待，确保任务奖励到账
+
+            // 4.0 开启炼金宝箱
+            openTreasureBox()
 
             // 4.1 查询是否有可收取的芝麻粒
             val queryFeedbackRes = AntMemberRpcCall.queryCreditFeedback()

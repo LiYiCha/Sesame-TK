@@ -1236,6 +1236,46 @@ public class AntMemberRpcCall {
                         "[{}]"
                 );
             }
+
+            /**
+             * 芝麻炼金-查询宝箱进度
+             */
+            public static String queryTreasureBox() {
+                return RequestManager.requestString(
+                        "com.antgroup.zmxy.zmmemberop.biz.rpc.AlchemyTreasureBoxRpcManager.query",
+                        "[{}]");
+            }
+
+            /**
+             * 芝麻炼金-开启宝箱
+             */
+            public static String openTreasureBox() {
+                return RequestManager.requestString(
+                        "com.antgroup.zmxy.zmmemberop.biz.rpc.AlchemyTreasureBoxRpcManager.open",
+                        "[null]");
+            }
+
+            /**
+             * 芝麻炼金-查询可用道具(体力药水等)
+             */
+            public static String queryAvailableItems(String bizScene) {
+                return RequestManager.requestString(
+                        "com.antgroup.zmxy.zmmemberop.biz.rpc.ItemRpcManager.queryAvailableItems",
+                        "[{\"bizScene\":\"" + (bizScene == null ? "ALCHEMY" : bizScene) + "\"}]");
+            }
+
+            public static String queryAvailableItems() {
+                return queryAvailableItems("ALCHEMY");
+            }
+
+            /**
+             * 芝麻炼金-使用道具(增加体力)
+             */
+            public static String useItem(String itemId, String itemType) {
+                return RequestManager.requestString(
+                        "com.antgroup.zmxy.zmmemberop.biz.rpc.ItemRpcManager.useItem",
+                        "[{\"itemId\":\"" + itemId + "\",\"itemType\":\"" + itemType + "\"}]");
+            }
         }
 
         public static class Pigeon {
