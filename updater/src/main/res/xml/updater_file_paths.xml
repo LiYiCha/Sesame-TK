@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- 允许共享应用私有缓存目录下的 apks 文件夹 -->
+    <cache-path name="updater_apks" path="apks/" />
+    <!-- 允许共享应用外部缓存目录下的 apks 文件夹 -->
+    <external-cache-path name="updater_external_apks" path="apks/" />
+    <!-- 允许共享应用私有文件目录下的 apks 文件夹 -->
+    <files-path name="updater_files_apks" path="apks/" />
+    <!-- 允许共享应用外部文件目录下的 apks 文件夹 (与 getExternalFilesDir(null) 匹配) -->
+    <!-- 允许共享应用外部媒体目录下的 update 文件夹 (匹配 /Android/media/{pkg}/update/) -->
+    <external-media-path name="updater_external_media" path="update/" />
+    <external-path name="updater_external_root" path="Android/media/" />
+    <external-path name="updater_external_storage" path="." />
+    <external-files-path name="updater_external_files_update" path="update/" />
+    <files-path name="updater_files_update" path="update/" />
+</paths>
+

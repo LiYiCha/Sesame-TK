@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- 网络请求与安装权限 -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+    
+    <!-- 前台服务权限 (兼容 Android 14) -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    
+    <!-- 通知发送权限 (兼容 Android 13+) -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+    <!-- 允许查询外部应用安装状态（用于宿主安装版本对账与精准清理，兼容 Android 11+ Package Visibility） -->
+    <queries>
+        <package android:name="com.eg.android.AlipayGphone" />
+        <intent>
+            <action android:name="android.intent.action.MAIN" />
+        </intent>
+    </queries>
+
+    <application>
+        <!-- 前台下载服务 -->
+        <service
+            android:name="com.updater.download.ForegroundDownloadService"
+            android:enabled="true"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
+
+        <!-- 下载管理与版本更新列表界面 -->
+        <activity
+            android:name="com.updater.ui.DownloadManagerActivity"
+            android:theme="@android:style/Theme.DeviceDefault.Light.NoActionBar"
+            android:screenOrientation="portrait"
+            android:exported="false" />
+
+        <!-- 安全安装 FileProvider -->
+        <provider
+            android:name="com.updater.utils.UpdaterFileProvider"
+            android:authorities="${applicationId}.updater.provider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/updater_file_paths" />
+        </provider>
+
+        <!-- 安装完成精准清理广播接收器 (覆盖安装生效后自动触发删除) -->
+        <receiver
+            android:name="com.updater.receiver.PackageInstalledReceiver"
+            android:enabled="true"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.PACKAGE_ADDED" />
+                <action android:name="android.intent.action.PACKAGE_REPLACED" />
+                <data android:scheme="package" />
+            </intent-filter>
+        </receiver>
+    </application>
+</manifest>

@@ -218,6 +218,9 @@ android {
     }
 }
 dependencies {
+    // Updater 模块接入
+    implementation(project(":updater"))
+
     // Shizuku
     implementation(libs.rikka.shizuku.api)
 
