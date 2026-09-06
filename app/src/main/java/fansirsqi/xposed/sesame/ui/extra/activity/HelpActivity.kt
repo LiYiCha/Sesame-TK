@@ -57,7 +57,10 @@ class HelpActivity : BaseActivity() {
 
         setContent {
             SesameTheme {
-                HelpScreen(onBackClick = { finish() })
+                HelpScreen(
+                    activity = this@HelpActivity,
+                    onBackClick = { finish() }
+                )
             }
         }
     }
@@ -65,8 +68,8 @@ class HelpActivity : BaseActivity() {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun HelpScreen(onBackClick: () -> Unit) {
-    val context = LocalContext.current
+private fun HelpScreen(activity: android.app.Activity, onBackClick: () -> Unit) {
+    val context = activity
     val configManager = remember { UpdaterConfigManager(context) }
 
     // 状态管理

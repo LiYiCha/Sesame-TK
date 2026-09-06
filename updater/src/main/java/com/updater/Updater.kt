@@ -1,7 +1,9 @@
 package com.updater
 
+import android.app.Activity
 import android.app.AlertDialog
 import android.content.Context
+import android.content.ContextWrapper
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
@@ -431,21 +433,32 @@ class Updater private constructor(
         return 1
     }
 
+    private fun findActivity(context: Context): Activity? {
+        var ctx = context
+        while (ctx is ContextWrapper) {
+            if (ctx is Activity) return ctx
+            ctx = ctx.baseContext
+        }
+        return null
+    }
+
     private fun showUpdateDialog(context: Context, updateInfo: UpdateInfo) {
-        if (context is android.app.Activity) {
-            if (context.isFinishing || (Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN_MR1 && context.isDestroyed)) {
+        val activity = findActivity(context)
+        if (activity != null) {
+            if (activity.isFinishing || (Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN_MR1 && activity.isDestroyed)) {
                 return
             }
         }
+        val targetContext = activity ?: context
         try {
-            val builder = AlertDialog.Builder(context).apply {
+            val builder = AlertDialog.Builder(targetContext).apply {
                 setTitle("发现新版本 v${updateInfo.latestVersionName}")
                 setMessage(updateInfo.updateLog.ifEmpty { "检测到新版本发布，可进入下载中心获取更新。" })
                 setCancelable(!updateInfo.isForceUpdate)
                 
                 setPositiveButton("立即查看") { dialog, _ ->
                     dialog.dismiss()
-                    openDownloadCenter(context, updateInfo)
+                    openDownloadCenter(targetContext, updateInfo)
                 }
                 
                 if (!updateInfo.isForceUpdate) {
@@ -464,7 +477,9 @@ class Updater private constructor(
                 }
             }
         } catch (e: Throwable) {
-            UpdaterLog.e("显示更新对话框异常", e)
+            UpdaterLog.e("显示更新对话框异常: ${e.message}", e)
+            // 兜底策略：如果因为 Context 或主题原因无法弹出对话框，直接打开下载管理中心，保证信息正常呈现
+            openDownloadCenter(targetContext, updateInfo)
         }
     }
 
