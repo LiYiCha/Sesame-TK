@@ -42,25 +42,31 @@ object SourceSettingsDialog {
         }
 
         val rbManual = RadioButton(context).apply {
+            id = View.generateViewId()
             text = "手动更新 (默认)\n仅在点击菜单检查更新时联网，日常无后台检测"
             textSize = 13f
             setTextColor(Color.parseColor("#343A40"))
-            isChecked = configManager.updateMode == UpdaterConfigManager.UPDATE_MODE_MANUAL
             setLineSpacing(dpToPx(context, 2).toFloat(), 1.0f)
             setPadding(dpToPx(context, 6), dpToPx(context, 4), 0, dpToPx(context, 8))
         }
 
         val rbAuto = RadioButton(context).apply {
+            id = View.generateViewId()
             text = "自动更新\n应用每次启动时后台静默检测，有新版本主动弹窗"
             textSize = 13f
             setTextColor(Color.parseColor("#343A40"))
-            isChecked = configManager.updateMode == UpdaterConfigManager.UPDATE_MODE_AUTO
             setLineSpacing(dpToPx(context, 2).toFloat(), 1.0f)
             setPadding(dpToPx(context, 6), dpToPx(context, 4), 0, dpToPx(context, 8))
         }
 
         radioGroupMode.addView(rbManual)
         radioGroupMode.addView(rbAuto)
+
+        if (configManager.updateMode == UpdaterConfigManager.UPDATE_MODE_AUTO) {
+            radioGroupMode.check(rbAuto.id)
+        } else {
+            radioGroupMode.check(rbManual.id)
+        }
 
         radioGroupMode.setOnCheckedChangeListener { _, checkedId ->
             if (checkedId == rbManual.id) {
@@ -276,14 +282,16 @@ object SourceSettingsDialog {
         }
 
         val rbCf = RadioButton(context).apply {
+            id = View.generateViewId()
             text = "Cloudflare Pages R2"
-            isChecked = true
         }
         val rbGh = RadioButton(context).apply {
+            id = View.generateViewId()
             text = "GitHub Releases"
         }
         rgType.addView(rbCf)
         rgType.addView(rbGh)
+        rgType.check(rbCf.id)
         formLayout.addView(rgType)
 
         AlertDialog.Builder(context)
@@ -297,7 +305,7 @@ object SourceSettingsDialog {
                     return@setPositiveButton
                 }
 
-                val type = if (rbGh.isChecked) UpdateSourceType.GITHUB_RELEASES else UpdateSourceType.CLOUDFLARE_R2
+                val type = if (rgType.checkedRadioButtonId == rbGh.id) UpdateSourceType.GITHUB_RELEASES else UpdateSourceType.CLOUDFLARE_R2
                 val newSource = UpdateSource(
                     id = UUID.randomUUID().toString(),
                     name = name,
