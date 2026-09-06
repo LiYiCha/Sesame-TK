@@ -22,6 +22,8 @@ class UpdaterConfigManager(context: Context) {
         private const val KEY_SELECTED_SOURCE_ID = "key_selected_source_id"
         private const val KEY_SOURCES_LIST = "key_sources_list"
         private const val KEY_CACHED_UPDATE_INFO = "key_cached_update_info"
+        private const val KEY_ADMIN_TOKEN = "key_admin_token"
+        private const val KEY_ADMIN_USERNAME = "key_admin_username"
     }
 
     /**
@@ -60,6 +62,24 @@ class UpdaterConfigManager(context: Context) {
     var selectedSourceId: String
         get() = sp.getString(KEY_SELECTED_SOURCE_ID, "") ?: ""
         set(value) = sp.edit().putString(KEY_SELECTED_SOURCE_ID, value).apply()
+
+    /**
+     * 管理员 Token 与认证信息
+     */
+    var adminToken: String
+        get() = sp.getString(KEY_ADMIN_TOKEN, "") ?: ""
+        set(value) = sp.edit().putString(KEY_ADMIN_TOKEN, value).apply()
+
+    var adminUsername: String
+        get() = sp.getString(KEY_ADMIN_USERNAME, "") ?: ""
+        set(value) = sp.edit().putString(KEY_ADMIN_USERNAME, value).apply()
+
+    val isAdminLoggedIn: Boolean
+        get() = adminToken.isNotBlank()
+
+    fun logoutAdmin() {
+        sp.edit().remove(KEY_ADMIN_TOKEN).remove(KEY_ADMIN_USERNAME).apply()
+    }
 
     /**
      * 初始化或合并预设更新源

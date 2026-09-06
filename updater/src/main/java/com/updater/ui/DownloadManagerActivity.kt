@@ -484,10 +484,17 @@ class DownloadManagerActivity : Activity() {
                 addRule(RelativeLayout.CENTER_IN_PARENT)
             }
             layoutParams = lp
+            setOnLongClickListener {
+                val currentAppId = updateInfo?.appId ?: packageName
+                AdminUploadDialog.show(this@DownloadManagerActivity, currentAppId) {
+                    doRefreshUpdates()
+                }
+                true
+            }
         }
         titleBar.addView(txtTitle)
 
-        // 3. 右侧操作区：刷新按钮 + 源设置按钮
+        // 3. 右侧操作区：刷新按钮 + 源设置按钮 + 管理员上传附加包按钮
         val rightActionLayout = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
@@ -508,8 +515,8 @@ class DownloadManagerActivity : Activity() {
                 cornerRadius = dpToPx(14).toFloat()
             }
             background = bg
-            val lp = LinearLayout.LayoutParams(dpToPx(56), dpToPx(30)).apply {
-                rightMargin = dpToPx(6)
+            val lp = LinearLayout.LayoutParams(dpToPx(52), dpToPx(30)).apply {
+                rightMargin = dpToPx(4)
             }
             layoutParams = lp
             setOnClickListener {
@@ -529,7 +536,9 @@ class DownloadManagerActivity : Activity() {
                 cornerRadius = dpToPx(14).toFloat()
             }
             background = bg
-            val lp = LinearLayout.LayoutParams(dpToPx(60), dpToPx(30))
+            val lp = LinearLayout.LayoutParams(dpToPx(56), dpToPx(30)).apply {
+                rightMargin = dpToPx(4)
+            }
             layoutParams = lp
             setOnClickListener {
                 SourceSettingsDialog.show(this@DownloadManagerActivity) {
@@ -538,6 +547,28 @@ class DownloadManagerActivity : Activity() {
             }
         }
         rightActionLayout.addView(btnSettings)
+
+        val btnUpload = Button(this).apply {
+            text = "上传包"
+            textSize = 12f
+            typeface = Typeface.DEFAULT_BOLD
+            setTextColor(colorTextPrimary)
+            val bg = GradientDrawable().apply {
+                setColor(colorCardInner)
+                setStroke(dpToPx(1), colorBorder)
+                cornerRadius = dpToPx(14).toFloat()
+            }
+            background = bg
+            val lp = LinearLayout.LayoutParams(dpToPx(56), dpToPx(30))
+            layoutParams = lp
+            setOnClickListener {
+                val currentAppId = updateInfo?.appId ?: packageName
+                AdminUploadDialog.show(this@DownloadManagerActivity, currentAppId) {
+                    doRefreshUpdates()
+                }
+            }
+        }
+        rightActionLayout.addView(btnUpload)
 
         titleBar.addView(rightActionLayout)
         root.addView(titleBar)
