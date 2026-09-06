@@ -2,6 +2,7 @@ package fansirsqi.xposed.sesame.task.otherTask2
 
 import fansirsqi.xposed.sesame.data.Status
 import fansirsqi.xposed.sesame.hook.RequestManager
+import fansirsqi.xposed.sesame.hook.core.ModuleScope
 import fansirsqi.xposed.sesame.task.otherTask.BaseCommTask
 import fansirsqi.xposed.sesame.task.otherTask.CompletedKeyEnum
 import fansirsqi.xposed.sesame.util.Log
@@ -9,10 +10,39 @@ import fansirsqi.xposed.sesame.util.RandomUtil
 import fansirsqi.xposed.sesame.util.DataStore
 import fansirsqi.xposed.sesame.util.TimeUtil
 import fansirsqi.xposed.sesame.util.maps.UserMap
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import org.json.JSONArray
 import org.json.JSONObject
 
 class GameCenterGold : BaseCommTask() {
+
+    companion object {
+        @Volatile
+        private var playJob: Job? = null
+
+        /**
+         * 检查60s玩游戏后台协程是否正在运行
+         */
+        fun isPlayJobRunning(): Boolean {
+            return playJob?.isActive == true
+        }
+
+        /**
+         * 停止60s玩游戏后台协程
+         */
+        fun stopPlayJob() {
+            try {
+                playJob?.cancel()
+            } catch (_: Exception) {
+            } finally {
+                playJob = null
+            }
+        }
+    }
 
     init {
         displayName = "游戏中心金币🍧"
@@ -86,12 +116,12 @@ class GameCenterGold : BaseCommTask() {
                 Status.setTemporaryStatusWithExpiry("GameCenterGold_Browse_Limit", 1000 * 60 * 60)
             }
 
-            // 4. 处理玩游戏60秒任务
+            // 4. 处理玩游戏60秒任务 (改用协程后台异步执行，不阻塞主任务队列)
             if (needPlay) {
-                processPlay60sTasks()
+                launchPlay60sTasksAsync()
             }
 
-            // 5. 领取阶段奖励里程碑
+            // 5. 领取阶段奖励里程碑（快速检查一次）
             handleMilestoneRewards()
 
         } catch (e: Exception) {
@@ -294,10 +324,36 @@ class GameCenterGold : BaseCommTask() {
     }
 
     /**
-     * 处理玩游戏60秒任务
+     * 启动60s玩游戏与时长上报后台协程（异步非阻塞，不占用主任务队列）
      */
-    private fun processPlay60sTasks() {
-        val maxIterations = 6 // 降低循环次数，避免过多请求
+    private fun launchPlay60sTasksAsync() {
+        if (playJob?.isActive == true) {
+            Log.runtime(TAG, "$displayName: 60s游戏任务后台协程正在运行中，跳过重复启动")
+            return
+        }
+
+        playJob = ModuleScope.launch(Dispatchers.IO) {
+            try {
+                Log.runtime(TAG, "$displayName: 启动60s游戏任务后台协程")
+                processPlay60sTasks()
+                // 完成全部槽位后，领取最终阶段奖励
+                handleMilestoneRewards()
+            } catch (_: CancellationException) {
+                Log.runtime(TAG, "$displayName: 60s游戏任务后台协程已取消")
+            } catch (e: Exception) {
+                Log.error(TAG, "$displayName: 60s游戏任务协程异常: ${e.message}")
+                Log.printStackTrace(e)
+            } finally {
+                playJob = null
+            }
+        }
+    }
+
+    /**
+     * 处理玩游戏60秒任务（协程挂起版本，非阻塞）
+     */
+    private suspend fun processPlay60sTasks() {
+        val maxIterations = 20 // 扩大单次循环上限，支持在后台连续跑完当天所有槽位
         var loopCount = 0
 
         while (loopCount < maxIterations) {
@@ -412,8 +468,8 @@ class GameCenterGold : BaseCommTask() {
                 // 发起 consult
                 val consultRes = gameP2eFloatingBallConsult(selectedGameId, gameModuleId)
                 if (consultRes != null && JSONObject(consultRes).optBoolean("success")) {
-                    // 模拟在游戏中玩 30 秒
-                    TimeUtil.sleep(30000)
+                    // 模拟在游戏中玩 30 秒（协程挂起，不阻塞线程）
+                    delay(30000)
                     
                     // 上报第一阶段时长 30s
                     submitUserPlayDurationAction(appId, 30)
@@ -421,7 +477,7 @@ class GameCenterGold : BaseCommTask() {
                     // 模拟再玩 32-35 秒以符合 60s 倒计时
                     val remainTime = RandomUtil.nextLong(32000, 35000)
                     val playTimeSec = (remainTime / 1000).toInt()
-                    TimeUtil.sleep(remainTime)
+                    delay(remainTime)
                     
                     // 上报第二阶段增量时长 (如 32-35s)
                     submitUserPlayDurationAction(appId, playTimeSec)
@@ -434,29 +490,34 @@ class GameCenterGold : BaseCommTask() {
                         todayPlayedGames.add(selectedGameId)
                         usedMap[mapKey] = todayPlayedGames
                         DataStore.put(storeKey, usedMap)
+
+                        // 槽位完成后，及时尝试领取阶段里程碑奖励
+                        handleMilestoneRewards()
                     } else {
                         Log.error(TAG, "槽位[$slotDesc]提交完成RPC失败: $completeRes")
                     }
                     
                     // 60s游戏结束，触发下发金币和气泡奖励曝光
                     queryHomePage()
-                    TimeUtil.sleep(RandomUtil.nextLong(1000, 2000))
+                    delay(RandomUtil.nextLong(1000, 2000))
                     queryBySpaceCodeList()
-                    TimeUtil.sleep(RandomUtil.nextLong(1000, 1500))
+                    delay(RandomUtil.nextLong(1000, 1500))
                     spaceFeedback()
-                    TimeUtil.sleep(RandomUtil.nextLong(1000, 2000))
+                    delay(RandomUtil.nextLong(1000, 2000))
                 } else {
                     Log.error(TAG, "启动游戏 $selectedGameId 咨询失败: $consultRes")
                     Log.other("$displayName: 游戏 $selectedGameId 启动咨询失败，今天跳过该游戏")
                     todayPlayedGames.add(selectedGameId)
                     usedMap[mapKey] = todayPlayedGames
                     DataStore.put(storeKey, usedMap)
-                    TimeUtil.sleep(5000)
+                    delay(5000)
                 }
 
+            } catch (_: CancellationException) {
+                throw CancellationException()
             } catch (e: Exception) {
                 Log.error(TAG, "$displayName: 处理60s游戏任务单次异常: ${e.message}")
-                TimeUtil.sleep(5000)
+                delay(5000)
             }
         }
     }

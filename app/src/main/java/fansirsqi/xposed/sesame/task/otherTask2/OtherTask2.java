@@ -311,8 +311,9 @@ public class OtherTask2 extends ModelTask {
             taskExecutor = null;
         }
 
-        // 4. 重置状态
+        // 4. 重置状态并停止游戏中心后台协程
         isRunning.set(false);
+        GameCenterGold.Companion.stopPlayJob();
 
         // 5. 调用父类清理协程
         super.stopTask();

@@ -4751,14 +4751,17 @@ class AntForest : ModelTask(), EnergyCollectCallback {
                     }
                 }
 
-                // 2. 判断是否需要刷任务 (接你之前的逻辑)
+                // 2. 判断是否需要刷任务 (接你之前的逻辑，使用后台协程异步执行，避免阻塞森林主流程)
                 val remainToTask = limitCount - usedCount
                 if (remainToTask > 0) {
-
-                    //Log.runtime(TAG, "任务进度未满，准备执行 $remainToTask 次上报...")
-                    GameTask.Forest_slxcc.report(remainToTask)
-
-
+                    GlobalThreadPools.execute(Dispatchers.IO) {
+                        try {
+                            GameTask.Forest_slxcc.report(remainToTask)
+                        } catch (_: CancellationException) {
+                        } catch (e: Exception) {
+                            Log.error(TAG, "森林小车车上报异常: ${e.message}")
+                        }
+                    }
                 } else {
                     // Log.runtime(TAG, "今日游戏中心任务已满额")
                 }
