@@ -13,6 +13,7 @@
 5. **本地进度缓存**：内置 SQLite 数据库，即便应用退出或手机重启，仍能保留下载进度和状态。
 6. **MD5 安全校验**：下载完成后自动比对文件 MD5，防止文件受损或篡改。
 7. **全版本安全安装**：利用 `FileProvider` 安全安装 APK，支持并适配 Android 7.0 ~ Android 14+。
+8. **Markdown 富文本版本说明**：内置 `MarkdownUtils`，更新弹窗与下载管理中心原生支持标题、加粗、斜体、列表、代码块及超链接点击交互。
 
 ---
 
@@ -214,6 +215,8 @@ btnSettings.setOnClickListener {
 > [!NOTE]
 > 1. `downloadUrl` 支持以 `http` 或 `https` 开头的绝对路径，也支持不带域名的相对路径。若为相对路径，更新模块会自动将其拼接为您在 `setBaseHost()` 中配置 of 域名。
 > 2. `apkMd5` 为空时，更新模块将跳过 MD5 校验。若不为空，下载完成后会计算本地文件 MD5 并与之对比，校验失败会提示用户重新下载。
+> 3. `updateLog` 原生支持 **Markdown** 语法渲染（如 `### 标题`、`- 列表项`、`**加粗**`、`[超链接](url)` 等），客户端弹窗与下载管理列表会自动以富文本展示，且超链接可直接点击跳转。
+> 4. **Cloudflare 后端权限设置**：若使用 FlareDrive-R2 作为更新源，安装包目录（`/raw/update/...`）默认免登录直链公开；若需通过环境变量严密管控，可在 Cloudflare Pages 设置 `ALLOW_PUBLIC_UPDATE=false` 并通过 `GUEST=update` 精准控制。
 
 ---
 
