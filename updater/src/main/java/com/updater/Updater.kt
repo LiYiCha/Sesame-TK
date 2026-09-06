@@ -14,6 +14,8 @@ import android.os.Handler
 import android.os.Looper
 import android.view.ViewGroup
 import android.widget.Toast
+import android.text.method.LinkMovementMethod
+import android.widget.TextView
 import com.updater.config.UpdaterConfigManager
 import com.updater.model.UpdateInfo
 import com.updater.model.UpdatePackage
@@ -21,6 +23,7 @@ import com.updater.model.UpdateSource
 import com.updater.model.UpdateSourceType
 import com.updater.ui.DownloadManagerActivity
 import com.updater.ui.SourceSettingsDialog
+import com.updater.utils.MarkdownUtils
 import com.updater.utils.UpdaterLog
 import okhttp3.*
 import org.json.JSONObject
@@ -560,9 +563,15 @@ class Updater private constructor(
         }
         val targetContext = activity ?: context
         try {
+            val updateMessage = if (updateInfo.updateLog.isNotBlank()) {
+                MarkdownUtils.renderMarkdown(targetContext, updateInfo.updateLog)
+            } else {
+                "检测到新版本发布，可进入下载中心获取更新。"
+            }
+
             val builder = AlertDialog.Builder(targetContext).apply {
                 setTitle("发现新版本 v${updateInfo.latestVersionName}")
-                setMessage(updateInfo.updateLog.ifEmpty { "检测到新版本发布，可进入下载中心获取更新。" })
+                setMessage(updateMessage)
                 setCancelable(!updateInfo.isForceUpdate)
 
                 setPositiveButton("立即查看") { dialog, _ ->
@@ -582,6 +591,10 @@ class Updater private constructor(
                 try {
                     val density = targetContext.resources.displayMetrics.density
                     fun dp(v: Int) = (v * density + 0.5f).toInt()
+
+                    // 支持 Markdown 超链接点击跳转
+                    val messageView = dialog.findViewById<TextView>(android.R.id.message)
+                    messageView?.movementMethod = LinkMovementMethod.getInstance()
 
                     // 1. 立即查看按钮：实心经典品牌绿底、白色文字、加粗、圆角、清晰轮廓
                     dialog.getButton(AlertDialog.BUTTON_POSITIVE)?.apply {

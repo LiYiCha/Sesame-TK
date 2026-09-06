@@ -19,6 +19,7 @@ import android.view.ViewGroup
 import android.widget.*
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
+import android.text.method.LinkMovementMethod
 import com.updater.Updater
 import com.updater.config.UpdaterConfigManager
 import com.updater.db.DownloadDatabaseHelper
@@ -28,6 +29,7 @@ import com.updater.model.UpdateInfo
 import com.updater.model.UpdatePackage
 import com.updater.utils.ApkCleanupManager
 import com.updater.utils.ApkInstaller
+import com.updater.utils.MarkdownUtils
 import com.updater.utils.UpdatePathManager
 import com.updater.utils.UpdaterLog
 import java.io.File
@@ -627,11 +629,17 @@ class DownloadManagerActivity : Activity() {
             headerCard.addView(txtVersionTag)
 
             val txtChangelog = TextView(this).apply {
-                text = info.updateLog.ifEmpty { "优化了用户体验和细节。" }
+                val mdContent = if (info.updateLog.isNotBlank()) {
+                    MarkdownUtils.renderMarkdown(this@DownloadManagerActivity, info.updateLog)
+                } else {
+                    "优化了用户体验和细节。"
+                }
+                text = mdContent
                 textSize = 12f
                 setTextColor(colorTextSecondary)
                 setPadding(0, dpToPx(6), 0, 0)
-                maxLines = 4
+                movementMethod = LinkMovementMethod.getInstance()
+                setLineSpacing(dpToPx(2).toFloat(), 1.0f)
             }
             headerCard.addView(txtChangelog)
         } else {
