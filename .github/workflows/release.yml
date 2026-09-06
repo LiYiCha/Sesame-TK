@@ -40,13 +40,16 @@ jobs:
           ls -lh release_outputs/
 
       - name: 使用正式密钥签名 APK
-        if: ${{ secrets.ANDROID_SIGNING_KEY != '' }}
         env:
           SIGNING_KEY: ${{ secrets.ANDROID_SIGNING_KEY }}
           KEYSTORE_PASSWORD: ${{ secrets.ANDROID_SIGNING_PASSWORD }}
           KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
+          if [ -z "$SIGNING_KEY" ]; then
+            echo "未配置正式签名密钥 (ANDROID_SIGNING_KEY)，跳过正式签名步骤"
+            exit 0
+          fi
           echo "$SIGNING_KEY" | base64 --decode > release.jks
           for apk in release_outputs/*.apk; do
             echo "正在对 $apk 进行正式密钥签名与对齐..."
