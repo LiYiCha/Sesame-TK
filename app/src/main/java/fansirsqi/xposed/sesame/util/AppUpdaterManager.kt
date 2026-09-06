@@ -3,6 +3,8 @@ package fansirsqi.xposed.sesame.util
 import android.content.Context
 import com.updater.Updater
 import com.updater.utils.ApkCleanupManager
+import com.updater.utils.IUpdaterLogger
+import com.updater.utils.UpdaterLog
 import fansirsqi.xposed.sesame.data.General
 
 /**
@@ -25,18 +27,33 @@ object AppUpdaterManager {
         }
 
         val appContext = context.applicationContext
+        
+        // 注入项目统一日志输出器
+        UpdaterLog.setLogger(object : IUpdaterLogger {
+            override fun i(tag: String, msg: String) {
+                Log.runtime(tag, msg)
+            }
+
+            override fun e(tag: String, msg: String, throwable: Throwable?) {
+                Log.runtime(tag, "ERROR: $msg ${throwable?.message ?: ""}")
+                if (throwable != null) {
+                    Log.printStackTrace(throwable)
+                }
+            }
+        })
+
         val builder = Updater.Companion.Builder(appContext)
             .setAppId(General.MODULE_PACKAGE_NAME)
-            // 预设 1：Cloudflare Pages R2 更新源（可由用户在界面自定义）
+            // 预设 1：Cloudflare Pages R2 官方源
             .addCloudflareSource(
                 name = "Cloudflare 官方源",
-                baseHost = "https://update.fansirsqi.com",
+                baseHost = "https://cicha.de5.net",
                 isDefault = true
             )
-            // 预设 2：GitHub Releases 官方开源源
+            // 预设 2：GitHub Releases 官方开源发布源
             .addGitHubSource(
                 name = "GitHub 官方发布源",
-                repoOrUrl = "https://github.com/fansirsqi/Sesame-TK",
+                repoOrUrl = "https://github.com/LiYiCha/Sesame-TK",
                 isDefault = false
             )
 
@@ -51,16 +68,19 @@ object AppUpdaterManager {
      * 2. 若用户在更新设置中开启了「启动时自动检查更新」，则执行后台静默检测
      */
     fun initAndCheckOnStartup(context: Context) {
-        try {
-            // 启动时版本对账
-            ApkCleanupManager.checkAndCleanOnStartup(context)
+        val appContext = context.applicationContext
+        Thread {
+            try {
+                // 1. 后台异步执行启动版本对账清理，绝对不阻塞主线程冷启动
+                ApkCleanupManager.checkAndCleanOnStartup(appContext)
 
-            // 检查启动自动更新
-            val updater = getUpdater(context)
-            updater.checkUpdateOnStartup(context)
-        } catch (e: Throwable) {
-            Log.runtime(TAG, "启动更新对账异常: ${e.message}")
-        }
+                // 2. 检查启动自动更新（仅在用户开启自动更新时联网，内部通过 Handler 抛回主线程弹窗）
+                val updater = getUpdater(appContext)
+                updater.checkUpdateOnStartup(context)
+            } catch (e: Throwable) {
+                Log.runtime(TAG, "启动更新对账异常: ${e.message}")
+            }
+        }.start()
     }
 
     /**

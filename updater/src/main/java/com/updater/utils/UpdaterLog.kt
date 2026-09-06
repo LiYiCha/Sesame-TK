@@ -1,42 +1,45 @@
 package com.updater.utils
 
-import java.lang.reflect.Method
+/**
+ * 更新日志委托接口（依赖倒置，解耦模块依赖）
+ */
+interface IUpdaterLogger {
+    fun i(tag: String, msg: String)
+    fun e(tag: String, msg: String, throwable: Throwable? = null)
+}
 
 /**
  * 更新模块精简日志门面
- * 优先反射复用主项目 fansirsqi.xposed.sesame.util.Log
  * 严禁任何高频循环日志输出，仅输出关键核心生命周期
+ * 支持由主工程直接注入项目日志实现（避免反射与循环依赖）
  */
 object UpdaterLog {
 
     private const val TAG = "SesameUpdater"
-    private var logClass: Class<*>? = null
-    private var logInfoMethod: Method? = null
-    private var logErrorMethod: Method? = null
+    private var loggerDelegate: IUpdaterLogger? = null
 
-    init {
-        try {
-            logClass = Class.forName("fansirsqi.xposed.sesame.util.Log")
-            logInfoMethod = logClass?.getMethod("i", String::class.java, String::class.java)
-            logErrorMethod = logClass?.getMethod("e", String::class.java, String::class.java, Throwable::class.java)
-        } catch (_: Throwable) {}
+    /**
+     * 依赖注入：由主工程在启动时直接注册 Log 实现
+     */
+    fun setLogger(logger: IUpdaterLogger) {
+        loggerDelegate = logger
     }
 
     fun i(msg: String) {
-        try {
-            if (logInfoMethod != null) {
-                logInfoMethod?.invoke(null, TAG, msg)
-            }
-        } catch (_: Throwable) {}
+        val delegate = loggerDelegate
+        if (delegate != null) {
+            delegate.i(TAG, msg)
+        } else {
+            android.util.Log.i(TAG, msg)
+        }
     }
 
     fun e(msg: String, throwable: Throwable? = null) {
-        try {
-            if (logErrorMethod != null && throwable != null) {
-                logErrorMethod?.invoke(null, TAG, msg, throwable)
-            } else if (logInfoMethod != null) {
-                logInfoMethod?.invoke(null, TAG, "ERROR: $msg")
-            }
-        } catch (_: Throwable) {}
+        val delegate = loggerDelegate
+        if (delegate != null) {
+            delegate.e(TAG, msg, throwable)
+        } else {
+            android.util.Log.e(TAG, msg, throwable)
+        }
     }
 }

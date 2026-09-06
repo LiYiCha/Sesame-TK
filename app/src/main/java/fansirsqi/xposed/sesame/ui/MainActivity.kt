@@ -49,6 +49,7 @@ import fansirsqi.xposed.sesame.util.Files
 import fansirsqi.xposed.sesame.util.Log
 import fansirsqi.xposed.sesame.util.ToastUtil
 import fansirsqi.xposed.sesame.util.maps.UserMap
+import fansirsqi.xposed.sesame.util.AppUpdaterManager
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -169,8 +170,8 @@ class MainActivity : BaseActivity() {
         }
         
 
-        // 启动时无感对账清理已安装新版的残留安装包，并依设置静默检测更新
-        fansirsqi.xposed.sesame.util.AppUpdaterManager.initAndCheckOnStartup(this)
+        // 启动时在后台静默对账清理残留安装包，并依设置检测更新
+        AppUpdaterManager.initAndCheckOnStartup(this)
     }
 
     override fun onResume() {
@@ -179,9 +180,6 @@ class MainActivity : BaseActivity() {
         updateSubTitle(runTypeStr)
         
         if (hasPermissions) {
-            // 切回前台时自动对账清理已生效的安装包
-            com.updater.utils.ApkCleanupManager.checkAndCleanOnStartup(this)
-
             // 如果当前状态是禁用，3秒后更新为禁用状态
             if (!ViewAppInfo.veriftag) {
                 viewHandler.postDelayed(titleRunner, 3000)
@@ -348,7 +346,6 @@ class MainActivity : BaseActivity() {
             }
             menu.add(0, 11, 11, R.string.help)  // 帮助页面
             menu.add(0, 12, 12, "检查更新")
-            menu.add(0, 13, 13, "更新设置")
         } catch (e: Exception) {
             Log.printStackTrace(e)
             ToastUtil.makeText(this, "菜单创建失败，请重试", Toast.LENGTH_SHORT).show()
@@ -429,9 +426,7 @@ class MainActivity : BaseActivity() {
             //帮助页面
             11 -> startActivity(Intent(this, HelpActivity::class.java))
             //检查更新
-            12 -> fansirsqi.xposed.sesame.util.AppUpdaterManager.checkUpdateManual(this)
-            //更新设置
-            13 -> fansirsqi.xposed.sesame.util.AppUpdaterManager.openSourceSettings(this)
+            12 -> AppUpdaterManager.checkUpdateManual(this)
         }
         return super.onOptionsItemSelected(item)
     }

@@ -62,28 +62,24 @@ class UpdaterConfigManager(context: Context) {
      * 初始化或合并预设更新源
      */
     fun ensureDefaultSources(defaults: List<UpdateSource>) {
-        val existing = getSources().toMutableList()
-        var changed = false
-
-        if (existing.isEmpty()) {
-            existing.addAll(defaults)
-            changed = true
-        } else {
-            for (def in defaults) {
-                if (existing.none { it.id == def.id }) {
-                    existing.add(def)
-                    changed = true
-                }
+        val existing = getSources()
+        val customSources = existing.filter { !it.isPreset }
+        val updatedList = mutableListOf<UpdateSource>()
+        
+        // 预设源始终同步最新配置
+        updatedList.addAll(defaults)
+        // 保留用户添加的自定义源
+        for (c in customSources) {
+            if (updatedList.none { it.id == c.id }) {
+                updatedList.add(c)
             }
         }
+        
+        saveSources(updatedList)
 
-        if (changed) {
-            saveSources(existing)
-        }
-
-        if (selectedSourceId.isEmpty() || existing.none { it.id == selectedSourceId }) {
-            if (existing.isNotEmpty()) {
-                selectedSourceId = existing[0].id
+        if (selectedSourceId.isEmpty() || updatedList.none { it.id == selectedSourceId }) {
+            if (updatedList.isNotEmpty()) {
+                selectedSourceId = updatedList[0].id
             }
         }
     }

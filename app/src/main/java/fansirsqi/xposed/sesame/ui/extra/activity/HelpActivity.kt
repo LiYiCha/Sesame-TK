@@ -1,435 +1,796 @@
 package fansirsqi.xposed.sesame.ui.extra.activity
 
 import android.annotation.SuppressLint
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
 import android.os.Build
 import android.os.Bundle
 import android.os.Environment
-import android.view.View
-import android.widget.Button
-import android.widget.LinearLayout
-import android.widget.TextView
 import android.widget.Toast
-import androidx.appcompat.widget.Toolbar
-import androidx.appcompat.app.AlertDialog
-import androidx.lifecycle.lifecycleScope
-import fansirsqi.xposed.sesame.R
+import androidx.activity.compose.setContent
+import androidx.compose.animation.*
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.automirrored.rounded.Help
+import androidx.compose.material.icons.rounded.*
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import com.updater.config.UpdaterConfigManager
+import com.updater.model.UpdateSource
+import com.updater.model.UpdateSourceType
+import fansirsqi.xposed.sesame.BuildConfig
 import fansirsqi.xposed.sesame.ui.BaseActivity
+import fansirsqi.xposed.sesame.ui.theme.app.SesameTheme
+import fansirsqi.xposed.sesame.util.AppUpdaterManager
 import fansirsqi.xposed.sesame.util.Files
-import fansirsqi.xposed.sesame.util.Log
 import fansirsqi.xposed.sesame.util.PermissionUtil
+import fansirsqi.xposed.sesame.util.ToastUtil
 import java.io.File
-import java.util.Calendar
+import java.util.*
 
 class HelpActivity : BaseActivity() {
 
-
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContentView(R.layout.activity_help)
 
-        try {
-            setupExpandableSections()
-        } catch (e: Exception) {
-            Log.printStackTrace(e)
-            Toast.makeText(this, "加载帮助信息失败: ${e.message}", Toast.LENGTH_LONG).show()
-        }
-    }
-
-    override fun onContentChanged() {
-        super.onContentChanged()
-        
-        // 手动处理 Toolbar 的补充配置
-        try {
-            val toolbar = findViewById<Toolbar>(R.id.x_toolbar)
-            if (toolbar != null) {
-                // 移除返回箭头显示 (由 HelpActivity 专属逻辑控制)
-                supportActionBar?.setDisplayHomeAsUpEnabled(false)
-                supportActionBar?.title = "帮助"
-                toolbar.title = "帮助"
+        setContent {
+            SesameTheme {
+                HelpScreen(onBackClick = { finish() })
             }
-        } catch (e: Exception) {
-            e.printStackTrace()
         }
     }
+}
 
-    @SuppressLint("SetTextI18n")
-    private fun initializeViews() {
-        val configPathText = findViewById<TextView>(R.id.config_path_text)
-        val logPathText = findViewById<TextView>(R.id.log_path_text)
-        val logDetailsText = findViewById<TextView>(R.id.log_details_text)
-        val logExpireText = findViewById<TextView>(R.id.log_expire_text)
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun HelpScreen(onBackClick: () -> Unit) {
+    val context = LocalContext.current
+    val configManager = remember { UpdaterConfigManager(context) }
 
-        // 安全地设置文本内容
-        configPathText.text = safeGetPath(Files.CONFIG_DIR, "配置目录未初始化")
-        logPathText.text = safeGetPath(Files.LOG_DIR, "日志目录未初始化")
-        logDetailsText.text = buildLogPathsInfo()
-        logExpireText.text = """
-            日志最大保留天数: 7天
-            单个日志文件最大大小: 50MB
-            总日志容量上限: 100MB
-            日志文件会自动按日期和大小进行轮转
-        """.trimIndent()
-    }
+    // 状态管理
+    var updateMode by remember { mutableIntStateOf(configManager.updateMode) }
+    var selectedSourceId by remember { mutableStateOf(configManager.selectedSourceId) }
+    var showSourceDialog by remember { mutableStateOf(false) }
+    var showClearLogDialog by remember { mutableStateOf(false) }
 
-    @SuppressLint("SetTextI18n")
-    private fun setupExpandableSections() {
-        // 基础信息部分
-        findViewById<View>(R.id.config_header).setOnClickListener {
-            toggleSection(R.id.config_content, R.id.config_arrow)
-        }
+    // 存储与日志大小状态
+    var storageRefreshTrigger by remember { mutableIntStateOf(0) }
+    val storageInfo = remember(storageRefreshTrigger) { calculateStorageInfo() }
 
-        findViewById<View>(R.id.log_header).setOnClickListener {
-            toggleSection(R.id.log_content, R.id.log_arrow)
-        }
-
-        findViewById<View>(R.id.log_details_header).setOnClickListener {
-            toggleSection(R.id.log_details_content, R.id.log_details_arrow)
-        }
-
-        findViewById<View>(R.id.log_expire_header).setOnClickListener {
-            toggleSection(R.id.log_expire_content, R.id.log_expire_arrow)
-        }
-
-        // 存储空间信息
-        findViewById<View>(R.id.storage_header).setOnClickListener {
-            toggleSection(R.id.storage_content, R.id.storage_arrow)
-        }
-        findViewById<TextView>(R.id.storage_info_text).text = getStorageInfo()
-
-        findViewById<View>(R.id.btn_clear_log_bak).setOnClickListener {
-            showConfirmClearLogBak()
-        }
-
-        // 权限状态
-        findViewById<View>(R.id.permission_header).setOnClickListener {
-            toggleSection(R.id.permission_content, R.id.permission_arrow)
-        }
-        findViewById<TextView>(R.id.permission_info_text).text = getPermissionInfo()
-
-        // 系统环境信息
-        findViewById<View>(R.id.system_header).setOnClickListener {
-            toggleSection(R.id.system_content, R.id.system_arrow)
-        }
-        findViewById<TextView>(R.id.system_info_text).text = getSystemInfo()
-
-        // 常见问题解答
-        findViewById<View>(R.id.faq_header).setOnClickListener {
-            toggleSection(R.id.faq_content, R.id.faq_arrow)
-        }
-        findViewById<TextView>(R.id.faq_info_text).text = getFAQInfo()
-    }
-
-
-    private fun toggleSection(contentId: Int, arrowId: Int) {
-        val content = findViewById<LinearLayout>(contentId)
-        val arrow = findViewById<TextView>(arrowId)
-
-        if (content.visibility == View.GONE) {
-            content.visibility = View.VISIBLE
-            arrow.text = "▲"
-        } else {
-            content.visibility = View.GONE
-            arrow.text = "▼"
-        }
-    }
-
-    private fun getStorageInfo(): String {
-        return try {
-            val configDir = Files.CONFIG_DIR
-            val logDir = Files.LOG_DIR
-            val bakDir = if (logDir != null) File(logDir, "bak") else null
-
-            val configSize = getDirectorySize(configDir)
-            val logSize = getDirectorySize(logDir)
-            val bakSize = getDirectorySize(bakDir)
-
-            """
-        配置目录: ${configDir?.absolutePath ?: "未初始化"}
-        配置目录大小: ${formatFileSize(configSize)}
-        
-        日志目录: ${logDir?.absolutePath ?: "未初始化"}
-        日志目录大小: ${formatFileSize(logSize)}
-        
-        备份日志目录: ${bakDir?.absolutePath ?: "未初始化"}
-        备份日志目录大小: ${formatFileSize(bakSize)}
-        
-        总占用空间: ${formatFileSize(configSize + logSize + bakSize)}
-        """.trimIndent()
-        } catch (e: Exception) {
-            "获取存储信息失败: ${e.message}"
-        }
-    }
-
-
-    private fun getDirectorySize(dir: File?): Long {
-        return try {
-            dir?.walk()
-                ?.filter { it.isFile }
-                ?.sumOf { it.length() }
-                ?: 0L
-        } catch (e: Exception) {
-            0L
-        }
-    }
-
-    @SuppressLint("DefaultLocale")
-    private fun formatFileSize(size: Long): String {
-        return when {
-            size < 1024 -> "$size B"
-            size < 1024 * 1024 -> "${String.format("%.2f", size / 1024.0)} KB"
-            size < 1024 * 1024 * 1024 -> "${String.format("%.2f", size / (1024.0 * 1024.0))} MB"
-            else -> "${String.format("%.2f", size / (1024.0 * 1024.0 * 1024.0))} GB"
-        }
-    }
-
-    private fun getPermissionInfo(): String {
-        return try {
-            val hasFilePermission = PermissionUtil.checkFilePermissions(this)
-            val storageState = Environment.getExternalStorageState()
-
-            """
-            文件读写权限: ${if (hasFilePermission) "已获取" else "未获取"}
-            外部存储状态: $storageState
-            应用存储目录: ${filesDir?.absolutePath}
-            外部存储目录: ${getExternalFilesDir(null)?.absolutePath ?: "不可用"}
-            """.trimIndent()
-        } catch (e: Exception) {
-            "获取权限信息失败: ${e.message}"
-        }
-    }
-
-    private fun getSystemInfo(): String {
-        return try {
-            val runtime = Runtime.getRuntime()
-            val maxMemory = runtime.maxMemory()
-            val totalMemory = runtime.totalMemory()
-            val freeMemory = runtime.freeMemory()
-            val usedMemory = totalMemory - freeMemory
-
-            """
-            Android版本: ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT})
-            设备型号: ${Build.MODEL}
-            设备制造商: ${Build.MANUFACTURER}
-            设备品牌: ${Build.BRAND}
-            
-            JVM最大内存: ${formatFileSize(maxMemory)}
-            JVM已分配内存: ${formatFileSize(totalMemory)}
-            JVM已使用内存: ${formatFileSize(usedMemory)}
-            JVM可用内存: ${formatFileSize(maxMemory - usedMemory)}
-            """.trimIndent()
-        } catch (e: Exception) {
-            "获取系统信息失败: ${e.message}"
-        }
-    }
-
-    private fun getFAQInfo(): String {
-        return """
-            Q: 权限获取失败怎么办？
-            A: 请在系统设置中手动授予应用存储权限，或尝试重启应用后重新授权。
-
-            Q: 日志文件过大怎么办？
-            A: 系统会自动清理7天前的日志，也可手动清理不需要的日志文件。
-
-            Q: 配置文件损坏如何恢复？
-            A: 可以尝试删除配置目录下的config_v2.json文件，重新启动应用会生成默认配置。
-
-            Q: 模块不生效怎么办？
-            A: 请确认Xposed框架已正确激活模块，并重启支付宝应用。
-
-            Q: 如何查看详细运行日志？
-            A: 在主界面可以通过菜单查看各类日志文件，或使用文件管理器访问日志目录。
-            
-            Q: 如何备份配置文件？
-            A: 可以复制配置目录下的config_v2.json文件到安全位置进行备份。
-            """.trimIndent()
-    }
-
-    private fun safeGetPath(file: File?, defaultText: String): String {
-        return try {
-            file?.absolutePath ?: defaultText
-        } catch (e: Exception) {
-            defaultText
-        }
-    }
-
-    private fun buildLogPathsInfo(): String {
-        return try {
-            val sb = StringBuilder()
-            val logDirPath = safeGetPath(Files.LOG_DIR, "日志目录未初始化")
-
-            listOf(
-                "runtime" to "运行日志",
-                "system" to "系统日志",
-                "record" to "记录日志",
-                "debug" to "调试日志",
-                "forest" to "森林日志",
-                "farm" to "农场日志",
-                "other" to "其他日志",
-                "error" to "错误日志",
-                "capture" to "抓包日志"
-            ).forEach { (logName, description) ->
-                sb.append("$description: $logDirPath/$logName.log\n")
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = {
+                    Text(
+                        text = "帮助与设置",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 20.sp
+                    )
+                },
+                navigationIcon = {
+                    IconButton(onClick = onBackClick) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Rounded.ArrowBack,
+                            contentDescription = "返回"
+                        )
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.background,
+                    titleContentColor = MaterialTheme.colorScheme.onBackground,
+                    navigationIconContentColor = MaterialTheme.colorScheme.onBackground
+                )
+            )
+        },
+        containerColor = MaterialTheme.colorScheme.background
+    ) { innerPadding ->
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding)
+                .padding(horizontal = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+            contentPadding = PaddingValues(top = 8.dp, bottom = 32.dp)
+        ) {
+            // 1. 【核心置顶】版本与更新设置模块
+            item {
+                UpdateSettingsCard(
+                    configManager = configManager,
+                    updateMode = updateMode,
+                    selectedSourceId = selectedSourceId,
+                    onUpdateModeChanged = { newMode ->
+                        updateMode = newMode
+                        configManager.updateMode = newMode
+                        Toast.makeText(
+                            context,
+                            if (newMode == UpdaterConfigManager.UPDATE_MODE_MANUAL) "已设为：手动更新 (仅点击时检查)" else "已设为：自动更新 (启动时静默检测)",
+                            Toast.LENGTH_SHORT
+                        ).show()
+                    },
+                    onOpenSourceDialog = { showSourceDialog = true },
+                    onCheckUpdateClick = {
+                        AppUpdaterManager.checkUpdateManual(context)
+                    }
+                )
             }
-            sb.toString()
-        } catch (e: Exception) {
-            "无法获取日志路径信息: ${e.message}"
+
+            // 2. 系统与设备信息模块
+            item {
+                SystemInfoCard()
+            }
+
+            // 3. 存储与日志管理模块
+            item {
+                StorageAndLogCard(
+                    storageInfo = storageInfo,
+                    onClearBackupClick = { showClearLogDialog = true }
+                )
+            }
+
+            // 4. 权限状态模块
+            item {
+                PermissionStatusCard()
+            }
+
+            // 5. 常见问题解答 FAQ
+            item {
+                FaqCard()
+            }
         }
     }
 
-    private fun showConfirmClearLogBak() {
-        try {
-            AlertDialog.Builder(this)
-                .setTitle("确认清理")
-                .setMessage("将清除备份日志（不清除今天），是否继续？")
-                .setNegativeButton("取消", null)
-                .setPositiveButton("继续") { _, _ ->
-                    showSecondConfirmClearLogBak()
-                }
-                .show()
-        } catch (e: Exception) {
-            Log.printStackTrace(e)
-            Toast.makeText(this, "无法显示确认窗口: ${e.message}", Toast.LENGTH_SHORT).show()
-        }
-    }
-
-    private fun showSecondConfirmClearLogBak() {
-        try {
-            AlertDialog.Builder(this)
-                .setTitle("再次确认")
-                .setMessage("此操作不可撤销，将清除备份目录中除今天外的日志文件，确定继续吗？")
-                .setNegativeButton("取消", null)
-                .setPositiveButton("清除") { _, _ ->
-                    val result = clearBackupLogs()
-                    Toast.makeText(this, result, Toast.LENGTH_SHORT).show()
-                    // 清理后刷新显示
-                    findViewById<TextView>(R.id.storage_info_text).text = getStorageInfo()
-                }
-                .show()
-        } catch (e: Exception) {
-            Log.printStackTrace(e)
-            Toast.makeText(this, "无法显示确认窗口: ${e.message}", Toast.LENGTH_SHORT).show()
-        }
-    }
-
-    private fun clearBackupLogs(): String {
-        return try {
-            // 验证权限和目录
-            val bakDir = validateBackupDirectory() ?: return "验证失败"
-
-            // 计算今日时间范围
-            val todayRange = calculateTodayTimeRange()
-
-            // 删除旧备份文件
-            val result = deleteOldBackupFiles(bakDir, todayRange)
-
-            "已清理: ${result.deleted} 个，失败: ${result.failed} 个"
-        } catch (e: Exception) {
-            Log.printStackTrace(e)
-            "清理失败: ${e.message}"
-        }
-    }
-
-    /**
-     * 验证备份目录是否存在且可访问
-     */
-    private fun validateBackupDirectory(): File? {
-        if (!PermissionUtil.checkFilePermissions(this)) {
-            Toast.makeText(this, "缺少存储权限", Toast.LENGTH_SHORT).show()
-            return null
-        }
-
-        val logDir = Files.LOG_DIR
-        if (logDir == null) {
-            Toast.makeText(this, "日志目录未初始化", Toast.LENGTH_SHORT).show()
-            return null
-        }
-
-        val bakDir = File(logDir, "bak")
-        if (!bakDir.exists() || !bakDir.isDirectory) {
-            Toast.makeText(this, "未找到备份日志目录", Toast.LENGTH_SHORT).show()
-            return null
-        }
-
-        return bakDir
-    }
-
-    /**
-     * 计算今日的时间范围
-     */
-    private fun calculateTodayTimeRange(): TodayTimeRange {
-        val cal = Calendar.getInstance()
-        val todayStr = String.format(
-            "%04d-%02d-%02d",
-            cal.get(Calendar.YEAR),
-            cal.get(Calendar.MONTH) + 1,
-            cal.get(Calendar.DAY_OF_MONTH)
+    // 更新源切换与管理对话框
+    if (showSourceDialog) {
+        UpdateSourceDialog(
+            configManager = configManager,
+            currentSourceId = selectedSourceId,
+            onDismiss = { showSourceDialog = false },
+            onSourceSelected = { newSource ->
+                selectedSourceId = newSource.id
+                configManager.selectedSourceId = newSource.id
+                showSourceDialog = false
+                Toast.makeText(context, "已切换更新源：${newSource.name}", Toast.LENGTH_SHORT).show()
+            }
         )
-
-        cal.set(Calendar.HOUR_OF_DAY, 0)
-        cal.set(Calendar.MINUTE, 0)
-        cal.set(Calendar.SECOND, 0)
-        cal.set(Calendar.MILLISECOND, 0)
-        val startOfToday = cal.timeInMillis
-        val endOfToday = startOfToday + 24L * 60 * 60 * 1000 - 1
-
-        return TodayTimeRange(startOfToday, endOfToday, todayStr)
     }
 
-    /**
-     * 删除旧备份文件（保留今日文件）
-     */
-    private fun deleteOldBackupFiles(bakDir: File, todayRange: TodayTimeRange): DeleteResult {
-        var deleted = 0
-        var failed = 0
+    // 清理备份日志确认对话框
+    if (showClearLogDialog) {
+        AlertDialog(
+            onDismissRequest = { showClearLogDialog = false },
+            title = { Text(text = "清理备份日志", fontWeight = FontWeight.Bold) },
+            text = { Text(text = "将清除除今日外的所有备份日志文件，此操作不可撤销，确定清理吗？") },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showClearLogDialog = false
+                        val result = clearBackupLogs(context)
+                        Toast.makeText(context, result, Toast.LENGTH_SHORT).show()
+                        storageRefreshTrigger++
+                    },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.error,
+                        contentColor = MaterialTheme.colorScheme.onError
+                    )
+                ) {
+                    Text("立即清除")
+                }
+            },
+            dismissButton = {
+                OutlinedButton(onClick = { showClearLogDialog = false }) {
+                    Text("取消")
+                }
+            }
+        )
+    }
+}
 
-        fun isTodayFile(file: File): Boolean {
-            val lastModified = file.lastModified()
-            val byTime = lastModified in todayRange.startTime..todayRange.endTime
-            val byName = file.name.contains(todayRange.dateString)
-            return byTime || byName
+/**
+ * 1. 软件更新与配置置顶卡片
+ */
+@Composable
+private fun UpdateSettingsCard(
+    configManager: UpdaterConfigManager,
+    updateMode: Int,
+    selectedSourceId: String,
+    onUpdateModeChanged: (Int) -> Unit,
+    onOpenSourceDialog: () -> Unit,
+    onCheckUpdateClick: () -> Unit
+) {
+    val activeSource = remember(selectedSourceId) { configManager.getSelectedSource() }
+
+    ElevatedCard(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.elevatedCardColors(
+            containerColor = MaterialTheme.colorScheme.surface
+        ),
+        elevation = CardDefaults.elevatedCardElevation(defaultElevation = 2.dp)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(18.dp)
+        ) {
+            // 模块头部与版本信息
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        modifier = Modifier
+                            .size(40.dp)
+                            .clip(CircleShape)
+                            .background(MaterialTheme.colorScheme.primaryContainer),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Rounded.SystemUpdate,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                            modifier = Modifier.size(22.dp)
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Column {
+                        Text(
+                            text = "版本与更新设置",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 17.sp,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Text(
+                            text = "v${BuildConfig.VERSION_NAME} (Build ${BuildConfig.VERSION_CODE})",
+                            fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.primary,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+                }
+
+                // 立即检查更新按钮
+                Button(
+                    onClick = onCheckUpdateClick,
+                    shape = RoundedCornerShape(20.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.primary,
+                        contentColor = MaterialTheme.colorScheme.onPrimary
+                    ),
+                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.Refresh,
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(text = "检查更新", fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                }
+            }
+
+            HorizontalDivider(
+                modifier = Modifier.padding(vertical = 14.dp),
+                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+            )
+
+            // 更新检测模式选择
+            Text(
+                text = "更新检测模式",
+                fontSize = 13.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // 手动模式单选框
+            UpdateModeOptionItem(
+                title = "手动更新 (默认)",
+                description = "仅在点击检查更新时发起网络请求，日常零后台消耗",
+                isSelected = updateMode == UpdaterConfigManager.UPDATE_MODE_MANUAL,
+                onClick = { onUpdateModeChanged(UpdaterConfigManager.UPDATE_MODE_MANUAL) }
+            )
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // 自动模式单选框
+            UpdateModeOptionItem(
+                title = "自动更新",
+                description = "应用每次启动时后台静默检测，有新版本主动提醒",
+                isSelected = updateMode == UpdaterConfigManager.UPDATE_MODE_AUTO,
+                onClick = { onUpdateModeChanged(UpdaterConfigManager.UPDATE_MODE_AUTO) }
+            )
+
+            Spacer(modifier = Modifier.height(14.dp))
+
+            // 当前更新源概览与切换
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f))
+                    .clickable(onClick = onOpenSourceDialog)
+                    .padding(horizontal = 14.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "当前生效更新源",
+                        fontSize = 11.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Text(
+                        text = activeSource?.name ?: "Cloudflare 官方源",
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Text(
+                        text = activeSource?.url ?: "https://cicha.de5.net",
+                        fontSize = 11.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
+                        maxLines = 1
+                    )
+                }
+
+                FilledTonalButton(
+                    onClick = onOpenSourceDialog,
+                    shape = RoundedCornerShape(14.dp),
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                ) {
+                    Text("切换源", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                }
+            }
+        }
+    }
+}
+
+/**
+ * 更新模式单选项卡片
+ */
+@Composable
+private fun UpdateModeOptionItem(
+    title: String,
+    description: String,
+    isSelected: Boolean,
+    onClick: () -> Unit
+) {
+    val borderColor = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
+    val bgColor = if (isSelected) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.25f) else MaterialTheme.colorScheme.surface
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .border(width = if (isSelected) 1.5.dp else 1.dp, color = borderColor, shape = RoundedCornerShape(12.dp))
+            .background(bgColor)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        RadioButton(
+            selected = isSelected,
+            onClick = onClick,
+            colors = RadioButtonDefaults.colors(
+                selectedColor = MaterialTheme.colorScheme.primary
+            )
+        )
+        Spacer(modifier = Modifier.width(8.dp))
+        Column {
+            Text(
+                text = title,
+                fontSize = 14.sp,
+                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            Text(
+                text = description,
+                fontSize = 11.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+}
+
+/**
+ * 2. 系统与设备信息卡片
+ */
+@Composable
+private fun SystemInfoCard() {
+    val runtime = Runtime.getRuntime()
+    val maxMemory = runtime.maxMemory()
+    val totalMemory = runtime.totalMemory()
+    val freeMemory = runtime.freeMemory()
+    val usedMemory = totalMemory - freeMemory
+
+    SectionCard(
+        title = "系统环境与设备信息",
+        icon = Icons.Rounded.PhoneAndroid
+    ) {
+        InfoRow("Android 版本", "${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT})")
+        InfoRow("设备机型", "${Build.MANUFACTURER} ${Build.MODEL}")
+        InfoRow("系统架构", Build.SUPPORTED_ABIS.firstOrNull() ?: "Unknown")
+        InfoRow("JVM 内存使用", "${formatFileSize(usedMemory)} / ${formatFileSize(maxMemory)}")
+    }
+}
+
+/**
+ * 3. 存储与日志管理卡片
+ */
+@Composable
+private fun StorageAndLogCard(
+    storageInfo: StorageInfoData,
+    onClearBackupClick: () -> Unit
+) {
+    val context = LocalContext.current
+    val clipboardManager = remember { context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager }
+
+    SectionCard(
+        title = "存储与日志管理",
+        icon = Icons.Rounded.Folder
+    ) {
+        InfoRow("配置目录", storageInfo.configPath, onClick = {
+            clipboardManager.setPrimaryClip(ClipData.newPlainText("ConfigPath", storageInfo.configPath))
+            Toast.makeText(context, "配置路径已复制", Toast.LENGTH_SHORT).show()
+        })
+        InfoRow("配置大小", storageInfo.configSize)
+        InfoRow("日志目录", storageInfo.logPath, onClick = {
+            clipboardManager.setPrimaryClip(ClipData.newPlainText("LogPath", storageInfo.logPath))
+            Toast.makeText(context, "日志路径已复制", Toast.LENGTH_SHORT).show()
+        })
+        InfoRow("实时日志大小", storageInfo.logSize)
+        InfoRow("备份日志大小", storageInfo.bakSize)
+        InfoRow("总占用容量", storageInfo.totalSize)
+
+        Spacer(modifier = Modifier.height(10.dp))
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.End
+        ) {
+            OutlinedButton(
+                onClick = onClearBackupClick,
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.error)
+            ) {
+                Icon(imageVector = Icons.Rounded.DeleteSweep, contentDescription = null, modifier = Modifier.size(16.dp))
+                Spacer(modifier = Modifier.width(6.dp))
+                Text("清理旧备份日志")
+            }
+        }
+    }
+}
+
+/**
+ * 4. 权限状态卡片
+ */
+@Composable
+private fun PermissionStatusCard() {
+    val context = LocalContext.current
+    val hasStoragePermission = remember { PermissionUtil.checkFilePermissions(context) }
+    val storageState = remember { Environment.getExternalStorageState() }
+
+    SectionCard(
+        title = "权限与存储环境",
+        icon = Icons.Rounded.Security
+    ) {
+        InfoRow("文件读写权限", if (hasStoragePermission) "正常获取" else "未获取 (需授权)")
+        InfoRow("外部存储状态", storageState)
+        InfoRow("应用内部私有目录", context.filesDir?.absolutePath ?: "不可用")
+    }
+}
+
+/**
+ * 5. 常见问题解答 FAQ
+ */
+@Composable
+private fun FaqCard() {
+    val faqs = remember {
+        listOf(
+            "模块不生效怎么办？" to "请确认 LSPosed / Xposed 框架中已勾选并激活本模块，作用域已正确包含目标宿主应用，且重启过宿主应用进程。",
+            "更新安装包下载后去哪里了？" to "安装包保存在公共媒体目录 Android/media/fansirsqi.xposed.sesame/update/ 下。下载完成后，界面会直接提供【打开目录】按钮，方便通过文件管理器提取或管理。",
+            "更新检测模式有什么区别？" to "【手动更新】为默认模式，日常零网络请求与打扰，仅在点击时检查；【自动更新】在每次应用冷启动时静默检查更新并在发现新版时提醒。",
+            "安装完成后安装包会自动删除吗？" to "是的！当系统检测到应用已升级生效后，会自动触发物理删除清理；若未安装则坚决完好保留，再次进入时支持 0 流量秒级复用。",
+            "日志文件过大怎么办？" to "系统会自动轮转清理 7 天前的过期日志。您也可以在本页面的存储管理中随时点击【清理旧备份日志】释放存储空间。"
+        )
+    }
+
+    SectionCard(
+        title = "常见问题解答 (FAQ)",
+        icon = Icons.AutoMirrored.Rounded.Help
+    ) {
+        faqs.forEachIndexed { index, (q, a) ->
+            FaqAccordionItem(question = q, answer = a)
+            if (index < faqs.size - 1) {
+                HorizontalDivider(
+                    modifier = Modifier.padding(vertical = 8.dp),
+                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)
+                )
+            }
+        }
+    }
+}
+
+/**
+ * FAQ 折叠手风琴条目
+ */
+@Composable
+private fun FaqAccordionItem(question: String, answer: String) {
+    var expanded by remember { mutableStateOf(false) }
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { expanded = !expanded }
+            .padding(vertical = 4.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Text(
+                text = question,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.weight(1f)
+            )
+            Icon(
+                imageVector = if (expanded) Icons.Rounded.KeyboardArrowUp else Icons.Rounded.KeyboardArrowDown,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
 
-        fun deleteRecursively(file: File) {
-            if (file.isDirectory) {
-                file.listFiles()?.forEach { deleteRecursively(it) }
-                // 删除空目录（非今日目录）
-                if (file.listFiles()?.isEmpty() == true && !isTodayFile(file)) {
-                    file.delete()
-                }
-            } else {
-                // 删除非今日文件
-                if (!isTodayFile(file)) {
-                    if (file.delete()) {
-                        deleted++
-                    } else {
-                        failed++
+        AnimatedVisibility(
+            visible = expanded,
+            enter = expandVertically() + fadeIn(),
+            exit = shrinkVertically() + fadeOut()
+        ) {
+            Text(
+                text = answer,
+                fontSize = 12.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                lineHeight = 18.sp,
+                modifier = Modifier.padding(top = 6.dp, bottom = 4.dp)
+            )
+        }
+    }
+}
+
+/**
+ * 通用卡片容器
+ */
+@Composable
+private fun SectionCard(
+    title: String,
+    icon: ImageVector,
+    content: @Composable ColumnScope.() -> Unit
+) {
+    ElevatedCard(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.elevatedCardColors(
+            containerColor = MaterialTheme.colorScheme.surface
+        ),
+        elevation = CardDefaults.elevatedCardElevation(defaultElevation = 1.5.dp)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp)
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.padding(bottom = 12.dp)
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(20.dp)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = title,
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+            }
+            content()
+        }
+    }
+}
+
+@Composable
+private fun InfoRow(
+    label: String,
+    value: String,
+    onClick: (() -> Unit)? = null
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
+            .padding(vertical = 4.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = label,
+            fontSize = 13.sp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Text(
+            text = value,
+            fontSize = 13.sp,
+            fontWeight = FontWeight.Medium,
+            color = MaterialTheme.colorScheme.onSurface,
+            fontFamily = FontFamily.Monospace,
+            maxLines = 1
+        )
+    }
+}
+
+/**
+ * 更新源管理弹窗
+ */
+@Composable
+private fun UpdateSourceDialog(
+    configManager: UpdaterConfigManager,
+    currentSourceId: String,
+    onDismiss: () -> Unit,
+    onSourceSelected: (UpdateSource) -> Unit
+) {
+    val sources = remember { configManager.getSources() }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(text = "选择更新源", fontWeight = FontWeight.Bold) },
+        text = {
+            Column(modifier = Modifier.fillMaxWidth()) {
+                sources.forEach { source ->
+                    val isSelected = source.id == currentSourceId
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(
+                                if (isSelected) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)
+                                else Color.Transparent
+                            )
+                            .clickable { onSourceSelected(source) }
+                            .padding(horizontal = 8.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        RadioButton(
+                            selected = isSelected,
+                            onClick = { onSourceSelected(source) }
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Column {
+                            Text(
+                                text = source.name,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 14.sp,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Text(
+                                text = source.url,
+                                fontSize = 11.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
                     }
                 }
             }
+        },
+        confirmButton = {
+            Button(
+                onClick = onDismiss,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    contentColor = MaterialTheme.colorScheme.onPrimary
+                )
+            ) {
+                Text("完成")
+            }
         }
+    )
+}
 
-        bakDir.listFiles()?.forEach { deleteRecursively(it) }
+// 辅助数据与格式化方法
+private data class StorageInfoData(
+    val configPath: String,
+    val configSize: String,
+    val logPath: String,
+    val logSize: String,
+    val bakSize: String,
+    val totalSize: String
+)
 
-        return DeleteResult(deleted, failed)
+private fun calculateStorageInfo(): StorageInfoData {
+    val configDir = Files.CONFIG_DIR
+    val logDir = Files.LOG_DIR
+    val bakDir = File(logDir, "bak")
+
+    fun getDirSize(d: File?): Long {
+        return try {
+            d?.walk()?.filter { it.isFile }?.sumOf { it.length() } ?: 0L
+        } catch (_: Exception) { 0L }
     }
 
-    /**
-     * 今日时间范围数据类
-     */
-    private data class TodayTimeRange(
-        val startTime: Long,
-        val endTime: Long,
-        val dateString: String
+    val cSize = getDirSize(configDir)
+    val lSize = getDirSize(logDir)
+    val bSize = getDirSize(bakDir)
+
+    return StorageInfoData(
+        configPath = configDir?.absolutePath ?: "未初始化",
+        configSize = formatFileSize(cSize),
+        logPath = logDir?.absolutePath ?: "未初始化",
+        logSize = formatFileSize(lSize),
+        bakSize = formatFileSize(bSize),
+        totalSize = formatFileSize(cSize + lSize + bSize)
     )
+}
 
-    /**
-     * 删除结果数据类
-     */
-    private data class DeleteResult(
-        val deleted: Int,
-        val failed: Int
-    )
+private fun formatFileSize(size: Long): String {
+    return when {
+        size < 1024 -> "$size B"
+        size < 1024 * 1024 -> "${String.format(Locale.getDefault(), "%.2f", size / 1024.0)} KB"
+        size < 1024 * 1024 * 1024 -> "${String.format(Locale.getDefault(), "%.2f", size / (1024.0 * 1024.0))} MB"
+        else -> "${String.format(Locale.getDefault(), "%.2f", size / (1024.0 * 1024.0 * 1024.0))} GB"
+    }
+}
 
+private fun clearBackupLogs(context: Context): String {
+    return try {
+        if (!PermissionUtil.checkFilePermissions(context)) {
+            return "缺少存储权限"
+        }
+        val logDir = Files.LOG_DIR ?: return "日志目录未初始化"
+        val bakDir = File(logDir, "bak")
+        if (!bakDir.exists() || !bakDir.isDirectory) {
+            return "未找到备份日志目录"
+        }
 
+        val cal = Calendar.getInstance()
+        val todayStr = String.format(Locale.getDefault(), "%04d-%02d-%02d", cal.get(Calendar.YEAR), cal.get(Calendar.MONTH) + 1, cal.get(Calendar.DAY_OF_MONTH))
+
+        var deleted = 0
+        var failed = 0
+
+        bakDir.walk().filter { it.isFile }.forEach { file ->
+            if (!file.name.contains(todayStr)) {
+                if (file.delete()) deleted++ else failed++
+            }
+        }
+
+        "已清理备份日志: $deleted 个，保留今日文件"
+    } catch (e: Exception) {
+        "清理异常: ${e.message}"
+    }
 }
