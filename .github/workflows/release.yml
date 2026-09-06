@@ -29,14 +29,14 @@ jobs:
       - name: 授予 gradlew 执行权限
         run: chmod +x gradlew
 
-      - name: 编译 Release APK
-        run: ./gradlew assembleRelease --stacktrace
+      - name: 编译 Normal Release APK
+        run: ./gradlew assembleNormalRelease --stacktrace
 
       - name: 整理输出 APK
         run: |
           mkdir -p release_outputs
-          find app/build/outputs/apk/ -name "*.apk" -exec cp {} release_outputs/ \;
-          echo "已成功编译以下 APK 安装包："
+          find app/build/outputs/apk/ -name "*Normal*.apk" -exec cp {} release_outputs/ \;
+          echo "已成功整理以下 Normal APK 安装包："
           ls -lh release_outputs/
 
       - name: 使用正式密钥签名 APK

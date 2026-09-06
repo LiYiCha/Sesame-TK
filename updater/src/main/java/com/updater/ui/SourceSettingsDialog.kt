@@ -2,6 +2,7 @@ package com.updater.ui
 
 import android.app.AlertDialog
 import android.content.Context
+import android.content.res.Configuration
 import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
@@ -19,6 +20,13 @@ object SourceSettingsDialog {
 
     fun show(context: Context, onSourceChanged: (() -> Unit)? = null) {
         val configManager = UpdaterConfigManager(context)
+        val isNight = (context.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES
+        val brandColor = if (isNight) Color.parseColor("#4CAF50") else Color.parseColor("#2D5A27")
+        val colorTextPrimary = if (isNight) Color.parseColor("#FFFFFF") else Color.parseColor("#212529")
+        val colorTextSecondary = if (isNight) Color.parseColor("#AAAAAA") else Color.parseColor("#6C757D")
+        val colorBorder = if (isNight) Color.parseColor("#333333") else Color.parseColor("#E0E0E0")
+        val colorItemBg = if (isNight) Color.parseColor("#262626") else Color.parseColor("#F8F9FA")
+
         var dialog: AlertDialog? = null
 
         val rootLayout = LinearLayout(context).apply {
@@ -31,7 +39,7 @@ object SourceSettingsDialog {
             text = "更新检测方式"
             textSize = 15f
             typeface = Typeface.DEFAULT_BOLD
-            setTextColor(Color.parseColor("#212529"))
+            setTextColor(colorTextPrimary)
             setPadding(0, 0, 0, dpToPx(context, 8))
         }
         rootLayout.addView(txtModeSectionTitle)
@@ -43,9 +51,9 @@ object SourceSettingsDialog {
 
         val rbManual = RadioButton(context).apply {
             id = View.generateViewId()
-            text = "手动更新 (默认)\n仅在点击菜单检查更新时联网，日常无后台检测"
+            text = "手动更新 (默认)\n仅在点击检查更新时联网，日常无后台检测"
             textSize = 13f
-            setTextColor(Color.parseColor("#343A40"))
+            setTextColor(colorTextPrimary)
             setLineSpacing(dpToPx(context, 2).toFloat(), 1.0f)
             setPadding(dpToPx(context, 6), dpToPx(context, 4), 0, dpToPx(context, 8))
         }
@@ -54,7 +62,7 @@ object SourceSettingsDialog {
             id = View.generateViewId()
             text = "自动更新\n应用每次启动时后台静默检测，有新版本主动弹窗"
             textSize = 13f
-            setTextColor(Color.parseColor("#343A40"))
+            setTextColor(colorTextPrimary)
             setLineSpacing(dpToPx(context, 2).toFloat(), 1.0f)
             setPadding(dpToPx(context, 6), dpToPx(context, 4), 0, dpToPx(context, 8))
         }
@@ -81,7 +89,7 @@ object SourceSettingsDialog {
 
         // 分割线
         val divider = View(context).apply {
-            setBackgroundColor(Color.parseColor("#E9ECEF"))
+            setBackgroundColor(colorBorder)
             layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dpToPx(context, 1)).apply {
                 bottomMargin = dpToPx(context, 14)
             }
@@ -93,7 +101,7 @@ object SourceSettingsDialog {
             text = "选择当前生效的更新源 (单选)"
             textSize = 14f
             typeface = Typeface.DEFAULT_BOLD
-            setTextColor(Color.parseColor("#495057"))
+            setTextColor(colorTextPrimary)
             setPadding(0, 0, 0, dpToPx(context, 8))
         }
         rootLayout.addView(txtSourceTitle)
@@ -118,7 +126,7 @@ object SourceSettingsDialog {
                     orientation = LinearLayout.HORIZONTAL
                     gravity = Gravity.CENTER_VERTICAL
                     setPadding(dpToPx(context, 4), dpToPx(context, 6), dpToPx(context, 4), dpToPx(context, 6))
-                    background = createItemSelector()
+                    background = createItemSelector(colorItemBg)
                 }
 
                 val rb = RadioButton(context).apply {
@@ -151,7 +159,7 @@ object SourceSettingsDialog {
                     text = source.name
                     textSize = 14f
                     typeface = Typeface.DEFAULT_BOLD
-                    setTextColor(Color.parseColor("#212529"))
+                    setTextColor(colorTextPrimary)
                 }
                 titleLayout.addView(txtName)
 
@@ -171,7 +179,7 @@ object SourceSettingsDialog {
                 val txtUrl = TextView(context).apply {
                     text = source.url
                     textSize = 11f
-                    setTextColor(Color.parseColor("#868E96"))
+                    setTextColor(colorTextSecondary)
                     maxLines = 1
                 }
                 infoLayout.addView(txtUrl)
@@ -185,7 +193,7 @@ object SourceSettingsDialog {
                         textSize = 12f
                         setTextColor(Color.parseColor("#DC3545"))
                         val delBg = GradientDrawable().apply {
-                            setColor(Color.parseColor("#1AD83545")) // 10% 浅红底
+                            setColor(if (isNight) Color.parseColor("#2A1C1C") else Color.parseColor("#FFF0F0"))
                             cornerRadius = dpToPx(context, 6).toFloat()
                         }
                         background = delBg
@@ -208,15 +216,15 @@ object SourceSettingsDialog {
 
         refreshSourcesUI()
 
-        // 3. 添加自定义更新源按钮（清晰高对比度圆角线框按钮）
+        // 3. 添加自定义更新源按钮（使用项目主题调色板）
         val btnAddSource = Button(context).apply {
             text = "+ 添加自定义更新源"
             textSize = 13f
             typeface = Typeface.DEFAULT_BOLD
-            setTextColor(Color.parseColor("#2979FF"))
+            setTextColor(brandColor)
             val btnBg = GradientDrawable().apply {
-                setColor(Color.parseColor("#F0F4FF"))
-                setStroke(dpToPx(context, 1), Color.parseColor("#B3D4FC"))
+                setColor(if (isNight) Color.parseColor("#1B3320") else Color.parseColor("#E8F5E9"))
+                setStroke(dpToPx(context, 1), brandColor)
                 cornerRadius = dpToPx(context, 8).toFloat()
             }
             background = btnBg
@@ -225,7 +233,7 @@ object SourceSettingsDialog {
             }
             layoutParams = lp
             setOnClickListener {
-                showAddSourceDialog(context, configManager) {
+                showAddSourceDialog(context, configManager, brandColor, colorTextPrimary) {
                     refreshSourcesUI()
                     onSourceChanged?.invoke()
                 }
@@ -243,15 +251,21 @@ object SourceSettingsDialog {
 
         dialog.show()
 
-        // 修复确定按钮在不同深浅主题下看不清的问题
+        // 按钮样式动态对齐项目品牌色
         dialog.getButton(android.content.DialogInterface.BUTTON_POSITIVE)?.apply {
-            setTextColor(Color.parseColor("#1976D2"))
+            setTextColor(brandColor)
             typeface = Typeface.DEFAULT_BOLD
             textSize = 15f
         }
     }
 
-    private fun showAddSourceDialog(context: Context, configManager: UpdaterConfigManager, onAdded: () -> Unit) {
+    private fun showAddSourceDialog(
+        context: Context,
+        configManager: UpdaterConfigManager,
+        brandColor: Int,
+        colorTextPrimary: Int,
+        onAdded: () -> Unit
+    ) {
         val formLayout = LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dpToPx(context, 20), dpToPx(context, 12), dpToPx(context, 20), dpToPx(context, 12))
@@ -260,12 +274,14 @@ object SourceSettingsDialog {
         val edtName = EditText(context).apply {
             hint = "更新源名称（如：我的备用镜像源）"
             textSize = 14f
+            setTextColor(colorTextPrimary)
         }
         formLayout.addView(edtName)
 
         val edtUrl = EditText(context).apply {
             hint = "接口或仓库 URL (CF域名 或 GitHub仓库地址)"
             textSize = 14f
+            setTextColor(colorTextPrimary)
             val lp = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
                 topMargin = dpToPx(context, 8)
             }
@@ -284,17 +300,19 @@ object SourceSettingsDialog {
         val rbCf = RadioButton(context).apply {
             id = View.generateViewId()
             text = "Cloudflare Pages R2"
+            setTextColor(colorTextPrimary)
         }
         val rbGh = RadioButton(context).apply {
             id = View.generateViewId()
             text = "GitHub Releases"
+            setTextColor(colorTextPrimary)
         }
         rgType.addView(rbCf)
         rgType.addView(rbGh)
         rgType.check(rbCf.id)
         formLayout.addView(rgType)
 
-        AlertDialog.Builder(context)
+        val addDialog = AlertDialog.Builder(context)
             .setTitle("添加自定义更新源")
             .setView(formLayout)
             .setPositiveButton("保存") { d, _ ->
@@ -319,7 +337,15 @@ object SourceSettingsDialog {
                 d.dismiss()
             }
             .setNegativeButton("取消", null)
-            .show()
+            .create()
+
+        addDialog.show()
+
+        addDialog.getButton(android.content.DialogInterface.BUTTON_POSITIVE)?.apply {
+            setTextColor(brandColor)
+            typeface = Typeface.DEFAULT_BOLD
+            textSize = 15f
+        }
     }
 
     private fun createBadgeBackground(colorHex: String): GradientDrawable {
@@ -329,9 +355,9 @@ object SourceSettingsDialog {
         }
     }
 
-    private fun createItemSelector(): GradientDrawable {
+    private fun createItemSelector(bgColor: Int): GradientDrawable {
         return GradientDrawable().apply {
-            setColor(Color.parseColor("#F8F9FA"))
+            setColor(bgColor)
             cornerRadius = 12f
         }
     }

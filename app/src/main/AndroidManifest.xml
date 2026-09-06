@@ -140,6 +140,14 @@
             android:exported="true"
             android:resizeableActivity="true" />
 
+        <!-- 下载管理与更新列表页面，复用主应用 AppTheme -->
+        <activity
+            android:name="com.updater.ui.DownloadManagerActivity"
+            android:theme="@style/AppTheme"
+            android:configChanges="uiMode|screenSize"
+            android:exported="false"
+            tools:replace="android:theme" />
+
         <!-- FileProvider 用于安装 APK -->
         <provider
             android:name="androidx.core.content.FileProvider"

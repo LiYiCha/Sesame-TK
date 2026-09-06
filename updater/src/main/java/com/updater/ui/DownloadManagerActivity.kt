@@ -5,6 +5,8 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.content.pm.PackageManager
+import android.content.res.Configuration
 import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
@@ -15,7 +17,10 @@ import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
 import android.widget.*
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 import com.updater.Updater
+import com.updater.config.UpdaterConfigManager
 import com.updater.db.DownloadDatabaseHelper
 import com.updater.db.DownloadTask
 import com.updater.download.ForegroundDownloadService
@@ -30,10 +35,25 @@ import java.io.File
 class DownloadManagerActivity : Activity() {
 
     private lateinit var dbHelper: DownloadDatabaseHelper
+    private lateinit var configManager: UpdaterConfigManager
     private var updateInfo: UpdateInfo? = null
-    
+
     private val packageViews = HashMap<String, PackageViewHolder>()
     private val tasks = HashMap<String, DownloadTask>()
+
+    private lateinit var rootView: LinearLayout
+    private lateinit var titleBar: RelativeLayout
+    private lateinit var scrollContent: LinearLayout
+
+    // 主题动态调色板（适配主项目 SesameTheme 白天 / 深色模式）
+    private var isNightMode: Boolean = false
+    private var colorBg: Int = 0
+    private var colorCard: Int = 0
+    private var colorTextPrimary: Int = 0
+    private var colorTextSecondary: Int = 0
+    private var colorBrand: Int = 0
+    private var colorBorder: Int = 0
+    private var colorCardInner: Int = 0
 
     private val progressReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
@@ -55,6 +75,10 @@ class DownloadManagerActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         dbHelper = DownloadDatabaseHelper(this)
+        configManager = UpdaterConfigManager(this)
+
+        initThemeColors()
+        setupSystemBar()
 
         var info = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             intent.getSerializableExtra("update_info", UpdateInfo::class.java)
@@ -63,20 +87,50 @@ class DownloadManagerActivity : Activity() {
             intent.getSerializableExtra("update_info") as? UpdateInfo
         }
 
+        // 优先从内存单例或本地持久化缓存恢复数据，彻底解决退出重进数据丢失为空的问题
         if (info == null) {
-            info = Updater.lastUpdateInfo
+            info = Updater.lastUpdateInfo ?: configManager.getCachedUpdateInfo()
         }
         updateInfo = info
+        if (info != null) {
+            configManager.saveCachedUpdateInfo(info)
+        }
 
-        val rootView = createRootLayout()
+        rootView = createRootLayout()
         setContentView(rootView)
-        
-        // 启动时在后台静默对账清理已安装包，保留未安装包供复用
+
+        // 后台静默对账清理已安装完成的历史包
         Thread {
             ApkCleanupManager.checkAndCleanOnStartup(this@DownloadManagerActivity)
         }.start()
 
         initPackageTasks()
+    }
+
+    private fun initThemeColors() {
+        isNightMode = (resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES
+        colorBg = if (isNightMode) Color.parseColor("#121212") else Color.parseColor("#F4F4F4")
+        colorCard = if (isNightMode) Color.parseColor("#1E1E1E") else Color.WHITE
+        colorTextPrimary = if (isNightMode) Color.parseColor("#FFFFFF") else Color.parseColor("#1A1A1A")
+        colorTextSecondary = if (isNightMode) Color.parseColor("#9E9E9E") else Color.parseColor("#666666")
+        colorBrand = if (isNightMode) Color.parseColor("#4CAF50") else Color.parseColor("#2D5A27")
+        colorBorder = if (isNightMode) Color.parseColor("#2D2D2D") else Color.parseColor("#E0E0E0")
+        colorCardInner = if (isNightMode) Color.parseColor("#252525") else Color.parseColor("#F8F9FA")
+    }
+
+    private fun setupSystemBar() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            window.statusBarColor = Color.TRANSPARENT
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                var flags = window.decorView.systemUiVisibility
+                flags = if (!isNightMode) {
+                    flags or View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR
+                } else {
+                    flags and View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR.inv()
+                }
+                window.decorView.systemUiVisibility = flags
+            }
+        }
     }
 
     private val installReceiver = object : BroadcastReceiver() {
@@ -89,7 +143,6 @@ class DownloadManagerActivity : Activity() {
 
     override fun onResume() {
         super.onResume()
-        // 从外部安装器返回时自动对账清理已安装完成的 APK
         ApkCleanupManager.cleanInstalledApks(this)
         syncTasksFromDb()
     }
@@ -117,7 +170,7 @@ class DownloadManagerActivity : Activity() {
                 registerReceiver(installReceiver, installFilter)
             }
         } catch (_: Exception) {}
-        
+
         syncTasksFromDb()
     }
 
@@ -143,7 +196,7 @@ class DownloadManagerActivity : Activity() {
                     val rawFileName = cleanUrl.substringAfterLast("/").ifEmpty { "app_${pkg.packageId}.apk" }
                     val fileName = if (rawFileName.endsWith(".apk", ignoreCase = true)) rawFileName else "$rawFileName.apk"
                     val saveFile = File(apkDir, fileName)
-                    
+
                     task = DownloadTask(
                         id = taskId,
                         url = getAbsoluteUrl(pkg.downloadUrl),
@@ -160,7 +213,6 @@ class DownloadManagerActivity : Activity() {
                 updateViewHolder(taskId, task)
             }
         } else {
-            // 没有在线 updateInfo 时，从本地数据库加载所有已存在的下载任务
             val localTasks = dbHelper.getAllTasks()
             for (task in localTasks) {
                 reconcileTaskFileState(task)
@@ -206,18 +258,16 @@ class DownloadManagerActivity : Activity() {
 
     private fun startDownload(taskId: String) {
         val task = tasks[taskId] ?: return
-        
+
         if (task.status == DownloadTask.STATUS_COMPLETED) {
             ApkInstaller.installApk(this, File(task.savePath))
             return
         }
 
-        // 1. 防重复点击：若已经在下载中，直接忽略
         if (task.status == DownloadTask.STATUS_DOWNLOADING) {
             return
         }
 
-        // 2. 单例限制：禁止并发下载，检查是否有其他包正在下载
         val currentDownloading = tasks.values.find { it.status == DownloadTask.STATUS_DOWNLOADING && it.id != taskId }
         if (currentDownloading != null) {
             Toast.makeText(this, "已有任务【${currentDownloading.title}】正在下载中，请等待完成或先暂停", Toast.LENGTH_SHORT).show()
@@ -233,7 +283,7 @@ class DownloadManagerActivity : Activity() {
         } else {
             startService(serviceIntent)
         }
-        
+
         task.status = DownloadTask.STATUS_DOWNLOADING
         updateViewHolder(taskId, task)
     }
@@ -245,7 +295,7 @@ class DownloadManagerActivity : Activity() {
             putExtra("task", task)
         }
         startService(serviceIntent)
-        
+
         task.status = DownloadTask.STATUS_PAUSED
         updateViewHolder(taskId, task)
     }
@@ -253,16 +303,16 @@ class DownloadManagerActivity : Activity() {
     private fun deleteDownload(taskId: String) {
         val task = tasks[taskId] ?: return
         pauseDownload(taskId)
-        
+
         val file = File(task.savePath)
         if (file.exists()) {
             file.delete()
         }
-        
+
         task.status = DownloadTask.STATUS_PENDING
         task.downloadedBytes = 0
         dbHelper.deleteTask(taskId)
-        
+
         updateViewHolder(taskId, task)
     }
 
@@ -294,7 +344,7 @@ class DownloadManagerActivity : Activity() {
         }
 
         if (relativeUrl.startsWith("http", ignoreCase = true)) return relativeUrl
-        val baseHost = intent.getStringExtra("base_host") ?: "https://yourdomain.com"
+        val baseHost = intent.getStringExtra("base_host") ?: "https://cicha.de5.net"
         val host = baseHost.trimEnd('/')
         return "$host/" + relativeUrl.removePrefix("/")
     }
@@ -311,57 +361,122 @@ class DownloadManagerActivity : Activity() {
         return String.format("%.1f %s", sizeD, units[i])
     }
 
-    // --- Programmatic Layout Builder ---
-    
-    private fun createRootLayout(): View {
+    // --- 执行手动刷新更新列表逻辑 ---
+    private fun doRefreshUpdates() {
+        Toast.makeText(applicationContext, "正在刷新更新信息...", Toast.LENGTH_SHORT).show()
+        val updater = Updater.getInstance(this)
+        updater.checkUpdate(
+            onUpdateAvailable = { newInfo ->
+                updateInfo = newInfo
+                Updater.lastUpdateInfo = newInfo
+                configManager.saveCachedUpdateInfo(newInfo)
+                rebuildContentLayout()
+                initPackageTasks()
+
+                val localName = getLocalVersionName()
+                val localCode = getLocalVersionCode()
+                if (Updater.isNewerVersion(newInfo.latestVersionName, newInfo.latestVersionCode, localName, localCode)) {
+                    Toast.makeText(applicationContext, "发现新版本 v${newInfo.latestVersionName}，列表已刷新", Toast.LENGTH_SHORT).show()
+                } else {
+                    Toast.makeText(applicationContext, "当前已是最新版本 (${newInfo.latestVersionName})", Toast.LENGTH_SHORT).show()
+                }
+            },
+            onNoUpdate = {
+                Toast.makeText(applicationContext, "当前已是最新版本，无新组件", Toast.LENGTH_SHORT).show()
+            },
+            onError = { err ->
+                Toast.makeText(applicationContext, "刷新失败: $err", Toast.LENGTH_SHORT).show()
+            }
+        )
+    }
+
+    private fun getLocalVersionName(): String {
+        return try {
+            val pInfo = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                packageManager.getPackageInfo(packageName, PackageManager.PackageInfoFlags.of(0))
+            } else {
+                @Suppress("DEPRECATION")
+                packageManager.getPackageInfo(packageName, 0)
+            }
+            pInfo.versionName ?: ""
+        } catch (_: Exception) {
+            ""
+        }
+    }
+
+    private fun getLocalVersionCode(): Long {
+        return try {
+            val pInfo = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                packageManager.getPackageInfo(packageName, PackageManager.PackageInfoFlags.of(0))
+            } else {
+                @Suppress("DEPRECATION")
+                packageManager.getPackageInfo(packageName, 0)
+            }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                pInfo.longVersionCode
+            } else {
+                @Suppress("DEPRECATION")
+                pInfo.versionCode.toLong()
+            }
+        } catch (_: Exception) {
+            0
+        }
+    }
+
+    // --- 界面构建逻辑（精简、高颜值、沉浸式 Edge-to-Edge） ---
+
+    private fun createRootLayout(): LinearLayout {
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setBackgroundColor(Color.parseColor("#F4F6F9"))
+            setBackgroundColor(colorBg)
             layoutParams = ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
         }
 
-        // Title Bar
-        val titleBar = RelativeLayout(this).apply {
-            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dpToPx(56)).apply {
-                elevation = dpToPx(4).toFloat()
+        // Title Bar（适配沉浸式 Insets 与状态栏高度）
+        titleBar = RelativeLayout(this).apply {
+            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                elevation = dpToPx(2).toFloat()
             }
-            setBackgroundColor(Color.WHITE)
+            setBackgroundColor(colorCard)
+            setPadding(dpToPx(12), dpToPx(10), dpToPx(12), dpToPx(10))
         }
-        
-        val btnBack = ImageButton(this).apply {
-            setImageResource(android.R.drawable.ic_menu_revert)
-            setBackgroundColor(Color.TRANSPARENT)
-            scaleType = ImageView.ScaleType.FIT_CENTER
-            val lp = RelativeLayout.LayoutParams(dpToPx(48), dpToPx(48)).apply {
+
+        // 1. 明确的返回按钮（严禁用易混淆的还原/旋转图标，换用标准的文字与箭头返回按键）
+        val btnBack = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dpToPx(6), dpToPx(6), dpToPx(10), dpToPx(6))
+            val lp = RelativeLayout.LayoutParams(RelativeLayout.LayoutParams.WRAP_CONTENT, dpToPx(38)).apply {
                 addRule(RelativeLayout.ALIGN_PARENT_LEFT)
                 addRule(RelativeLayout.CENTER_VERTICAL)
-                leftMargin = dpToPx(8)
             }
             layoutParams = lp
+
+            val txtArrow = TextView(this@DownloadManagerActivity).apply {
+                text = "‹"
+                textSize = 24f
+                typeface = Typeface.DEFAULT_BOLD
+                setTextColor(colorTextPrimary)
+                setPadding(0, 0, dpToPx(2), dpToPx(2))
+            }
+            val txtLabel = TextView(this@DownloadManagerActivity).apply {
+                text = "返回"
+                textSize = 14f
+                typeface = Typeface.DEFAULT_BOLD
+                setTextColor(colorTextPrimary)
+            }
+            addView(txtArrow)
+            addView(txtLabel)
+
             setOnClickListener { finish() }
         }
         titleBar.addView(btnBack)
 
-        val btnSettings = ImageButton(this).apply {
-            setImageResource(android.R.drawable.ic_menu_preferences)
-            setBackgroundColor(Color.TRANSPARENT)
-            scaleType = ImageView.ScaleType.FIT_CENTER
-            val lp = RelativeLayout.LayoutParams(dpToPx(48), dpToPx(48)).apply {
-                addRule(RelativeLayout.ALIGN_PARENT_RIGHT)
-                addRule(RelativeLayout.CENTER_VERTICAL)
-                rightMargin = dpToPx(8)
-            }
-            layoutParams = lp
-            setOnClickListener {
-                SourceSettingsDialog.show(this@DownloadManagerActivity)
-            }
-        }
-        titleBar.addView(btnSettings)
-
+        // 2. 标题居中
         val txtTitle = TextView(this).apply {
-            text = "系统更新与配套应用"
-            textSize = 18f
-            setTextColor(Color.parseColor("#212529"))
+            text = "更新与下载中心"
+            textSize = 17f
+            setTextColor(colorTextPrimary)
             typeface = Typeface.DEFAULT_BOLD
             val lp = RelativeLayout.LayoutParams(RelativeLayout.LayoutParams.WRAP_CONTENT, RelativeLayout.LayoutParams.WRAP_CONTENT).apply {
                 addRule(RelativeLayout.CENTER_IN_PARENT)
@@ -369,6 +484,60 @@ class DownloadManagerActivity : Activity() {
             layoutParams = lp
         }
         titleBar.addView(txtTitle)
+
+        // 3. 右侧操作区：刷新按钮 + 源设置按钮
+        val rightActionLayout = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            val lp = RelativeLayout.LayoutParams(RelativeLayout.LayoutParams.WRAP_CONTENT, RelativeLayout.LayoutParams.WRAP_CONTENT).apply {
+                addRule(RelativeLayout.ALIGN_PARENT_RIGHT)
+                addRule(RelativeLayout.CENTER_VERTICAL)
+            }
+            layoutParams = lp
+        }
+
+        val btnRefresh = Button(this).apply {
+            text = "刷新"
+            textSize = 12f
+            typeface = Typeface.DEFAULT_BOLD
+            setTextColor(Color.WHITE)
+            val bg = GradientDrawable().apply {
+                setColor(colorBrand)
+                cornerRadius = dpToPx(14).toFloat()
+            }
+            background = bg
+            val lp = LinearLayout.LayoutParams(dpToPx(56), dpToPx(30)).apply {
+                rightMargin = dpToPx(6)
+            }
+            layoutParams = lp
+            setOnClickListener {
+                doRefreshUpdates()
+            }
+        }
+        rightActionLayout.addView(btnRefresh)
+
+        val btnSettings = Button(this).apply {
+            text = "源设置"
+            textSize = 12f
+            typeface = Typeface.DEFAULT_BOLD
+            setTextColor(colorTextPrimary)
+            val bg = GradientDrawable().apply {
+                setColor(colorCardInner)
+                setStroke(dpToPx(1), colorBorder)
+                cornerRadius = dpToPx(14).toFloat()
+            }
+            background = bg
+            val lp = LinearLayout.LayoutParams(dpToPx(60), dpToPx(30))
+            layoutParams = lp
+            setOnClickListener {
+                SourceSettingsDialog.show(this@DownloadManagerActivity) {
+                    doRefreshUpdates()
+                }
+            }
+        }
+        rightActionLayout.addView(btnSettings)
+
+        titleBar.addView(rightActionLayout)
         root.addView(titleBar)
 
         // Scroll Container
@@ -376,100 +545,117 @@ class DownloadManagerActivity : Activity() {
             layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1.0f)
         }
 
-        val scrollContent = LinearLayout(this).apply {
+        scrollContent = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dpToPx(16), dpToPx(16), dpToPx(16), dpToPx(16))
+            setPadding(dpToPx(14), dpToPx(12), dpToPx(14), dpToPx(24))
             layoutParams = FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT)
         }
 
-        // 1. Version Card / Header Card
-        val cardBackground = GradientDrawable().apply {
-            setColor(Color.WHITE)
-            cornerRadius = dpToPx(12).toFloat()
+        scrollView.addView(scrollContent)
+        root.addView(scrollView)
+
+        // 沉浸式边距适配（解决顶部系统状态栏挤压与底部导航栏遮挡）
+        ViewCompat.setOnApplyWindowInsetsListener(root) { _, insets ->
+            val statusBars = insets.getInsets(WindowInsetsCompat.Type.statusBars())
+            val navBars = insets.getInsets(WindowInsetsCompat.Type.navigationBars())
+            titleBar.setPadding(dpToPx(12), statusBars.top + dpToPx(6), dpToPx(12), dpToPx(6))
+            root.setPadding(0, 0, 0, navBars.bottom)
+            insets
         }
-        
+
+        rebuildContentLayout()
+
+        return root
+    }
+
+    private fun rebuildContentLayout() {
+        scrollContent.removeAllViews()
+        packageViews.clear()
+
+        // 1. 精简版版本信息卡片
+        val info = updateInfo
         val headerCard = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            background = cardBackground
-            setPadding(dpToPx(16), dpToPx(16), dpToPx(16), dpToPx(16))
-            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
-                bottomMargin = dpToPx(20)
+            background = GradientDrawable().apply {
+                setColor(colorCard)
+                cornerRadius = dpToPx(12).toFloat()
             }
-            elevation = dpToPx(2).toFloat()
+            setPadding(dpToPx(14), dpToPx(12), dpToPx(14), dpToPx(12))
+            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
+                bottomMargin = dpToPx(14)
+            }
+            elevation = dpToPx(1f).toFloat()
         }
 
-        val info = updateInfo
-        if (info != null) {
-            val txtAppName = TextView(this).apply {
-                text = info.appName
-                textSize = 20f
-                typeface = Typeface.DEFAULT_BOLD
-                setTextColor(Color.parseColor("#333333"))
-            }
-            headerCard.addView(txtAppName)
+        val topRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
+        }
 
-            val txtVersion = TextView(this).apply {
-                text = "最新版本: v${info.latestVersionName} (Build ${info.latestVersionCode})"
-                textSize = 14f
-                setTextColor(Color.parseColor("#667eea"))
+        val txtAppName = TextView(this).apply {
+            text = info?.appName ?: "芝麻粒 (Sesame-TK)"
+            textSize = 16f
+            typeface = Typeface.DEFAULT_BOLD
+            setTextColor(colorTextPrimary)
+            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1.0f)
+        }
+        topRow.addView(txtAppName)
+
+        val activeSource = configManager.getSelectedSource()
+        val txtSourceBadge = TextView(this).apply {
+            text = " ${activeSource?.name ?: "官方源"} "
+            textSize = 10f
+            setTextColor(colorBrand)
+            background = GradientDrawable().apply {
+                setColor(if (isNightMode) Color.parseColor("#1B3320") else Color.parseColor("#E8F5E9"))
+                cornerRadius = dpToPx(6).toFloat()
+            }
+            setPadding(dpToPx(6), dpToPx(3), dpToPx(6), dpToPx(3))
+        }
+        topRow.addView(txtSourceBadge)
+        headerCard.addView(topRow)
+
+        if (info != null) {
+            val txtVersionTag = TextView(this).apply {
+                text = "最新版本：v${info.latestVersionName} (Build ${info.latestVersionCode})"
+                textSize = 12f
+                setTextColor(colorBrand)
+                typeface = Typeface.DEFAULT_BOLD
                 setPadding(0, dpToPx(4), 0, 0)
             }
-            headerCard.addView(txtVersion)
-
-            val divider = View(this).apply {
-                setBackgroundColor(Color.parseColor("#E9ECEF"))
-                layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dpToPx(1)).apply {
-                    topMargin = dpToPx(12)
-                    bottomMargin = dpToPx(12)
-                }
-            }
-            headerCard.addView(divider)
-
-            val txtChangelogTitle = TextView(this).apply {
-                text = "更新内容:"
-                textSize = 14f
-                typeface = Typeface.DEFAULT_BOLD
-                setTextColor(Color.parseColor("#495057"))
-            }
-            headerCard.addView(txtChangelogTitle)
+            headerCard.addView(txtVersionTag)
 
             val txtChangelog = TextView(this).apply {
                 text = info.updateLog.ifEmpty { "优化了用户体验和细节。" }
-                textSize = 13f
-                setTextColor(Color.parseColor("#6C757D"))
+                textSize = 12f
+                setTextColor(colorTextSecondary)
                 setPadding(0, dpToPx(6), 0, 0)
+                maxLines = 4
             }
             headerCard.addView(txtChangelog)
         } else {
-            val txtHeaderTitle = TextView(this).apply {
-                text = "安装包与配套文件下载中心"
-                textSize = 18f
-                typeface = Typeface.DEFAULT_BOLD
-                setTextColor(Color.parseColor("#333333"))
+            val txtDesc = TextView(this).apply {
+                text = "在此管理下载的更新安装包与配套应用组件，支持断点续传与离线复用。"
+                textSize = 12f
+                setTextColor(colorTextSecondary)
+                setPadding(0, dpToPx(4), 0, 0)
             }
-            headerCard.addView(txtHeaderTitle)
-
-            val txtHeaderDesc = TextView(this).apply {
-                text = "在此管理本地下载的更新安装包与配套应用组件。"
-                textSize = 13f
-                setTextColor(Color.parseColor("#6C757D"))
-                setPadding(0, dpToPx(6), 0, 0)
-            }
-            headerCard.addView(txtHeaderDesc)
+            headerCard.addView(txtDesc)
         }
         scrollContent.addView(headerCard)
 
-        // 2. Packages Title
-        val txtPackagesTitle = TextView(this).apply {
-            text = if (info != null) "配套安装包列表" else "本地安装包任务列表"
-            textSize = 15f
+        // 2. 安装包列表标题
+        val txtListTitle = TextView(this).apply {
+            text = "配套安装包与组件列表"
+            textSize = 13f
             typeface = Typeface.DEFAULT_BOLD
-            setTextColor(Color.parseColor("#495057"))
-            setPadding(dpToPx(4), 0, 0, dpToPx(10))
+            setTextColor(colorTextSecondary)
+            setPadding(dpToPx(4), 0, 0, dpToPx(8))
         }
-        scrollContent.addView(txtPackagesTitle)
+        scrollContent.addView(txtListTitle)
 
-        // 3. Packages Cards List
+        // 3. 安装包列表卡片
         if (info != null && info.packages.isNotEmpty()) {
             for (pkg in info.packages) {
                 val pkgCard = createPackageCard(getTaskId(pkg.downloadUrl), pkg.packageName, pkg.apkSize, pkg.description)
@@ -481,91 +667,85 @@ class DownloadManagerActivity : Activity() {
                 scrollContent.addView(pkgCard)
             }
         } else {
-            // 空状态提示
             val emptyCard = LinearLayout(this).apply {
                 orientation = LinearLayout.VERTICAL
                 gravity = Gravity.CENTER
-                setPadding(dpToPx(20), dpToPx(36), dpToPx(20), dpToPx(36))
+                setPadding(dpToPx(16), dpToPx(24), dpToPx(16), dpToPx(24))
                 background = GradientDrawable().apply {
-                    setColor(Color.WHITE)
+                    setColor(colorCard)
                     cornerRadius = dpToPx(12).toFloat()
                 }
             }
             val txtEmpty = TextView(this).apply {
-                text = "暂无待管理或已下载的安装包"
-                textSize = 14f
-                setTextColor(Color.parseColor("#868E96"))
+                text = "暂无待下载或已缓存的安装包，可点击右上角「刷新」检测"
+                textSize = 13f
+                setTextColor(colorTextSecondary)
                 gravity = Gravity.CENTER
             }
             emptyCard.addView(txtEmpty)
             scrollContent.addView(emptyCard)
         }
-
-        scrollView.addView(scrollContent)
-        root.addView(scrollView)
-        return root
     }
 
     private fun createPackageCard(taskId: String, title: String, sizeBytes: Long, description: String): View {
-        val cardBackground = GradientDrawable().apply {
-            setColor(Color.WHITE)
-            cornerRadius = dpToPx(10).toFloat()
-        }
-
         val card = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            background = cardBackground
-            setPadding(dpToPx(16), dpToPx(16), dpToPx(16), dpToPx(16))
-            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
-                bottomMargin = dpToPx(12)
+            background = GradientDrawable().apply {
+                setColor(colorCard)
+                cornerRadius = dpToPx(10).toFloat()
             }
-            elevation = dpToPx(1.5f).toFloat()
+            setPadding(dpToPx(14), dpToPx(12), dpToPx(14), dpToPx(12))
+            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
+                bottomMargin = dpToPx(10)
+            }
+            elevation = dpToPx(1f).toFloat()
         }
 
-        // Title Row
+        // 标题与大小行
         val titleRow = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
             layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
         }
 
         val txtPkgName = TextView(this).apply {
             text = title
-            textSize = 15f
+            textSize = 14f
             typeface = Typeface.DEFAULT_BOLD
-            setTextColor(Color.parseColor("#343A40"))
+            setTextColor(colorTextPrimary)
             layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1.0f)
         }
         titleRow.addView(txtPkgName)
 
         val txtSize = TextView(this).apply {
             text = if (sizeBytes > 0) formatSize(sizeBytes) else ""
-            textSize = 13f
-            setTextColor(Color.parseColor("#6C757D"))
+            textSize = 12f
+            setTextColor(colorTextSecondary)
         }
         titleRow.addView(txtSize)
         card.addView(titleRow)
 
-        // Description
+        // 描述
         val txtDesc = TextView(this).apply {
             text = description
-            textSize = 12f
-            setTextColor(Color.parseColor("#868E96"))
-            setPadding(0, dpToPx(4), 0, dpToPx(10))
+            textSize = 11f
+            setTextColor(colorTextSecondary)
+            setPadding(0, dpToPx(3), 0, dpToPx(6))
         }
         card.addView(txtDesc)
 
-        // Progress Bar
+        // 进度条
         val progressBar = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply {
             max = 100
             progress = 0
             visibility = View.GONE
             layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dpToPx(4)).apply {
-                bottomMargin = dpToPx(8)
+                bottomMargin = dpToPx(6)
             }
         }
         card.addView(progressBar)
 
-        // Bottom Actions Row
+        // 底部状态与操作按钮行
         val actionsRow = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
@@ -575,7 +755,7 @@ class DownloadManagerActivity : Activity() {
         val txtStatus = TextView(this).apply {
             text = "状态: 未下载"
             textSize = 12f
-            setTextColor(Color.parseColor("#6C757D"))
+            setTextColor(colorTextSecondary)
             layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1.0f)
         }
         actionsRow.addView(txtStatus)
@@ -583,11 +763,16 @@ class DownloadManagerActivity : Activity() {
         val btnOpenDir = Button(this).apply {
             text = "打开目录"
             textSize = 12f
-            setTextColor(Color.parseColor("#495057"))
-            setBackgroundColor(Color.TRANSPARENT)
+            setTextColor(colorTextPrimary)
+            val bg = GradientDrawable().apply {
+                setColor(colorCardInner)
+                setStroke(dpToPx(1), colorBorder)
+                cornerRadius = dpToPx(6).toFloat()
+            }
+            background = bg
             visibility = View.GONE
-            val lp = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, dpToPx(36)).apply {
-                rightMargin = dpToPx(8)
+            val lp = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, dpToPx(32)).apply {
+                rightMargin = dpToPx(6)
             }
             layoutParams = lp
             setOnClickListener {
@@ -602,10 +787,14 @@ class DownloadManagerActivity : Activity() {
             text = "删除"
             textSize = 12f
             setTextColor(Color.parseColor("#DC3545"))
-            setBackgroundColor(Color.TRANSPARENT)
+            val bg = GradientDrawable().apply {
+                setColor(if (isNightMode) Color.parseColor("#2A1C1C") else Color.parseColor("#FFF0F0"))
+                cornerRadius = dpToPx(6).toFloat()
+            }
+            background = bg
             visibility = View.GONE
-            val lp = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, dpToPx(36)).apply {
-                rightMargin = dpToPx(8)
+            val lp = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, dpToPx(32)).apply {
+                rightMargin = dpToPx(6)
             }
             layoutParams = lp
             setOnClickListener { deleteDownload(taskId) }
@@ -614,16 +803,17 @@ class DownloadManagerActivity : Activity() {
 
         val btnAction = Button(this).apply {
             text = "下载"
-            textSize = 13f
+            textSize = 12f
+            typeface = Typeface.DEFAULT_BOLD
             setTextColor(Color.WHITE)
-            
+
             val btnBg = GradientDrawable().apply {
-                setColor(Color.parseColor("#667eea"))
+                setColor(colorBrand)
                 cornerRadius = dpToPx(6).toFloat()
             }
             background = btnBg
-            layoutParams = LinearLayout.LayoutParams(dpToPx(80), dpToPx(36))
-            
+            layoutParams = LinearLayout.LayoutParams(dpToPx(72), dpToPx(32))
+
             setOnClickListener {
                 val task = tasks[taskId] ?: return@setOnClickListener
                 when (task.status) {
@@ -637,74 +827,73 @@ class DownloadManagerActivity : Activity() {
         card.addView(actionsRow)
 
         packageViews[taskId] = PackageViewHolder(progressBar, txtStatus, btnAction, btnDelete, btnOpenDir)
-
         return card
     }
 
     private fun updateViewHolder(taskId: String, task: DownloadTask, errorMsg: String? = null) {
         val holder = packageViews[taskId] ?: return
-        
+
         when (task.status) {
             DownloadTask.STATUS_PENDING -> {
                 holder.progressBar.visibility = View.GONE
                 holder.txtStatus.text = "状态: 未下载"
-                holder.txtStatus.setTextColor(Color.parseColor("#6C757D"))
+                holder.txtStatus.setTextColor(colorTextSecondary)
                 holder.btnAction.text = "下载"
                 holder.btnAction.visibility = View.VISIBLE
                 holder.btnDelete.visibility = View.GONE
                 holder.btnOpenDir.visibility = View.GONE
-                setButtonColor(holder.btnAction, "#667eea")
+                setButtonBgColor(holder.btnAction, colorBrand)
             }
             DownloadTask.STATUS_DOWNLOADING -> {
                 holder.progressBar.visibility = View.VISIBLE
                 val progressPercent = if (task.totalBytes > 0) ((task.downloadedBytes.toDouble() / task.totalBytes.toDouble()) * 100).toInt() else 0
                 holder.progressBar.progress = progressPercent
                 holder.txtStatus.text = "下载中: $progressPercent%"
-                holder.txtStatus.setTextColor(Color.parseColor("#667eea"))
+                holder.txtStatus.setTextColor(colorBrand)
                 holder.btnAction.text = "暂停"
                 holder.btnAction.visibility = View.VISIBLE
                 holder.btnDelete.visibility = View.GONE
                 holder.btnOpenDir.visibility = View.GONE
-                setButtonColor(holder.btnAction, "#E0A800")
+                setButtonBgColor(holder.btnAction, Color.parseColor("#E0A800"))
             }
             DownloadTask.STATUS_PAUSED -> {
                 holder.progressBar.visibility = View.VISIBLE
                 val progressPercent = if (task.totalBytes > 0) ((task.downloadedBytes.toDouble() / task.totalBytes.toDouble()) * 100).toInt() else 0
                 holder.progressBar.progress = progressPercent
                 holder.txtStatus.text = "已暂停 ($progressPercent%)"
-                holder.txtStatus.setTextColor(Color.parseColor("#6C757D"))
+                holder.txtStatus.setTextColor(colorTextSecondary)
                 holder.btnAction.text = "继续"
                 holder.btnAction.visibility = View.VISIBLE
                 holder.btnDelete.visibility = View.VISIBLE
                 holder.btnOpenDir.visibility = View.GONE
-                setButtonColor(holder.btnAction, "#667eea")
+                setButtonBgColor(holder.btnAction, colorBrand)
             }
             DownloadTask.STATUS_COMPLETED -> {
                 holder.progressBar.visibility = View.GONE
-                holder.txtStatus.text = "下载完成"
-                holder.txtStatus.setTextColor(Color.parseColor("#28A745"))
+                holder.txtStatus.text = "已就绪 (0流量复用)"
+                holder.txtStatus.setTextColor(colorBrand)
                 holder.btnAction.text = "安装"
                 holder.btnAction.visibility = View.VISIBLE
                 holder.btnDelete.visibility = View.VISIBLE
                 holder.btnOpenDir.visibility = View.VISIBLE
-                setButtonColor(holder.btnAction, "#28A745")
+                setButtonBgColor(holder.btnAction, colorBrand)
             }
             DownloadTask.STATUS_FAILED -> {
                 holder.progressBar.visibility = View.GONE
-                holder.txtStatus.text = "下载失败: ${errorMsg ?: "未知错误"}"
+                holder.txtStatus.text = "下载失败: ${errorMsg ?: "网络异常"}"
                 holder.txtStatus.setTextColor(Color.parseColor("#DC3545"))
                 holder.btnAction.text = "重试"
                 holder.btnAction.visibility = View.VISIBLE
                 holder.btnDelete.visibility = View.VISIBLE
                 holder.btnOpenDir.visibility = View.GONE
-                setButtonColor(holder.btnAction, "#DC3545")
+                setButtonBgColor(holder.btnAction, Color.parseColor("#DC3545"))
             }
         }
     }
 
-    private fun setButtonColor(button: Button, colorHex: String) {
+    private fun setButtonBgColor(button: Button, color: Int) {
         val bg = button.background as? GradientDrawable
-        bg?.setColor(Color.parseColor(colorHex))
+        bg?.setColor(color)
     }
 
     private fun dpToPx(dp: Int): Int {

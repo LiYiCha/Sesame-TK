@@ -2,6 +2,8 @@ package com.updater.config
 
 import android.content.Context
 import android.content.SharedPreferences
+import com.updater.model.UpdateInfo
+import com.updater.model.UpdatePackage
 import com.updater.model.UpdateSource
 import com.updater.model.UpdateSourceType
 import org.json.JSONArray
@@ -19,6 +21,7 @@ class UpdaterConfigManager(context: Context) {
         private const val KEY_AUTO_CHECK_ON_STARTUP = "key_auto_check_on_startup"
         private const val KEY_SELECTED_SOURCE_ID = "key_selected_source_id"
         private const val KEY_SOURCES_LIST = "key_sources_list"
+        private const val KEY_CACHED_UPDATE_INFO = "key_cached_update_info"
     }
 
     /**
@@ -172,5 +175,83 @@ class UpdaterConfigManager(context: Context) {
             selectedSourceId = list.firstOrNull()?.id ?: ""
         }
         return true
+    }
+
+    /**
+     * 持久化缓存最新获取到的更新详情与配套包列表
+     * 解决退出页面或冷启动后下载列表丢失的问题
+     */
+    fun saveCachedUpdateInfo(info: UpdateInfo) {
+        try {
+            val obj = JSONObject().apply {
+                put("appId", info.appId)
+                put("appName", info.appName)
+                put("latestVersionCode", info.latestVersionCode)
+                put("latestVersionName", info.latestVersionName)
+                put("updateLog", info.updateLog)
+                put("isForceUpdate", info.isForceUpdate)
+                put("lastUpdated", info.lastUpdated)
+
+                val pkgs = JSONArray()
+                for (p in info.packages) {
+                    val pObj = JSONObject().apply {
+                        put("packageId", p.packageId)
+                        put("packageName", p.packageName)
+                        put("versionName", p.versionName)
+                        put("versionCode", p.versionCode)
+                        put("description", p.description)
+                        put("downloadUrl", p.downloadUrl)
+                        put("apkSize", p.apkSize)
+                        put("apkMd5", p.apkMd5)
+                    }
+                    pkgs.put(pObj)
+                }
+                put("packages", pkgs)
+            }
+            sp.edit().putString(KEY_CACHED_UPDATE_INFO, obj.toString()).apply()
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
+    /**
+     * 读取本地持久化缓存的更新信息与配套包列表
+     */
+    fun getCachedUpdateInfo(): UpdateInfo? {
+        val jsonStr = sp.getString(KEY_CACHED_UPDATE_INFO, null) ?: return null
+        return try {
+            val obj = JSONObject(jsonStr)
+            val pkgs = mutableListOf<UpdatePackage>()
+            val pkgsArr = obj.optJSONArray("packages")
+            if (pkgsArr != null) {
+                for (i in 0 until pkgsArr.length()) {
+                    val pObj = pkgsArr.getJSONObject(i)
+                    pkgs.add(
+                        UpdatePackage(
+                            packageId = pObj.optString("packageId"),
+                            packageName = pObj.optString("packageName"),
+                            versionName = pObj.optString("versionName"),
+                            versionCode = pObj.optInt("versionCode"),
+                            description = pObj.optString("description"),
+                            downloadUrl = pObj.optString("downloadUrl"),
+                            apkSize = pObj.optLong("apkSize"),
+                            apkMd5 = pObj.optString("apkMd5")
+                        )
+                    )
+                }
+            }
+            UpdateInfo(
+                appId = obj.optString("appId"),
+                appName = obj.optString("appName"),
+                latestVersionCode = obj.optInt("latestVersionCode"),
+                latestVersionName = obj.optString("latestVersionName"),
+                updateLog = obj.optString("updateLog"),
+                isForceUpdate = obj.optBoolean("isForceUpdate"),
+                packages = pkgs,
+                lastUpdated = obj.optLong("lastUpdated")
+            )
+        } catch (e: Exception) {
+            null
+        }
     }
 }

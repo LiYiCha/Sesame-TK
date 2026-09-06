@@ -6,9 +6,13 @@ import android.content.Context
 import android.content.ContextWrapper
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.graphics.Color
+import android.graphics.Typeface
+import android.graphics.drawable.GradientDrawable
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
+import android.view.ViewGroup
 import android.widget.Toast
 import com.updater.config.UpdaterConfigManager
 import com.updater.model.UpdateInfo
@@ -40,6 +44,88 @@ class Updater private constructor(
     companion object {
         @Volatile
         var lastUpdateInfo: UpdateInfo? = null
+
+        @Volatile
+        private var defaultInstance: Updater? = null
+
+        fun getInstance(context: Context): Updater {
+            val existing = defaultInstance
+            if (existing != null) return existing
+            synchronized(this) {
+                val existingSync = defaultInstance
+                if (existingSync != null) return existingSync
+
+                val config = UpdaterConfigManager(context)
+                val builder = Builder(context)
+                val sources = config.getSources()
+                if (sources.isNotEmpty()) {
+                    for (s in sources) {
+                        if (s.type == UpdateSourceType.CLOUDFLARE_R2) {
+                            builder.addCloudflareSource(s.name, s.url, s.id == config.selectedSourceId, s.downloadHost)
+                        } else {
+                            builder.addGitHubSource(s.name, s.url, s.id == config.selectedSourceId)
+                        }
+                    }
+                } else {
+                    builder.addCloudflareSource("Cloudflare 官方源", "https://cicha.de5.net", isDefault = true)
+                    builder.addGitHubSource("GitHub 官方发布源", "https://github.com/LiYiCha/Sesame-TK", isDefault = false)
+                }
+                val created = builder.build()
+                defaultInstance = created
+                return created
+            }
+        }
+
+        /**
+         * 语义化版本比对：
+         * 提取版本数字进行数值逐级比较
+         * 返回 > 0 表示 v1 > v2，< 0 表示 v1 < v2，== 0 表示相等
+         */
+        fun compareSemanticVersions(v1: String, v2: String): Int {
+            fun parseNumbers(v: String): List<Int> {
+                val clean = v.trim().removePrefix("v").removePrefix("V")
+                return clean.split(".", "-", "_").mapNotNull { part ->
+                    part.takeWhile { it.isDigit() }.toIntOrNull()
+                }
+            }
+            val list1 = parseNumbers(v1)
+            val list2 = parseNumbers(v2)
+            val maxLen = maxOf(list1.size, list2.size)
+            for (i in 0 until maxLen) {
+                val n1 = list1.getOrElse(i) { 0 }
+                val n2 = list2.getOrElse(i) { 0 }
+                if (n1 != n2) {
+                    return n1.compareTo(n2)
+                }
+            }
+            return 0
+        }
+
+        /**
+         * 判断远程版本是否确实新于本地当前运行版本
+         * 避免因仅比较虚构的 fake versionCode 造成已安装最新版仍死循环弹窗提示
+         */
+        fun isNewerVersion(
+            remoteVersionName: String,
+            remoteVersionCode: Int,
+            localVersionName: String,
+            localVersionCode: Long
+        ): Boolean {
+            val cmp = compareSemanticVersions(remoteVersionName, localVersionName)
+            if (cmp > 0) return true
+            if (cmp < 0) return false
+
+            // 当主语义版本号一致时（如均为 0.4.6）：
+            // 只有当两者均为合法且差值处于正常小范围步进的真实 versionCode 时，才支持构建号递增更新
+            // 彻底杜绝 GitHub 虚构的 406 假代码误判大于本地系统 versionCode 31
+            if (remoteVersionCode > 0 && localVersionCode > 0) {
+                val diff = remoteVersionCode - localVersionCode
+                if (diff in 1..20) {
+                    return true
+                }
+            }
+            return false
+        }
 
         class Builder(private val context: Context) {
             private var appId: String = context.packageName
@@ -117,6 +203,20 @@ class Updater private constructor(
     }
 
     /**
+     * 判断传入的 UpdateInfo 是否确实新于本地当前版本
+     */
+    fun isNewerThanLocal(context: Context, updateInfo: UpdateInfo): Boolean {
+        val localVersionName = getLocalVersionName(context)
+        val localVersionCode = getLocalVersionCode(context)
+        return isNewerVersion(
+            remoteVersionName = updateInfo.latestVersionName,
+            remoteVersionCode = updateInfo.latestVersionCode,
+            localVersionName = localVersionName,
+            localVersionCode = localVersionCode
+        )
+    }
+
+    /**
      * 模式一：应用启动时自动检测更新
      * 仅在用户开启了「启动时自动检查更新」设置时触发，静默检测，有新版本才弹窗
      */
@@ -126,10 +226,9 @@ class Updater private constructor(
             return
         }
 
-        val currentVersionCode = getLocalVersionCode(activityContext)
         checkUpdate(
             onUpdateAvailable = { updateInfo ->
-                if (updateInfo.latestVersionCode > currentVersionCode) {
+                if (isNewerThanLocal(activityContext, updateInfo)) {
                     showUpdateDialog(activityContext, updateInfo)
                 }
             },
@@ -143,22 +242,29 @@ class Updater private constructor(
      * 会给出明确的交互反馈（“正在检查...”、“当前已是最新版本”或更新弹窗）
      */
     fun checkUpdateManual(activityContext: Context) {
-        Toast.makeText(activityContext, "正在检查更新...", Toast.LENGTH_SHORT).show()
-        val currentVersionCode = getLocalVersionCode(activityContext)
+        try {
+            Toast.makeText(activityContext.applicationContext, "正在检查更新...", Toast.LENGTH_SHORT).show()
+        } catch (_: Throwable) {}
 
         checkUpdate(
             onUpdateAvailable = { updateInfo ->
-                if (updateInfo.latestVersionCode > currentVersionCode) {
+                if (isNewerThanLocal(activityContext, updateInfo)) {
                     showUpdateDialog(activityContext, updateInfo)
                 } else {
-                    Toast.makeText(activityContext, "当前已是最新版本 (${updateInfo.latestVersionName})", Toast.LENGTH_SHORT).show()
+                    try {
+                        Toast.makeText(activityContext.applicationContext, "当前已是最新版本 (${updateInfo.latestVersionName})", Toast.LENGTH_SHORT).show()
+                    } catch (_: Throwable) {}
                 }
             },
             onNoUpdate = {
-                Toast.makeText(activityContext, "当前已是最新版本", Toast.LENGTH_SHORT).show()
+                try {
+                    Toast.makeText(activityContext.applicationContext, "当前已是最新版本", Toast.LENGTH_SHORT).show()
+                } catch (_: Throwable) {}
             },
             onError = { error ->
-                Toast.makeText(activityContext, "检查更新失败: $error", Toast.LENGTH_SHORT).show()
+                try {
+                    Toast.makeText(activityContext.applicationContext, "检查更新失败: $error", Toast.LENGTH_SHORT).show()
+                } catch (_: Throwable) {}
             }
         )
     }
@@ -167,17 +273,18 @@ class Updater private constructor(
      * 兼容原有的无感知检查更新并弹窗方法
      */
     fun checkAndShowUpdateDialog(activityContext: Context) {
-        val currentVersionCode = getLocalVersionCode(activityContext)
         checkUpdate(
             onUpdateAvailable = { updateInfo ->
-                if (updateInfo.latestVersionCode > currentVersionCode) {
+                if (isNewerThanLocal(activityContext, updateInfo)) {
                     showUpdateDialog(activityContext, updateInfo)
                 }
             },
             onNoUpdate = {},
             onError = { error ->
                 handler.post {
-                    Toast.makeText(activityContext, "检查更新失败: $error", Toast.LENGTH_SHORT).show()
+                    try {
+                        Toast.makeText(activityContext.applicationContext, "检查更新失败: $error", Toast.LENGTH_SHORT).show()
+                    } catch (_: Throwable) {}
                 }
             }
         )
@@ -298,6 +405,7 @@ class Updater private constructor(
                     )
 
                     lastUpdateInfo = updateInfo
+                    configManager.saveCachedUpdateInfo(updateInfo)
                     handler.post { onUpdateAvailable(updateInfo) }
                 } catch (e: Exception) {
                     handler.post { onError("数据解析错误: ${e.message}") }
@@ -397,6 +505,7 @@ class Updater private constructor(
                     )
 
                     lastUpdateInfo = updateInfo
+                    configManager.saveCachedUpdateInfo(updateInfo)
                     handler.post { onUpdateAvailable(updateInfo) }
                 } catch (e: Exception) {
                     handler.post { onError("GitHub 数据解析失败: ${e.message}") }
@@ -455,20 +564,55 @@ class Updater private constructor(
                 setTitle("发现新版本 v${updateInfo.latestVersionName}")
                 setMessage(updateInfo.updateLog.ifEmpty { "检测到新版本发布，可进入下载中心获取更新。" })
                 setCancelable(!updateInfo.isForceUpdate)
-                
+
                 setPositiveButton("立即查看") { dialog, _ ->
                     dialog.dismiss()
                     openDownloadCenter(targetContext, updateInfo)
                 }
-                
+
                 if (!updateInfo.isForceUpdate) {
                     setNegativeButton("稍后再说") { dialog, _ ->
                         dialog.dismiss()
                     }
                 }
             }
-            
+
             val dialog = builder.create()
+            dialog.setOnShowListener {
+                try {
+                    val density = targetContext.resources.displayMetrics.density
+                    fun dp(v: Int) = (v * density + 0.5f).toInt()
+
+                    // 1. 立即查看按钮：实心经典品牌绿底、白色文字、加粗、圆角、清晰轮廓
+                    dialog.getButton(AlertDialog.BUTTON_POSITIVE)?.apply {
+                        typeface = Typeface.DEFAULT_BOLD
+                        setTextColor(Color.WHITE)
+                        val bg = GradientDrawable().apply {
+                            setColor(Color.parseColor("#2D5A27")) // 经典品牌绿
+                            cornerRadius = dp(20).toFloat()
+                        }
+                        background = bg
+                        setPadding(dp(18), dp(8), dp(18), dp(8))
+                        val lp = layoutParams as? ViewGroup.MarginLayoutParams
+                        lp?.leftMargin = dp(8)
+                        layoutParams = lp
+                    }
+
+                    // 2. 稍后再说按钮：清晰线框轮廓、高对比度深色文字、圆角线框、告别置灰感
+                    dialog.getButton(AlertDialog.BUTTON_NEGATIVE)?.apply {
+                        typeface = Typeface.DEFAULT_BOLD
+                        setTextColor(Color.parseColor("#212529"))
+                        val bg = GradientDrawable().apply {
+                            setColor(Color.parseColor("#F5F5F5"))
+                            setStroke(dp(1), Color.parseColor("#BDBDBD"))
+                            cornerRadius = dp(20).toFloat()
+                        }
+                        background = bg
+                        setPadding(dp(16), dp(8), dp(16), dp(8))
+                    }
+                } catch (_: Throwable) {}
+            }
+
             dialog.show()
 
             if (updateInfo.isForceUpdate) {
@@ -484,7 +628,7 @@ class Updater private constructor(
     }
 
     fun openDownloadCenter(context: Context, updateInfo: UpdateInfo? = null) {
-        val targetInfo = updateInfo ?: lastUpdateInfo
+        val targetInfo = updateInfo ?: lastUpdateInfo ?: configManager.getCachedUpdateInfo()
         val currentSource = configManager.getSelectedSource()
         val intent = Intent(context, DownloadManagerActivity::class.java).apply {
             if (targetInfo != null) {
@@ -497,6 +641,20 @@ class Updater private constructor(
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         }
         context.startActivity(intent)
+    }
+
+    private fun getLocalVersionName(context: Context): String {
+        return try {
+            val packageInfo = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                context.packageManager.getPackageInfo(context.packageName, PackageManager.PackageInfoFlags.of(0))
+            } else {
+                @Suppress("DEPRECATION")
+                context.packageManager.getPackageInfo(context.packageName, 0)
+            }
+            packageInfo.versionName ?: ""
+        } catch (e: Exception) {
+            ""
+        }
     }
 
     private fun getLocalVersionCode(context: Context): Long {
