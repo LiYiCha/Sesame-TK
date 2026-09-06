@@ -132,6 +132,9 @@ private fun HelpScreen(onBackClick: () -> Unit) {
                     onOpenSourceDialog = { showSourceDialog = true },
                     onCheckUpdateClick = {
                         AppUpdaterManager.checkUpdateManual(context)
+                    },
+                    onOpenDownloadListClick = {
+                        AppUpdaterManager.openDownloadList(context)
                     }
                 )
             }
@@ -217,7 +220,8 @@ private fun UpdateSettingsCard(
     selectedSourceId: String,
     onUpdateModeChanged: (Int) -> Unit,
     onOpenSourceDialog: () -> Unit,
-    onCheckUpdateClick: () -> Unit
+    onCheckUpdateClick: () -> Unit,
+    onOpenDownloadListClick: () -> Unit
 ) {
     val activeSource = remember(selectedSourceId) { configManager.getSelectedSource() }
 
@@ -363,6 +367,55 @@ private fun UpdateSettingsCard(
                     contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
                 ) {
                     Text("切换源", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                }
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            // 更新包与配套应用下载管理列表入口
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f))
+                    .clickable(onClick = onOpenDownloadListClick)
+                    .padding(horizontal = 14.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                    Icon(
+                        imageVector = Icons.Rounded.Download,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(22.dp)
+                    )
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Column {
+                        Text(
+                            text = "更新包与配套应用列表",
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Text(
+                            text = "查看已下载安装包、断点续传及外部目录",
+                            fontSize = 11.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+
+                Button(
+                    onClick = onOpenDownloadListClick,
+                    shape = RoundedCornerShape(14.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.primary,
+                        contentColor = MaterialTheme.colorScheme.onPrimary
+                    ),
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                ) {
+                    Text("打开列表", fontSize = 12.sp, fontWeight = FontWeight.Bold)
                 }
             }
         }

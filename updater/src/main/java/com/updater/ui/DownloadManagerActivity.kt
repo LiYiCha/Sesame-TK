@@ -15,18 +15,22 @@ import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
 import android.widget.*
+import com.updater.Updater
 import com.updater.db.DownloadDatabaseHelper
 import com.updater.db.DownloadTask
 import com.updater.download.ForegroundDownloadService
 import com.updater.model.UpdateInfo
 import com.updater.model.UpdatePackage
+import com.updater.utils.ApkCleanupManager
 import com.updater.utils.ApkInstaller
+import com.updater.utils.UpdatePathManager
+import com.updater.utils.UpdaterLog
 import java.io.File
 
 class DownloadManagerActivity : Activity() {
 
     private lateinit var dbHelper: DownloadDatabaseHelper
-    private lateinit var updateInfo: UpdateInfo
+    private var updateInfo: UpdateInfo? = null
     
     private val packageViews = HashMap<String, PackageViewHolder>()
     private val tasks = HashMap<String, DownloadTask>()
@@ -52,7 +56,7 @@ class DownloadManagerActivity : Activity() {
         super.onCreate(savedInstanceState)
         dbHelper = DownloadDatabaseHelper(this)
 
-        val info = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        var info = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             intent.getSerializableExtra("update_info", UpdateInfo::class.java)
         } else {
             @Suppress("DEPRECATION")
@@ -60,17 +64,17 @@ class DownloadManagerActivity : Activity() {
         }
 
         if (info == null) {
-            Toast.makeText(this, "更新配置读取失败", Toast.LENGTH_SHORT).show()
-            finish()
-            return
+            info = Updater.lastUpdateInfo
         }
         updateInfo = info
 
         val rootView = createRootLayout()
         setContentView(rootView)
         
-        // 启动时无感对账清理已安装包，保留未安装包供复用
-        com.updater.utils.ApkCleanupManager.checkAndCleanOnStartup(this)
+        // 启动时在后台静默对账清理已安装包，保留未安装包供复用
+        Thread {
+            ApkCleanupManager.checkAndCleanOnStartup(this@DownloadManagerActivity)
+        }.start()
 
         initPackageTasks()
     }
@@ -78,7 +82,7 @@ class DownloadManagerActivity : Activity() {
     private val installReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             if (context == null || intent == null) return
-            com.updater.utils.ApkCleanupManager.cleanInstalledApks(this@DownloadManagerActivity)
+            ApkCleanupManager.cleanInstalledApks(this@DownloadManagerActivity)
             syncTasksFromDb()
         }
     }
@@ -86,7 +90,7 @@ class DownloadManagerActivity : Activity() {
     override fun onResume() {
         super.onResume()
         // 从外部安装器返回时自动对账清理已安装完成的 APK
-        com.updater.utils.ApkCleanupManager.cleanInstalledApks(this)
+        ApkCleanupManager.cleanInstalledApks(this)
         syncTasksFromDb()
     }
 
@@ -128,52 +132,63 @@ class DownloadManagerActivity : Activity() {
     }
 
     private fun initPackageTasks() {
-        val apkDir = com.updater.utils.UpdatePathManager.getUpdateDir(this)
-        for (pkg in updateInfo.packages) {
-            val taskId = getTaskId(pkg.downloadUrl)
-            
-            var task = dbHelper.getTask(taskId)
-            if (task == null) {
-                val cleanUrl = pkg.downloadUrl.substringBefore("?")
-                val rawFileName = cleanUrl.substringAfterLast("/").ifEmpty { "app_${pkg.packageId}.apk" }
-                val fileName = if (rawFileName.endsWith(".apk", ignoreCase = true)) rawFileName else "$rawFileName.apk"
-                val saveFile = File(apkDir, fileName)
-                
-                task = DownloadTask(
-                    id = taskId,
-                    url = getAbsoluteUrl(pkg.downloadUrl),
-                    savePath = saveFile.absolutePath,
-                    title = pkg.packageName,
-                    totalBytes = pkg.apkSize,
-                    downloadedBytes = 0,
-                    status = DownloadTask.STATUS_PENDING,
-                    fileMd5 = pkg.apkMd5
-                )
-            }
-            
-            // 快速前置对账：若本地已存在完整合法包，直接识别为已完成状态，0 流量秒级复用
-            val file = File(task.savePath)
-            if (file.exists() && file.length() > 0) {
-                val isCompleted = (task.totalBytes <= 0 || file.length() == task.totalBytes) &&
-                        (task.fileMd5.isNullOrBlank() || ApkInstaller.verifyApkMd5(file, task.fileMd5)) &&
-                        try { packageManager.getPackageArchiveInfo(file.absolutePath, 0) != null } catch (_: Throwable) { false }
-                if (isCompleted) {
-                    task.status = DownloadTask.STATUS_COMPLETED
-                    task.downloadedBytes = file.length()
-                    dbHelper.insertOrUpdateTask(task)
-                } else if (task.status == DownloadTask.STATUS_COMPLETED) {
-                    task.status = DownloadTask.STATUS_PENDING
-                    task.downloadedBytes = file.length()
-                    dbHelper.insertOrUpdateTask(task)
+        val apkDir = UpdatePathManager.getUpdateDir(this)
+        val info = updateInfo
+        if (info != null && info.packages.isNotEmpty()) {
+            for (pkg in info.packages) {
+                val taskId = getTaskId(pkg.downloadUrl)
+                var task = dbHelper.getTask(taskId)
+                if (task == null) {
+                    val cleanUrl = pkg.downloadUrl.substringBefore("?")
+                    val rawFileName = cleanUrl.substringAfterLast("/").ifEmpty { "app_${pkg.packageId}.apk" }
+                    val fileName = if (rawFileName.endsWith(".apk", ignoreCase = true)) rawFileName else "$rawFileName.apk"
+                    val saveFile = File(apkDir, fileName)
+                    
+                    task = DownloadTask(
+                        id = taskId,
+                        url = getAbsoluteUrl(pkg.downloadUrl),
+                        savePath = saveFile.absolutePath,
+                        title = pkg.packageName,
+                        totalBytes = pkg.apkSize,
+                        downloadedBytes = 0,
+                        status = DownloadTask.STATUS_PENDING,
+                        fileMd5 = pkg.apkMd5
+                    )
                 }
-            } else if (task.status == DownloadTask.STATUS_COMPLETED) {
+                reconcileTaskFileState(task)
+                tasks[taskId] = task
+                updateViewHolder(taskId, task)
+            }
+        } else {
+            // 没有在线 updateInfo 时，从本地数据库加载所有已存在的下载任务
+            val localTasks = dbHelper.getAllTasks()
+            for (task in localTasks) {
+                reconcileTaskFileState(task)
+                tasks[task.id] = task
+                updateViewHolder(task.id, task)
+            }
+        }
+    }
+
+    private fun reconcileTaskFileState(task: DownloadTask) {
+        val file = File(task.savePath)
+        if (file.exists() && file.length() > 0) {
+            val lengthMatches = (task.totalBytes <= 0 || file.length() >= task.totalBytes)
+            val md5Valid = task.fileMd5.isBlank() || ApkInstaller.verifyApkMd5(file, task.fileMd5)
+            if (task.status == DownloadTask.STATUS_COMPLETED || (lengthMatches && md5Valid)) {
+                task.status = DownloadTask.STATUS_COMPLETED
+                task.downloadedBytes = file.length()
+                dbHelper.insertOrUpdateTask(task)
+            } else if (task.status != DownloadTask.STATUS_DOWNLOADING) {
+                task.downloadedBytes = file.length()
+                dbHelper.insertOrUpdateTask(task)
+            }
+        } else {
+            if (task.status == DownloadTask.STATUS_COMPLETED) {
                 task.status = DownloadTask.STATUS_PENDING
                 task.downloadedBytes = 0
                 dbHelper.insertOrUpdateTask(task)
             }
-            
-            tasks[taskId] = task
-            updateViewHolder(taskId, task)
         }
     }
 
@@ -183,27 +198,7 @@ class DownloadManagerActivity : Activity() {
             if (dbTask != null) {
                 task.status = dbTask.status
                 task.downloadedBytes = dbTask.downloadedBytes
-                
-                val file = File(task.savePath)
-                if (file.exists() && file.length() > 0) {
-                    val isCompleted = (task.totalBytes <= 0 || file.length() == task.totalBytes) &&
-                            (task.fileMd5.isNullOrBlank() || ApkInstaller.verifyApkMd5(file, task.fileMd5)) &&
-                            try { packageManager.getPackageArchiveInfo(file.absolutePath, 0) != null } catch (_: Throwable) { false }
-                    if (isCompleted) {
-                        task.status = DownloadTask.STATUS_COMPLETED
-                        task.downloadedBytes = file.length()
-                        dbHelper.insertOrUpdateTask(task)
-                    } else if (task.status == DownloadTask.STATUS_COMPLETED) {
-                        task.status = DownloadTask.STATUS_PENDING
-                        task.downloadedBytes = file.length()
-                        dbHelper.insertOrUpdateTask(task)
-                    }
-                } else if (task.status == DownloadTask.STATUS_COMPLETED) {
-                    task.status = DownloadTask.STATUS_PENDING
-                    task.downloadedBytes = 0
-                    dbHelper.insertOrUpdateTask(task)
-                }
-                
+                reconcileTaskFileState(task)
                 updateViewHolder(taskId, task)
             }
         }
@@ -387,13 +382,13 @@ class DownloadManagerActivity : Activity() {
             layoutParams = FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT)
         }
 
-        // 1. Version Card
+        // 1. Version Card / Header Card
         val cardBackground = GradientDrawable().apply {
             setColor(Color.WHITE)
             cornerRadius = dpToPx(12).toFloat()
         }
         
-        val versionCard = LinearLayout(this).apply {
+        val headerCard = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             background = cardBackground
             setPadding(dpToPx(16), dpToPx(16), dpToPx(16), dpToPx(16))
@@ -403,51 +398,70 @@ class DownloadManagerActivity : Activity() {
             elevation = dpToPx(2).toFloat()
         }
 
-        val txtAppName = TextView(this).apply {
-            text = updateInfo.appName
-            textSize = 20f
-            typeface = Typeface.DEFAULT_BOLD
-            setTextColor(Color.parseColor("#333333"))
-        }
-        versionCard.addView(txtAppName)
-
-        val txtVersion = TextView(this).apply {
-            text = "最新版本: v${updateInfo.latestVersionName} (Build ${updateInfo.latestVersionCode})"
-            textSize = 14f
-            setTextColor(Color.parseColor("#667eea"))
-            setPadding(0, dpToPx(4), 0, 0)
-        }
-        versionCard.addView(txtVersion)
-
-        val divider = View(this).apply {
-            setBackgroundColor(Color.parseColor("#E9ECEF"))
-            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dpToPx(1)).apply {
-                topMargin = dpToPx(12)
-                bottomMargin = dpToPx(12)
+        val info = updateInfo
+        if (info != null) {
+            val txtAppName = TextView(this).apply {
+                text = info.appName
+                textSize = 20f
+                typeface = Typeface.DEFAULT_BOLD
+                setTextColor(Color.parseColor("#333333"))
             }
-        }
-        versionCard.addView(divider)
+            headerCard.addView(txtAppName)
 
-        val txtChangelogTitle = TextView(this).apply {
-            text = "更新内容:"
-            textSize = 14f
-            typeface = Typeface.DEFAULT_BOLD
-            setTextColor(Color.parseColor("#495057"))
-        }
-        versionCard.addView(txtChangelogTitle)
+            val txtVersion = TextView(this).apply {
+                text = "最新版本: v${info.latestVersionName} (Build ${info.latestVersionCode})"
+                textSize = 14f
+                setTextColor(Color.parseColor("#667eea"))
+                setPadding(0, dpToPx(4), 0, 0)
+            }
+            headerCard.addView(txtVersion)
 
-        val txtChangelog = TextView(this).apply {
-            text = updateInfo.updateLog.ifEmpty { "优化了用户体验和细节。" }
-            textSize = 13f
-            setTextColor(Color.parseColor("#6C757D"))
-            setPadding(0, dpToPx(6), 0, 0)
+            val divider = View(this).apply {
+                setBackgroundColor(Color.parseColor("#E9ECEF"))
+                layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dpToPx(1)).apply {
+                    topMargin = dpToPx(12)
+                    bottomMargin = dpToPx(12)
+                }
+            }
+            headerCard.addView(divider)
+
+            val txtChangelogTitle = TextView(this).apply {
+                text = "更新内容:"
+                textSize = 14f
+                typeface = Typeface.DEFAULT_BOLD
+                setTextColor(Color.parseColor("#495057"))
+            }
+            headerCard.addView(txtChangelogTitle)
+
+            val txtChangelog = TextView(this).apply {
+                text = info.updateLog.ifEmpty { "优化了用户体验和细节。" }
+                textSize = 13f
+                setTextColor(Color.parseColor("#6C757D"))
+                setPadding(0, dpToPx(6), 0, 0)
+            }
+            headerCard.addView(txtChangelog)
+        } else {
+            val txtHeaderTitle = TextView(this).apply {
+                text = "安装包与配套文件下载中心"
+                textSize = 18f
+                typeface = Typeface.DEFAULT_BOLD
+                setTextColor(Color.parseColor("#333333"))
+            }
+            headerCard.addView(txtHeaderTitle)
+
+            val txtHeaderDesc = TextView(this).apply {
+                text = "在此管理本地下载的更新安装包与配套应用组件。"
+                textSize = 13f
+                setTextColor(Color.parseColor("#6C757D"))
+                setPadding(0, dpToPx(6), 0, 0)
+            }
+            headerCard.addView(txtHeaderDesc)
         }
-        versionCard.addView(txtChangelog)
-        scrollContent.addView(versionCard)
+        scrollContent.addView(headerCard)
 
         // 2. Packages Title
         val txtPackagesTitle = TextView(this).apply {
-            text = "配套安装包列表"
+            text = if (info != null) "配套安装包列表" else "本地安装包任务列表"
             textSize = 15f
             typeface = Typeface.DEFAULT_BOLD
             setTextColor(Color.parseColor("#495057"))
@@ -456,9 +470,35 @@ class DownloadManagerActivity : Activity() {
         scrollContent.addView(txtPackagesTitle)
 
         // 3. Packages Cards List
-        for (pkg in updateInfo.packages) {
-            val pkgCard = createPackageCard(pkg)
-            scrollContent.addView(pkgCard)
+        if (info != null && info.packages.isNotEmpty()) {
+            for (pkg in info.packages) {
+                val pkgCard = createPackageCard(getTaskId(pkg.downloadUrl), pkg.packageName, pkg.apkSize, pkg.description)
+                scrollContent.addView(pkgCard)
+            }
+        } else if (tasks.isNotEmpty()) {
+            for ((id, task) in tasks) {
+                val pkgCard = createPackageCard(id, task.title, task.totalBytes, "本地安装包: ${File(task.savePath).name}")
+                scrollContent.addView(pkgCard)
+            }
+        } else {
+            // 空状态提示
+            val emptyCard = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                gravity = Gravity.CENTER
+                setPadding(dpToPx(20), dpToPx(36), dpToPx(20), dpToPx(36))
+                background = GradientDrawable().apply {
+                    setColor(Color.WHITE)
+                    cornerRadius = dpToPx(12).toFloat()
+                }
+            }
+            val txtEmpty = TextView(this).apply {
+                text = "暂无待管理或已下载的安装包"
+                textSize = 14f
+                setTextColor(Color.parseColor("#868E96"))
+                gravity = Gravity.CENTER
+            }
+            emptyCard.addView(txtEmpty)
+            scrollContent.addView(emptyCard)
         }
 
         scrollView.addView(scrollContent)
@@ -466,9 +506,7 @@ class DownloadManagerActivity : Activity() {
         return root
     }
 
-    private fun createPackageCard(pkg: UpdatePackage): View {
-        val taskId = getTaskId(pkg.downloadUrl)
-        
+    private fun createPackageCard(taskId: String, title: String, sizeBytes: Long, description: String): View {
         val cardBackground = GradientDrawable().apply {
             setColor(Color.WHITE)
             cornerRadius = dpToPx(10).toFloat()
@@ -491,7 +529,7 @@ class DownloadManagerActivity : Activity() {
         }
 
         val txtPkgName = TextView(this).apply {
-            text = pkg.packageName
+            text = title
             textSize = 15f
             typeface = Typeface.DEFAULT_BOLD
             setTextColor(Color.parseColor("#343A40"))
@@ -500,7 +538,7 @@ class DownloadManagerActivity : Activity() {
         titleRow.addView(txtPkgName)
 
         val txtSize = TextView(this).apply {
-            text = formatSize(pkg.apkSize)
+            text = if (sizeBytes > 0) formatSize(sizeBytes) else ""
             textSize = 13f
             setTextColor(Color.parseColor("#6C757D"))
         }
@@ -509,7 +547,7 @@ class DownloadManagerActivity : Activity() {
 
         // Description
         val txtDesc = TextView(this).apply {
-            text = pkg.description
+            text = description
             textSize = 12f
             setTextColor(Color.parseColor("#868E96"))
             setPadding(0, dpToPx(4), 0, dpToPx(10))
@@ -554,8 +592,8 @@ class DownloadManagerActivity : Activity() {
             layoutParams = lp
             setOnClickListener {
                 val task = tasks[taskId] ?: return@setOnClickListener
-                val targetDir = File(task.savePath).parentFile ?: com.updater.utils.UpdatePathManager.getUpdateDir(this@DownloadManagerActivity)
-                com.updater.utils.UpdatePathManager.openUpdateDirectory(this@DownloadManagerActivity, targetDir)
+                val targetDir = File(task.savePath).parentFile ?: UpdatePathManager.getUpdateDir(this@DownloadManagerActivity)
+                UpdatePathManager.openUpdateDirectory(this@DownloadManagerActivity, targetDir)
             }
         }
         actionsRow.addView(btnOpenDir)

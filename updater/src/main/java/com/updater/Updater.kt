@@ -15,6 +15,7 @@ import com.updater.model.UpdateSource
 import com.updater.model.UpdateSourceType
 import com.updater.ui.DownloadManagerActivity
 import com.updater.ui.SourceSettingsDialog
+import com.updater.utils.UpdaterLog
 import okhttp3.*
 import org.json.JSONObject
 import java.io.IOException
@@ -35,6 +36,9 @@ class Updater private constructor(
     }
 
     companion object {
+        @Volatile
+        var lastUpdateInfo: UpdateInfo? = null
+
         class Builder(private val context: Context) {
             private var appId: String = context.packageName
             private val sources = mutableListOf<UpdateSource>()
@@ -291,6 +295,7 @@ class Updater private constructor(
                         lastUpdated = lastUpdated
                     )
 
+                    lastUpdateInfo = updateInfo
                     handler.post { onUpdateAvailable(updateInfo) }
                 } catch (e: Exception) {
                     handler.post { onError("数据解析错误: ${e.message}") }
@@ -389,6 +394,7 @@ class Updater private constructor(
                         lastUpdated = System.currentTimeMillis()
                     )
 
+                    lastUpdateInfo = updateInfo
                     handler.post { onUpdateAvailable(updateInfo) }
                 } catch (e: Exception) {
                     handler.post { onError("GitHub 数据解析失败: ${e.message}") }
@@ -458,14 +464,17 @@ class Updater private constructor(
                 }
             }
         } catch (e: Throwable) {
-            com.updater.utils.UpdaterLog.e("显示更新对话框异常", e)
+            UpdaterLog.e("显示更新对话框异常", e)
         }
     }
 
-    fun openDownloadCenter(context: Context, updateInfo: UpdateInfo) {
+    fun openDownloadCenter(context: Context, updateInfo: UpdateInfo? = null) {
+        val targetInfo = updateInfo ?: lastUpdateInfo
         val currentSource = configManager.getSelectedSource()
         val intent = Intent(context, DownloadManagerActivity::class.java).apply {
-            putExtra("update_info", updateInfo)
+            if (targetInfo != null) {
+                putExtra("update_info", targetInfo)
+            }
             putExtra("base_host", currentSource?.url ?: "")
             if (!currentSource?.downloadHost.isNullOrEmpty()) {
                 putExtra("download_host", currentSource?.downloadHost)

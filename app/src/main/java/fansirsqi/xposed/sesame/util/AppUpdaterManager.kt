@@ -106,4 +106,16 @@ object AppUpdaterManager {
             Log.runtime(TAG, "打开更新配置异常: ${e.message}")
         }
     }
+
+    /**
+     * 打开更新包下载管理列表中心
+     */
+    fun openDownloadList(context: Context) {
+        try {
+            val updater = getUpdater(context)
+            updater.openDownloadCenter(context)
+        } catch (e: Throwable) {
+            Log.runtime(TAG, "打开下载列表异常: ${e.message}")
+        }
+    }
 }

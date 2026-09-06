@@ -10,6 +10,7 @@ import androidx.core.app.NotificationCompat
 import com.updater.db.DownloadDatabaseHelper
 import com.updater.db.DownloadTask
 import com.updater.utils.ApkInstaller
+import com.updater.utils.UpdaterLog
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.io.File
@@ -103,7 +104,7 @@ class ForegroundDownloadService : Service() {
             dbHelper.insertOrUpdateTask(task)
             dbHelper.updateTaskProgress(task.id, task.downloadedBytes, DownloadTask.STATUS_COMPLETED)
             sendProgressBroadcast(task)
-            com.updater.utils.UpdaterLog.i("命中本地完整安装包，直接复用: ${targetFile.name}")
+            UpdaterLog.i("命中本地完整安装包，直接复用: ${targetFile.name}")
             ApkInstaller.installApk(this, targetFile)
             checkStopService()
             return
@@ -149,7 +150,7 @@ class ForegroundDownloadService : Service() {
         val downloaded = tempFile.length()
         task.downloadedBytes = downloaded
 
-        com.updater.utils.UpdaterLog.i("开始单线程下载: ${tempFile.name}, 当前偏移量: $downloaded 字节")
+        UpdaterLog.i("开始单线程下载: ${tempFile.name}, 当前偏移量: $downloaded 字节")
 
         val requestBuilder = Request.Builder()
             .url(task.url)
@@ -205,14 +206,18 @@ class ForegroundDownloadService : Service() {
                 task.status = DownloadTask.STATUS_COMPLETED
                 dbHelper.updateTaskProgress(task.id, task.downloadedBytes, DownloadTask.STATUS_COMPLETED)
                 sendProgressBroadcast(task)
-                com.updater.utils.UpdaterLog.i("下载完成且校验通过: ${tempFile.name}")
-                // 尝试直接调起系统安装
-                ApkInstaller.installApk(this, tempFile)
+                UpdaterLog.i("下载完成且校验通过: ${tempFile.name}")
+                // 尝试直接调起系统安装 (隔离异常，坚决不污染已完成的下载状态)
+                try {
+                    ApkInstaller.installApk(this, tempFile)
+                } catch (installEx: Throwable) {
+                    UpdaterLog.e("下载完成后调起安装提示异常: ${installEx.message}", installEx)
+                }
             } else {
                 task.status = DownloadTask.STATUS_FAILED
                 dbHelper.updateTaskProgress(task.id, task.downloadedBytes, DownloadTask.STATUS_FAILED)
                 sendProgressBroadcast(task, "MD5 校验失败")
-                com.updater.utils.UpdaterLog.e("MD5 校验失败: ${tempFile.name}")
+                UpdaterLog.e("MD5 校验失败: ${tempFile.name}")
             }
 
         } catch (e: Exception) {
@@ -220,7 +225,7 @@ class ForegroundDownloadService : Service() {
                 task.status = DownloadTask.STATUS_FAILED
                 dbHelper.updateTaskProgress(task.id, task.downloadedBytes, DownloadTask.STATUS_FAILED)
                 sendProgressBroadcast(task, e.message ?: "下载错误")
-                com.updater.utils.UpdaterLog.e("下载异常: ${e.message}", e)
+                UpdaterLog.e("下载异常: ${e.message}", e)
             }
         } finally {
             activeCalls.remove(task.id)

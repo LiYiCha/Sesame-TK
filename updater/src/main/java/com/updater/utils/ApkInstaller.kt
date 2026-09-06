@@ -4,6 +4,8 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import android.provider.Settings
 import android.widget.Toast
 import androidx.core.content.FileProvider
@@ -52,48 +54,70 @@ object ApkInstaller {
         return actualMd5.equals(cleanExpected, ignoreCase = true)
     }
 
+    private fun safeToast(context: Context, msg: String, duration: Int = Toast.LENGTH_SHORT) {
+        Handler(Looper.getMainLooper()).post {
+            try {
+                Toast.makeText(context.applicationContext, msg, duration).show()
+            } catch (_: Throwable) {}
+        }
+    }
+
     /**
      * 安全地执行 APK 的安装
      */
     fun installApk(context: Context, apkFile: File) {
-        if (!apkFile.exists()) {
-            Toast.makeText(context, "安装包不存在", Toast.LENGTH_SHORT).show()
-            return
-        }
-
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val hasInstallPermission = context.packageManager.canRequestPackageInstalls()
-            if (!hasInstallPermission) {
-                Toast.makeText(context, "请先授权允许安装未知来源应用", Toast.LENGTH_LONG).show()
-                val packageUri = Uri.parse("package:${context.packageName}")
-                val intent = Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, packageUri).apply {
-                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        Handler(Looper.getMainLooper()).post {
+            try {
+                if (!apkFile.exists()) {
+                    safeToast(context, "安装包不存在")
+                    return@post
                 }
-                context.startActivity(intent)
-                return
-            }
-        }
 
-        val intent = Intent(Intent.ACTION_VIEW).apply {
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-                val apkUri: Uri = FileProvider.getUriForFile(
-                    context,
-                    "${context.packageName}.updater.provider",
-                    apkFile
-                )
-                setDataAndType(apkUri, "application/vnd.android.package-archive")
-                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-            } else {
-                setDataAndType(Uri.fromFile(apkFile), "application/vnd.android.package-archive")
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    val hasInstallPermission = context.packageManager.canRequestPackageInstalls()
+                    if (!hasInstallPermission) {
+                        safeToast(context, "请先授权允许安装未知来源应用", Toast.LENGTH_LONG)
+                        val packageUri = Uri.parse("package:${context.packageName}")
+                        val intent = Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, packageUri).apply {
+                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        }
+                        context.startActivity(intent)
+                        return@post
+                    }
+                }
+
+                val intent = Intent(Intent.ACTION_VIEW).apply {
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                        val apkUri: Uri = try {
+                            FileProvider.getUriForFile(
+                                context,
+                                "${context.packageName}.updater.provider",
+                                apkFile
+                            )
+                        } catch (_: Throwable) {
+                            try {
+                                FileProvider.getUriForFile(
+                                    context,
+                                    "${context.packageName}.provider",
+                                    apkFile
+                                )
+                            } catch (_: Throwable) {
+                                Uri.fromFile(apkFile)
+                            }
+                        }
+                        setDataAndType(apkUri, "application/vnd.android.package-archive")
+                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    } else {
+                        setDataAndType(Uri.fromFile(apkFile), "application/vnd.android.package-archive")
+                    }
+                }
+
+                context.startActivity(intent)
+            } catch (e: Exception) {
+                e.printStackTrace()
+                safeToast(context, "无法启动系统安装程序: ${e.message}", Toast.LENGTH_LONG)
             }
-        }
-        
-        try {
-            context.startActivity(intent)
-        } catch (e: Exception) {
-            e.printStackTrace()
-            Toast.makeText(context, "无法启动系统安装程序: ${e.message}", Toast.LENGTH_LONG).show()
         }
     }
 }
