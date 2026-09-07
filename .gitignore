@@ -71,3 +71,4 @@ demo/*
 *.REST
 *.txt
 .kotlin
+build_release.bat

@@ -2,7 +2,6 @@ package com.updater.ui
 
 import android.content.Context
 import android.content.res.ColorStateList
-import android.content.res.Configuration
 import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
@@ -10,29 +9,39 @@ import android.util.TypedValue
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
-import android.widget.*
+import android.widget.EditText
+import android.widget.LinearLayout
+import android.widget.RadioGroup
+import android.widget.ScrollView
+import android.widget.TextView
+import android.widget.Toast
+import androidx.annotation.ColorInt
 import androidx.appcompat.app.AlertDialog
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.card.MaterialCardView
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.radiobutton.MaterialRadioButton
-import com.updater.config.UpdaterConfigManager
 import com.updater.model.UpdateSource
 import com.updater.model.UpdateSourceType
-import java.util.*
+import com.updater.config.UpdaterConfigManager
+import java.util.UUID
 
+/**
+ * 更新源配置与检测模式设置对话框
+ * 全面遵循 Material 3 设计规范，通过 ThemeUtils 动态适配宿主主题与深色模式，杜绝硬编码颜色。
+ */
 object SourceSettingsDialog {
 
     fun show(context: Context, onSourceChanged: (() -> Unit)? = null) {
         val configManager = UpdaterConfigManager(context)
-        val isNight = (context.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES
+        val palette = ThemeUtils.M3Palette(context)
 
-        val colorSurface = resolveColor(context, com.google.android.material.R.attr.colorSurface, if (isNight) Color.parseColor("#1E1E1E") else Color.WHITE)
-        val colorSurfaceVariant = resolveColor(context, com.google.android.material.R.attr.colorSurfaceVariant, if (isNight) Color.parseColor("#2C2C2C") else Color.parseColor("#F4F4F4"))
-        val colorPrimary = resolveColor(context, com.google.android.material.R.attr.colorPrimary, if (isNight) Color.parseColor("#A5D6A7") else Color.parseColor("#2D5A27"))
-        val colorOnSurface = resolveColor(context, com.google.android.material.R.attr.colorOnSurface, if (isNight) Color.parseColor("#E0E0E0") else Color.parseColor("#1A1A1A"))
-        val colorOnSurfaceVariant = resolveColor(context, com.google.android.material.R.attr.colorOnSurfaceVariant, if (isNight) Color.parseColor("#9E9E9E") else Color.parseColor("#666666"))
-        val colorOutline = resolveColor(context, com.google.android.material.R.attr.colorOutline, if (isNight) Color.parseColor("#444444") else Color.parseColor("#D0D0D0"))
+        val colorSurface = palette.surface
+        val colorSurfaceVariant = palette.surfaceVariant
+        val colorPrimary = palette.primary
+        val colorOnSurface = palette.onSurface
+        val colorOnSurfaceVariant = palette.onSurfaceVariant
+        val colorOutline = palette.outline
 
         var dialog: AlertDialog? = null
 
@@ -129,11 +138,12 @@ object SourceSettingsDialog {
             val selectedId = configManager.selectedSourceId
 
             for (source in sources) {
+                val isSelected = (source.id == selectedId)
                 val cardItem = MaterialCardView(context).apply {
                     radius = dpToPx(context, 10).toFloat()
                     strokeWidth = dpToPx(context, 1)
-                    strokeColor = if (source.id == selectedId) colorPrimary else colorOutline
-                    setCardBackgroundColor(if (source.id == selectedId) colorSurfaceVariant else colorSurface)
+                    strokeColor = if (isSelected) colorPrimary else colorOutline
+                    setCardBackgroundColor(if (isSelected) palette.primaryContainer else colorSurface)
                     val lp = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
                         bottomMargin = dpToPx(context, 8)
                     }
@@ -147,7 +157,7 @@ object SourceSettingsDialog {
                 }
 
                 val rb = MaterialRadioButton(context).apply {
-                    isChecked = (source.id == selectedId)
+                    isChecked = isSelected
                     setOnClickListener {
                         configManager.selectedSourceId = source.id
                         refreshSourcesUI()
@@ -176,15 +186,15 @@ object SourceSettingsDialog {
                     text = source.name
                     textSize = 14f
                     typeface = Typeface.DEFAULT_BOLD
-                    setTextColor(colorOnSurface)
+                    setTextColor(if (isSelected) palette.onPrimaryContainer else colorOnSurface)
                 }
                 titleLayout.addView(txtName)
 
                 val txtTag = TextView(context).apply {
                     text = if (source.type == UpdateSourceType.CLOUDFLARE_R2) " CF R2 " else " GitHub "
                     textSize = 10f
-                    setTextColor(Color.WHITE)
-                    background = createBadgeBackground(if (source.type == UpdateSourceType.CLOUDFLARE_R2) "#F6821F" else "#24292E")
+                    setTextColor(if (source.type == UpdateSourceType.CLOUDFLARE_R2) palette.onTertiary else palette.onSecondary)
+                    background = createBadgeBackground(if (source.type == UpdateSourceType.CLOUDFLARE_R2) palette.tertiary else palette.secondary)
                     val lp = LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
                         leftMargin = dpToPx(context, 6)
                     }
@@ -196,7 +206,7 @@ object SourceSettingsDialog {
                 val txtUrl = TextView(context).apply {
                     text = source.url
                     textSize = 11f
-                    setTextColor(colorOnSurfaceVariant)
+                    setTextColor(if (isSelected) palette.onPrimaryContainer else colorOnSurfaceVariant)
                     maxLines = 1
                 }
                 infoLayout.addView(txtUrl)
@@ -210,8 +220,8 @@ object SourceSettingsDialog {
                         textSize = 11f
                         cornerRadius = dpToPx(context, 8)
                         strokeWidth = dpToPx(context, 1)
-                        strokeColor = ColorStateList.valueOf(Color.parseColor("#DC3545"))
-                        setTextColor(Color.parseColor("#DC3545"))
+                        strokeColor = ColorStateList.valueOf(palette.error)
+                        setTextColor(palette.error)
                         setPadding(dpToPx(context, 6), 0, dpToPx(context, 6), 0)
                         minWidth = dpToPx(context, 48)
                         insetTop = 0
@@ -250,7 +260,7 @@ object SourceSettingsDialog {
             }
             layoutParams = lp
             setOnClickListener {
-                showAddSourceDialog(context, configManager, colorPrimary, colorOnSurface, colorOutline) {
+                showAddSourceDialog(context, configManager, palette) {
                     refreshSourcesUI()
                     onSourceChanged?.invoke()
                 }
@@ -272,9 +282,7 @@ object SourceSettingsDialog {
     private fun showAddSourceDialog(
         context: Context,
         configManager: UpdaterConfigManager,
-        colorPrimary: Int,
-        colorOnSurface: Int,
-        colorOutline: Int,
+        palette: ThemeUtils.M3Palette,
         onAdded: () -> Unit
     ) {
         val formLayout = LinearLayout(context).apply {
@@ -285,18 +293,19 @@ object SourceSettingsDialog {
         fun createInput(hintText: String): EditText {
             val normalBg = GradientDrawable().apply {
                 cornerRadius = dpToPx(context, 8).toFloat()
-                setStroke(dpToPx(context, 1), colorOutline)
+                setStroke(dpToPx(context, 1), palette.outline)
                 setColor(Color.TRANSPARENT)
             }
             val focusedBg = GradientDrawable().apply {
                 cornerRadius = dpToPx(context, 8).toFloat()
-                setStroke(dpToPx(context, 1.5f.toInt().coerceAtLeast(1)), colorPrimary)
+                setStroke(dpToPx(context, 1.5f.toInt().coerceAtLeast(1)), palette.primary)
                 setColor(Color.TRANSPARENT)
             }
             return EditText(context).apply {
                 hint = hintText
                 textSize = 14f
-                setTextColor(colorOnSurface)
+                setTextColor(palette.onSurface)
+                setHintTextColor(palette.onSurfaceVariant)
                 setPadding(dpToPx(context, 12), dpToPx(context, 10), dpToPx(context, 12), dpToPx(context, 10))
                 background = normalBg
                 setOnFocusChangeListener { _, hasFocus ->
@@ -327,12 +336,12 @@ object SourceSettingsDialog {
         val rbCf = MaterialRadioButton(context).apply {
             id = View.generateViewId()
             text = "Cloudflare Pages R2"
-            setTextColor(colorOnSurface)
+            setTextColor(palette.onSurface)
         }
         val rbGh = MaterialRadioButton(context).apply {
             id = View.generateViewId()
             text = "GitHub Releases"
-            setTextColor(colorOnSurface)
+            setTextColor(palette.onSurface)
         }
         rgType.addView(rbCf)
         rgType.addView(rbGh)
@@ -367,23 +376,10 @@ object SourceSettingsDialog {
             .show()
     }
 
-    private fun createBadgeBackground(colorHex: String): GradientDrawable {
+    private fun createBadgeBackground(@ColorInt color: Int): GradientDrawable {
         return GradientDrawable().apply {
-            setColor(Color.parseColor(colorHex))
+            setColor(color)
             cornerRadius = 8f
-        }
-    }
-
-    private fun resolveColor(context: Context, attr: Int, fallback: Int): Int {
-        val tv = TypedValue()
-        return if (context.theme.resolveAttribute(attr, tv, true)) {
-            if (tv.type >= TypedValue.TYPE_FIRST_COLOR_INT && tv.type <= TypedValue.TYPE_LAST_COLOR_INT) {
-                tv.data
-            } else {
-                fallback
-            }
-        } else {
-            fallback
         }
     }
 

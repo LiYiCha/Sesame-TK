@@ -643,12 +643,14 @@ class Updater private constructor(
                     val messageView = dialog.findViewById<TextView>(android.R.id.message)
                     messageView?.movementMethod = LinkMovementMethod.getInstance()
 
-                    // 1. 立即查看按钮：实心经典品牌绿底、白色文字、加粗、圆角、清晰轮廓
+                    val palette = com.updater.ui.ThemeUtils.M3Palette(targetContext)
+
+                    // 1. 立即查看按钮：实心主题主色底、文字对比度高、加粗圆角
                     dialog.getButton(AlertDialog.BUTTON_POSITIVE)?.apply {
                         typeface = Typeface.DEFAULT_BOLD
-                        setTextColor(Color.WHITE)
+                        setTextColor(palette.onPrimary)
                         val bg = GradientDrawable().apply {
-                            setColor(Color.parseColor("#2D5A27")) // 经典品牌绿
+                            setColor(palette.primary)
                             cornerRadius = dp(20).toFloat()
                         }
                         background = bg
@@ -658,13 +660,13 @@ class Updater private constructor(
                         layoutParams = lp
                     }
 
-                    // 2. 稍后再说按钮：清晰线框轮廓、高对比度深色文字、圆角线框、告别置灰感
+                    // 2. 稍后再说按钮：清晰线框轮廓、表面次色背景、与主题统一
                     dialog.getButton(AlertDialog.BUTTON_NEGATIVE)?.apply {
                         typeface = Typeface.DEFAULT_BOLD
-                        setTextColor(Color.parseColor("#212529"))
+                        setTextColor(palette.onSurface)
                         val bg = GradientDrawable().apply {
-                            setColor(Color.parseColor("#F5F5F5"))
-                            setStroke(dp(1), Color.parseColor("#BDBDBD"))
+                            setColor(palette.surfaceVariant)
+                            setStroke(dp(1), palette.outline)
                             cornerRadius = dp(20).toFloat()
                         }
                         background = bg

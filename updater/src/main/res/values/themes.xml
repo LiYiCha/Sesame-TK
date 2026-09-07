@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <!-- Updater 模块基础主题，继承自 Material 3，颜色全部由宿主 AppTheme 动态注入提供 -->
     <style name="Theme.Updater" parent="Theme.Material3.DayNight.NoActionBar">
         <item name="android:statusBarColor">@android:color/transparent</item>
         <item name="android:windowLightStatusBar">true</item>

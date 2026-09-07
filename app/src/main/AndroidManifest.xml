@@ -140,7 +140,7 @@
             android:exported="true"
             android:resizeableActivity="true" />
 
-        <!-- 下载管理与更新列表页面，复用主应用 AppTheme -->
+        <!-- 下载管理与更新列表页面，统一使用主模块的主题样式 AppTheme -->
         <activity
             android:name="com.updater.ui.DownloadManagerActivity"
             android:theme="@style/AppTheme"

@@ -67,11 +67,11 @@ android {
         }
 
 
-        val versionNumber = "0.4.9"
+        val versionNumber = "0.5.0"
         val dateString = SimpleDateFormat("yyMMdd", Locale.CHINA).apply {
             timeZone = TimeZone.getTimeZone("GMT+8")
         }.format(Date())
-        versionCode = 34
+        versionCode = 35
         val buildTag = "beta"
         versionName = "$versionNumber-$dateString"
 

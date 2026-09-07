@@ -9,7 +9,9 @@ import android.content.res.ColorStateList
 import android.content.res.Configuration
 import android.graphics.Color
 import android.graphics.Typeface
+import android.graphics.drawable.ClipDrawable
 import android.graphics.drawable.GradientDrawable
+import android.graphics.drawable.LayerDrawable
 import android.os.Build
 import android.os.Bundle
 import android.util.TypedValue
@@ -24,10 +26,7 @@ import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import android.text.method.LinkMovementMethod
-import com.google.android.material.button.MaterialButton
-import com.google.android.material.card.MaterialCardView
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
-import com.google.android.material.progressindicator.LinearProgressIndicator
 import com.updater.Updater
 import com.updater.config.UpdaterConfigManager
 import com.updater.db.DownloadDatabaseHelper
@@ -67,6 +66,7 @@ class DownloadManagerActivity : AppCompatActivity() {
 
     // 主题动态调色板（完美对接主项目 AppTheme 与 Material3 DayNight 模式）
     private var isNightMode: Boolean = false
+    private lateinit var palette: ThemeUtils.M3Palette
     private var colorBg: Int = 0
     private var colorCard: Int = 0
     private var colorTextPrimary: Int = 0
@@ -74,6 +74,8 @@ class DownloadManagerActivity : AppCompatActivity() {
     private var colorBrand: Int = 0
     private var colorBorder: Int = 0
     private var colorCardInner: Int = 0
+    private var colorError: Int = 0
+    private var colorWarning: Int = 0
 
     private val progressReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
@@ -128,40 +130,18 @@ class DownloadManagerActivity : AppCompatActivity() {
         initPackageTasks()
     }
 
-    private fun resolveColorAttr(attr: Int, fallback: Int): Int {
-        val tv = TypedValue()
-        return if (theme.resolveAttribute(attr, tv, true)) {
-            if (tv.type >= TypedValue.TYPE_FIRST_COLOR_INT && tv.type <= TypedValue.TYPE_LAST_COLOR_INT) {
-                tv.data
-            } else {
-                try {
-                    ContextCompat.getColor(this, tv.resourceId)
-                } catch (_: Throwable) {
-                    fallback
-                }
-            }
-        } else {
-            fallback
-        }
-    }
-
     private fun initThemeColors() {
         isNightMode = (resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES
-        val defaultBg = if (isNightMode) Color.parseColor("#121212") else Color.parseColor("#F4F4F4")
-        val defaultCard = if (isNightMode) Color.parseColor("#1E1E1E") else Color.WHITE
-        val defaultTextPrimary = if (isNightMode) Color.parseColor("#FFFFFF") else Color.parseColor("#1A1A1A")
-        val defaultTextSecondary = if (isNightMode) Color.parseColor("#9E9E9E") else Color.parseColor("#666666")
-        val defaultBrand = if (isNightMode) Color.parseColor("#4CAF50") else Color.parseColor("#2D5A27")
-        val defaultBorder = if (isNightMode) Color.parseColor("#2D2D2D") else Color.parseColor("#E0E0E0")
-        val defaultCardInner = if (isNightMode) Color.parseColor("#252525") else Color.parseColor("#F8F9FA")
-
-        colorBg = resolveColorAttr(android.R.attr.colorBackground, defaultBg)
-        colorCard = resolveColorAttr(com.google.android.material.R.attr.colorSurface, defaultCard)
-        colorTextPrimary = resolveColorAttr(android.R.attr.textColorPrimary, defaultTextPrimary)
-        colorTextSecondary = resolveColorAttr(android.R.attr.textColorSecondary, defaultTextSecondary)
-        colorBrand = resolveColorAttr(com.google.android.material.R.attr.colorPrimary, defaultBrand)
-        colorBorder = resolveColorAttr(com.google.android.material.R.attr.colorOutline, defaultBorder)
-        colorCardInner = resolveColorAttr(com.google.android.material.R.attr.colorSurfaceVariant, defaultCardInner)
+        palette = ThemeUtils.M3Palette(this)
+        colorBg = palette.surface
+        colorCard = palette.surface
+        colorTextPrimary = palette.onSurface
+        colorTextSecondary = palette.onSurfaceVariant
+        colorBrand = palette.primary
+        colorBorder = palette.outlineVariant
+        colorCardInner = palette.surfaceVariant
+        colorError = palette.error
+        colorWarning = palette.tertiary
     }
 
     private fun setupSystemBar() {
@@ -554,51 +534,38 @@ class DownloadManagerActivity : AppCompatActivity() {
         }
         titleBar.addView(txtTitle)
 
-        // 右侧操作区：统一样式的按钮组（刷新、源设置、上传包）
+        // 右侧操作区：统一样式的按钮组（刷新、源设置、上传）
         val rightActionLayout = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
             layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT)
         }
 
-        fun createHeaderButton(label: String, isPrimary: Boolean, onClick: () -> Unit): MaterialButton {
-            return if (isPrimary) {
-                MaterialButton(this).apply {
-                    text = label
-                    textSize = 12f
-                    typeface = Typeface.DEFAULT_BOLD
-                    cornerRadius = dpToPx(8)
-                    setBackgroundColor(colorBrand)
-                    setTextColor(Color.WHITE)
-                    setPadding(dpToPx(8), 0, dpToPx(8), 0)
-                    minWidth = dpToPx(44)
-                    insetTop = 0
-                    insetBottom = 0
-                    val lp = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, dpToPx(32)).apply {
-                        rightMargin = dpToPx(5)
-                    }
-                    layoutParams = lp
-                    setOnClickListener { onClick() }
+        fun createHeaderButton(label: String, isPrimary: Boolean, onClick: () -> Unit): TextView {
+            val bg = GradientDrawable().apply {
+                cornerRadius = dpToPx(8).toFloat()
+                if (isPrimary) {
+                    setColor(colorBrand)
+                } else {
+                    setColor(Color.TRANSPARENT)
+                    setStroke(dpToPx(1), colorBorder)
                 }
-            } else {
-                MaterialButton(this, null, com.google.android.material.R.attr.materialButtonOutlinedStyle).apply {
-                    text = label
-                    textSize = 12f
-                    typeface = Typeface.DEFAULT_BOLD
-                    cornerRadius = dpToPx(8)
-                    strokeWidth = dpToPx(1)
-                    strokeColor = ColorStateList.valueOf(colorBorder)
-                    setTextColor(colorTextPrimary)
-                    setPadding(dpToPx(8), 0, dpToPx(8), 0)
-                    minWidth = dpToPx(44)
-                    insetTop = 0
-                    insetBottom = 0
-                    val lp = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, dpToPx(32)).apply {
-                        rightMargin = dpToPx(5)
-                    }
-                    layoutParams = lp
-                    setOnClickListener { onClick() }
+            }
+            return TextView(this).apply {
+                text = label
+                textSize = 12f
+                typeface = Typeface.DEFAULT_BOLD
+                setTextColor(if (isPrimary) Color.WHITE else colorTextPrimary)
+                gravity = Gravity.CENTER
+                background = bg
+                isClickable = true
+                isFocusable = true
+                setPadding(dpToPx(8), 0, dpToPx(8), 0)
+                val lp = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, dpToPx(32)).apply {
+                    rightMargin = dpToPx(5)
                 }
+                layoutParams = lp
+                setOnClickListener { onClick() }
             }
         }
 
@@ -654,19 +621,6 @@ class DownloadManagerActivity : AppCompatActivity() {
         scrollView.addView(scrollContent)
         root.addView(scrollView)
 
-        // 沉浸式边距适配（动态调整状态栏 Spacer 高度，根部贴合导航栏）
-        ViewCompat.setOnApplyWindowInsetsListener(root) { _, insets ->
-            val statusBars = insets.getInsets(WindowInsetsCompat.Type.statusBars())
-            val navBars = insets.getInsets(WindowInsetsCompat.Type.navigationBars())
-            val topInset = if (statusBars.top > 0) statusBars.top else getStatusBarHeight()
-            if (statusBarSpacer.layoutParams.height != topInset) {
-                statusBarSpacer.layoutParams.height = topInset
-                statusBarSpacer.requestLayout()
-            }
-            root.setPadding(0, 0, 0, navBars.bottom)
-            insets
-        }
-
         rebuildContentLayout()
 
         return root
@@ -676,14 +630,18 @@ class DownloadManagerActivity : AppCompatActivity() {
         scrollContent.removeAllViews()
         packageViews.clear()
 
-        // 1. 精简版版本信息卡片 (MaterialCardView)
+        // 1. 精简版版本信息卡片 (使用原生 LinearLayout + GradientDrawable 彻底杜绝 Theme 属性缺失闪退)
         val info = updateInfo
-        val headerCard = MaterialCardView(this).apply {
-            radius = dpToPx(14f).toFloat()
-            strokeWidth = dpToPx(1)
-            strokeColor = colorBorder
-            setCardBackgroundColor(colorCard)
-            cardElevation = dpToPx(1f).toFloat()
+        val headerCard = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            background = GradientDrawable().apply {
+                setColor(colorCard)
+                cornerRadius = dpToPx(14f).toFloat()
+                setStroke(dpToPx(1), colorBorder)
+            }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                elevation = dpToPx(1.5f).toFloat()
+            }
             layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
                 bottomMargin = dpToPx(14)
             }
@@ -715,9 +673,9 @@ class DownloadManagerActivity : AppCompatActivity() {
         val txtSourceBadge = TextView(this).apply {
             text = " ${activeSource?.name ?: "官方源"} "
             textSize = 10f
-            setTextColor(colorBrand)
+            setTextColor(palette.onPrimaryContainer)
             background = GradientDrawable().apply {
-                setColor(if (isNightMode) Color.parseColor("#1B3320") else Color.parseColor("#E8F5E9"))
+                setColor(palette.primaryContainer)
                 cornerRadius = dpToPx(6).toFloat()
             }
             setPadding(dpToPx(6), dpToPx(3), dpToPx(6), dpToPx(3))
@@ -782,16 +740,14 @@ class DownloadManagerActivity : AppCompatActivity() {
                 scrollContent.addView(pkgCard)
             }
         } else {
-            val emptyCard = MaterialCardView(this).apply {
-                radius = dpToPx(14f).toFloat()
-                strokeWidth = dpToPx(1)
-                strokeColor = colorBorder
-                setCardBackgroundColor(colorCard)
-                cardElevation = dpToPx(1f).toFloat()
-            }
-            val emptyContent = LinearLayout(this).apply {
+            val emptyCard = LinearLayout(this).apply {
                 orientation = LinearLayout.VERTICAL
                 gravity = Gravity.CENTER
+                background = GradientDrawable().apply {
+                    setColor(colorCard)
+                    cornerRadius = dpToPx(14f).toFloat()
+                    setStroke(dpToPx(1), colorBorder)
+                }
                 setPadding(dpToPx(16), dpToPx(24), dpToPx(16), dpToPx(24))
             }
             val txtEmpty = TextView(this).apply {
@@ -800,19 +756,45 @@ class DownloadManagerActivity : AppCompatActivity() {
                 setTextColor(colorTextSecondary)
                 gravity = Gravity.CENTER
             }
-            emptyContent.addView(txtEmpty)
-            emptyCard.addView(emptyContent)
+            emptyCard.addView(txtEmpty)
             scrollContent.addView(emptyCard)
         }
     }
 
+    private fun createCardButton(label: String, isPrimary: Boolean, strokeColor: Int = colorBorder, textColor: Int = colorTextPrimary): TextView {
+        val bg = GradientDrawable().apply {
+            cornerRadius = dpToPx(8).toFloat()
+            if (isPrimary) {
+                setColor(colorBrand)
+            } else {
+                setColor(Color.TRANSPARENT)
+                setStroke(dpToPx(1), strokeColor)
+            }
+        }
+        return TextView(this).apply {
+            text = label
+            textSize = 12f
+            typeface = Typeface.DEFAULT_BOLD
+            this.setTextColor(if (isPrimary) Color.WHITE else textColor)
+            gravity = Gravity.CENTER
+            background = bg
+            isClickable = true
+            isFocusable = true
+            setPadding(dpToPx(10), 0, dpToPx(10), 0)
+        }
+    }
+
     private fun createPackageCard(taskId: String, title: String, sizeBytes: Long, description: String): View {
-        val card = MaterialCardView(this).apply {
-            radius = dpToPx(14f).toFloat()
-            strokeWidth = dpToPx(1)
-            strokeColor = colorBorder
-            setCardBackgroundColor(colorCard)
-            cardElevation = dpToPx(1f).toFloat()
+        val card = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            background = GradientDrawable().apply {
+                setColor(colorCard)
+                cornerRadius = dpToPx(14f).toFloat()
+                setStroke(dpToPx(1), colorBorder)
+            }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                elevation = dpToPx(1.5f).toFloat()
+            }
             layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
                 bottomMargin = dpToPx(10)
             }
@@ -858,16 +840,27 @@ class DownloadManagerActivity : AppCompatActivity() {
         }
         cardContent.addView(txtDesc)
 
-        // Material 3 线性进度条
-        val progressBar = LinearProgressIndicator(this).apply {
-            trackCornerRadius = dpToPx(3)
-            trackThickness = dpToPx(4)
-            setIndicatorColor(colorBrand)
-            trackColor = colorCardInner
+        // 原生水平进度条（完全隔离 MDC 主题属性缺失崩溃）
+        val progressBar = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply {
             max = 100
             progress = 0
+            isIndeterminate = false
+            val progressBg = GradientDrawable().apply {
+                setColor(colorCardInner)
+                cornerRadius = dpToPx(3).toFloat()
+            }
+            val progressFg = GradientDrawable().apply {
+                setColor(colorBrand)
+                cornerRadius = dpToPx(3).toFloat()
+            }
+            val clipFg = ClipDrawable(progressFg, Gravity.START, ClipDrawable.HORIZONTAL)
+            val layerDrawable = LayerDrawable(arrayOf(progressBg, clipFg)).apply {
+                setId(0, android.R.id.background)
+                setId(1, android.R.id.progress)
+            }
+            progressDrawable = layerDrawable
             visibility = View.GONE
-            val lp = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
+            val lp = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dpToPx(6)).apply {
                 bottomMargin = dpToPx(8)
             }
             layoutParams = lp
@@ -890,17 +883,7 @@ class DownloadManagerActivity : AppCompatActivity() {
         }
         actionsRow.addView(txtStatus)
 
-        val btnOpenDir = MaterialButton(this, null, com.google.android.material.R.attr.materialButtonOutlinedStyle).apply {
-            text = "打开"
-            textSize = 12f
-            cornerRadius = dpToPx(8)
-            strokeWidth = dpToPx(1)
-            strokeColor = ColorStateList.valueOf(colorBorder)
-            setTextColor(colorTextPrimary)
-            setPadding(dpToPx(8), 0, dpToPx(8), 0)
-            minWidth = dpToPx(48)
-            insetTop = 0
-            insetBottom = 0
+        val btnOpenDir = createCardButton("打开", isPrimary = false, strokeColor = colorBorder, textColor = colorTextPrimary).apply {
             visibility = View.GONE
             val lp = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, dpToPx(32)).apply {
                 rightMargin = dpToPx(6)
@@ -914,17 +897,7 @@ class DownloadManagerActivity : AppCompatActivity() {
         }
         actionsRow.addView(btnOpenDir)
 
-        val btnDelete = MaterialButton(this, null, com.google.android.material.R.attr.materialButtonOutlinedStyle).apply {
-            text = "删除"
-            textSize = 12f
-            cornerRadius = dpToPx(8)
-            strokeWidth = dpToPx(1)
-            strokeColor = ColorStateList.valueOf(Color.parseColor("#DC3545"))
-            setTextColor(Color.parseColor("#DC3545"))
-            setPadding(dpToPx(8), 0, dpToPx(8), 0)
-            minWidth = dpToPx(48)
-            insetTop = 0
-            insetBottom = 0
+        val btnDelete = createCardButton("删除", isPrimary = false, strokeColor = colorError, textColor = colorError).apply {
             visibility = View.GONE
             val lp = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, dpToPx(32)).apply {
                 rightMargin = dpToPx(6)
@@ -934,19 +907,9 @@ class DownloadManagerActivity : AppCompatActivity() {
         }
         actionsRow.addView(btnDelete)
 
-        val btnAction = MaterialButton(this).apply {
-            text = "下载"
-            textSize = 12f
-            typeface = Typeface.DEFAULT_BOLD
-            cornerRadius = dpToPx(8)
-            setBackgroundColor(colorBrand)
-            setTextColor(Color.WHITE)
-            setPadding(dpToPx(12), 0, dpToPx(12), 0)
-            minWidth = dpToPx(64)
-            insetTop = 0
-            insetBottom = 0
-            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, dpToPx(32))
-
+        val btnAction = createCardButton("下载", isPrimary = true).apply {
+            val lp = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, dpToPx(32))
+            layoutParams = lp
             setOnClickListener {
                 val task = tasks[taskId] ?: return@setOnClickListener
                 when (task.status) {
@@ -991,7 +954,7 @@ class DownloadManagerActivity : AppCompatActivity() {
                 holder.btnAction.visibility = View.VISIBLE
                 holder.btnDelete.visibility = View.GONE
                 holder.btnOpenDir.visibility = View.GONE
-                setButtonBgColor(holder.btnAction, Color.parseColor("#E0A800"))
+                setButtonBgColor(holder.btnAction, colorWarning)
             }
             DownloadTask.STATUS_PAUSED -> {
                 holder.progressBar.visibility = View.VISIBLE
@@ -1023,7 +986,7 @@ class DownloadManagerActivity : AppCompatActivity() {
                 holder.progressBar.visibility = View.GONE
                 val finalErr = errorMsg ?: task.errorMsg ?: "网络连接异常"
                 holder.txtStatus.text = "下载失败 (点击查看详情)"
-                holder.txtStatus.setTextColor(Color.parseColor("#DC3545"))
+                holder.txtStatus.setTextColor(colorError)
                 holder.txtStatus.isClickable = true
                 holder.txtStatus.setOnClickListener {
                     showErrorDetailsDialog(task, finalErr)
@@ -1032,7 +995,7 @@ class DownloadManagerActivity : AppCompatActivity() {
                 holder.btnAction.visibility = View.VISIBLE
                 holder.btnDelete.visibility = View.VISIBLE
                 holder.btnOpenDir.visibility = View.GONE
-                setButtonBgColor(holder.btnAction, Color.parseColor("#DC3545"))
+                setButtonBgColor(holder.btnAction, colorError)
             }
         }
     }
@@ -1053,21 +1016,39 @@ class DownloadManagerActivity : AppCompatActivity() {
             addView(tv)
         }
 
-        MaterialAlertDialogBuilder(this)
-            .setTitle("失败详情")
-            .setView(scroll)
-            .setPositiveButton("复制") { _, _ ->
-                val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
-                val clip = android.content.ClipData.newPlainText("下载错误详情", details)
-                clipboard.setPrimaryClip(clip)
-                Toast.makeText(this, "已复制", Toast.LENGTH_SHORT).show()
-            }
-            .setNegativeButton("关闭", null)
-            .show()
+        try {
+            MaterialAlertDialogBuilder(this)
+                .setTitle("失败详情")
+                .setView(scroll)
+                .setPositiveButton("复制") { _, _ ->
+                    val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                    val clip = android.content.ClipData.newPlainText("下载错误详情", details)
+                    clipboard.setPrimaryClip(clip)
+                    Toast.makeText(this, "已复制", Toast.LENGTH_SHORT).show()
+                }
+                .setNegativeButton("关闭", null)
+                .show()
+        } catch (_: Throwable) {
+            AlertDialog.Builder(this)
+                .setTitle("失败详情")
+                .setView(scroll)
+                .setPositiveButton("复制") { _, _ ->
+                    val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                    val clip = android.content.ClipData.newPlainText("下载错误详情", details)
+                    clipboard.setPrimaryClip(clip)
+                    Toast.makeText(this, "已复制", Toast.LENGTH_SHORT).show()
+                }
+                .setNegativeButton("关闭", null)
+                .show()
+        }
     }
 
-    private fun setButtonBgColor(button: MaterialButton, color: Int) {
-        button.setBackgroundColor(color)
+    private fun setButtonBgColor(button: TextView, color: Int) {
+        button.background = GradientDrawable().apply {
+            cornerRadius = dpToPx(8).toFloat()
+            setColor(color)
+        }
+        button.setTextColor(Color.WHITE)
     }
 
     private fun dpToPx(dp: Int): Int {
@@ -1087,10 +1068,10 @@ class DownloadManagerActivity : AppCompatActivity() {
     }
 
     private data class PackageViewHolder(
-        val progressBar: LinearProgressIndicator,
+        val progressBar: ProgressBar,
         val txtStatus: TextView,
-        val btnAction: MaterialButton,
-        val btnDelete: MaterialButton,
-        val btnOpenDir: MaterialButton
+        val btnAction: TextView,
+        val btnDelete: TextView,
+        val btnOpenDir: TextView
     )
 }

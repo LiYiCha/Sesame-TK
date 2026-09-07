@@ -20,6 +20,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.*
 import androidx.appcompat.app.AlertDialog
+import androidx.core.content.ContextCompat
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.card.MaterialCardView
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
@@ -61,15 +62,14 @@ object AdminUploadDialog {
 
     fun show(activity: Activity, appId: String, onUploadSuccess: (() -> Unit)? = null) {
         val configManager = UpdaterConfigManager(activity)
-        val isNight = (activity.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES
-
-        val colorSurface = resolveColor(activity, com.google.android.material.R.attr.colorSurface, if (isNight) Color.parseColor("#1E1E1E") else Color.WHITE)
-        val colorSurfaceVariant = resolveColor(activity, com.google.android.material.R.attr.colorSurfaceVariant, if (isNight) Color.parseColor("#2C2C2C") else Color.parseColor("#F0F4F0"))
-        val colorPrimary = resolveColor(activity, com.google.android.material.R.attr.colorPrimary, if (isNight) Color.parseColor("#A5D6A7") else Color.parseColor("#2D5A27"))
-        val colorOnPrimary = resolveColor(activity, com.google.android.material.R.attr.colorOnPrimary, Color.WHITE)
-        val colorOnSurface = resolveColor(activity, com.google.android.material.R.attr.colorOnSurface, if (isNight) Color.parseColor("#E0E0E0") else Color.parseColor("#1A1A1A"))
-        val colorOnSurfaceVariant = resolveColor(activity, com.google.android.material.R.attr.colorOnSurfaceVariant, if (isNight) Color.parseColor("#9E9E9E") else Color.parseColor("#666666"))
-        val colorOutline = resolveColor(activity, com.google.android.material.R.attr.colorOutline, if (isNight) Color.parseColor("#444444") else Color.parseColor("#D0D0D0"))
+        val palette = ThemeUtils.M3Palette(activity)
+        val colorSurface = palette.surface
+        val colorSurfaceVariant = palette.surfaceVariant
+        val colorPrimary = palette.primary
+        val colorOnPrimary = palette.onPrimary
+        val colorOnSurface = palette.onSurface
+        val colorOnSurfaceVariant = palette.onSurfaceVariant
+        val colorOutline = palette.outline
 
         val cfSource = configManager.getSources().find { it.type == UpdateSourceType.CLOUDFLARE_R2 }
             ?: configManager.getSelectedSource()
@@ -97,12 +97,12 @@ object AdminUploadDialog {
             val normalBg = GradientDrawable().apply {
                 cornerRadius = dp(8).toFloat()
                 setStroke(dp(1), colorOutline)
-                setColor(if (isNight) Color.parseColor("#222222") else Color.parseColor("#F9F9F9"))
+                setColor(palette.surfaceVariant)
             }
             val focusedBg = GradientDrawable().apply {
                 cornerRadius = dp(8).toFloat()
                 setStroke(dp(1.5f.toInt().coerceAtLeast(1)), colorPrimary)
-                setColor(if (isNight) Color.parseColor("#282828") else Color.WHITE)
+                setColor(palette.surface)
             }
             return EditText(activity).apply {
                 hint = hintText
@@ -257,7 +257,7 @@ object AdminUploadDialog {
             val btnLogout = TextView(activity).apply {
                 text = "退出"
                 textSize = 13f
-                setTextColor(Color.parseColor("#EF4444"))
+                setTextColor(palette.error)
                 setPadding(dp(8), dp(4), dp(8), dp(4))
                 setOnClickListener {
                     configManager.logoutAdmin()
@@ -757,18 +757,7 @@ object AdminUploadDialog {
         return String.format("%.1f %s", sizeD, units[i])
     }
 
-    private fun resolveColor(context: Context, attr: Int, fallback: Int): Int {
-        val tv = TypedValue()
-        return if (context.theme.resolveAttribute(attr, tv, true)) {
-            if (tv.type >= TypedValue.TYPE_FIRST_COLOR_INT && tv.type <= TypedValue.TYPE_LAST_COLOR_INT) {
-                tv.data
-            } else {
-                fallback
-            }
-        } else {
-            fallback
-        }
-    }
+
 
     private fun dp(context: Context, v: Int): Int {
         return TypedValue.applyDimension(
@@ -779,12 +768,12 @@ object AdminUploadDialog {
     }
 
     /**
-     * 符合 Material 3 规范的上传进度指示弹窗 (替代废弃的旧版 ProgressDialog)
+     * 符合 Material 3 视觉规范的原生安全上传进度指示弹窗 (无任何 Theme 崩溃风险)
      */
     class M3ProgressDialog(activity: Activity) {
         private val dialog: AlertDialog
         private val txtMsg: TextView
-        private val indicator: LinearProgressIndicator
+        private val indicator: ProgressBar
 
         init {
             val d = { v: Int ->
@@ -796,9 +785,10 @@ object AdminUploadDialog {
                 setPadding(d(24), d(20), d(24), d(24))
             }
 
-            val colorOnSurface = resolveColor(activity, com.google.android.material.R.attr.colorOnSurface, Color.BLACK)
-            val colorOnSurfaceVariant = resolveColor(activity, com.google.android.material.R.attr.colorOnSurfaceVariant, Color.DKGRAY)
-            val colorPrimary = resolveColor(activity, com.google.android.material.R.attr.colorPrimary, Color.parseColor("#2D5A27"))
+            val p = ThemeUtils.M3Palette(activity)
+            val colorOnSurface = p.onSurface
+            val colorOnSurfaceVariant = p.onSurfaceVariant
+            val colorPrimary = p.primary
 
             val titleView = TextView(activity).apply {
                 text = "上传附加包"
@@ -817,20 +807,39 @@ object AdminUploadDialog {
             }
             layout.addView(txtMsg)
 
-            indicator = LinearProgressIndicator(activity).apply {
-                trackCornerRadius = d(4)
-                setIndicatorColor(colorPrimary)
-                isIndeterminate = false
+            indicator = ProgressBar(activity, null, android.R.attr.progressBarStyleHorizontal).apply {
                 max = 100
                 progress = 0
+                isIndeterminate = false
+                val progressBg = GradientDrawable().apply {
+                    setColor(p.surfaceVariant)
+                    cornerRadius = d(4).toFloat()
+                }
+                val progressFg = GradientDrawable().apply {
+                    setColor(colorPrimary)
+                    cornerRadius = d(4).toFloat()
+                }
+                val clipFg = android.graphics.drawable.ClipDrawable(progressFg, Gravity.START, android.graphics.drawable.ClipDrawable.HORIZONTAL)
+                val layer = android.graphics.drawable.LayerDrawable(arrayOf(progressBg, clipFg)).apply {
+                    setId(0, android.R.id.background)
+                    setId(1, android.R.id.progress)
+                }
+                progressDrawable = layer
                 layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, d(6))
             }
             layout.addView(indicator)
 
-            dialog = MaterialAlertDialogBuilder(activity)
-                .setView(layout)
-                .setCancelable(false)
-                .create()
+            dialog = try {
+                MaterialAlertDialogBuilder(activity)
+                    .setView(layout)
+                    .setCancelable(false)
+                    .create()
+            } catch (_: Throwable) {
+                AlertDialog.Builder(activity)
+                    .setView(layout)
+                    .setCancelable(false)
+                    .create()
+            }
         }
 
         fun show() = dialog.show()
