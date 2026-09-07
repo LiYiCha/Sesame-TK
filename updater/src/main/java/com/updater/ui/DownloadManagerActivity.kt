@@ -1,11 +1,11 @@
 package com.updater.ui
 
-import android.app.Activity
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.PackageManager
+import android.content.res.ColorStateList
 import android.content.res.Configuration
 import android.graphics.Color
 import android.graphics.Typeface
@@ -17,9 +17,17 @@ import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
 import android.widget.*
+import androidx.appcompat.app.AlertDialog
+import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.ContextCompat
 import androidx.core.view.ViewCompat
+import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import android.text.method.LinkMovementMethod
+import com.google.android.material.button.MaterialButton
+import com.google.android.material.card.MaterialCardView
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
+import com.google.android.material.progressindicator.LinearProgressIndicator
 import com.updater.Updater
 import com.updater.config.UpdaterConfigManager
 import com.updater.db.DownloadDatabaseHelper
@@ -33,8 +41,14 @@ import com.updater.utils.MarkdownUtils
 import com.updater.utils.UpdatePathManager
 import com.updater.utils.UpdaterLog
 import java.io.File
+import java.util.concurrent.atomic.AtomicBoolean
 
-class DownloadManagerActivity : Activity() {
+class DownloadManagerActivity : AppCompatActivity() {
+
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        AdminUploadDialog.handleActivityResult(this, requestCode, resultCode, data)
+    }
 
     private lateinit var dbHelper: DownloadDatabaseHelper
     private lateinit var configManager: UpdaterConfigManager
@@ -44,10 +58,14 @@ class DownloadManagerActivity : Activity() {
     private val tasks = HashMap<String, DownloadTask>()
 
     private lateinit var rootView: LinearLayout
-    private lateinit var titleBar: RelativeLayout
+    private lateinit var statusBarSpacer: View
+    private lateinit var titleBar: LinearLayout
     private lateinit var scrollContent: LinearLayout
 
-    // 主题动态调色板（适配主项目 SesameTheme 白天 / 深色模式）
+    // 单线程刷新保护
+    private val isRefreshingUpdates = AtomicBoolean(false)
+
+    // 主题动态调色板（完美对接主项目 AppTheme 与 Material3 DayNight 模式）
     private var isNightMode: Boolean = false
     private var colorBg: Int = 0
     private var colorCard: Int = 0
@@ -69,6 +87,9 @@ class DownloadManagerActivity : Activity() {
             if (task != null) {
                 task.downloadedBytes = downloaded
                 task.status = status
+                if (error != null) {
+                    task.errorMsg = error
+                }
                 updateViewHolder(taskId, task, error)
             }
         }
@@ -89,7 +110,6 @@ class DownloadManagerActivity : Activity() {
             intent.getSerializableExtra("update_info") as? UpdateInfo
         }
 
-        // 优先从内存单例或本地持久化缓存恢复数据，彻底解决退出重进数据丢失为空的问题
         if (info == null) {
             info = Updater.lastUpdateInfo ?: configManager.getCachedUpdateInfo()
         }
@@ -101,7 +121,6 @@ class DownloadManagerActivity : Activity() {
         rootView = createRootLayout()
         setContentView(rootView)
 
-        // 后台静默对账清理已安装完成的历史包
         Thread {
             ApkCleanupManager.checkAndCleanOnStartup(this@DownloadManagerActivity)
         }.start()
@@ -109,29 +128,48 @@ class DownloadManagerActivity : Activity() {
         initPackageTasks()
     }
 
+    private fun resolveColorAttr(attr: Int, fallback: Int): Int {
+        val tv = TypedValue()
+        return if (theme.resolveAttribute(attr, tv, true)) {
+            if (tv.type >= TypedValue.TYPE_FIRST_COLOR_INT && tv.type <= TypedValue.TYPE_LAST_COLOR_INT) {
+                tv.data
+            } else {
+                try {
+                    ContextCompat.getColor(this, tv.resourceId)
+                } catch (_: Throwable) {
+                    fallback
+                }
+            }
+        } else {
+            fallback
+        }
+    }
+
     private fun initThemeColors() {
         isNightMode = (resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES
-        colorBg = if (isNightMode) Color.parseColor("#121212") else Color.parseColor("#F4F4F4")
-        colorCard = if (isNightMode) Color.parseColor("#1E1E1E") else Color.WHITE
-        colorTextPrimary = if (isNightMode) Color.parseColor("#FFFFFF") else Color.parseColor("#1A1A1A")
-        colorTextSecondary = if (isNightMode) Color.parseColor("#9E9E9E") else Color.parseColor("#666666")
-        colorBrand = if (isNightMode) Color.parseColor("#4CAF50") else Color.parseColor("#2D5A27")
-        colorBorder = if (isNightMode) Color.parseColor("#2D2D2D") else Color.parseColor("#E0E0E0")
-        colorCardInner = if (isNightMode) Color.parseColor("#252525") else Color.parseColor("#F8F9FA")
+        val defaultBg = if (isNightMode) Color.parseColor("#121212") else Color.parseColor("#F4F4F4")
+        val defaultCard = if (isNightMode) Color.parseColor("#1E1E1E") else Color.WHITE
+        val defaultTextPrimary = if (isNightMode) Color.parseColor("#FFFFFF") else Color.parseColor("#1A1A1A")
+        val defaultTextSecondary = if (isNightMode) Color.parseColor("#9E9E9E") else Color.parseColor("#666666")
+        val defaultBrand = if (isNightMode) Color.parseColor("#4CAF50") else Color.parseColor("#2D5A27")
+        val defaultBorder = if (isNightMode) Color.parseColor("#2D2D2D") else Color.parseColor("#E0E0E0")
+        val defaultCardInner = if (isNightMode) Color.parseColor("#252525") else Color.parseColor("#F8F9FA")
+
+        colorBg = resolveColorAttr(android.R.attr.colorBackground, defaultBg)
+        colorCard = resolveColorAttr(com.google.android.material.R.attr.colorSurface, defaultCard)
+        colorTextPrimary = resolveColorAttr(android.R.attr.textColorPrimary, defaultTextPrimary)
+        colorTextSecondary = resolveColorAttr(android.R.attr.textColorSecondary, defaultTextSecondary)
+        colorBrand = resolveColorAttr(com.google.android.material.R.attr.colorPrimary, defaultBrand)
+        colorBorder = resolveColorAttr(com.google.android.material.R.attr.colorOutline, defaultBorder)
+        colorCardInner = resolveColorAttr(com.google.android.material.R.attr.colorSurfaceVariant, defaultCardInner)
     }
 
     private fun setupSystemBar() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
             window.statusBarColor = Color.TRANSPARENT
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                var flags = window.decorView.systemUiVisibility
-                flags = if (!isNightMode) {
-                    flags or View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR
-                } else {
-                    flags and View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR.inv()
-                }
-                window.decorView.systemUiVisibility = flags
-            }
+            WindowCompat.setDecorFitsSystemWindows(window, false)
+            val controller = WindowCompat.getInsetsController(window, window.decorView)
+            controller.isAppearanceLightStatusBars = !isNightMode
         }
     }
 
@@ -272,7 +310,7 @@ class DownloadManagerActivity : Activity() {
 
         val currentDownloading = tasks.values.find { it.status == DownloadTask.STATUS_DOWNLOADING && it.id != taskId }
         if (currentDownloading != null) {
-            Toast.makeText(this, "已有任务【${currentDownloading.title}】正在下载中，请等待完成或先暂停", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "已有任务正在下载，请等待完成或暂停", Toast.LENGTH_SHORT).show()
             return
         }
 
@@ -363,12 +401,18 @@ class DownloadManagerActivity : Activity() {
         return String.format("%.1f %s", sizeD, units[i])
     }
 
-    // --- 执行手动刷新更新列表逻辑 ---
+    // --- 执行手动刷新更新列表逻辑（单线程互斥保护） ---
     private fun doRefreshUpdates() {
-        Toast.makeText(applicationContext, "正在刷新更新信息...", Toast.LENGTH_SHORT).show()
+        if (!isRefreshingUpdates.compareAndSet(false, true)) {
+            Toast.makeText(applicationContext, "正在检查更新，请勿重复点击", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        Toast.makeText(applicationContext, "正在检查更新...", Toast.LENGTH_SHORT).show()
         val updater = Updater.getInstance(this)
         updater.checkUpdate(
             onUpdateAvailable = { newInfo ->
+                isRefreshingUpdates.set(false)
                 updateInfo = newInfo
                 Updater.lastUpdateInfo = newInfo
                 configManager.saveCachedUpdateInfo(newInfo)
@@ -378,15 +422,17 @@ class DownloadManagerActivity : Activity() {
                 val localName = getLocalVersionName()
                 val localCode = getLocalVersionCode()
                 if (Updater.isNewerVersion(newInfo.latestVersionName, newInfo.latestVersionCode, localName, localCode)) {
-                    Toast.makeText(applicationContext, "发现新版本 v${newInfo.latestVersionName}，列表已刷新", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(applicationContext, "发现新版本 v${newInfo.latestVersionName}", Toast.LENGTH_SHORT).show()
                 } else {
-                    Toast.makeText(applicationContext, "当前已是最新版本 (${newInfo.latestVersionName})", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(applicationContext, "当前已是最新版本", Toast.LENGTH_SHORT).show()
                 }
             },
             onNoUpdate = {
-                Toast.makeText(applicationContext, "当前已是最新版本，无新组件", Toast.LENGTH_SHORT).show()
+                isRefreshingUpdates.set(false)
+                Toast.makeText(applicationContext, "当前已是最新版本", Toast.LENGTH_SHORT).show()
             },
             onError = { err ->
+                isRefreshingUpdates.set(false)
                 Toast.makeText(applicationContext, "刷新失败: $err", Toast.LENGTH_SHORT).show()
             }
         )
@@ -425,7 +471,12 @@ class DownloadManagerActivity : Activity() {
         }
     }
 
-    // --- 界面构建逻辑（精简、高颜值、沉浸式 Edge-to-Edge） ---
+    // --- 界面构建逻辑（解决状态栏挤压、按钮统一样式、沉浸式适配） ---
+
+    private fun getStatusBarHeight(): Int {
+        val resId = resources.getIdentifier("status_bar_height", "dimen", "android")
+        return if (resId > 0) resources.getDimensionPixelSize(resId) else dpToPx(24)
+    }
 
     private fun createRootLayout(): LinearLayout {
         val root = LinearLayout(this).apply {
@@ -434,24 +485,30 @@ class DownloadManagerActivity : Activity() {
             layoutParams = ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
         }
 
-        // Title Bar（适配沉浸式 Insets 与状态栏高度）
-        titleBar = RelativeLayout(this).apply {
-            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
-                elevation = dpToPx(2).toFloat()
+        // 1. 状态栏独立占位 Spacer：通过 WindowInsets 动态精准绑定高度，彻底杜绝状态栏重叠与刘海遮挡
+        statusBarSpacer = View(this).apply {
+            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, getStatusBarHeight())
+            setBackgroundColor(colorCard)
+        }
+        root.addView(statusBarSpacer)
+
+        // 2. Title Bar：水平线性排布，中间标题自动占据剩余宽度 (weight=1)，绝不与右侧按钮发生物理挤压或重叠
+        titleBar = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dpToPx(52)).apply {
+                elevation = dpToPx(1.5f).toFloat()
             }
             setBackgroundColor(colorCard)
-            setPadding(dpToPx(12), dpToPx(10), dpToPx(12), dpToPx(10))
+            setPadding(dpToPx(6), 0, dpToPx(12), 0)
         }
 
-        // 1. 明确的返回按钮（严禁用易混淆的还原/旋转图标，换用标准的文字与箭头返回按键）
+        // 返回按钮
         val btnBack = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(dpToPx(6), dpToPx(6), dpToPx(10), dpToPx(6))
-            val lp = RelativeLayout.LayoutParams(RelativeLayout.LayoutParams.WRAP_CONTENT, dpToPx(38)).apply {
-                addRule(RelativeLayout.ALIGN_PARENT_LEFT)
-                addRule(RelativeLayout.CENTER_VERTICAL)
-            }
+            setPadding(dpToPx(6), dpToPx(6), dpToPx(8), dpToPx(6))
+            val lp = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, dpToPx(36))
             layoutParams = lp
 
             val txtArrow = TextView(this@DownloadManagerActivity).apply {
@@ -474,14 +531,17 @@ class DownloadManagerActivity : Activity() {
         }
         titleBar.addView(btnBack)
 
-        // 2. 标题居中
+        // 标题占据剩余空间并支持省略与长按管理员入口
         val txtTitle = TextView(this).apply {
-            text = "更新与下载中心"
-            textSize = 17f
+            text = "更新与下载"
+            textSize = 16f
             setTextColor(colorTextPrimary)
             typeface = Typeface.DEFAULT_BOLD
-            val lp = RelativeLayout.LayoutParams(RelativeLayout.LayoutParams.WRAP_CONTENT, RelativeLayout.LayoutParams.WRAP_CONTENT).apply {
-                addRule(RelativeLayout.CENTER_IN_PARENT)
+            maxLines = 1
+            ellipsize = android.text.TextUtils.TruncateAt.END
+            val lp = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1.0f).apply {
+                leftMargin = dpToPx(4)
+                rightMargin = dpToPx(6)
             }
             layoutParams = lp
             setOnLongClickListener {
@@ -494,80 +554,72 @@ class DownloadManagerActivity : Activity() {
         }
         titleBar.addView(txtTitle)
 
-        // 3. 右侧操作区：刷新按钮 + 源设置按钮 + 管理员上传附加包按钮
+        // 右侧操作区：统一样式的按钮组（刷新、源设置、上传包）
         val rightActionLayout = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            val lp = RelativeLayout.LayoutParams(RelativeLayout.LayoutParams.WRAP_CONTENT, RelativeLayout.LayoutParams.WRAP_CONTENT).apply {
-                addRule(RelativeLayout.ALIGN_PARENT_RIGHT)
-                addRule(RelativeLayout.CENTER_VERTICAL)
-            }
-            layoutParams = lp
+            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT)
         }
 
-        val btnRefresh = Button(this).apply {
-            text = "刷新"
-            textSize = 12f
-            typeface = Typeface.DEFAULT_BOLD
-            setTextColor(Color.WHITE)
-            val bg = GradientDrawable().apply {
-                setColor(colorBrand)
-                cornerRadius = dpToPx(14).toFloat()
+        fun createHeaderButton(label: String, isPrimary: Boolean, onClick: () -> Unit): MaterialButton {
+            return if (isPrimary) {
+                MaterialButton(this).apply {
+                    text = label
+                    textSize = 12f
+                    typeface = Typeface.DEFAULT_BOLD
+                    cornerRadius = dpToPx(8)
+                    setBackgroundColor(colorBrand)
+                    setTextColor(Color.WHITE)
+                    setPadding(dpToPx(8), 0, dpToPx(8), 0)
+                    minWidth = dpToPx(44)
+                    insetTop = 0
+                    insetBottom = 0
+                    val lp = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, dpToPx(32)).apply {
+                        rightMargin = dpToPx(5)
+                    }
+                    layoutParams = lp
+                    setOnClickListener { onClick() }
+                }
+            } else {
+                MaterialButton(this, null, com.google.android.material.R.attr.materialButtonOutlinedStyle).apply {
+                    text = label
+                    textSize = 12f
+                    typeface = Typeface.DEFAULT_BOLD
+                    cornerRadius = dpToPx(8)
+                    strokeWidth = dpToPx(1)
+                    strokeColor = ColorStateList.valueOf(colorBorder)
+                    setTextColor(colorTextPrimary)
+                    setPadding(dpToPx(8), 0, dpToPx(8), 0)
+                    minWidth = dpToPx(44)
+                    insetTop = 0
+                    insetBottom = 0
+                    val lp = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, dpToPx(32)).apply {
+                        rightMargin = dpToPx(5)
+                    }
+                    layoutParams = lp
+                    setOnClickListener { onClick() }
+                }
             }
-            background = bg
-            val lp = LinearLayout.LayoutParams(dpToPx(52), dpToPx(30)).apply {
-                rightMargin = dpToPx(4)
-            }
-            layoutParams = lp
-            setOnClickListener {
+        }
+
+        val btnRefresh = createHeaderButton("刷新", isPrimary = true) {
+            doRefreshUpdates()
+        }
+        val btnSettings = createHeaderButton("源设置", isPrimary = false) {
+            SourceSettingsDialog.show(this@DownloadManagerActivity) {
                 doRefreshUpdates()
             }
         }
+        val btnUpload = createHeaderButton("上传", isPrimary = false) {
+            val currentAppId = updateInfo?.appId ?: packageName
+            AdminUploadDialog.show(this@DownloadManagerActivity, currentAppId) {
+                doRefreshUpdates()
+            }
+        }
+        (btnUpload.layoutParams as? LinearLayout.LayoutParams)?.rightMargin = 0
+
         rightActionLayout.addView(btnRefresh)
-
-        val btnSettings = Button(this).apply {
-            text = "源设置"
-            textSize = 12f
-            typeface = Typeface.DEFAULT_BOLD
-            setTextColor(colorTextPrimary)
-            val bg = GradientDrawable().apply {
-                setColor(colorCardInner)
-                setStroke(dpToPx(1), colorBorder)
-                cornerRadius = dpToPx(14).toFloat()
-            }
-            background = bg
-            val lp = LinearLayout.LayoutParams(dpToPx(56), dpToPx(30)).apply {
-                rightMargin = dpToPx(4)
-            }
-            layoutParams = lp
-            setOnClickListener {
-                SourceSettingsDialog.show(this@DownloadManagerActivity) {
-                    doRefreshUpdates()
-                }
-            }
-        }
         rightActionLayout.addView(btnSettings)
-
-        val btnUpload = Button(this).apply {
-            text = "上传包"
-            textSize = 12f
-            typeface = Typeface.DEFAULT_BOLD
-            setTextColor(colorTextPrimary)
-            val bg = GradientDrawable().apply {
-                setColor(colorCardInner)
-                setStroke(dpToPx(1), colorBorder)
-                cornerRadius = dpToPx(14).toFloat()
-            }
-            background = bg
-            val lp = LinearLayout.LayoutParams(dpToPx(56), dpToPx(30))
-            layoutParams = lp
-            setOnClickListener {
-                val currentAppId = updateInfo?.appId ?: packageName
-                AdminUploadDialog.show(this@DownloadManagerActivity, currentAppId) {
-                    doRefreshUpdates()
-                }
-            }
-        }
         rightActionLayout.addView(btnUpload)
 
         titleBar.addView(rightActionLayout)
@@ -576,6 +628,7 @@ class DownloadManagerActivity : Activity() {
         // Scroll Container
         val scrollView = ScrollView(this).apply {
             layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1.0f)
+            isFillViewport = true
         }
 
         scrollContent = LinearLayout(this).apply {
@@ -584,14 +637,32 @@ class DownloadManagerActivity : Activity() {
             layoutParams = FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT)
         }
 
+        // 精准适配状态栏与底部手势条 / 虚拟导航栏
+        ViewCompat.setOnApplyWindowInsetsListener(root) { _, insets ->
+            val statusBarHeight = insets.getInsets(WindowInsetsCompat.Type.statusBars()).top
+            if (statusBarHeight > 0) {
+                statusBarSpacer.layoutParams = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    statusBarHeight
+                )
+            }
+            val navBarHeight = insets.getInsets(WindowInsetsCompat.Type.navigationBars()).bottom
+            scrollContent.setPadding(dpToPx(14), dpToPx(12), dpToPx(14), dpToPx(24) + navBarHeight)
+            insets
+        }
+
         scrollView.addView(scrollContent)
         root.addView(scrollView)
 
-        // 沉浸式边距适配（解决顶部系统状态栏挤压与底部导航栏遮挡）
+        // 沉浸式边距适配（动态调整状态栏 Spacer 高度，根部贴合导航栏）
         ViewCompat.setOnApplyWindowInsetsListener(root) { _, insets ->
             val statusBars = insets.getInsets(WindowInsetsCompat.Type.statusBars())
             val navBars = insets.getInsets(WindowInsetsCompat.Type.navigationBars())
-            titleBar.setPadding(dpToPx(12), statusBars.top + dpToPx(6), dpToPx(12), dpToPx(6))
+            val topInset = if (statusBars.top > 0) statusBars.top else getStatusBarHeight()
+            if (statusBarSpacer.layoutParams.height != topInset) {
+                statusBarSpacer.layoutParams.height = topInset
+                statusBarSpacer.requestLayout()
+            }
             root.setPadding(0, 0, 0, navBars.bottom)
             insets
         }
@@ -605,20 +676,25 @@ class DownloadManagerActivity : Activity() {
         scrollContent.removeAllViews()
         packageViews.clear()
 
-        // 1. 精简版版本信息卡片
+        // 1. 精简版版本信息卡片 (MaterialCardView)
         val info = updateInfo
-        val headerCard = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            background = GradientDrawable().apply {
-                setColor(colorCard)
-                cornerRadius = dpToPx(12).toFloat()
-            }
-            setPadding(dpToPx(14), dpToPx(12), dpToPx(14), dpToPx(12))
+        val headerCard = MaterialCardView(this).apply {
+            radius = dpToPx(14f).toFloat()
+            strokeWidth = dpToPx(1)
+            strokeColor = colorBorder
+            setCardBackgroundColor(colorCard)
+            cardElevation = dpToPx(1f).toFloat()
             layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
                 bottomMargin = dpToPx(14)
             }
-            elevation = dpToPx(1f).toFloat()
         }
+
+        val headerContent = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dpToPx(14), dpToPx(12), dpToPx(14), dpToPx(12))
+            layoutParams = ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+        }
+        headerCard.addView(headerContent)
 
         val topRow = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -647,17 +723,17 @@ class DownloadManagerActivity : Activity() {
             setPadding(dpToPx(6), dpToPx(3), dpToPx(6), dpToPx(3))
         }
         topRow.addView(txtSourceBadge)
-        headerCard.addView(topRow)
+        headerContent.addView(topRow)
 
         if (info != null) {
             val txtVersionTag = TextView(this).apply {
-                text = "最新版本：v${info.latestVersionName} (Build ${info.latestVersionCode})"
+                text = "最新版本: v${info.latestVersionName} (${info.latestVersionCode})"
                 textSize = 12f
                 setTextColor(colorBrand)
                 typeface = Typeface.DEFAULT_BOLD
                 setPadding(0, dpToPx(4), 0, 0)
             }
-            headerCard.addView(txtVersionTag)
+            headerContent.addView(txtVersionTag)
 
             val txtChangelog = TextView(this).apply {
                 val mdContent = if (info.updateLog.isNotBlank()) {
@@ -672,21 +748,21 @@ class DownloadManagerActivity : Activity() {
                 movementMethod = LinkMovementMethod.getInstance()
                 setLineSpacing(dpToPx(2).toFloat(), 1.0f)
             }
-            headerCard.addView(txtChangelog)
+            headerContent.addView(txtChangelog)
         } else {
             val txtDesc = TextView(this).apply {
-                text = "在此管理下载的更新安装包与配套应用组件，支持断点续传与离线复用。"
+                text = "管理应用及配套安装包"
                 textSize = 12f
                 setTextColor(colorTextSecondary)
                 setPadding(0, dpToPx(4), 0, 0)
             }
-            headerCard.addView(txtDesc)
+            headerContent.addView(txtDesc)
         }
         scrollContent.addView(headerCard)
 
         // 2. 安装包列表标题
         val txtListTitle = TextView(this).apply {
-            text = "配套安装包与组件列表"
+            text = "安装包列表"
             textSize = 13f
             typeface = Typeface.DEFAULT_BOLD
             setTextColor(colorTextSecondary)
@@ -706,39 +782,48 @@ class DownloadManagerActivity : Activity() {
                 scrollContent.addView(pkgCard)
             }
         } else {
-            val emptyCard = LinearLayout(this).apply {
+            val emptyCard = MaterialCardView(this).apply {
+                radius = dpToPx(14f).toFloat()
+                strokeWidth = dpToPx(1)
+                strokeColor = colorBorder
+                setCardBackgroundColor(colorCard)
+                cardElevation = dpToPx(1f).toFloat()
+            }
+            val emptyContent = LinearLayout(this).apply {
                 orientation = LinearLayout.VERTICAL
                 gravity = Gravity.CENTER
                 setPadding(dpToPx(16), dpToPx(24), dpToPx(16), dpToPx(24))
-                background = GradientDrawable().apply {
-                    setColor(colorCard)
-                    cornerRadius = dpToPx(12).toFloat()
-                }
             }
             val txtEmpty = TextView(this).apply {
-                text = "暂无待下载或已缓存的安装包，可点击右上角「刷新」检测"
+                text = "暂无安装包，可点击右上角「刷新」检测"
                 textSize = 13f
                 setTextColor(colorTextSecondary)
                 gravity = Gravity.CENTER
             }
-            emptyCard.addView(txtEmpty)
+            emptyContent.addView(txtEmpty)
+            emptyCard.addView(emptyContent)
             scrollContent.addView(emptyCard)
         }
     }
 
     private fun createPackageCard(taskId: String, title: String, sizeBytes: Long, description: String): View {
-        val card = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            background = GradientDrawable().apply {
-                setColor(colorCard)
-                cornerRadius = dpToPx(10).toFloat()
-            }
-            setPadding(dpToPx(14), dpToPx(12), dpToPx(14), dpToPx(12))
+        val card = MaterialCardView(this).apply {
+            radius = dpToPx(14f).toFloat()
+            strokeWidth = dpToPx(1)
+            strokeColor = colorBorder
+            setCardBackgroundColor(colorCard)
+            cardElevation = dpToPx(1f).toFloat()
             layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
                 bottomMargin = dpToPx(10)
             }
-            elevation = dpToPx(1f).toFloat()
         }
+
+        val cardContent = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dpToPx(14), dpToPx(12), dpToPx(14), dpToPx(12))
+            layoutParams = ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+        }
+        card.addView(cardContent)
 
         // 标题与大小行
         val titleRow = LinearLayout(this).apply {
@@ -762,7 +847,7 @@ class DownloadManagerActivity : Activity() {
             setTextColor(colorTextSecondary)
         }
         titleRow.addView(txtSize)
-        card.addView(titleRow)
+        cardContent.addView(titleRow)
 
         // 描述
         val txtDesc = TextView(this).apply {
@@ -771,18 +856,23 @@ class DownloadManagerActivity : Activity() {
             setTextColor(colorTextSecondary)
             setPadding(0, dpToPx(3), 0, dpToPx(6))
         }
-        card.addView(txtDesc)
+        cardContent.addView(txtDesc)
 
-        // 进度条
-        val progressBar = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply {
+        // Material 3 线性进度条
+        val progressBar = LinearProgressIndicator(this).apply {
+            trackCornerRadius = dpToPx(3)
+            trackThickness = dpToPx(4)
+            setIndicatorColor(colorBrand)
+            trackColor = colorCardInner
             max = 100
             progress = 0
             visibility = View.GONE
-            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dpToPx(4)).apply {
-                bottomMargin = dpToPx(6)
+            val lp = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
+                bottomMargin = dpToPx(8)
             }
+            layoutParams = lp
         }
-        card.addView(progressBar)
+        cardContent.addView(progressBar)
 
         // 底部状态与操作按钮行
         val actionsRow = LinearLayout(this).apply {
@@ -792,23 +882,25 @@ class DownloadManagerActivity : Activity() {
         }
 
         val txtStatus = TextView(this).apply {
-            text = "状态: 未下载"
+            text = "未下载"
             textSize = 12f
             setTextColor(colorTextSecondary)
+            setTextIsSelectable(true)
             layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1.0f)
         }
         actionsRow.addView(txtStatus)
 
-        val btnOpenDir = Button(this).apply {
-            text = "打开目录"
+        val btnOpenDir = MaterialButton(this, null, com.google.android.material.R.attr.materialButtonOutlinedStyle).apply {
+            text = "打开"
             textSize = 12f
+            cornerRadius = dpToPx(8)
+            strokeWidth = dpToPx(1)
+            strokeColor = ColorStateList.valueOf(colorBorder)
             setTextColor(colorTextPrimary)
-            val bg = GradientDrawable().apply {
-                setColor(colorCardInner)
-                setStroke(dpToPx(1), colorBorder)
-                cornerRadius = dpToPx(6).toFloat()
-            }
-            background = bg
+            setPadding(dpToPx(8), 0, dpToPx(8), 0)
+            minWidth = dpToPx(48)
+            insetTop = 0
+            insetBottom = 0
             visibility = View.GONE
             val lp = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, dpToPx(32)).apply {
                 rightMargin = dpToPx(6)
@@ -822,15 +914,17 @@ class DownloadManagerActivity : Activity() {
         }
         actionsRow.addView(btnOpenDir)
 
-        val btnDelete = Button(this).apply {
+        val btnDelete = MaterialButton(this, null, com.google.android.material.R.attr.materialButtonOutlinedStyle).apply {
             text = "删除"
             textSize = 12f
+            cornerRadius = dpToPx(8)
+            strokeWidth = dpToPx(1)
+            strokeColor = ColorStateList.valueOf(Color.parseColor("#DC3545"))
             setTextColor(Color.parseColor("#DC3545"))
-            val bg = GradientDrawable().apply {
-                setColor(if (isNightMode) Color.parseColor("#2A1C1C") else Color.parseColor("#FFF0F0"))
-                cornerRadius = dpToPx(6).toFloat()
-            }
-            background = bg
+            setPadding(dpToPx(8), 0, dpToPx(8), 0)
+            minWidth = dpToPx(48)
+            insetTop = 0
+            insetBottom = 0
             visibility = View.GONE
             val lp = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, dpToPx(32)).apply {
                 rightMargin = dpToPx(6)
@@ -840,18 +934,18 @@ class DownloadManagerActivity : Activity() {
         }
         actionsRow.addView(btnDelete)
 
-        val btnAction = Button(this).apply {
+        val btnAction = MaterialButton(this).apply {
             text = "下载"
             textSize = 12f
             typeface = Typeface.DEFAULT_BOLD
+            cornerRadius = dpToPx(8)
+            setBackgroundColor(colorBrand)
             setTextColor(Color.WHITE)
-
-            val btnBg = GradientDrawable().apply {
-                setColor(colorBrand)
-                cornerRadius = dpToPx(6).toFloat()
-            }
-            background = btnBg
-            layoutParams = LinearLayout.LayoutParams(dpToPx(72), dpToPx(32))
+            setPadding(dpToPx(12), 0, dpToPx(12), 0)
+            minWidth = dpToPx(64)
+            insetTop = 0
+            insetBottom = 0
+            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, dpToPx(32))
 
             setOnClickListener {
                 val task = tasks[taskId] ?: return@setOnClickListener
@@ -863,7 +957,7 @@ class DownloadManagerActivity : Activity() {
             }
         }
         actionsRow.addView(btnAction)
-        card.addView(actionsRow)
+        cardContent.addView(actionsRow)
 
         packageViews[taskId] = PackageViewHolder(progressBar, txtStatus, btnAction, btnDelete, btnOpenDir)
         return card
@@ -875,8 +969,10 @@ class DownloadManagerActivity : Activity() {
         when (task.status) {
             DownloadTask.STATUS_PENDING -> {
                 holder.progressBar.visibility = View.GONE
-                holder.txtStatus.text = "状态: 未下载"
+                holder.txtStatus.text = "未下载"
                 holder.txtStatus.setTextColor(colorTextSecondary)
+                holder.txtStatus.isClickable = false
+                holder.txtStatus.setOnClickListener(null)
                 holder.btnAction.text = "下载"
                 holder.btnAction.visibility = View.VISIBLE
                 holder.btnDelete.visibility = View.GONE
@@ -889,6 +985,8 @@ class DownloadManagerActivity : Activity() {
                 holder.progressBar.progress = progressPercent
                 holder.txtStatus.text = "下载中: $progressPercent%"
                 holder.txtStatus.setTextColor(colorBrand)
+                holder.txtStatus.isClickable = false
+                holder.txtStatus.setOnClickListener(null)
                 holder.btnAction.text = "暂停"
                 holder.btnAction.visibility = View.VISIBLE
                 holder.btnDelete.visibility = View.GONE
@@ -901,6 +999,8 @@ class DownloadManagerActivity : Activity() {
                 holder.progressBar.progress = progressPercent
                 holder.txtStatus.text = "已暂停 ($progressPercent%)"
                 holder.txtStatus.setTextColor(colorTextSecondary)
+                holder.txtStatus.isClickable = false
+                holder.txtStatus.setOnClickListener(null)
                 holder.btnAction.text = "继续"
                 holder.btnAction.visibility = View.VISIBLE
                 holder.btnDelete.visibility = View.VISIBLE
@@ -909,8 +1009,10 @@ class DownloadManagerActivity : Activity() {
             }
             DownloadTask.STATUS_COMPLETED -> {
                 holder.progressBar.visibility = View.GONE
-                holder.txtStatus.text = "已就绪 (0流量复用)"
+                holder.txtStatus.text = "已就绪"
                 holder.txtStatus.setTextColor(colorBrand)
+                holder.txtStatus.isClickable = false
+                holder.txtStatus.setOnClickListener(null)
                 holder.btnAction.text = "安装"
                 holder.btnAction.visibility = View.VISIBLE
                 holder.btnDelete.visibility = View.VISIBLE
@@ -919,8 +1021,13 @@ class DownloadManagerActivity : Activity() {
             }
             DownloadTask.STATUS_FAILED -> {
                 holder.progressBar.visibility = View.GONE
-                holder.txtStatus.text = "下载失败: ${errorMsg ?: "网络异常"}"
+                val finalErr = errorMsg ?: task.errorMsg ?: "网络连接异常"
+                holder.txtStatus.text = "下载失败 (点击查看详情)"
                 holder.txtStatus.setTextColor(Color.parseColor("#DC3545"))
+                holder.txtStatus.isClickable = true
+                holder.txtStatus.setOnClickListener {
+                    showErrorDetailsDialog(task, finalErr)
+                }
                 holder.btnAction.text = "重试"
                 holder.btnAction.visibility = View.VISIBLE
                 holder.btnDelete.visibility = View.VISIBLE
@@ -930,9 +1037,37 @@ class DownloadManagerActivity : Activity() {
         }
     }
 
-    private fun setButtonBgColor(button: Button, color: Int) {
-        val bg = button.background as? GradientDrawable
-        bg?.setColor(color)
+    private fun showErrorDetailsDialog(task: DownloadTask, errorMsg: String) {
+        val details = "名称: ${task.title}\n地址: ${task.url}\n路径: ${task.savePath}\n原因: $errorMsg"
+
+        val tv = TextView(this).apply {
+            text = details
+            textSize = 13f
+            setTextColor(colorTextPrimary)
+            setTextIsSelectable(true)
+            setPadding(dpToPx(16), dpToPx(14), dpToPx(16), dpToPx(14))
+            setLineSpacing(dpToPx(3).toFloat(), 1.0f)
+        }
+
+        val scroll = ScrollView(this).apply {
+            addView(tv)
+        }
+
+        MaterialAlertDialogBuilder(this)
+            .setTitle("失败详情")
+            .setView(scroll)
+            .setPositiveButton("复制") { _, _ ->
+                val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                val clip = android.content.ClipData.newPlainText("下载错误详情", details)
+                clipboard.setPrimaryClip(clip)
+                Toast.makeText(this, "已复制", Toast.LENGTH_SHORT).show()
+            }
+            .setNegativeButton("关闭", null)
+            .show()
+    }
+
+    private fun setButtonBgColor(button: MaterialButton, color: Int) {
+        button.setBackgroundColor(color)
     }
 
     private fun dpToPx(dp: Int): Int {
@@ -952,10 +1087,10 @@ class DownloadManagerActivity : Activity() {
     }
 
     private data class PackageViewHolder(
-        val progressBar: ProgressBar,
+        val progressBar: LinearProgressIndicator,
         val txtStatus: TextView,
-        val btnAction: Button,
-        val btnDelete: Button,
-        val btnOpenDir: Button
+        val btnAction: MaterialButton,
+        val btnDelete: MaterialButton,
+        val btnOpenDir: MaterialButton
     )
 }

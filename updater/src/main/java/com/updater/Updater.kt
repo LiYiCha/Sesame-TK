@@ -16,6 +16,7 @@ import android.view.ViewGroup
 import android.widget.Toast
 import android.text.method.LinkMovementMethod
 import android.widget.TextView
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.updater.config.UpdaterConfigManager
 import com.updater.model.UpdateInfo
 import com.updater.model.UpdatePackage
@@ -35,9 +36,13 @@ class Updater private constructor(
     private val defaultSources: List<UpdateSource>
 ) {
 
-    private val client = OkHttpClient()
+    private val client = OkHttpClient.Builder()
+        .connectTimeout(15, java.util.concurrent.TimeUnit.SECONDS)
+        .readTimeout(20, java.util.concurrent.TimeUnit.SECONDS)
+        .build()
     private val handler = Handler(Looper.getMainLooper())
     val configManager = UpdaterConfigManager(context)
+    private var lastOpenCenterTime: Long = 0
 
     init {
         // 初始化并持久化默认预设更新源
@@ -45,6 +50,8 @@ class Updater private constructor(
     }
 
     companion object {
+        private val isChecking = java.util.concurrent.atomic.AtomicBoolean(false)
+
         @Volatile
         var lastUpdateInfo: UpdateInfo? = null
 
@@ -301,22 +308,40 @@ class Updater private constructor(
     }
 
     /**
-     * 核心异步检查更新方法（根据当前激活的更新源类型自动分发）
+     * 核心检查更新方法（单线程互斥，避免并发重复点击）
      */
     fun checkUpdate(
         onUpdateAvailable: (UpdateInfo) -> Unit,
         onNoUpdate: () -> Unit,
         onError: (String) -> Unit
     ) {
+        if (!isChecking.compareAndSet(false, true)) {
+            handler.post { onError("正在检查更新中，请勿重复点击") }
+            return
+        }
+
+        val wrappedOnAvailable: (UpdateInfo) -> Unit = {
+            isChecking.set(false)
+            onUpdateAvailable(it)
+        }
+        val wrappedOnNoUpdate: () -> Unit = {
+            isChecking.set(false)
+            onNoUpdate()
+        }
+        val wrappedOnError: (String) -> Unit = {
+            isChecking.set(false)
+            onError(it)
+        }
+
         val source = configManager.getSelectedSource()
         if (source == null) {
-            handler.post { onError("未配置有效的更新源") }
+            handler.post { wrappedOnError("未配置有效更新源") }
             return
         }
 
         when (source.type) {
-            UpdateSourceType.CLOUDFLARE_R2 -> checkCloudflareR2(source, onUpdateAvailable, onNoUpdate, onError)
-            UpdateSourceType.GITHUB_RELEASES -> checkGitHubRelease(source, onUpdateAvailable, onNoUpdate, onError)
+            UpdateSourceType.CLOUDFLARE_R2 -> checkCloudflareR2(source, wrappedOnAvailable, wrappedOnNoUpdate, wrappedOnError)
+            UpdateSourceType.GITHUB_RELEASES -> checkGitHubRelease(source, wrappedOnAvailable, wrappedOnNoUpdate, wrappedOnError)
         }
     }
 
@@ -332,12 +357,13 @@ class Updater private constructor(
         val baseHost = source.url.trimEnd('/')
         val url = "$baseHost/api/update?app_id=$appId"
 
-        val request = Request.Builder()
-            .url(url)
-            .get()
-            .build()
+        val requestBuilder = Request.Builder().url(url).get()
+        val token = configManager.adminToken
+        if (token.isNotEmpty()) {
+            requestBuilder.addHeader("Authorization", "Bearer $token")
+        }
 
-        client.newCall(request).enqueue(object : Callback {
+        client.newCall(requestBuilder.build()).enqueue(object : Callback {
             override fun onFailure(call: Call, e: IOException) {
                 handler.post { onError(e.message ?: "网络连接失败") }
             }
@@ -345,7 +371,9 @@ class Updater private constructor(
             override fun onResponse(call: Call, response: Response) {
                 val bodyStr = response.body?.string()
                 if (!response.isSuccessful || bodyStr == null) {
-                    handler.post { onError("HTTP ${response.code}") }
+                    val code = response.code
+                    val msg = if (code == 401) "HTTP 401 (更新源未授权或需鉴权)" else "HTTP $code"
+                    handler.post { onError(msg) }
                     return
                 }
 
@@ -371,7 +399,7 @@ class Updater private constructor(
                     val isForceUpdate = json.optBoolean("isForceUpdate")
                     val lastUpdated = json.optLong("lastUpdated")
 
-                    if (appIdVal.isEmpty() || latestVersionCode <= 0) {
+                    if (appIdVal.isEmpty() || (latestVersionCode <= 0 && latestVersionName.isEmpty())) {
                         handler.post { onNoUpdate() }
                         return
                     }
@@ -391,6 +419,25 @@ class Updater private constructor(
                                     downloadUrl = pkgJson.optString("downloadUrl"),
                                     apkSize = pkgJson.optLong("apkSize"),
                                     apkMd5 = pkgJson.optString("apkMd5")
+                                )
+                            )
+                        }
+                    }
+
+                    // 兼容传统单包后端格式 (根节点直接声明 downloadUrl)
+                    if (packagesList.isEmpty()) {
+                        val singleUrl = json.optString("downloadUrl")
+                        if (singleUrl.isNotEmpty()) {
+                            packagesList.add(
+                                UpdatePackage(
+                                    packageId = "main",
+                                    packageName = if (appName.isNotEmpty()) "$appName 安装包" else "标准安装包",
+                                    versionName = latestVersionName,
+                                    versionCode = latestVersionCode,
+                                    description = "标准版安装包",
+                                    downloadUrl = singleUrl,
+                                    apkSize = json.optLong("apkSize", 0L),
+                                    apkMd5 = json.optString("apkMd5", "")
                                 )
                             )
                         }
@@ -566,21 +613,21 @@ class Updater private constructor(
             val updateMessage = if (updateInfo.updateLog.isNotBlank()) {
                 MarkdownUtils.renderMarkdown(targetContext, updateInfo.updateLog)
             } else {
-                "检测到新版本发布，可进入下载中心获取更新。"
+                "检测到新版本发布。"
             }
 
-            val builder = AlertDialog.Builder(targetContext).apply {
+            val builder = MaterialAlertDialogBuilder(targetContext).apply {
                 setTitle("发现新版本 v${updateInfo.latestVersionName}")
                 setMessage(updateMessage)
                 setCancelable(!updateInfo.isForceUpdate)
 
-                setPositiveButton("立即查看") { dialog, _ ->
+                setPositiveButton("查看") { dialog, _ ->
                     dialog.dismiss()
                     openDownloadCenter(targetContext, updateInfo)
                 }
 
                 if (!updateInfo.isForceUpdate) {
-                    setNegativeButton("稍后再说") { dialog, _ ->
+                    setNegativeButton("稍后") { dialog, _ ->
                         dialog.dismiss()
                     }
                 }
@@ -641,6 +688,12 @@ class Updater private constructor(
     }
 
     fun openDownloadCenter(context: Context, updateInfo: UpdateInfo? = null) {
+        val now = System.currentTimeMillis()
+        if (now - lastOpenCenterTime < 800) {
+            return
+        }
+        lastOpenCenterTime = now
+
         val targetInfo = updateInfo ?: lastUpdateInfo ?: configManager.getCachedUpdateInfo()
         val currentSource = configManager.getSelectedSource()
         val intent = Intent(context, DownloadManagerActivity::class.java).apply {

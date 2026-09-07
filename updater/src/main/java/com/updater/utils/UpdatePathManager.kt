@@ -95,7 +95,7 @@ object UpdatePathManager {
         }
 
         try {
-            val chooser = Intent.createChooser(intents.last(), "选择文件管理器打开更新目录")
+            val chooser = Intent.createChooser(intents.last(), "打开更新目录")
             chooser.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             context.startActivity(chooser)
         } catch (_: Exception) {

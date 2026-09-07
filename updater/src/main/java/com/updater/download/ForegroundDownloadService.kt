@@ -159,16 +159,30 @@ class ForegroundDownloadService : Service() {
             requestBuilder.addHeader("Range", "bytes=$downloaded-")
         }
 
+        val config = com.updater.config.UpdaterConfigManager(this)
+        val token = config.adminToken
+        if (token.isNotEmpty()) {
+            requestBuilder.addHeader("Authorization", "Bearer $token")
+        }
+
         val call = client.newCall(requestBuilder.build())
         activeCalls[task.id] = call
 
         try {
             val response = call.execute()
             if (!response.isSuccessful && response.code != 206) {
-                throw Exception("HTTP ${response.code}")
+                val code = response.code
+                val err = when (code) {
+                    401 -> "HTTP 401 (未授权: 需要登录或鉴权已失效)"
+                    403 -> "HTTP 403 (禁止访问: 无下载权限)"
+                    404 -> "HTTP 404 (下载链接不存在或文件已下架)"
+                    500, 502, 503, 504 -> "HTTP $code (云端服务器故障)"
+                    else -> "HTTP $code (${response.message.ifEmpty { "请求失败" }})"
+                }
+                throw Exception(err)
             }
 
-            val responseBody = response.body ?: throw Exception("响应体为空")
+            val responseBody = response.body ?: throw Exception("响应体为空，无法读取数据")
 
             val raf = RandomAccessFile(tempFile, "rw")
             if (response.code == 206) {
@@ -204,7 +218,8 @@ class ForegroundDownloadService : Service() {
 
             if (ApkInstaller.verifyApkMd5(tempFile, task.fileMd5)) {
                 task.status = DownloadTask.STATUS_COMPLETED
-                dbHelper.updateTaskProgress(task.id, task.downloadedBytes, DownloadTask.STATUS_COMPLETED)
+                task.errorMsg = null
+                dbHelper.updateTaskProgress(task.id, task.downloadedBytes, DownloadTask.STATUS_COMPLETED, null)
                 sendProgressBroadcast(task)
                 UpdaterLog.i("下载完成且校验通过: ${tempFile.name}")
                 // 尝试直接调起系统安装 (隔离异常，坚决不污染已完成的下载状态)
@@ -214,18 +229,29 @@ class ForegroundDownloadService : Service() {
                     UpdaterLog.e("下载完成后调起安装提示异常: ${installEx.message}", installEx)
                 }
             } else {
+                val actualMd5 = ApkInstaller.calculateFileMd5(tempFile)
+                val md5Err = "MD5 校验不匹配 (期望: ${task.fileMd5.take(8)}..., 实际: ${actualMd5.take(8)}...)"
                 task.status = DownloadTask.STATUS_FAILED
-                dbHelper.updateTaskProgress(task.id, task.downloadedBytes, DownloadTask.STATUS_FAILED)
-                sendProgressBroadcast(task, "MD5 校验失败")
-                UpdaterLog.e("MD5 校验失败: ${tempFile.name}")
+                task.errorMsg = md5Err
+                dbHelper.updateTaskProgress(task.id, task.downloadedBytes, DownloadTask.STATUS_FAILED, md5Err)
+                sendProgressBroadcast(task, md5Err)
+                UpdaterLog.e("MD5 校验失败: ${tempFile.name}, $md5Err")
             }
 
         } catch (e: Exception) {
             if (!call.isCanceled()) {
+                val detailError = when {
+                    e is java.net.UnknownHostException -> "无法解析域名，请检查网络连接"
+                    e is java.net.SocketTimeoutException -> "网络连接或读取超时"
+                    e is java.net.ConnectException -> "连接服务器失败: ${e.message ?: "连接被拒绝"}"
+                    !e.message.isNullOrBlank() -> e.message!!
+                    else -> e.javaClass.simpleName
+                }
                 task.status = DownloadTask.STATUS_FAILED
-                dbHelper.updateTaskProgress(task.id, task.downloadedBytes, DownloadTask.STATUS_FAILED)
-                sendProgressBroadcast(task, e.message ?: "下载错误")
-                UpdaterLog.e("下载异常: ${e.message}", e)
+                task.errorMsg = detailError
+                dbHelper.updateTaskProgress(task.id, task.downloadedBytes, DownloadTask.STATUS_FAILED, detailError)
+                sendProgressBroadcast(task, detailError)
+                UpdaterLog.e("下载异常: $detailError", e)
             }
         } finally {
             activeCalls.remove(task.id)

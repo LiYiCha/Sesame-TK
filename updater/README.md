@@ -4,20 +4,20 @@
 
 ---
 
-## ✨ 功能特性
+## 功能特性
 
 1. **多包联发 (Release Groups)**：支持一次更新发布中包含多个关联的安装包（如：原版 APK、LSPatch 便携版 APK、Xposed 插件包），用户可在界面中统一查看、按需下载。
 2. **断点续传**：基于 OkHttp 并采用 HTTP `Range` 头请求，支持下载暂停、恢复与网络异常重试，有效节约网络带宽与 Cloudflare R2 请求次数。
-3. **轻量且低耦**：移除了对重型三方库（如 Gson、AppCompat、Material Design）的依赖，改用原生 Activity 布局、JSON 解析和基础 Ktx，体积极小，避免依赖冲突。
+3. **轻量且低耦**：采用原生 Activity 布局、JSON 解析和基础 Ktx，体积极小，避免依赖冲突。
 4. **前台服务下载**：采用符合 Android 14 最新规范的前台数据同步服务 (`FOREGROUND_SERVICE_DATA_SYNC`)，并在系统通知栏显示实时进度，防后台杀死。
 5. **本地进度缓存**：内置 SQLite 数据库，即便应用退出或手机重启，仍能保留下载进度和状态。
 6. **MD5 安全校验**：下载完成后自动比对文件 MD5，防止文件受损或篡改。
 7. **全版本安全安装**：利用 `FileProvider` 安全安装 APK，支持并适配 Android 7.0 ~ Android 14+。
-8. **Markdown 富文本版本说明**：内置 `MarkdownUtils`，更新弹窗与下载管理中心原生支持标题、加粗、斜体、列表、代码块及超链接点击交互。
+8. **Markdown 富文本版本说明**：内置 `MarkdownUtils`，更新弹窗与下载管理中心原生支持标题 (含 #### 四级标题)、加粗、斜体、列表、代码块及超链接点击交互。
 
 ---
 
-## 📂 模块结构
+## 模块结构
 
 ```text
 updater/
@@ -120,7 +120,7 @@ dependencies {
 
 ---
 
-## 🚀 代码调用指南
+## 代码调用指南
 
 ### 1. 初始化更新器（支持多更新源：Cloudflare R2 + GitHub Releases）
 在 Application 或首个 Activity 中配置更新源并构建单例 `Updater`：
@@ -173,7 +173,7 @@ btnSettings.setOnClickListener {
 
 ---
 
-## 🌐 后端数据接口契约
+## 后端数据接口契约
 
 `Updater` 默认向您的 Cloudflare 后端发起 `GET /api/update?app_id={appId}` 请求。
 
@@ -220,7 +220,7 @@ btnSettings.setOnClickListener {
 
 ---
 
-## 🔒 混淆规则 (Proguard Rules)
+## 混淆规则 (Proguard Rules)
 
 如果您的 App 开启了混淆，本模块在打包为 AAR 时会自动带入混淆保护规则。若您是直接引入源码，请在主项目的 `proguard-rules.pro` 中添加以下规则：
 

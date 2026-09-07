@@ -81,10 +81,11 @@ object MarkdownUtils {
 
             var processedLine = escapeHtml(line)
 
-            // 1. 标题识别
-            val isHeading3 = processedLine.startsWith("### ")
-            val isHeading2 = !isHeading3 && processedLine.startsWith("## ")
-            val isHeading1 = !isHeading3 && !isHeading2 && processedLine.startsWith("# ")
+            // 1. 标题识别 (#, ##, ###, ####)
+            val isHeading4 = processedLine.startsWith("#### ")
+            val isHeading3 = !isHeading4 && processedLine.startsWith("### ")
+            val isHeading2 = !isHeading4 && !isHeading3 && processedLine.startsWith("## ")
+            val isHeading1 = !isHeading4 && !isHeading3 && !isHeading2 && processedLine.startsWith("# ")
 
             if (isHeading1) {
                 val content = parseInline(processedLine.substring(2).trim())
@@ -97,6 +98,10 @@ object MarkdownUtils {
             } else if (isHeading3) {
                 val content = parseInline(processedLine.substring(4).trim())
                 htmlBuilder.append("<p><b>").append(content).append("</b></p>")
+                continue
+            } else if (isHeading4) {
+                val content = parseInline(processedLine.substring(5).trim())
+                htmlBuilder.append("<p><b><small>").append(content).append("</small></b></p>")
                 continue
             }
 

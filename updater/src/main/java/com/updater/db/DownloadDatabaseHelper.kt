@@ -14,7 +14,8 @@ data class DownloadTask(
     val totalBytes: Long,      // File total size
     var downloadedBytes: Long, // Downloaded size
     var status: Int,           // 0: PENDING, 1: DOWNLOADING, 2: PAUSED, 3: COMPLETED, 4: FAILED
-    val fileMd5: String        // Expected MD5
+    val fileMd5: String,       // Expected MD5
+    var errorMsg: String? = null // Detailed error reason
 ) : Serializable {
     companion object {
         const val STATUS_PENDING = 0
@@ -29,7 +30,7 @@ class DownloadDatabaseHelper(context: Context) : SQLiteOpenHelper(context, DATAB
 
     companion object {
         private const val DATABASE_NAME = "updater_downloads.db"
-        private const val DATABASE_VERSION = 1
+        private const val DATABASE_VERSION = 2
         
         private const val TABLE_TASKS = "download_tasks"
         private const val COLUMN_ID = "id"
@@ -40,6 +41,7 @@ class DownloadDatabaseHelper(context: Context) : SQLiteOpenHelper(context, DATAB
         private const val COLUMN_DOWNLOADED_BYTES = "downloaded_bytes"
         private const val COLUMN_STATUS = "status"
         private const val COLUMN_FILE_MD5 = "file_md5"
+        private const val COLUMN_ERROR_MSG = "error_msg"
     }
 
     override fun onCreate(db: SQLiteDatabase) {
@@ -52,15 +54,19 @@ class DownloadDatabaseHelper(context: Context) : SQLiteOpenHelper(context, DATAB
                 $COLUMN_TOTAL_BYTES INTEGER,
                 $COLUMN_DOWNLOADED_BYTES INTEGER,
                 $COLUMN_STATUS INTEGER,
-                $COLUMN_FILE_MD5 TEXT
+                $COLUMN_FILE_MD5 TEXT,
+                $COLUMN_ERROR_MSG TEXT
             )
         """.trimIndent()
         db.execSQL(createTableQuery)
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
-        db.execSQL("DROP TABLE IF EXISTS $TABLE_TASKS")
-        onCreate(db)
+        if (oldVersion < 2) {
+            try {
+                db.execSQL("ALTER TABLE $TABLE_TASKS ADD COLUMN $COLUMN_ERROR_MSG TEXT")
+            } catch (_: Exception) {}
+        }
     }
 
     @Synchronized
@@ -75,6 +81,7 @@ class DownloadDatabaseHelper(context: Context) : SQLiteOpenHelper(context, DATAB
             put(COLUMN_DOWNLOADED_BYTES, task.downloadedBytes)
             put(COLUMN_STATUS, task.status)
             put(COLUMN_FILE_MD5, task.fileMd5)
+            put(COLUMN_ERROR_MSG, task.errorMsg)
         }
         db.insertWithOnConflict(TABLE_TASKS, null, values, SQLiteDatabase.CONFLICT_REPLACE)
     }
@@ -94,6 +101,8 @@ class DownloadDatabaseHelper(context: Context) : SQLiteOpenHelper(context, DATAB
         
         var task: DownloadTask? = null
         if (cursor.moveToFirst()) {
+            val errorMsgIndex = cursor.getColumnIndex(COLUMN_ERROR_MSG)
+            val err = if (errorMsgIndex != -1) cursor.getString(errorMsgIndex) else null
             task = DownloadTask(
                 id = cursor.getString(cursor.getColumnIndexOrThrow(COLUMN_ID)),
                 url = cursor.getString(cursor.getColumnIndexOrThrow(COLUMN_URL)),
@@ -102,7 +111,8 @@ class DownloadDatabaseHelper(context: Context) : SQLiteOpenHelper(context, DATAB
                 totalBytes = cursor.getLong(cursor.getColumnIndexOrThrow(COLUMN_TOTAL_BYTES)),
                 downloadedBytes = cursor.getLong(cursor.getColumnIndexOrThrow(COLUMN_DOWNLOADED_BYTES)),
                 status = cursor.getInt(cursor.getColumnIndexOrThrow(COLUMN_STATUS)),
-                fileMd5 = cursor.getString(cursor.getColumnIndexOrThrow(COLUMN_FILE_MD5))
+                fileMd5 = cursor.getString(cursor.getColumnIndexOrThrow(COLUMN_FILE_MD5)),
+                errorMsg = err
             )
         }
         cursor.close()
@@ -116,6 +126,8 @@ class DownloadDatabaseHelper(context: Context) : SQLiteOpenHelper(context, DATAB
         val cursor = db.query(TABLE_TASKS, null, null, null, null, null, null)
         
         while (cursor.moveToNext()) {
+            val errorMsgIndex = cursor.getColumnIndex(COLUMN_ERROR_MSG)
+            val err = if (errorMsgIndex != -1) cursor.getString(errorMsgIndex) else null
             val task = DownloadTask(
                 id = cursor.getString(cursor.getColumnIndexOrThrow(COLUMN_ID)),
                 url = cursor.getString(cursor.getColumnIndexOrThrow(COLUMN_URL)),
@@ -124,7 +136,8 @@ class DownloadDatabaseHelper(context: Context) : SQLiteOpenHelper(context, DATAB
                 totalBytes = cursor.getLong(cursor.getColumnIndexOrThrow(COLUMN_TOTAL_BYTES)),
                 downloadedBytes = cursor.getLong(cursor.getColumnIndexOrThrow(COLUMN_DOWNLOADED_BYTES)),
                 status = cursor.getInt(cursor.getColumnIndexOrThrow(COLUMN_STATUS)),
-                fileMd5 = cursor.getString(cursor.getColumnIndexOrThrow(COLUMN_FILE_MD5))
+                fileMd5 = cursor.getString(cursor.getColumnIndexOrThrow(COLUMN_FILE_MD5)),
+                errorMsg = err
             )
             tasks.add(task)
         }
@@ -133,11 +146,14 @@ class DownloadDatabaseHelper(context: Context) : SQLiteOpenHelper(context, DATAB
     }
 
     @Synchronized
-    fun updateTaskProgress(id: String, downloadedBytes: Long, status: Int) {
+    fun updateTaskProgress(id: String, downloadedBytes: Long, status: Int, errorMsg: String? = null) {
         val db = writableDatabase
         val values = ContentValues().apply {
             put(COLUMN_DOWNLOADED_BYTES, downloadedBytes)
             put(COLUMN_STATUS, status)
+            if (errorMsg != null) {
+                put(COLUMN_ERROR_MSG, errorMsg)
+            }
         }
         db.update(TABLE_TASKS, values, "$COLUMN_ID = ?", arrayOf(id))
     }
