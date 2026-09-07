@@ -26,3 +26,8 @@
 -keepnames class * implements java.io.Serializable
 -keepclassmembers class * implements java.io.Serializable { *; }
 -dontwarn java.beans.ConstructorProperties, java.beans.Transient
+
+# ---------- Updater 更新模块 ----------
+-keep class com.updater.** { *; }
+-keepclassmembers class com.updater.** { *; }
+-dontwarn com.updater.**

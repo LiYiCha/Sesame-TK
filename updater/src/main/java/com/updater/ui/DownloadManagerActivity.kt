@@ -26,7 +26,6 @@ import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import android.text.method.LinkMovementMethod
-import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.updater.Updater
 import com.updater.config.UpdaterConfigManager
 import com.updater.db.DownloadDatabaseHelper
@@ -99,58 +98,149 @@ class DownloadManagerActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        dbHelper = DownloadDatabaseHelper(this)
-        configManager = UpdaterConfigManager(this)
+        try {
+            dbHelper = DownloadDatabaseHelper(this)
+            configManager = UpdaterConfigManager(this)
 
-        initThemeColors()
-        setupSystemBar()
+            initThemeColors()
 
-        var info = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            intent.getSerializableExtra("update_info", UpdateInfo::class.java)
-        } else {
-            @Suppress("DEPRECATION")
-            intent.getSerializableExtra("update_info") as? UpdateInfo
+            // 优先从内存单例与本地持久化安全读取，彻底规避 Intent 反序列化崩溃
+            var info: UpdateInfo? = Updater.lastUpdateInfo ?: try {
+                configManager.getCachedUpdateInfo()
+            } catch (_: Throwable) { null }
+
+            if (info == null) {
+                try {
+                    info = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                        intent.getSerializableExtra("update_info", UpdateInfo::class.java)
+                    } else {
+                        @Suppress("DEPRECATION")
+                        intent.getSerializableExtra("update_info") as? UpdateInfo
+                    }
+                } catch (_: Throwable) {}
+            }
+
+            updateInfo = info
+            if (info != null) {
+                try {
+                    configManager.saveCachedUpdateInfo(info)
+                } catch (_: Throwable) {}
+            }
+
+            rootView = createRootLayout()
+            setContentView(rootView)
+            setupSystemBar()
+
+            Thread {
+                try {
+                    ApkCleanupManager.checkAndCleanOnStartup(this@DownloadManagerActivity)
+                } catch (_: Throwable) {}
+            }.start()
+
+            try {
+                initPackageTasks()
+            } catch (e: Throwable) {
+                UpdaterLog.e("初始化任务列表失败", e)
+            }
+        } catch (e: Throwable) {
+            UpdaterLog.e("DownloadManagerActivity 初始化异常", e)
+            try {
+                setContentView(createSafeFallbackView(e.message ?: "页面加载异常"))
+            } catch (_: Throwable) {
+                Toast.makeText(this, "进入更新管理失败: ${e.message}", Toast.LENGTH_LONG).show()
+                finish()
+            }
         }
+    }
 
-        if (info == null) {
-            info = Updater.lastUpdateInfo ?: configManager.getCachedUpdateInfo()
+    private fun createSafeFallbackView(errorMessage: String): View {
+        val root = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER
+            setPadding(dpToPx(24), dpToPx(24), dpToPx(24), dpToPx(24))
+            setBackgroundColor(if (isNightMode) Color.BLACK else Color.WHITE)
         }
-        updateInfo = info
-        if (info != null) {
-            configManager.saveCachedUpdateInfo(info)
+        val tvTitle = TextView(this).apply {
+            text = "下载管理页面加载异常"
+            textSize = 18f
+            typeface = Typeface.DEFAULT_BOLD
+            setTextColor(if (isNightMode) Color.WHITE else Color.BLACK)
+            gravity = Gravity.CENTER
+            setPadding(0, 0, 0, dpToPx(12))
         }
-
-        rootView = createRootLayout()
-        setContentView(rootView)
-
-        Thread {
-            ApkCleanupManager.checkAndCleanOnStartup(this@DownloadManagerActivity)
-        }.start()
-
-        initPackageTasks()
+        val tvMsg = TextView(this).apply {
+            text = errorMessage
+            textSize = 13f
+            setTextColor(Color.GRAY)
+            gravity = Gravity.CENTER
+            setPadding(0, 0, 0, dpToPx(24))
+        }
+        val btnRetry = TextView(this).apply {
+            text = "重试"
+            textSize = 14f
+            typeface = Typeface.DEFAULT_BOLD
+            setTextColor(Color.WHITE)
+            gravity = Gravity.CENTER
+            background = GradientDrawable().apply {
+                cornerRadius = dpToPx(8).toFloat()
+                setColor(Color.parseColor("#A5D6A7"))
+            }
+            setTextColor(Color.parseColor("#1B3320"))
+            setPadding(dpToPx(24), dpToPx(10), dpToPx(24), dpToPx(10))
+            setOnClickListener { recreate() }
+        }
+        val btnBack = TextView(this).apply {
+            text = "返回上一页"
+            textSize = 14f
+            setTextColor(Color.GRAY)
+            gravity = Gravity.CENTER
+            setPadding(dpToPx(24), dpToPx(16), dpToPx(24), dpToPx(12))
+            setOnClickListener { finish() }
+        }
+        root.addView(tvTitle)
+        root.addView(tvMsg)
+        root.addView(btnRetry)
+        root.addView(btnBack)
+        return root
     }
 
     private fun initThemeColors() {
-        isNightMode = (resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES
-        palette = ThemeUtils.M3Palette(this)
-        colorBg = palette.surface
-        colorCard = palette.surface
-        colorTextPrimary = palette.onSurface
-        colorTextSecondary = palette.onSurfaceVariant
-        colorBrand = palette.primary
-        colorBorder = palette.outlineVariant
-        colorCardInner = palette.surfaceVariant
-        colorError = palette.error
-        colorWarning = palette.tertiary
+        try {
+            isNightMode = (resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES
+            palette = ThemeUtils.M3Palette(this)
+            colorBg = palette.surface
+            colorCard = palette.surface
+            colorTextPrimary = palette.onSurface
+            colorTextSecondary = palette.onSurfaceVariant
+            colorBrand = palette.primary
+            colorBorder = palette.outlineVariant
+            colorCardInner = palette.surfaceVariant
+            colorError = palette.error
+            colorWarning = palette.tertiary
+        } catch (_: Throwable) {
+            isNightMode = false
+            colorBg = if (isNightMode) Color.parseColor("#121212") else Color.parseColor("#F5F5F5")
+            colorCard = if (isNightMode) Color.parseColor("#1E1E1E") else Color.WHITE
+            colorTextPrimary = if (isNightMode) Color.WHITE else Color.BLACK
+            colorTextSecondary = if (isNightMode) Color.LTGRAY else Color.DKGRAY
+            colorBrand = Color.parseColor("#A5D6A7")
+            colorBorder = if (isNightMode) Color.parseColor("#333333") else Color.parseColor("#E0E0E0")
+            colorCardInner = if (isNightMode) Color.parseColor("#2C2C2C") else Color.parseColor("#F0F0F0")
+            colorError = Color.parseColor("#B3261E")
+            colorWarning = Color.parseColor("#E65100")
+        }
     }
 
     private fun setupSystemBar() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-            window.statusBarColor = Color.TRANSPARENT
-            WindowCompat.setDecorFitsSystemWindows(window, false)
-            val controller = WindowCompat.getInsetsController(window, window.decorView)
-            controller.isAppearanceLightStatusBars = !isNightMode
-        }
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                window.statusBarColor = Color.TRANSPARENT
+                WindowCompat.setDecorFitsSystemWindows(window, false)
+                val decor = window.decorView ?: return
+                val controller = WindowCompat.getInsetsController(window, decor)
+                controller.isAppearanceLightStatusBars = !isNightMode
+            }
+        } catch (_: Throwable) {}
     }
 
     private val installReceiver = object : BroadcastReceiver() {
@@ -555,7 +645,7 @@ class DownloadManagerActivity : AppCompatActivity() {
                 text = label
                 textSize = 12f
                 typeface = Typeface.DEFAULT_BOLD
-                setTextColor(if (isPrimary) Color.WHITE else colorTextPrimary)
+                setTextColor(if (isPrimary) palette.onPrimary else colorTextPrimary)
                 gravity = Gravity.CENTER
                 background = bg
                 isClickable = true
@@ -694,16 +784,22 @@ class DownloadManagerActivity : AppCompatActivity() {
             headerContent.addView(txtVersionTag)
 
             val txtChangelog = TextView(this).apply {
-                val mdContent = if (info.updateLog.isNotBlank()) {
-                    MarkdownUtils.renderMarkdown(this@DownloadManagerActivity, info.updateLog)
-                } else {
-                    "优化了用户体验和细节。"
+                val mdContent = try {
+                    if (info.updateLog.isNotBlank()) {
+                        MarkdownUtils.renderMarkdown(this@DownloadManagerActivity, info.updateLog)
+                    } else {
+                        "优化了用户体验和细节。"
+                    }
+                } catch (_: Throwable) {
+                    info.updateLog.ifBlank { "优化了用户体验和细节。" }
                 }
                 text = mdContent
                 textSize = 12f
                 setTextColor(colorTextSecondary)
                 setPadding(0, dpToPx(6), 0, 0)
-                movementMethod = LinkMovementMethod.getInstance()
+                try {
+                    movementMethod = LinkMovementMethod.getInstance()
+                } catch (_: Throwable) {}
                 setLineSpacing(dpToPx(2).toFloat(), 1.0f)
             }
             headerContent.addView(txtChangelog)
@@ -775,7 +871,7 @@ class DownloadManagerActivity : AppCompatActivity() {
             text = label
             textSize = 12f
             typeface = Typeface.DEFAULT_BOLD
-            this.setTextColor(if (isPrimary) Color.WHITE else textColor)
+            this.setTextColor(if (isPrimary) palette.onPrimary else textColor)
             gravity = Gravity.CENTER
             background = bg
             isClickable = true
@@ -845,20 +941,22 @@ class DownloadManagerActivity : AppCompatActivity() {
             max = 100
             progress = 0
             isIndeterminate = false
-            val progressBg = GradientDrawable().apply {
-                setColor(colorCardInner)
-                cornerRadius = dpToPx(3).toFloat()
-            }
-            val progressFg = GradientDrawable().apply {
-                setColor(colorBrand)
-                cornerRadius = dpToPx(3).toFloat()
-            }
-            val clipFg = ClipDrawable(progressFg, Gravity.START, ClipDrawable.HORIZONTAL)
-            val layerDrawable = LayerDrawable(arrayOf(progressBg, clipFg)).apply {
-                setId(0, android.R.id.background)
-                setId(1, android.R.id.progress)
-            }
-            progressDrawable = layerDrawable
+            try {
+                val progressBg = GradientDrawable().apply {
+                    setColor(colorCardInner)
+                    cornerRadius = dpToPx(3).toFloat()
+                }
+                val progressFg = GradientDrawable().apply {
+                    setColor(colorBrand)
+                    cornerRadius = dpToPx(3).toFloat()
+                }
+                val clipFg = ClipDrawable(progressFg, Gravity.START, ClipDrawable.HORIZONTAL)
+                val layerDrawable = LayerDrawable(arrayOf(progressBg, clipFg)).apply {
+                    setId(0, android.R.id.background)
+                    setId(1, android.R.id.progress)
+                }
+                progressDrawable = layerDrawable
+            } catch (_: Throwable) {}
             visibility = View.GONE
             val lp = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dpToPx(6)).apply {
                 bottomMargin = dpToPx(8)
@@ -1017,7 +1115,7 @@ class DownloadManagerActivity : AppCompatActivity() {
         }
 
         try {
-            MaterialAlertDialogBuilder(this)
+            androidx.appcompat.app.AlertDialog.Builder(this)
                 .setTitle("失败详情")
                 .setView(scroll)
                 .setPositiveButton("复制") { _, _ ->
@@ -1029,17 +1127,19 @@ class DownloadManagerActivity : AppCompatActivity() {
                 .setNegativeButton("关闭", null)
                 .show()
         } catch (_: Throwable) {
-            AlertDialog.Builder(this)
-                .setTitle("失败详情")
-                .setView(scroll)
-                .setPositiveButton("复制") { _, _ ->
-                    val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
-                    val clip = android.content.ClipData.newPlainText("下载错误详情", details)
-                    clipboard.setPrimaryClip(clip)
-                    Toast.makeText(this, "已复制", Toast.LENGTH_SHORT).show()
-                }
-                .setNegativeButton("关闭", null)
-                .show()
+            try {
+                android.app.AlertDialog.Builder(this)
+                    .setTitle("失败详情")
+                    .setView(scroll)
+                    .setPositiveButton("复制") { _, _ ->
+                        val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                        val clip = android.content.ClipData.newPlainText("下载错误详情", details)
+                        clipboard.setPrimaryClip(clip)
+                        Toast.makeText(this, "已复制", Toast.LENGTH_SHORT).show()
+                    }
+                    .setNegativeButton("关闭", null)
+                    .show()
+            } catch (_: Throwable) {}
         }
     }
 
@@ -1048,7 +1148,7 @@ class DownloadManagerActivity : AppCompatActivity() {
             cornerRadius = dpToPx(8).toFloat()
             setColor(color)
         }
-        button.setTextColor(Color.WHITE)
+        button.setTextColor(if (color == colorBrand) palette.onPrimary else Color.WHITE)
     }
 
     private fun dpToPx(dp: Int): Int {

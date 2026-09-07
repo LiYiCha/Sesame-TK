@@ -1,7 +1,6 @@
 package com.updater.ui
 
 import android.content.Context
-import android.content.res.ColorStateList
 import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
@@ -11,24 +10,21 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.EditText
 import android.widget.LinearLayout
+import android.widget.RadioButton
 import android.widget.RadioGroup
 import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
 import androidx.annotation.ColorInt
 import androidx.appcompat.app.AlertDialog
-import com.google.android.material.button.MaterialButton
-import com.google.android.material.card.MaterialCardView
-import com.google.android.material.dialog.MaterialAlertDialogBuilder
-import com.google.android.material.radiobutton.MaterialRadioButton
+import com.updater.config.UpdaterConfigManager
 import com.updater.model.UpdateSource
 import com.updater.model.UpdateSourceType
-import com.updater.config.UpdaterConfigManager
 import java.util.UUID
 
 /**
  * 更新源配置与检测模式设置对话框
- * 全面遵循 Material 3 设计规范，通过 ThemeUtils 动态适配宿主主题与深色模式，杜绝硬编码颜色。
+ * 纯原生控件实现，彻底移除 Material 组件依赖，杜绝 colorPrimary 检查闪退。
  */
 object SourceSettingsDialog {
 
@@ -38,100 +34,97 @@ object SourceSettingsDialog {
 
         val colorSurface = palette.surface
         val colorSurfaceVariant = palette.surfaceVariant
-        val colorPrimary = palette.primary
         val colorOnSurface = palette.onSurface
         val colorOnSurfaceVariant = palette.onSurfaceVariant
+        val colorPrimary = palette.primary
         val colorOutline = palette.outline
-
-        var dialog: AlertDialog? = null
 
         val rootLayout = LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dpToPx(context, 20), dpToPx(context, 16), dpToPx(context, 20), dpToPx(context, 16))
+            setPadding(dpToPx(context, 18), dpToPx(context, 14), dpToPx(context, 18), dpToPx(context, 14))
+            setBackgroundColor(colorSurface)
         }
 
-        // 1. 更新检测方式
-        val txtModeSectionTitle = TextView(context).apply {
-            text = "检测方式"
-            textSize = 15f
-            typeface = Typeface.DEFAULT_BOLD
-            setTextColor(colorOnSurface)
-            setPadding(0, 0, 0, dpToPx(context, 8))
-        }
-        rootLayout.addView(txtModeSectionTitle)
-
-        val radioGroupMode = RadioGroup(context).apply {
-            orientation = RadioGroup.VERTICAL
-            setPadding(0, 0, 0, dpToPx(context, 8))
-        }
-
-        val rbManual = MaterialRadioButton(context).apply {
-            id = View.generateViewId()
-            text = "手动检查\n点击时联网检测"
-            textSize = 13f
-            setTextColor(colorOnSurface)
-            setLineSpacing(dpToPx(context, 2).toFloat(), 1.0f)
-            setPadding(dpToPx(context, 6), dpToPx(context, 4), 0, dpToPx(context, 6))
-        }
-
-        val rbAuto = MaterialRadioButton(context).apply {
-            id = View.generateViewId()
-            text = "自动检测\n启动时静默检查"
-            textSize = 13f
-            setTextColor(colorOnSurface)
-            setLineSpacing(dpToPx(context, 2).toFloat(), 1.0f)
-            setPadding(dpToPx(context, 6), dpToPx(context, 4), 0, dpToPx(context, 6))
-        }
-
-        radioGroupMode.addView(rbManual)
-        radioGroupMode.addView(rbAuto)
-
-        if (configManager.updateMode == UpdaterConfigManager.UPDATE_MODE_AUTO) {
-            radioGroupMode.check(rbAuto.id)
-        } else {
-            radioGroupMode.check(rbManual.id)
-        }
-
-        radioGroupMode.setOnCheckedChangeListener { _, checkedId ->
-            if (checkedId == rbManual.id) {
-                configManager.updateMode = UpdaterConfigManager.UPDATE_MODE_MANUAL
-                Toast.makeText(context, "已设为手动检查", Toast.LENGTH_SHORT).show()
-            } else if (checkedId == rbAuto.id) {
-                configManager.updateMode = UpdaterConfigManager.UPDATE_MODE_AUTO
-                Toast.makeText(context, "已设为自动检测", Toast.LENGTH_SHORT).show()
-            }
-        }
-        rootLayout.addView(radioGroupMode)
-
-        // 分割线
-        val divider = View(context).apply {
-            setBackgroundColor(colorOutline)
-            layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dpToPx(context, 1)).apply {
-                bottomMargin = dpToPx(context, 14)
-            }
-        }
-        rootLayout.addView(divider)
-
-        // 2. 更新源列表
-        val txtSourceTitle = TextView(context).apply {
-            text = "更新源"
+        // 1. 自动检测更新模式开关
+        val modeTitle = TextView(context).apply {
+            text = "更新检测模式"
             textSize = 14f
             typeface = Typeface.DEFAULT_BOLD
             setTextColor(colorOnSurface)
             setPadding(0, 0, 0, dpToPx(context, 8))
         }
-        rootLayout.addView(txtSourceTitle)
+        rootLayout.addView(modeTitle)
 
-        val scrollSources = ScrollView(context).apply {
-            layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dpToPx(context, 190))
+        val modeGroup = RadioGroup(context).apply {
+            orientation = RadioGroup.VERTICAL
+            setPadding(0, 0, 0, dpToPx(context, 14))
+        }
+
+        val rbManual = RadioButton(context).apply {
+            id = View.generateViewId()
+            text = "仅手动检测（推荐，仅在主动点击时检查）"
+            textSize = 13f
+            setTextColor(colorOnSurface)
+        }
+        val rbAuto = RadioButton(context).apply {
+            id = View.generateViewId()
+            text = "启动时静默检测（打开应用时后台轻量检测）"
+            textSize = 13f
+            setTextColor(colorOnSurface)
+        }
+
+        modeGroup.addView(rbManual)
+        modeGroup.addView(rbAuto)
+
+        if (configManager.updateMode == UpdaterConfigManager.UPDATE_MODE_AUTO) {
+            modeGroup.check(rbAuto.id)
+        } else {
+            modeGroup.check(rbManual.id)
+        }
+
+        modeGroup.setOnCheckedChangeListener { _, checkedId ->
+            if (checkedId == rbAuto.id) {
+                configManager.updateMode = UpdaterConfigManager.UPDATE_MODE_AUTO
+                Toast.makeText(context, "已开启启动时静默检测", Toast.LENGTH_SHORT).show()
+            } else {
+                configManager.updateMode = UpdaterConfigManager.UPDATE_MODE_MANUAL
+                Toast.makeText(context, "已切换为仅手动检测", Toast.LENGTH_SHORT).show()
+            }
+        }
+        rootLayout.addView(modeGroup)
+
+        // 分割线
+        val divider = View(context).apply {
+            setBackgroundColor(colorOutline)
+            val lp = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dpToPx(context, 1)).apply {
+                bottomMargin = dpToPx(context, 12)
+            }
+            layoutParams = lp
+        }
+        rootLayout.addView(divider)
+
+        // 2. 更新源选择列表
+        val sourcesTitle = TextView(context).apply {
+            text = "活跃更新源选择"
+            textSize = 14f
+            typeface = Typeface.DEFAULT_BOLD
+            setTextColor(colorOnSurface)
+            setPadding(0, 0, 0, dpToPx(context, 8))
+        }
+        rootLayout.addView(sourcesTitle)
+
+        val sourcesScroll = ScrollView(context).apply {
+            val lp = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dpToPx(context, 180))
+            layoutParams = lp
         }
         val sourcesListLayout = LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
         }
-        scrollSources.addView(sourcesListLayout)
-        rootLayout.addView(scrollSources)
+        sourcesScroll.addView(sourcesListLayout)
+        rootLayout.addView(sourcesScroll)
 
-        // 刷新源列表方法
+        var dialog: AlertDialog? = null
+
         fun refreshSourcesUI() {
             sourcesListLayout.removeAllViews()
             val sources = configManager.getSources()
@@ -139,11 +132,13 @@ object SourceSettingsDialog {
 
             for (source in sources) {
                 val isSelected = (source.id == selectedId)
-                val cardItem = MaterialCardView(context).apply {
-                    radius = dpToPx(context, 10).toFloat()
-                    strokeWidth = dpToPx(context, 1)
-                    strokeColor = if (isSelected) colorPrimary else colorOutline
-                    setCardBackgroundColor(if (isSelected) palette.primaryContainer else colorSurface)
+                val cardItem = LinearLayout(context).apply {
+                    orientation = LinearLayout.VERTICAL
+                    background = GradientDrawable().apply {
+                        cornerRadius = dpToPx(context, 10).toFloat()
+                        setStroke(dpToPx(context, 1), if (isSelected) colorPrimary else colorOutline)
+                        setColor(if (isSelected) palette.primaryContainer else colorSurfaceVariant)
+                    }
                     val lp = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
                         bottomMargin = dpToPx(context, 8)
                     }
@@ -156,7 +151,7 @@ object SourceSettingsDialog {
                     setPadding(dpToPx(context, 8), dpToPx(context, 8), dpToPx(context, 8), dpToPx(context, 8))
                 }
 
-                val rb = MaterialRadioButton(context).apply {
+                val rb = RadioButton(context).apply {
                     isChecked = isSelected
                     setOnClickListener {
                         configManager.selectedSourceId = source.id
@@ -215,18 +210,19 @@ object SourceSettingsDialog {
 
                 // 如果不是预设内置源，显示删除按钮
                 if (!source.isPreset) {
-                    val btnDelete = MaterialButton(context, null, com.google.android.material.R.attr.materialButtonOutlinedStyle).apply {
+                    val btnDelete = TextView(context).apply {
                         text = "删除"
                         textSize = 11f
-                        cornerRadius = dpToPx(context, 8)
-                        strokeWidth = dpToPx(context, 1)
-                        strokeColor = ColorStateList.valueOf(palette.error)
+                        typeface = Typeface.DEFAULT_BOLD
                         setTextColor(palette.error)
-                        setPadding(dpToPx(context, 6), 0, dpToPx(context, 6), 0)
-                        minWidth = dpToPx(context, 48)
-                        insetTop = 0
-                        insetBottom = 0
-                        val lp = LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dpToPx(context, 32)).apply {
+                        gravity = Gravity.CENTER
+                        background = GradientDrawable().apply {
+                            cornerRadius = dpToPx(context, 8).toFloat()
+                            setStroke(dpToPx(context, 1), palette.error)
+                            setColor(Color.TRANSPARENT)
+                        }
+                        setPadding(dpToPx(context, 8), 0, dpToPx(context, 8), 0)
+                        val lp = LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dpToPx(context, 30)).apply {
                             leftMargin = dpToPx(context, 6)
                         }
                         layoutParams = lp
@@ -247,15 +243,18 @@ object SourceSettingsDialog {
         refreshSourcesUI()
 
         // 3. 添加自定义更新源按钮
-        val btnAddSource = MaterialButton(context, null, com.google.android.material.R.attr.materialButtonOutlinedStyle).apply {
+        val btnAddSource = TextView(context).apply {
             text = "+ 添加更新源"
             textSize = 13f
             typeface = Typeface.DEFAULT_BOLD
-            cornerRadius = dpToPx(context, 10)
-            strokeWidth = dpToPx(context, 1)
-            strokeColor = ColorStateList.valueOf(colorPrimary)
             setTextColor(colorPrimary)
-            val lp = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dpToPx(context, 44)).apply {
+            gravity = Gravity.CENTER
+            background = GradientDrawable().apply {
+                cornerRadius = dpToPx(context, 10).toFloat()
+                setStroke(dpToPx(context, 1), colorPrimary)
+                setColor(Color.TRANSPARENT)
+            }
+            val lp = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dpToPx(context, 42)).apply {
                 topMargin = dpToPx(context, 10)
             }
             layoutParams = lp
@@ -268,7 +267,7 @@ object SourceSettingsDialog {
         }
         rootLayout.addView(btnAddSource)
 
-        dialog = MaterialAlertDialogBuilder(context)
+        dialog = AlertDialog.Builder(context)
             .setTitle("更新设置")
             .setView(rootLayout)
             .setPositiveButton("完成") { d, _ ->
@@ -333,12 +332,12 @@ object SourceSettingsDialog {
             layoutParams = lp
         }
 
-        val rbCf = MaterialRadioButton(context).apply {
+        val rbCf = RadioButton(context).apply {
             id = View.generateViewId()
             text = "Cloudflare Pages R2"
             setTextColor(palette.onSurface)
         }
-        val rbGh = MaterialRadioButton(context).apply {
+        val rbGh = RadioButton(context).apply {
             id = View.generateViewId()
             text = "GitHub Releases"
             setTextColor(palette.onSurface)
@@ -348,7 +347,7 @@ object SourceSettingsDialog {
         rgType.check(rbCf.id)
         formLayout.addView(rgType)
 
-        MaterialAlertDialogBuilder(context)
+        AlertDialog.Builder(context)
             .setTitle("添加更新源")
             .setView(formLayout)
             .setPositiveButton("保存") { d, _ ->

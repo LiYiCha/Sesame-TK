@@ -21,10 +21,6 @@ import android.view.ViewGroup
 import android.widget.*
 import androidx.appcompat.app.AlertDialog
 import androidx.core.content.ContextCompat
-import com.google.android.material.button.MaterialButton
-import com.google.android.material.card.MaterialCardView
-import com.google.android.material.dialog.MaterialAlertDialogBuilder
-import com.google.android.material.progressindicator.LinearProgressIndicator
 import com.updater.config.UpdaterConfigManager
 import com.updater.model.UpdateSourceType
 import okhttp3.*
@@ -150,15 +146,16 @@ object AdminUploadDialog {
             val spacer2 = View(activity).apply { layoutParams = LinearLayout.LayoutParams(1, dp(18)) }
             container.addView(spacer2)
 
-            val btnLogin = MaterialButton(activity).apply {
+            val btnLogin = TextView(activity).apply {
                 text = "登录"
                 textSize = 14f
                 typeface = Typeface.DEFAULT_BOLD
-                cornerRadius = dp(10)
-                setBackgroundColor(colorPrimary)
                 setTextColor(colorOnPrimary)
-                insetTop = 0
-                insetBottom = 0
+                gravity = Gravity.CENTER
+                background = GradientDrawable().apply {
+                    cornerRadius = dp(10).toFloat()
+                    setColor(colorPrimary)
+                }
                 layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(44))
                 setOnClickListener {
                     val user = etUsername.text.toString().trim()
@@ -216,15 +213,17 @@ object AdminUploadDialog {
             }
             container.addView(btnLogin)
 
-            val btnClose = MaterialButton(activity, null, com.google.android.material.R.attr.materialButtonOutlinedStyle).apply {
+            val btnClose = TextView(activity).apply {
                 text = "关闭"
                 textSize = 14f
                 typeface = Typeface.DEFAULT_BOLD
-                cornerRadius = dp(10)
                 setTextColor(colorOnSurface)
-                strokeColor = ColorStateList.valueOf(colorOutline)
-                insetTop = 0
-                insetBottom = 0
+                gravity = Gravity.CENTER
+                background = GradientDrawable().apply {
+                    cornerRadius = dp(10).toFloat()
+                    setStroke(dp(1), colorOutline)
+                    setColor(Color.TRANSPARENT)
+                }
                 val lp = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(42)).apply {
                     topMargin = dp(10)
                 }
@@ -287,11 +286,13 @@ object AdminUploadDialog {
             // 选中的文件详情展示卡片 (MaterialCardView)
             var selectedFile: File? = null
 
-            val cardFile = MaterialCardView(activity).apply {
-                radius = dp(12).toFloat()
-                strokeWidth = dp(1)
-                strokeColor = colorOutline
-                setCardBackgroundColor(colorSurfaceVariant)
+            val cardFile = LinearLayout(activity).apply {
+                orientation = LinearLayout.VERTICAL
+                background = GradientDrawable().apply {
+                    cornerRadius = dp(12).toFloat()
+                    setStroke(dp(1), colorOutline)
+                    setColor(colorSurfaceVariant)
+                }
                 layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
             }
 
@@ -308,12 +309,17 @@ object AdminUploadDialog {
             cardContent.addView(txtFileInfo)
 
             // 选择本地 APK 按钮
-            val btnPickFile = MaterialButton(activity, null, com.google.android.material.R.attr.materialButtonOutlinedStyle).apply {
+            val btnPickFile = TextView(activity).apply {
                 text = "选择本地 APK"
                 textSize = 13f
-                cornerRadius = dp(8)
+                typeface = Typeface.DEFAULT_BOLD
                 setTextColor(colorPrimary)
-                strokeColor = android.content.res.ColorStateList.valueOf(colorPrimary)
+                gravity = Gravity.CENTER
+                background = GradientDrawable().apply {
+                    cornerRadius = dp(8).toFloat()
+                    setStroke(dp(1), colorPrimary)
+                    setColor(Color.TRANSPARENT)
+                }
                 val lp = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(40)).apply {
                     topMargin = dp(10)
                 }
@@ -369,15 +375,16 @@ object AdminUploadDialog {
             }
 
             // 上传发布按钮
-            val btnUpload = MaterialButton(activity).apply {
+            val btnUpload = TextView(activity).apply {
                 text = "上传并发布"
                 textSize = 14f
                 typeface = Typeface.DEFAULT_BOLD
-                cornerRadius = dp(10)
-                setBackgroundColor(colorPrimary)
                 setTextColor(colorOnPrimary)
-                insetTop = 0
-                insetBottom = 0
+                gravity = Gravity.CENTER
+                background = GradientDrawable().apply {
+                    cornerRadius = dp(10).toFloat()
+                    setColor(colorPrimary)
+                }
                 val lp = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(44)).apply {
                     topMargin = dp(16)
                 }
@@ -423,15 +430,17 @@ object AdminUploadDialog {
             }
             container.addView(btnUpload)
 
-            val btnClose = MaterialButton(activity, null, com.google.android.material.R.attr.materialButtonOutlinedStyle).apply {
+            val btnClose = TextView(activity).apply {
                 text = "关闭"
                 textSize = 14f
                 typeface = Typeface.DEFAULT_BOLD
-                cornerRadius = dp(10)
                 setTextColor(colorOnSurface)
-                strokeColor = ColorStateList.valueOf(colorOutline)
-                insetTop = 0
-                insetBottom = 0
+                gravity = Gravity.CENTER
+                background = GradientDrawable().apply {
+                    cornerRadius = dp(10).toFloat()
+                    setStroke(dp(1), colorOutline)
+                    setColor(Color.TRANSPARENT)
+                }
                 val lp = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(42)).apply {
                     topMargin = dp(8)
                 }
@@ -447,7 +456,7 @@ object AdminUploadDialog {
             renderLoginView?.invoke()
         }
 
-        currentDialog = MaterialAlertDialogBuilder(activity)
+        currentDialog = AlertDialog.Builder(activity)
             .setView(scrollView)
             .create()
 
@@ -829,17 +838,10 @@ object AdminUploadDialog {
             }
             layout.addView(indicator)
 
-            dialog = try {
-                MaterialAlertDialogBuilder(activity)
-                    .setView(layout)
-                    .setCancelable(false)
-                    .create()
-            } catch (_: Throwable) {
-                AlertDialog.Builder(activity)
-                    .setView(layout)
-                    .setCancelable(false)
-                    .create()
-            }
+            dialog = AlertDialog.Builder(activity)
+                .setView(layout)
+                .setCancelable(false)
+                .create()
         }
 
         fun show() = dialog.show()

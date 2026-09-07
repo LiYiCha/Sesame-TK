@@ -32,7 +32,7 @@
         <activity
             android:name="com.updater.ui.DownloadManagerActivity"
             android:theme="@style/Theme.Updater"
-            android:screenOrientation="portrait"
+            android:configChanges="uiMode|screenSize"
             android:exported="false" />
 
         <!-- 安全安装 FileProvider -->

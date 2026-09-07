@@ -16,7 +16,6 @@ import android.view.ViewGroup
 import android.widget.Toast
 import android.text.method.LinkMovementMethod
 import android.widget.TextView
-import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.updater.config.UpdaterConfigManager
 import com.updater.model.UpdateInfo
 import com.updater.model.UpdatePackage
@@ -616,7 +615,7 @@ class Updater private constructor(
                 "检测到新版本发布。"
             }
 
-            val builder = MaterialAlertDialogBuilder(targetContext).apply {
+            val builder = androidx.appcompat.app.AlertDialog.Builder(targetContext).apply {
                 setTitle("发现新版本 v${updateInfo.latestVersionName}")
                 setMessage(updateMessage)
                 setCancelable(!updateInfo.isForceUpdate)
@@ -697,18 +696,26 @@ class Updater private constructor(
         lastOpenCenterTime = now
 
         val targetInfo = updateInfo ?: lastUpdateInfo ?: configManager.getCachedUpdateInfo()
+        if (targetInfo != null) {
+            lastUpdateInfo = targetInfo
+            try {
+                configManager.saveCachedUpdateInfo(targetInfo)
+            } catch (_: Throwable) {}
+        }
+
         val currentSource = configManager.getSelectedSource()
         val intent = Intent(context, DownloadManagerActivity::class.java).apply {
-            if (targetInfo != null) {
-                putExtra("update_info", targetInfo)
-            }
             putExtra("base_host", currentSource?.url ?: "")
             if (!currentSource?.downloadHost.isNullOrEmpty()) {
                 putExtra("download_host", currentSource?.downloadHost)
             }
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         }
-        context.startActivity(intent)
+        try {
+            context.startActivity(intent)
+        } catch (e: Throwable) {
+            UpdaterLog.e("启动更新下载中心页面失败", e)
+        }
     }
 
     private fun getLocalVersionName(context: Context): String {

@@ -71,19 +71,21 @@ class DownloadDatabaseHelper(context: Context) : SQLiteOpenHelper(context, DATAB
 
     @Synchronized
     fun insertOrUpdateTask(task: DownloadTask) {
-        val db = writableDatabase
-        val values = ContentValues().apply {
-            put(COLUMN_ID, task.id)
-            put(COLUMN_URL, task.url)
-            put(COLUMN_SAVE_PATH, task.savePath)
-            put(COLUMN_TITLE, task.title)
-            put(COLUMN_TOTAL_BYTES, task.totalBytes)
-            put(COLUMN_DOWNLOADED_BYTES, task.downloadedBytes)
-            put(COLUMN_STATUS, task.status)
-            put(COLUMN_FILE_MD5, task.fileMd5)
-            put(COLUMN_ERROR_MSG, task.errorMsg)
-        }
-        db.insertWithOnConflict(TABLE_TASKS, null, values, SQLiteDatabase.CONFLICT_REPLACE)
+        try {
+            val db = writableDatabase
+            val values = ContentValues().apply {
+                put(COLUMN_ID, task.id)
+                put(COLUMN_URL, task.url)
+                put(COLUMN_SAVE_PATH, task.savePath)
+                put(COLUMN_TITLE, task.title)
+                put(COLUMN_TOTAL_BYTES, task.totalBytes)
+                put(COLUMN_DOWNLOADED_BYTES, task.downloadedBytes)
+                put(COLUMN_STATUS, task.status)
+                put(COLUMN_FILE_MD5, task.fileMd5)
+                put(COLUMN_ERROR_MSG, task.errorMsg)
+            }
+            db.insertWithOnConflict(TABLE_TASKS, null, values, SQLiteDatabase.CONFLICT_REPLACE)
+        } catch (_: Throwable) {}
     }
 
     @Synchronized
@@ -100,73 +102,109 @@ class DownloadDatabaseHelper(context: Context) : SQLiteOpenHelper(context, DATAB
         )
         
         var task: DownloadTask? = null
-        if (cursor.moveToFirst()) {
-            val errorMsgIndex = cursor.getColumnIndex(COLUMN_ERROR_MSG)
-            val err = if (errorMsgIndex != -1) cursor.getString(errorMsgIndex) else null
-            task = DownloadTask(
-                id = cursor.getString(cursor.getColumnIndexOrThrow(COLUMN_ID)),
-                url = cursor.getString(cursor.getColumnIndexOrThrow(COLUMN_URL)),
-                savePath = cursor.getString(cursor.getColumnIndexOrThrow(COLUMN_SAVE_PATH)),
-                title = cursor.getString(cursor.getColumnIndexOrThrow(COLUMN_TITLE)),
-                totalBytes = cursor.getLong(cursor.getColumnIndexOrThrow(COLUMN_TOTAL_BYTES)),
-                downloadedBytes = cursor.getLong(cursor.getColumnIndexOrThrow(COLUMN_DOWNLOADED_BYTES)),
-                status = cursor.getInt(cursor.getColumnIndexOrThrow(COLUMN_STATUS)),
-                fileMd5 = cursor.getString(cursor.getColumnIndexOrThrow(COLUMN_FILE_MD5)),
-                errorMsg = err
-            )
+        try {
+            if (cursor.moveToFirst()) {
+                val errorMsgIndex = cursor.getColumnIndex(COLUMN_ERROR_MSG)
+                val err = if (errorMsgIndex != -1) cursor.getString(errorMsgIndex) else null
+                val idIdx = cursor.getColumnIndex(COLUMN_ID)
+                val urlIdx = cursor.getColumnIndex(COLUMN_URL)
+                val savePathIdx = cursor.getColumnIndex(COLUMN_SAVE_PATH)
+                val titleIdx = cursor.getColumnIndex(COLUMN_TITLE)
+                val totalBytesIdx = cursor.getColumnIndex(COLUMN_TOTAL_BYTES)
+                val downloadedBytesIdx = cursor.getColumnIndex(COLUMN_DOWNLOADED_BYTES)
+                val statusIdx = cursor.getColumnIndex(COLUMN_STATUS)
+                val fileMd5Idx = cursor.getColumnIndex(COLUMN_FILE_MD5)
+
+                task = DownloadTask(
+                    id = if (idIdx != -1) cursor.getString(idIdx) ?: id else id,
+                    url = if (urlIdx != -1) cursor.getString(urlIdx) ?: "" else "",
+                    savePath = if (savePathIdx != -1) cursor.getString(savePathIdx) ?: "" else "",
+                    title = if (titleIdx != -1) cursor.getString(titleIdx) ?: "" else "",
+                    totalBytes = if (totalBytesIdx != -1) cursor.getLong(totalBytesIdx) else 0L,
+                    downloadedBytes = if (downloadedBytesIdx != -1) cursor.getLong(downloadedBytesIdx) else 0L,
+                    status = if (statusIdx != -1) cursor.getInt(statusIdx) else DownloadTask.STATUS_PENDING,
+                    fileMd5 = if (fileMd5Idx != -1) cursor.getString(fileMd5Idx) ?: "" else "",
+                    errorMsg = err
+                )
+            }
+        } catch (_: Throwable) {
+        } finally {
+            try { cursor.close() } catch (_: Throwable) {}
         }
-        cursor.close()
         return task
     }
 
     @Synchronized
     fun getAllTasks(): List<DownloadTask> {
         val tasks = ArrayList<DownloadTask>()
-        val db = readableDatabase
-        val cursor = db.query(TABLE_TASKS, null, null, null, null, null, null)
-        
-        while (cursor.moveToNext()) {
-            val errorMsgIndex = cursor.getColumnIndex(COLUMN_ERROR_MSG)
-            val err = if (errorMsgIndex != -1) cursor.getString(errorMsgIndex) else null
-            val task = DownloadTask(
-                id = cursor.getString(cursor.getColumnIndexOrThrow(COLUMN_ID)),
-                url = cursor.getString(cursor.getColumnIndexOrThrow(COLUMN_URL)),
-                savePath = cursor.getString(cursor.getColumnIndexOrThrow(COLUMN_SAVE_PATH)),
-                title = cursor.getString(cursor.getColumnIndexOrThrow(COLUMN_TITLE)),
-                totalBytes = cursor.getLong(cursor.getColumnIndexOrThrow(COLUMN_TOTAL_BYTES)),
-                downloadedBytes = cursor.getLong(cursor.getColumnIndexOrThrow(COLUMN_DOWNLOADED_BYTES)),
-                status = cursor.getInt(cursor.getColumnIndexOrThrow(COLUMN_STATUS)),
-                fileMd5 = cursor.getString(cursor.getColumnIndexOrThrow(COLUMN_FILE_MD5)),
-                errorMsg = err
-            )
-            tasks.add(task)
+        val db = try { readableDatabase } catch (_: Throwable) { return tasks }
+        val cursor = try {
+            db.query(TABLE_TASKS, null, null, null, null, null, null)
+        } catch (_: Throwable) {
+            return tasks
         }
-        cursor.close()
+        
+        try {
+            val idIdx = cursor.getColumnIndex(COLUMN_ID)
+            val urlIdx = cursor.getColumnIndex(COLUMN_URL)
+            val savePathIdx = cursor.getColumnIndex(COLUMN_SAVE_PATH)
+            val titleIdx = cursor.getColumnIndex(COLUMN_TITLE)
+            val totalBytesIdx = cursor.getColumnIndex(COLUMN_TOTAL_BYTES)
+            val downloadedBytesIdx = cursor.getColumnIndex(COLUMN_DOWNLOADED_BYTES)
+            val statusIdx = cursor.getColumnIndex(COLUMN_STATUS)
+            val fileMd5Idx = cursor.getColumnIndex(COLUMN_FILE_MD5)
+            val errorMsgIndex = cursor.getColumnIndex(COLUMN_ERROR_MSG)
+
+            while (cursor.moveToNext()) {
+                val err = if (errorMsgIndex != -1) cursor.getString(errorMsgIndex) else null
+                val task = DownloadTask(
+                    id = if (idIdx != -1) cursor.getString(idIdx) ?: "" else "",
+                    url = if (urlIdx != -1) cursor.getString(urlIdx) ?: "" else "",
+                    savePath = if (savePathIdx != -1) cursor.getString(savePathIdx) ?: "" else "",
+                    title = if (titleIdx != -1) cursor.getString(titleIdx) ?: "" else "",
+                    totalBytes = if (totalBytesIdx != -1) cursor.getLong(totalBytesIdx) else 0L,
+                    downloadedBytes = if (downloadedBytesIdx != -1) cursor.getLong(downloadedBytesIdx) else 0L,
+                    status = if (statusIdx != -1) cursor.getInt(statusIdx) else DownloadTask.STATUS_PENDING,
+                    fileMd5 = if (fileMd5Idx != -1) cursor.getString(fileMd5Idx) ?: "" else "",
+                    errorMsg = err
+                )
+                tasks.add(task)
+            }
+        } catch (_: Throwable) {
+        } finally {
+            try { cursor.close() } catch (_: Throwable) {}
+        }
         return tasks
     }
 
     @Synchronized
     fun updateTaskProgress(id: String, downloadedBytes: Long, status: Int, errorMsg: String? = null) {
-        val db = writableDatabase
-        val values = ContentValues().apply {
-            put(COLUMN_DOWNLOADED_BYTES, downloadedBytes)
-            put(COLUMN_STATUS, status)
-            if (errorMsg != null) {
-                put(COLUMN_ERROR_MSG, errorMsg)
+        try {
+            val db = writableDatabase
+            val values = ContentValues().apply {
+                put(COLUMN_DOWNLOADED_BYTES, downloadedBytes)
+                put(COLUMN_STATUS, status)
+                if (errorMsg != null) {
+                    put(COLUMN_ERROR_MSG, errorMsg)
+                }
             }
-        }
-        db.update(TABLE_TASKS, values, "$COLUMN_ID = ?", arrayOf(id))
+            db.update(TABLE_TASKS, values, "$COLUMN_ID = ?", arrayOf(id))
+        } catch (_: Throwable) {}
     }
 
     @Synchronized
     fun deleteTask(id: String) {
-        val db = writableDatabase
-        db.delete(TABLE_TASKS, "$COLUMN_ID = ?", arrayOf(id))
+        try {
+            val db = writableDatabase
+            db.delete(TABLE_TASKS, "$COLUMN_ID = ?", arrayOf(id))
+        } catch (_: Throwable) {}
     }
 
     @Synchronized
     fun deleteTaskBySavePath(savePath: String) {
-        val db = writableDatabase
-        db.delete(TABLE_TASKS, "$COLUMN_SAVE_PATH = ?", arrayOf(savePath))
+        try {
+            val db = writableDatabase
+            db.delete(TABLE_TASKS, "$COLUMN_SAVE_PATH = ?", arrayOf(savePath))
+        } catch (_: Throwable) {}
     }
 }
