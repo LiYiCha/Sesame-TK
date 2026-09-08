@@ -35,6 +35,13 @@
             android:configChanges="uiMode|screenSize"
             android:exported="false" />
 
+        <!-- 安装包管理与发布界面 (支持增删 APK 与分片直传) -->
+        <activity
+            android:name="com.updater.ui.AdminManagerActivity"
+            android:theme="@style/Theme.Updater"
+            android:configChanges="uiMode|screenSize"
+            android:exported="false" />
+
         <!-- 安全安装 FileProvider -->
         <provider
             android:name="com.updater.utils.UpdaterFileProvider"

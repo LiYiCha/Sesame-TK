@@ -7,11 +7,19 @@ import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.content.res.ColorStateList
 import android.content.res.Configuration
+import android.graphics.Canvas
 import android.graphics.Color
+import android.graphics.ColorFilter
+import android.graphics.Paint
+import android.graphics.Path
+import android.graphics.PixelFormat
+import android.graphics.Rect
 import android.graphics.Typeface
 import android.graphics.drawable.ClipDrawable
+import android.graphics.drawable.Drawable
 import android.graphics.drawable.GradientDrawable
 import android.graphics.drawable.LayerDrawable
+import android.graphics.drawable.StateListDrawable
 import android.os.Build
 import android.os.Bundle
 import android.util.TypedValue
@@ -43,9 +51,24 @@ import java.util.concurrent.atomic.AtomicBoolean
 
 class DownloadManagerActivity : AppCompatActivity() {
 
+    companion object {
+        private const val REQUEST_CODE_ADMIN_MANAGE = 9101
+    }
+
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
         AdminUploadDialog.handleActivityResult(this, requestCode, resultCode, data)
+        if (requestCode == REQUEST_CODE_ADMIN_MANAGE) {
+            doRefreshUpdates()
+        }
+    }
+
+    private fun openAdminManagerActivity() {
+        val currentAppId = updateInfo?.appId ?: packageName
+        val intent = Intent(this, AdminManagerActivity::class.java).apply {
+            putExtra(AdminManagerActivity.EXTRA_APP_ID, currentAppId)
+        }
+        startActivityForResult(intent, REQUEST_CODE_ADMIN_MANAGE)
     }
 
     private lateinit var dbHelper: DownloadDatabaseHelper
@@ -573,28 +596,59 @@ class DownloadManagerActivity : AppCompatActivity() {
             setPadding(dpToPx(6), 0, dpToPx(12), 0)
         }
 
-        // 返回按钮
+        // 返回按钮：高度统一为 32dp，使用矢量向左箭头，与右侧操作按钮保持严格居中对齐
         val btnBack = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(dpToPx(6), dpToPx(6), dpToPx(8), dpToPx(6))
-            val lp = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, dpToPx(36))
+            isBaselineAligned = false
+            setPadding(dpToPx(6), 0, dpToPx(8), 0)
+            val lp = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, dpToPx(32)).apply {
+                gravity = Gravity.CENTER_VERTICAL
+            }
             layoutParams = lp
 
-            val txtArrow = TextView(this@DownloadManagerActivity).apply {
-                text = "‹"
-                textSize = 24f
-                typeface = Typeface.DEFAULT_BOLD
-                setTextColor(colorTextPrimary)
-                setPadding(0, 0, dpToPx(2), dpToPx(2))
+            val normalBg = GradientDrawable().apply {
+                cornerRadius = dpToPx(8).toFloat()
+                setColor(Color.TRANSPARENT)
             }
+            val pressedBg = GradientDrawable().apply {
+                cornerRadius = dpToPx(8).toFloat()
+                setColor(palette.primaryContainer)
+            }
+            background = StateListDrawable().apply {
+                addState(intArrayOf(android.R.attr.state_pressed), pressedBg)
+                addState(intArrayOf(), normalBg)
+            }
+            isClickable = true
+            isFocusable = true
+
+            // 返回箭头：矢量居中绘制，规避字符基线错位
+            val ivArrow = ImageView(this@DownloadManagerActivity).apply {
+                val arrowSize = dpToPx(18)
+                val arrowDrawable = BackArrowDrawable(colorTextPrimary, dpToPx(2.2f).toFloat())
+                setImageDrawable(arrowDrawable)
+                val ivLp = LinearLayout.LayoutParams(arrowSize, arrowSize).apply {
+                    gravity = Gravity.CENTER_VERTICAL
+                    rightMargin = dpToPx(2)
+                }
+                layoutParams = ivLp
+            }
+
+            // 返回文字：与箭头严密垂直居中
             val txtLabel = TextView(this@DownloadManagerActivity).apply {
                 text = "返回"
-                textSize = 14f
+                textSize = 13f
                 typeface = Typeface.DEFAULT_BOLD
                 setTextColor(colorTextPrimary)
+                gravity = Gravity.CENTER_VERTICAL
+                includeFontPadding = false
+                val tvLp = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
+                    gravity = Gravity.CENTER_VERTICAL
+                }
+                layoutParams = tvLp
             }
-            addView(txtArrow)
+
+            addView(ivArrow)
             addView(txtLabel)
 
             setOnClickListener { finish() }
@@ -610,25 +664,26 @@ class DownloadManagerActivity : AppCompatActivity() {
             maxLines = 1
             ellipsize = android.text.TextUtils.TruncateAt.END
             val lp = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1.0f).apply {
-                leftMargin = dpToPx(4)
+                leftMargin = dpToPx(6)
                 rightMargin = dpToPx(6)
+                gravity = Gravity.CENTER_VERTICAL
             }
             layoutParams = lp
             setOnLongClickListener {
-                val currentAppId = updateInfo?.appId ?: packageName
-                AdminUploadDialog.show(this@DownloadManagerActivity, currentAppId) {
-                    doRefreshUpdates()
-                }
+                openAdminManagerActivity()
                 true
             }
         }
         titleBar.addView(txtTitle)
 
-        // 右侧操作区：统一样式的按钮组（刷新、源设置、上传）
+        // 右侧操作区：统一样式的按钮组（刷新、源设置、安装包管理）
         val rightActionLayout = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT)
+            val lp = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
+                gravity = Gravity.CENTER_VERTICAL
+            }
+            layoutParams = lp
         }
 
         fun createHeaderButton(label: String, isPrimary: Boolean, onClick: () -> Unit): TextView {
@@ -667,11 +722,8 @@ class DownloadManagerActivity : AppCompatActivity() {
                 doRefreshUpdates()
             }
         }
-        val btnUpload = createHeaderButton("上传", isPrimary = false) {
-            val currentAppId = updateInfo?.appId ?: packageName
-            AdminUploadDialog.show(this@DownloadManagerActivity, currentAppId) {
-                doRefreshUpdates()
-            }
+        val btnUpload = createHeaderButton("管理", isPrimary = false) {
+            openAdminManagerActivity()
         }
         (btnUpload.layoutParams as? LinearLayout.LayoutParams)?.rightMargin = 0
 
@@ -1174,4 +1226,45 @@ class DownloadManagerActivity : AppCompatActivity() {
         val btnDelete: TextView,
         val btnOpenDir: TextView
     )
+
+    private class BackArrowDrawable(private val color: Int, private val strokeWidthPx: Float) : Drawable() {
+        private val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            this.color = this@BackArrowDrawable.color
+            style = Paint.Style.STROKE
+            strokeWidth = strokeWidthPx
+            strokeCap = Paint.Cap.ROUND
+            strokeJoin = Paint.Join.ROUND
+        }
+        private val path = Path()
+
+        override fun onBoundsChange(bounds: Rect) {
+            super.onBoundsChange(bounds)
+            path.reset()
+            val w = bounds.width().toFloat()
+            val h = bounds.height().toFloat()
+            val cx = bounds.exactCenterX()
+            val cy = bounds.exactCenterY()
+            // 居中绘制向左精细折角：尖端在左侧，上下对称，完全垂直水平居中
+            val arrowW = w * 0.36f
+            val arrowH = h * 0.50f
+            path.moveTo(cx + arrowW * 0.45f, cy - arrowH * 0.5f)
+            path.lineTo(cx - arrowW * 0.55f, cy)
+            path.lineTo(cx + arrowW * 0.45f, cy + arrowH * 0.5f)
+        }
+
+        override fun draw(canvas: Canvas) {
+            canvas.drawPath(path, paint)
+        }
+
+        override fun setAlpha(alpha: Int) {
+            paint.alpha = alpha
+        }
+
+        override fun setColorFilter(colorFilter: ColorFilter?) {
+            paint.colorFilter = colorFilter
+        }
+
+        @Deprecated("Deprecated in Java")
+        override fun getOpacity(): Int = PixelFormat.TRANSLUCENT
+    }
 }
