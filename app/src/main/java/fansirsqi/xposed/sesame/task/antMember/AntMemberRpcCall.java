@@ -1223,7 +1223,44 @@ public class AntMemberRpcCall {
              */
             public static String alchemyQueryListV3() {
                 return RequestManager.requestString("com.antgroup.zmxy.zmmemberop.biz.rpc.creditaccumulate.CreditAccumulateStrategyRpcManager.queryListV3",
-                        "[{\"chInfo\":\"\",\"deliverStatus\":\"\",\"deliveryTemplateId\":\"\",\"searchSubscribeTask\":true,\"version\":\"alchemy\"}]");
+                        "[{\"chInfo\":\"ch_zmxy_lianjin__chsub_zmsy_yinxiaoentrance\",\"deliverStatus\":\"\",\"deliveryTemplateId\":\"\",\"searchSubscribeTask\":true,\"supportRewardLJCS\":true,\"version\":\"alchemy\"}]");
+            }
+
+            /**
+             * 芝麻炼金-领取活动任务 (joinActivity)
+             */
+            public static String joinActivity(String templateId) {
+                return RequestManager.requestString(
+                        "com.antgroup.zmxy.zmmemberop.biz.rpc.promise.PromiseRpcManager.joinActivity",
+                        "[{\"chInfo\":\"seasameList\",\"joinFromOuter\":false,\"sceneCode\":\"alchemy\",\"templateId\":\"" + templateId + "\"}]");
+            }
+
+            /**
+             * 芝麻炼金-任务回调（支持转换奖励类型，如获取体力药水 BOTTLE）
+             */
+            public static String taskFeedback(String templateId, String changeRewardType) {
+                String payload;
+                if (changeRewardType != null && !changeRewardType.isEmpty()) {
+                    payload = "[{\"actionType\":\"TO_COMPLETE\",\"bizType\":\"LIFE_RECORD\",\"changeRewardType\":\"" + changeRewardType + "\",\"templateId\":\"" + templateId + "\"}]";
+                } else {
+                    payload = "[{\"actionType\":\"TO_COMPLETE\",\"templateId\":\"" + templateId + "\",\"version\":\"alchemy\"}]";
+                }
+                return RequestManager.requestString(
+                        "com.antgroup.zmxy.zmmemberop.biz.rpc.creditaccumulate.CreditAccumulateStrategyRpcManager.taskFeedback",
+                        payload);
+            }
+
+            public static String taskFeedback(String templateId) {
+                return taskFeedback(templateId, null);
+            }
+
+            /**
+             * 芝麻炼金-完成活动任务
+             */
+            public static String pushActivity(String recordId) {
+                return RequestManager.requestString(
+                        "com.antgroup.zmxy.zmmemberop.biz.rpc.promise.PromiseRpcManager.pushActivity",
+                        "[{\"recordId\":\"" + recordId + "\"}]");
             }
             /**
              * [日志对应] 芝麻炼金 - 领取奖励

@@ -131,7 +131,8 @@ public class OtherTask extends ModelTask {
     private final BooleanModelField goldenBeanPark = new BooleanModelField("goldenBeanPark", "金豆乐园", false);
     private final IntegerModelField goldenBeanManureExchangeAmount = new IntegerModelField("goldenBeanManureExchangeAmount", "金豆乐园 | 肥料换豆量(0关/-1全换)", 0);
     private final BooleanModelField goldTicket = new BooleanModelField("goldTicket", "黄金票", false);
-    private final BooleanModelField huabeijin = new BooleanModelField("huabeijin", "花呗金", false);
+    @Getter
+    private final static BooleanModelField huabeijin = new BooleanModelField("huabeijin", "花呗金", false);
     private final BooleanModelField travelDeals = new BooleanModelField("travelDeals", "出行特惠", false);
     private final BooleanModelField jobRight = new BooleanModelField("jobRight", "就业|积分", false);
     private final BooleanModelField huaCard = new BooleanModelField("hauCard", "花花卡", false);

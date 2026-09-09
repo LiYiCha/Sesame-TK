@@ -18,8 +18,9 @@ import java.util.concurrent.TimeUnit
 class TopUpGold {
     private val TAG = "💰充值金任务"
     private val APP_ID = "2021004113642010"
-    private val VERSION = "0.2.2605251828.32"
+    private val VERSION = "0.2.2609031701.52"
     private val REFERER = "https://$APP_ID.hybrid.alipay-eco.com/$APP_ID/$VERSION/index.html#pages/index/index"
+    private val TASK_CEN_ID = "AP17266821"
 
     private val client = OkHttpClient.Builder()
         .connectTimeout(15, TimeUnit.SECONDS)
@@ -67,6 +68,7 @@ class TopUpGold {
                 Thread.sleep(RandomUtil.nextGaussianLong(1500, 3000))
             }
 
+            val processedTasks = mutableSetOf<String>()
             var completedCount = 0
             val maxTasks = 15
             var loopCount = 0
@@ -75,10 +77,16 @@ class TopUpGold {
                 loopCount++
 
                 val listJson = queryTaskListRaw(token, userId)
-                if (listJson == null || !listJson.optBoolean("success", false)) break
+                if (listJson == null || !listJson.optBoolean("success", false)) {
+                    Log.other(TAG, "获取任务列表失败，触发风控保护，退出充值金任务")
+                    return
+                }
 
                 val taskList = listJson.optJSONArray("data")
-                if (taskList == null || taskList.length() == 0) break
+                if (taskList == null || taskList.length() == 0) {
+                    Log.other(TAG, "任务列表为空，结束任务执行")
+                    break
+                }
 
                 // 寻找第一个待完成且符合规则 of 浏览任务
                 var targetTask: JSONObject? = null
@@ -91,6 +99,7 @@ class TopUpGold {
                     val taskStatus = task.optString("taskStatus", "")
                     val buttonText = task.optString("buttonText", "")
 
+                    if (processedTasks.contains(taskId)) continue
                     if ("FINISHED" == taskStatus || "已完成" == buttonText) continue
                     if ("BROWSER" != taskType) continue
                     if (taskName.contains("灯火") || "denghuoClickType" == bizTaskType) continue
@@ -101,20 +110,28 @@ class TopUpGold {
                     break
                 }
 
-                if (targetTask == null) break
+                if (targetTask == null) {
+                    Log.other(TAG, "已无可完成的有效浏览任务")
+                    break
+                }
 
                 val taskId = targetTask.optString("taskId", "")
                 val taskName = targetTask.optString("taskName", "")
+                processedTasks.add(taskId)
+
                 val taskBrowseTime = if (targetTask.has("taskBrowseTime") && !targetTask.isNull("taskBrowseTime")) {
                     targetTask.optInt("taskBrowseTime")
                 } else {
                     15
                 }
 
-//                Log.other(TAG, "⏳ [$loopCount/$maxTasks] 正在执行: $taskName")
+                Log.other(TAG, "⏳ [$loopCount/$maxTasks] 正在执行: $taskName")
 
                 val taskRecordId = executeSignup(token, userId, taskId, taskName)
-                if (taskRecordId.isNullOrEmpty()) break
+                if (taskRecordId.isNullOrEmpty()) {
+                    Log.other(TAG, "⚠️ 任务 $taskName 报名失败，触发风控保护，退出充值金任务")
+                    return
+                }
 
                 val sleepSeconds = maxOf(taskBrowseTime, 5)
                 Thread.sleep(sleepSeconds * 1000L)
@@ -124,7 +141,8 @@ class TopUpGold {
                     Log.other(TAG, "✅ 任务 $taskName 完成")
                     completedCount++
                 } else {
-                    Log.other(TAG, "❌ 任务 $taskName 失败")
+                    Log.other(TAG, "❌ 任务 $taskName 失败，触发风控保护，退出充值金任务")
+                    return
                 }
 
                 // 每次完成一定量任务后要随机延迟多一点 (每完成3个，休息10-15秒；否则休息3-4.5秒)
@@ -230,6 +248,7 @@ class TopUpGold {
                 .addHeader("x-release-type", "ONLINE")
                 .addHeader("userid", userId)
                 .addHeader("alipayminimark", miniMark)
+                .addHeader("authorization", token)
                 .addHeader("User-Agent", getUA())
                 .addHeader("Accept", "*/*")
                 .addHeader("x-allow-afts-limit", "true")
@@ -248,6 +267,7 @@ class TopUpGold {
                 .addHeader("x-release-type", "ONLINE")
                 .addHeader("userid", userId)
                 .addHeader("alipayminimark", miniMark)
+                .addHeader("authorization", token)
                 .addHeader("User-Agent", getUA())
                 .addHeader("Accept", "*/*")
                 .addHeader("x-allow-afts-limit", "true")
@@ -277,6 +297,7 @@ class TopUpGold {
                 .addHeader("x-release-type", "ONLINE")
                 .addHeader("userid", userId)
                 .addHeader("alipayminimark", miniMark)
+                .addHeader("authorization", token)
                 .addHeader("User-Agent", getUA())
                 .addHeader("Accept", "*/*")
                 .addHeader("x-allow-afts-limit", "true")
@@ -312,6 +333,7 @@ class TopUpGold {
                 .addHeader("x-release-type", "ONLINE")
                 .addHeader("userid", userId)
                 .addHeader("alipayminimark", miniMark)
+                .addHeader("authorization", token)
                 .addHeader("User-Agent", getUA())
                 .addHeader("Accept", "*/*")
                 .addHeader("x-allow-afts-limit", "true")
@@ -339,9 +361,9 @@ class TopUpGold {
     private fun queryTaskListRaw(token: String, userId: String): JSONObject? {
         try {
             val miniMark = AlipayMiniMarkHelper.getAlipayMiniMark(APP_ID, VERSION)
-            val url = "https://gdbizweb.alipay-eco.com/gdbizweb/task/list/query?channelSource=self&token=$token&version=3"
+            val url = "https://gdbizweb.alipay-eco.com/gdbizweb/task/list/query?channelSource=self&version=4"
             val mediaType = "application/json".toMediaType()
-            val body = "{}".toRequestBody(mediaType)
+            val body = "{\"taskCenId\":\"$TASK_CEN_ID\"}".toRequestBody(mediaType)
 
             val request = Request.Builder()
                 .url(url)
@@ -351,15 +373,22 @@ class TopUpGold {
                 .addHeader("x-release-type", "ONLINE")
                 .addHeader("userid", userId)
                 .addHeader("alipayminimark", miniMark)
+                .addHeader("authorization", token)
                 .addHeader("User-Agent", getUA())
                 .addHeader("Accept", "*/*")
                 .addHeader("x-allow-afts-limit", "true")
                 .build()
 
             client.newCall(request).execute().use { response ->
+                val bodyText = response.body?.string() ?: ""
                 if (response.isSuccessful) {
-                    val bodyText = response.body?.string() ?: ""
-                    return JSONObject(bodyText)
+                    val json = JSONObject(bodyText)
+                    if (!json.optBoolean("success", false)) {
+                        Log.error(TAG, "查询任务列表业务失败: $bodyText")
+                    }
+                    return json
+                } else {
+                    Log.error(TAG, "查询任务列表接口 HTTP 失败: ${response.code}, 内容: $bodyText")
                 }
             }
         } catch (e: Exception) {
@@ -371,7 +400,7 @@ class TopUpGold {
     private fun executeSignup(token: String, userId: String, taskId: String, taskName: String): String? {
         try {
             val miniMark = AlipayMiniMarkHelper.getAlipayMiniMark(APP_ID, VERSION)
-            val url = "https://gdbizweb.alipay-eco.com/gdbizweb/task/signup?channelSource=self&token=$token&version=3"
+            val url = "https://gdbizweb.alipay-eco.com/gdbizweb/task/signup?channelSource=self&token=$token&version=4"
             val mediaType = "application/json".toMediaType()
             
             val signupJson = JSONObject().apply {
@@ -391,18 +420,23 @@ class TopUpGold {
                 .addHeader("x-release-type", "ONLINE")
                 .addHeader("userid", userId)
                 .addHeader("alipayminimark", miniMark)
+                .addHeader("authorization", token)
                 .addHeader("User-Agent", getUA())
                 .addHeader("Accept", "*/*")
                 .addHeader("x-allow-afts-limit", "true")
                 .build()
 
             client.newCall(request).execute().use { response ->
+                val bodyText = response.body?.string() ?: ""
                 if (response.isSuccessful) {
-                    val bodyText = response.body?.string() ?: ""
                     val json = JSONObject(bodyText)
                     if (json.optBoolean("success", false)) {
                         return json.optString("data", "")
+                    } else {
+                        Log.error(TAG, "报名任务 [$taskName] 业务失败: $bodyText")
                     }
+                } else {
+                    Log.error(TAG, "报名任务 [$taskName] HTTP 失败: ${response.code}, 内容: $bodyText")
                 }
             }
         } catch (e: Exception) {
@@ -414,7 +448,7 @@ class TopUpGold {
     private fun queryTaskStatus(token: String, userId: String, taskId: String, taskRecordId: String): Boolean {
         try {
             val miniMark = AlipayMiniMarkHelper.getAlipayMiniMark(APP_ID, VERSION)
-            val url = "https://gdbizweb.alipay-eco.com/gdbizweb/task/status/query?channelSource=self&token=$token&version=3"
+            val url = "https://gdbizweb.alipay-eco.com/gdbizweb/task/status/query?channelSource=self&token=$token&version=4"
             val mediaType = "application/json".toMediaType()
             
             val statusJson = JSONObject().apply {
@@ -431,16 +465,24 @@ class TopUpGold {
                 .addHeader("x-release-type", "ONLINE")
                 .addHeader("userid", userId)
                 .addHeader("alipayminimark", miniMark)
+                .addHeader("authorization", token)
                 .addHeader("User-Agent", getUA())
                 .addHeader("Accept", "*/*")
                 .addHeader("x-allow-afts-limit", "true")
                 .build()
 
             client.newCall(request).execute().use { response ->
+                val bodyText = response.body?.string() ?: ""
                 if (response.isSuccessful) {
-                    val bodyText = response.body?.string() ?: ""
                     val json = JSONObject(bodyText)
-                    return json.optBoolean("success", false)
+                    if (json.optBoolean("success", false)) {
+                        val data = json.optJSONObject("data")
+                        val taskStatus = data?.optString("taskStatus", "")
+                        return "FINISHED" == taskStatus || data?.optBoolean("finished", false) == true
+                    }
+                    return false
+                } else {
+                    Log.error(TAG, "查询任务状态 HTTP 失败: ${response.code}, 内容: $bodyText")
                 }
             }
         } catch (e: Exception) {

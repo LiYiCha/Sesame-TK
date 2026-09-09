@@ -1910,15 +1910,15 @@ class AntMember : ModelTask() {
     }
 
     /**
-     * 芝麻炼金 - 检查并使用体力药水
+     * 芝麻炼金 - 检查背包并使用体力药水
      */
-    private suspend fun checkAndUseStamina(): Unit = CoroutineUtils.run {
+    private suspend fun useStaminaFromBag(): Boolean = CoroutineUtils.run {
         try {
             val itemsRes = AntMemberRpcCall.Zmxy.Alchemy.queryAvailableItems()
             val itemsJo = JSONObject(itemsRes)
             if (ResChecker.checkRes(TAG, itemsJo)) {
-                val data = itemsJo.optJSONObject("data") ?: return@run
-                val items = data.optJSONArray("items") ?: return@run
+                val data = itemsJo.optJSONObject("data") ?: return@run false
+                val items = data.optJSONArray("items") ?: return@run false
                 for (i in 0 until items.length()) {
                     val item = items.optJSONObject(i) ?: continue
                     val itemId = item.optString("itemId")
@@ -1928,20 +1928,101 @@ class AntMember : ModelTask() {
                         val useJo = JSONObject(useRes)
                         if (ResChecker.checkRes(TAG, useJo) && useJo.optJSONObject("data")?.optBoolean("success") == true) {
                             Log.other("芝麻炼金⚗️[使用体力药水成功]#恢复体力🚀")
+                            delay(1000)
+                            return@run true
                         } else {
                             Log.runtime(TAG, "芝麻炼金⚗️使用体力药水失败: ${useJo.optString("resultView")}")
                         }
-                        delay(1000)
                     }
                 }
             }
         } catch (t: Throwable) {
-            Log.printStackTrace("$TAG.checkAndUseStamina", t)
+            Log.printStackTrace("$TAG.useStaminaFromBag", t)
         }
+        return@run false
     }
 
     /**
-     * 芝麻炼金 - 开启宝箱
+     * 芝麻炼金 - 检查并使用体力药水（兼容保留）
+     */
+    private suspend fun checkAndUseStamina(): Unit = CoroutineUtils.run {
+        useStaminaFromBag()
+    }
+
+    /**
+     * 芝麻炼金 - 确保拥有体力（背包优先，无则做任务获取）
+     */
+    private suspend fun ensureStamina(hasBottleQuota: Boolean = true): Boolean = CoroutineUtils.run {
+        try {
+            // 1. 先检查背包现有药水
+            if (useStaminaFromBag()) {
+                return@run true
+            }
+
+            // 2. 如果背包无药水，检查是否有兑换药水配额
+            if (!hasBottleQuota) {
+                Log.runtime(TAG, "芝麻炼金⚗️今日体力药水兑换配额已用完")
+                return@run false
+            }
+
+            Log.other("芝麻炼金⚗️体力不足，正在通过做任务获取体力药水...")
+            val listRes = AntMemberRpcCall.Zmxy.Alchemy.alchemyQueryListV3()
+            val listJo = JSONObject(listRes)
+            if (!ResChecker.checkRes(TAG, listJo)) return@run false
+
+            val data = listJo.optJSONObject("data") ?: return@run false
+            val toCompleteVOS = data.optJSONArray("toCompleteVOS") ?: return@run false
+
+            for (i in 0 until toCompleteVOS.length()) {
+                val task = toCompleteVOS.optJSONObject(i) ?: continue
+                val bizType = task.optString("bizType")
+                val title = task.optString("title")
+                val templateId = task.optString("templateId")
+
+                if (isTaskInBlacklist(title)) continue
+                if (task.optBoolean("shareAssist", false)) continue
+
+                if (bizType == "LIFE_RECORD") {
+                    val recordId = joinSesameTask(templateId)
+                    if (recordId.isEmpty()) continue
+
+                    delay(9000 + (Math.random() * 1000).toLong())
+                    AntMemberRpcCall.Zmxy.Alchemy.taskFeedback(templateId, "BOTTLE")
+                    delay(6000 + (Math.random() * 1000).toLong())
+                    val finishRes = AntMemberRpcCall.Zmxy.Alchemy.pushActivity(recordId)
+                    val finishJo = JSONObject(finishRes)
+                    if (ResChecker.checkRes(TAG, finishJo)) {
+                        Log.other("芝麻炼金⚗️[获取体力任务完成]#$title")
+                        delay(1500)
+                        if (useStaminaFromBag()) {
+                            return@run true
+                        }
+                    } else {
+                        Log.error(TAG, "芝麻炼金⚗️获取体力任务失败: $title - $finishRes")
+                    }
+                }
+            }
+        } catch (t: Throwable) {
+            Log.printStackTrace("$TAG.ensureStamina", t)
+        }
+        return@run false
+    }
+
+    private fun joinSesameTask(templateId: String): String {
+        try {
+            val joinRes = AntMemberRpcCall.Zmxy.Alchemy.joinActivity(templateId)
+            val joinJo = JSONObject(joinRes)
+            if (ResChecker.checkRes(TAG, joinJo)) {
+                return joinJo.optJSONObject("data")?.optString("recordId", "") ?: ""
+            }
+        } catch (e: Exception) {
+            Log.error(TAG, "joinSesameTask: $e")
+        }
+        return ""
+    }
+
+    /**
+     * 芝麻炼金 - 开启宝箱（含“得到更多”任务与二次开箱）
      */
     private suspend fun openTreasureBox(): Unit = CoroutineUtils.run {
         try {
@@ -1959,6 +2040,9 @@ class AntMember : ModelTask() {
                         val openData = openJo.optJSONObject("data")
                         val got = openData?.optInt("rewardAmount", rewardAmount) ?: rewardAmount
                         Log.other("芝麻炼金⚗️[开启宝箱成功]#获得芝麻粒 +$got")
+
+                        // 开启宝箱后处理“得到更多”
+                        handleBoxGetMore()
                     } else {
                         Log.runtime(TAG, "芝麻炼金⚗️开启宝箱失败: ${openJo.optString("resultView")}")
                     }
@@ -1966,6 +2050,80 @@ class AntMember : ModelTask() {
             }
         } catch (t: Throwable) {
             Log.printStackTrace("$TAG.openTreasureBox", t)
+        }
+    }
+
+    /** 宝箱“得到更多”：做1个任务后再次开箱 */
+    private suspend fun handleBoxGetMore(): Unit = CoroutineUtils.run {
+        try {
+            delay(1500)
+            val listRes = AntMemberRpcCall.Zmxy.Alchemy.alchemyQueryListV3()
+            val listJo = JSONObject(listRes)
+            if (!ResChecker.checkRes(TAG, listJo)) return@run
+            val data = listJo.optJSONObject("data") ?: return@run
+            val toCompleteVOS = data.optJSONArray("toCompleteVOS") ?: return@run
+
+            var finishedTask = false
+            for (i in 0 until toCompleteVOS.length()) {
+                val task = toCompleteVOS.optJSONObject(i) ?: continue
+                val bizType = task.optString("bizType")
+                val title = task.optString("title")
+                val templateId = task.optString("templateId")
+
+                if (isTaskInBlacklist(title)) continue
+                if (task.optBoolean("shareAssist", false)) continue
+
+                if (bizType == "AD_TASK") {
+                    val logExtMap = task.optJSONObject("logExtMap") ?: continue
+                    val bizId = logExtMap.optString("bizId")
+                    Log.other("芝麻炼金⚗️开宝箱得到更多，正在完成广告任务[$title]...")
+                    delay(10000)
+                    val adFinishRes = AntMemberRpcCall.taskFinish(bizId)
+                    val adFinishJo = JSONObject(adFinishRes)
+                    if (ResChecker.checkRes(TAG, adFinishJo) || "0" == adFinishJo.optString("errCode")) {
+                        Log.other("芝麻炼金⚗️[得到更多广告任务完成: $title]")
+                        finishedTask = true
+                        break
+                    }
+                } else if (bizType == "LIFE_RECORD") {
+                    Log.other("芝麻炼金⚗️开宝箱得到更多，正在完成任务[$title]...")
+                    val recordId = joinSesameTask(templateId)
+                    if (recordId.isEmpty()) continue
+                    delay(9000 + (Math.random() * 1000).toLong())
+                    AntMemberRpcCall.Zmxy.Alchemy.taskFeedback(templateId)
+                    delay(6000 + (Math.random() * 1000).toLong())
+                    val pushRes = AntMemberRpcCall.Zmxy.Alchemy.pushActivity(recordId)
+                    val pushJo = JSONObject(pushRes)
+                    if (ResChecker.checkRes(TAG, pushJo)) {
+                        Log.other("芝麻炼金⚗️[得到更多任务完成: $title]")
+                        finishedTask = true
+                        break
+                    }
+                }
+            }
+
+            if (finishedTask) {
+                delay(2000)
+                val queryRes = AntMemberRpcCall.Zmxy.Alchemy.queryTreasureBox()
+                val queryJo = JSONObject(queryRes)
+                if (ResChecker.checkRes(TAG, queryJo)) {
+                    val boxData = queryJo.optJSONObject("data") ?: return@run
+                    val rewardAmountStr = boxData.optString("rewardAmount", "0")
+                    val rewardAmount = rewardAmountStr.toIntOrNull() ?: boxData.optInt("rewardAmount", 0)
+                    if (rewardAmount > 0) {
+                        val openRes = AntMemberRpcCall.Zmxy.Alchemy.openTreasureBox()
+                        val openJo = JSONObject(openRes)
+                        if (ResChecker.checkRes(TAG, openJo)) {
+                            val got = openJo.optJSONObject("data")?.optInt("rewardAmount", rewardAmount) ?: rewardAmount
+                            Log.other("芝麻炼金⚗️[开启宝箱“得到更多”成功]#获得额外芝麻粒 +$got")
+                        } else {
+                            Log.runtime(TAG, "再次开启宝箱失败: ${openJo.optString("resultView")}")
+                        }
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            Log.error(TAG, "handleBoxGetMore: $e")
         }
     }
 
@@ -1987,8 +2145,13 @@ class AntMember : ModelTask() {
                 if (data != null) {
                     val staminaStatus = data.optString("staminaStatus", "")
                     val staminaCurrent = data.optInt("staminaCurrent", 0)
+                    val hasBottleQuota = data.optBoolean("hasBottleQuota", true)
                     if (staminaStatus == "EXHAUSTED" || staminaCurrent == 0) {
-                        checkAndUseStamina()
+                        val ok = ensureStamina(hasBottleQuota)
+                        if (!ok) {
+                            Log.other("芝麻炼金⚗️体力已耗尽且无法恢复，结束本次炼金")
+                            return@run
+                        }
                     }
                     var zmlBalance = data.optInt("zmlBalance", 0) // 当前芝麻粒
                     val cost = data.optInt("alchemyCostZml", 5) // 单次消耗
@@ -2020,8 +2183,22 @@ class AntMember : ModelTask() {
                                 break
                             }
                         } else {
-                            Log.error(TAG, "芝麻炼金失败: " + alchemyJo.optString("resultView"))
-                            break
+                            val resultView = alchemyJo.optString("resultView", "")
+                            val resultCode = alchemyJo.optString("resultCode", "")
+                            if (resultView.contains("体力") || resultCode.contains("STAMINA") || resultCode.contains("EXHAUSTED")) {
+                                Log.other("芝麻炼金⚗️炼金过程中体力耗尽，尝试恢复体力...")
+                                val recovered = ensureStamina(hasBottleQuota = true)
+                                if (recovered) {
+                                    delay(1500)
+                                    continue
+                                } else {
+                                    Log.other("芝麻炼金⚗️体力恢复失败或无可用配额，退出炼金")
+                                    break
+                                }
+                            } else {
+                                Log.error(TAG, "芝麻炼金失败: " + resultView)
+                                break
+                            }
                         }
                     }
                 }

@@ -4,11 +4,13 @@ import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
+import fansirsqi.xposed.sesame.data.Config;
 import fansirsqi.xposed.sesame.data.Status;
 import fansirsqi.xposed.sesame.hook.RequestManager;
 import fansirsqi.xposed.sesame.util.Log;
 import fansirsqi.xposed.sesame.util.RandomUtil;
 import fansirsqi.xposed.sesame.util.TimeUtil;
+import fansirsqi.xposed.sesame.util.maps.UserMap;
 
 public class HuaBeiJin extends BaseCommTask {
 
@@ -36,7 +38,12 @@ public class HuaBeiJin extends BaseCommTask {
             }
             JSONObject queryJo = new JSONObject(queryRes);
             if (!queryJo.optBoolean("success", false)) {
+                String errorCode = queryJo.optString("errorCode", "");
+                String errorMsg = queryJo.optString("errorMsg", "");
                 Log.error("花呗金--查询签到信息失败: " + queryJo.optString("errorMsg", queryRes));
+                if ("无玩法ID".equals(errorMsg) || "QUERY_FAILED".equals(errorCode) || errorMsg.contains("无玩法ID")) {
+                    disableHuaBeiJinSwitch(errorMsg.isEmpty() ? errorCode : errorMsg);
+                }
                 return;
             }
             JSONObject result = queryJo.optJSONObject("result");
@@ -88,5 +95,17 @@ public class HuaBeiJin extends BaseCommTask {
             Log.error(this.TAG, "花呗金异常："+th);
         }
         Status.setFlagToday("HuaBeiJin:Sign");
+    }
+
+    private void disableHuaBeiJinSwitch(String reason) {
+        Log.other(this.displayName, "花呗金查询失败(" + reason + ")，自动关闭【花呗金】开关");
+        try {
+            if (OtherTask.getHuabeijin() != null) {
+                OtherTask.getHuabeijin().setValue(false);
+            }
+            Config.save(UserMap.getCurrentUid(), true);
+        } catch (Throwable t) {
+            Log.error(this.TAG, "关闭花呗金开关异常: " + t.getMessage());
+        }
     }
 }
