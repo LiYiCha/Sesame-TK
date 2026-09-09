@@ -20,7 +20,7 @@ class PackageInstalledReceiver : BroadcastReceiver() {
             when (action) {
                 Intent.ACTION_MY_PACKAGE_REPLACED -> {
                     UpdaterLog.i("收到自身被覆盖安装激活广播 (ACTION_MY_PACKAGE_REPLACED)，执行安装包清理")
-                    ApkCleanupManager.cleanInstalledApks(context)
+                    ApkCleanupManager.cleanInstalledApkForPackage(context, context.packageName)
                 }
                 Intent.ACTION_PACKAGE_ADDED, Intent.ACTION_PACKAGE_REPLACED -> {
                     val dataString = intent.dataString

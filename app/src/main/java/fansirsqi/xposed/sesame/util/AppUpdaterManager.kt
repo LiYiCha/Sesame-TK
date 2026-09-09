@@ -2,10 +2,11 @@ package fansirsqi.xposed.sesame.util
 
 import android.content.Context
 import com.updater.Updater
-import com.updater.utils.ApkCleanupManager
+import com.updater.ui.UpdaterThemeConfig
 import com.updater.utils.IUpdaterLogger
 import com.updater.utils.UpdaterLog
 import fansirsqi.xposed.sesame.data.General
+import fansirsqi.xposed.sesame.ui.theme.app.HolidayTheme
 
 /**
  * 芝麻粒更新管理门面
@@ -42,6 +43,17 @@ object AppUpdaterManager {
             }
         })
 
+        // 注入宿主主题：更新模块页面跟随主模块 SesameTheme/HolidayTheme 换肤体系
+        // 读取 themeVersion 订阅换肤变更，主题切换时模块页面自动重组同步
+        UpdaterThemeConfig.schemeProvider = { dark ->
+            try {
+                HolidayTheme.themeVersion.intValue
+                HolidayTheme.resolvePalette(dark).toColorScheme()
+            } catch (_: Throwable) {
+                null
+            }
+        }
+
         val builder = Updater.Companion.Builder(appContext)
             .setAppId(General.MODULE_PACKAGE_NAME)
             // 预设 1：Cloudflare Pages R2 官方源
@@ -64,21 +76,18 @@ object AppUpdaterManager {
 
     /**
      * 应用启动时调用：
-     * 1. 自动对账清理已安装新版的残留 APK（未安装的完好保留供 0 流量秒级复用）
-     * 2. 若用户在更新设置中开启了「启动时自动检查更新」，则执行后台静默检测
+     * 若用户在更新设置中开启了「启动时自动检查更新」，则执行后台静默检测。
+     * 安装包清理不在此处进行——已改为完全由系统安装生效广播（PackageInstalledReceiver）驱动，
+     * 避免启动/恢复页面时误删尚未安装的安装包。
      */
     fun initAndCheckOnStartup(context: Context) {
         val appContext = context.applicationContext
         Thread {
             try {
-                // 1. 后台异步执行启动版本对账清理，绝对不阻塞主线程冷启动
-                ApkCleanupManager.checkAndCleanOnStartup(appContext)
-
-                // 2. 检查启动自动更新（仅在用户开启自动更新时联网，内部通过 Handler 抛回主线程弹窗）
                 val updater = getUpdater(appContext)
                 updater.checkUpdateOnStartup(context)
             } catch (e: Throwable) {
-                Log.runtime(TAG, "启动更新对账异常: ${e.message}")
+                Log.runtime(TAG, "启动更新检测异常: ${e.message}")
             }
         }.start()
     }
@@ -92,18 +101,6 @@ object AppUpdaterManager {
             updater.checkUpdateManual(context)
         } catch (e: Throwable) {
             Log.runtime(TAG, "手动检查更新异常: ${e.message}")
-        }
-    }
-
-    /**
-     * 打开更新源配置对话框
-     */
-    fun openSourceSettings(context: Context) {
-        try {
-            val updater = getUpdater(context)
-            updater.openSourceSettingsDialog(context)
-        } catch (e: Throwable) {
-            Log.runtime(TAG, "打开更新配置异常: ${e.message}")
         }
     }
 

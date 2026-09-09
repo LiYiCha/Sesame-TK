@@ -10,7 +10,12 @@ import java.io.File
 object ApkCleanupManager {
 
     /**
-     * 清理已完成安装的 APK 安装包（用于自身覆盖安装生效后或冷启动对账）
+     * 清理已完成安装的 APK 安装包（全量扫描 + 版本对账）
+     *
+     * 【注意】此方法已不再被任何页面在 onResume 等生命周期中自动调用：
+     * 旧逻辑会在安装界面弹出前后误删尚未安装的安装包。
+     * 清理现在仅由系统安装生效广播（PACKAGE_REPLACED / MY_PACKAGE_REPLACED）触发，
+     * 优先使用下方精准的 cleanInstalledApkForPackage。本方法仅作为手动对账工具保留。
      */
     fun cleanInstalledApks(context: Context) {
         val updateDir = UpdatePathManager.getUpdateDir(context)
@@ -120,14 +125,4 @@ object ApkCleanupManager {
         }
     }
 
-    /**
-     * 冷启动时安全无感对账并清理
-     */
-    fun checkAndCleanOnStartup(context: Context) {
-        try {
-            cleanInstalledApks(context)
-        } catch (e: Throwable) {
-            UpdaterLog.e("启动对账清理异常", e)
-        }
-    }
 }

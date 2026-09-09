@@ -24,6 +24,7 @@ class UpdaterConfigManager(context: Context) {
         private const val KEY_CACHED_UPDATE_INFO = "key_cached_update_info"
         private const val KEY_ADMIN_TOKEN = "key_admin_token"
         private const val KEY_ADMIN_USERNAME = "key_admin_username"
+        private const val KEY_GITHUB_PROXY_HOST = "key_github_proxy_host"
     }
 
     /**
@@ -73,6 +74,16 @@ class UpdaterConfigManager(context: Context) {
     var adminUsername: String
         get() = sp.getString(KEY_ADMIN_USERNAME, "") ?: ""
         set(value) = sp.edit().putString(KEY_ADMIN_USERNAME, value).apply()
+
+    /**
+     * GitHub 下载加速代理地址（可选）
+     * 填入自建 CF Worker 等 gh-proxy 类服务域名（如 https://xxx.workers.dev），
+     * 下载 GitHub Release 直链时将自动改写为 "代理域名/原始URL" 通用格式，由 Worker 流式转发。
+     * 留空则直连 github.com。
+     */
+    var githubProxyHost: String
+        get() = sp.getString(KEY_GITHUB_PROXY_HOST, "") ?: ""
+        set(value) = sp.edit().putString(KEY_GITHUB_PROXY_HOST, value.trim()).apply()
 
     val isAdminLoggedIn: Boolean
         get() = adminToken.isNotBlank()

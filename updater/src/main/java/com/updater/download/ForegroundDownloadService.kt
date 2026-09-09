@@ -30,6 +30,7 @@ class ForegroundDownloadService : Service() {
         const val EXTRA_TOTAL = "extra_total"
         const val EXTRA_STATUS = "extra_status"
         const val EXTRA_ERROR = "extra_error"
+        const val EXTRA_SPEED = "extra_speed" // 实时下载速度 (字节/秒)
 
         private const val CHANNEL_ID = "updater_download_channel"
         private const val NOTIFICATION_ID = 1024
@@ -161,7 +162,11 @@ class ForegroundDownloadService : Service() {
 
         val config = com.updater.config.UpdaterConfigManager(this)
         val token = config.adminToken
-        if (token.isNotEmpty()) {
+        // 鉴权头仅用于自有 CF 网盘源；GitHub 直链/代理下载严禁携带，
+        // 避免把管理 Token 泄漏给第三方代理服务
+        val isThirdPartyUrl = task.url.startsWith("https://github.com/", ignoreCase = true) ||
+                task.url.contains("/https://github.com/", ignoreCase = true)
+        if (token.isNotEmpty() && !isThirdPartyUrl) {
             requestBuilder.addHeader("Authorization", "Bearer $token")
         }
 
@@ -197,6 +202,8 @@ class ForegroundDownloadService : Service() {
             val buffer = ByteArray(8192)
             var bytesRead: Int
             var lastUpdate = System.currentTimeMillis()
+            var lastSpeedBytes = task.downloadedBytes
+            var lastSpeedTime = System.currentTimeMillis()
 
             try {
                 while (inputStream.read(buffer).also { bytesRead = it } != -1) {
@@ -206,9 +213,14 @@ class ForegroundDownloadService : Service() {
                     val now = System.currentTimeMillis()
                     if (now - lastUpdate > 500) {
                         lastUpdate = now
+                        val speedBps = if (now > lastSpeedTime) {
+                            (task.downloadedBytes - lastSpeedBytes) * 1000 / (now - lastSpeedTime)
+                        } else 0L
+                        lastSpeedBytes = task.downloadedBytes
+                        lastSpeedTime = now
                         dbHelper.updateTaskProgress(task.id, task.downloadedBytes, DownloadTask.STATUS_DOWNLOADING)
-                        sendProgressBroadcast(task)
-                        updateNotification(task)
+                        sendProgressBroadcast(task, null, speedBps)
+                        updateNotification(task, speedBps)
                     }
                 }
             } finally {
@@ -260,13 +272,14 @@ class ForegroundDownloadService : Service() {
         }
     }
 
-    private fun sendProgressBroadcast(task: DownloadTask, errorMsg: String? = null) {
+    private fun sendProgressBroadcast(task: DownloadTask, errorMsg: String? = null, speedBps: Long = 0) {
         val intent = Intent(BROADCAST_ACTION).apply {
             putExtra(EXTRA_TASK_ID, task.id)
             putExtra(EXTRA_DOWNLOADED, task.downloadedBytes)
             putExtra(EXTRA_TOTAL, task.totalBytes)
             putExtra(EXTRA_STATUS, task.status)
             putExtra(EXTRA_ERROR, errorMsg)
+            putExtra(EXTRA_SPEED, speedBps)
             setPackage(packageName)
         }
         sendBroadcast(intent)
@@ -301,18 +314,30 @@ class ForegroundDownloadService : Service() {
         }
     }
 
-    private fun updateNotification(task: DownloadTask) {
+    private fun updateNotification(task: DownloadTask, speedBps: Long = 0) {
         val progressPercent = if (task.totalBytes > 0) ((task.downloadedBytes.toDouble() / task.totalBytes.toDouble()) * 100).toInt() else 0
         val notification = NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.stat_sys_download)
             .setContentTitle("正在下载: ${task.title}")
-            .setContentText("下载进度: $progressPercent%")
+            .setContentText("进度: $progressPercent%  ·  ${formatSpeed(speedBps)}")
             .setProgress(100, progressPercent, false)
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .build()
-        
+
         val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         manager.notify(NOTIFICATION_ID, notification)
+    }
+
+    private fun formatSpeed(bytesPerSec: Long): String {
+        if (bytesPerSec <= 0) return "--"
+        val units = arrayOf("B/s", "KB/s", "MB/s", "GB/s")
+        var size = bytesPerSec.toDouble()
+        var i = 0
+        while (size >= 1024 && i < units.size - 1) {
+            size /= 1024
+            i++
+        }
+        return String.format("%.1f %s", size, units[i])
     }
 
     private fun checkStopService() {

@@ -22,7 +22,6 @@ import com.updater.model.UpdatePackage
 import com.updater.model.UpdateSource
 import com.updater.model.UpdateSourceType
 import com.updater.ui.DownloadManagerActivity
-import com.updater.ui.SourceSettingsDialog
 import com.updater.utils.MarkdownUtils
 import com.updater.utils.UpdaterLog
 import okhttp3.*
@@ -297,13 +296,6 @@ class Updater private constructor(
                 }
             }
         )
-    }
-
-    /**
-     * 打开更新源与自动更新设置弹窗
-     */
-    fun openSourceSettingsDialog(activityContext: Context, onSourceChanged: (() -> Unit)? = null) {
-        SourceSettingsDialog.show(activityContext, onSourceChanged)
     }
 
     /**
@@ -600,6 +592,24 @@ class Updater private constructor(
         return null
     }
 
+    /** 解析主题属性色值：直接颜色取 data，@color 引用走资源解析 */
+    private fun resolveThemeColor(context: Context, attr: Int): Int {
+        return try {
+            val tv = android.util.TypedValue()
+            if (context.theme.resolveAttribute(attr, tv, true)) {
+                if (tv.type >= android.util.TypedValue.TYPE_FIRST_COLOR_INT &&
+                    tv.type <= android.util.TypedValue.TYPE_LAST_COLOR_INT
+                ) {
+                    tv.data
+                } else {
+                    androidx.core.content.ContextCompat.getColor(context, tv.resourceId)
+                }
+            } else 0
+        } catch (_: Throwable) {
+            0
+        }
+    }
+
     private fun showUpdateDialog(context: Context, updateInfo: UpdateInfo) {
         val activity = findActivity(context)
         if (activity != null) {
@@ -642,14 +652,19 @@ class Updater private constructor(
                     val messageView = dialog.findViewById<TextView>(android.R.id.message)
                     messageView?.movementMethod = LinkMovementMethod.getInstance()
 
-                    val palette = com.updater.ui.ThemeUtils.M3Palette(targetContext)
+                    // 从宿主 Material3 主题属性解析配色（主模块为 Theme.Material3.DayNight）
+                    val colorPrimary = resolveThemeColor(targetContext, com.google.android.material.R.attr.colorPrimary)
+                    val colorOnPrimary = resolveThemeColor(targetContext, com.google.android.material.R.attr.colorOnPrimary)
+                    val colorSurfaceVariant = resolveThemeColor(targetContext, com.google.android.material.R.attr.colorSurfaceVariant)
+                    val colorOutline = resolveThemeColor(targetContext, com.google.android.material.R.attr.colorOutline)
+                    val colorOnSurface = resolveThemeColor(targetContext, com.google.android.material.R.attr.colorOnSurface)
 
                     // 1. 立即查看按钮：实心主题主色底、文字对比度高、加粗圆角
                     dialog.getButton(AlertDialog.BUTTON_POSITIVE)?.apply {
                         typeface = Typeface.DEFAULT_BOLD
-                        setTextColor(palette.onPrimary)
+                        setTextColor(colorOnPrimary)
                         val bg = GradientDrawable().apply {
-                            setColor(palette.primary)
+                            setColor(colorPrimary)
                             cornerRadius = dp(20).toFloat()
                         }
                         background = bg
@@ -662,10 +677,10 @@ class Updater private constructor(
                     // 2. 稍后再说按钮：清晰线框轮廓、表面次色背景、与主题统一
                     dialog.getButton(AlertDialog.BUTTON_NEGATIVE)?.apply {
                         typeface = Typeface.DEFAULT_BOLD
-                        setTextColor(palette.onSurface)
+                        setTextColor(colorOnSurface)
                         val bg = GradientDrawable().apply {
-                            setColor(palette.surfaceVariant)
-                            setStroke(dp(1), palette.outline)
+                            setColor(colorSurfaceVariant)
+                            setStroke(dp(1), colorOutline)
                             cornerRadius = dp(20).toFloat()
                         }
                         background = bg

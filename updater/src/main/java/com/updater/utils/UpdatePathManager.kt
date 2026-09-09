@@ -63,34 +63,30 @@ object UpdatePathManager {
         val docUri = Uri.parse("content://com.android.externalstorage.documents/document/$encodedPath")
 
         val intents = listOf(
-            // 1. 系统 DocumentsUI 直达
+            // 系统 DocumentsUI 浏览模式；ACTION_OPEN_DOCUMENT_TREE 会进入选择文件夹流程。
             Intent(Intent.ACTION_VIEW).apply {
                 setDataAndType(docUri, "vnd.android.document/directory")
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_GRANT_READ_URI_PERMISSION)
             },
-            // 2. SAF 树形结构直达
-            Intent(Intent.ACTION_OPEN_DOCUMENT_TREE).apply {
-                putExtra("android.provider.extra.INITIAL_URI", docUri)
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            },
-            // 3. 适配 MT 管理器 / 第三方文件管理器的 resource/folder 协议
+            // 适配 MT 管理器 / 第三方文件管理器的 resource/folder 协议
             Intent(Intent.ACTION_VIEW).apply {
                 setDataAndType(Uri.fromFile(updateDir), "resource/folder")
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             },
-            // 4. 适配 inode/directory 协议
+            // 适配 inode/directory 协议
             Intent(Intent.ACTION_VIEW).apply {
                 setDataAndType(Uri.fromFile(updateDir), "inode/directory")
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             }
         )
 
+        // 不使用 resolveActivity 预判：Android 11+ 的包可见性限制下，
+        // DocumentsUI 很可能查询不到而被误判"无可用入口"直接落到 chooser；
+        // 改为直接尝试启动，靠 ActivityNotFoundException 逐级降级
         for (intent in intents) {
             try {
-                if (intent.resolveActivity(context.packageManager) != null) {
-                    context.startActivity(intent)
-                    return
-                }
+                context.startActivity(intent)
+                return
             } catch (_: Exception) {}
         }
 

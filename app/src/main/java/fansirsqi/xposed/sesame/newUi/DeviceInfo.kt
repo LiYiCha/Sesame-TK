@@ -1094,12 +1094,12 @@ private fun HolidayWheel(
             shadowElevation = 3.dp,
             modifier = Modifier
                 .width(160.dp)
-                .height(116.dp)
+                .height(140.dp)
         ) {
             Column(
-                modifier = Modifier.fillMaxSize().padding(horizontal = 12.dp, vertical = 10.dp),
+                modifier = Modifier.fillMaxSize().padding(horizontal = 12.dp, vertical = 6.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center
+                verticalArrangement = Arrangement.Top
             ) {
                 if (isAuto) {
                     Icon(
@@ -1131,17 +1131,17 @@ private fun HolidayWheel(
                         color = cardTheme.textColor,
                         textAlign = TextAlign.Center
                     )
-                    Spacer(Modifier.height(6.dp))
+                    Spacer(Modifier.height(4.dp))
                     Text(
                         cardTheme.story,
                         fontSize = 11.sp,
                         color = cardTheme.textColor.copy(alpha = 0.75f),
                         textAlign = TextAlign.Center,
-                        maxLines = 2,
+                        maxLines = 3,
                         overflow = TextOverflow.Ellipsis
                     )
                 }
-                Spacer(Modifier.height(8.dp))
+                Spacer(Modifier.height(6.dp))
                 Surface(
                     color = if (isAuto) cardTheme.mainColor.copy(alpha = 0.5f) else cardTheme.mainColor.copy(alpha = 0.14f),
                     shape = RoundedCornerShape(50),
