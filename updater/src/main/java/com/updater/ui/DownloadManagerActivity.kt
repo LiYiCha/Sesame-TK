@@ -245,6 +245,7 @@ class DownloadManagerActivity : AppCompatActivity() {
         if (info != null && info.packages.isNotEmpty()) {
             for (pkg in info.packages) {
                 val taskId = getTaskId(pkg.downloadUrl)
+                val expectedUrl = getAbsoluteUrl(pkg.downloadUrl)
                 var task = dbHelper.getTask(taskId)
                 if (task == null) {
                     val cleanUrl = pkg.downloadUrl.substringBefore("?")
@@ -254,7 +255,7 @@ class DownloadManagerActivity : AppCompatActivity() {
 
                     task = DownloadTask(
                         id = taskId,
-                        url = getAbsoluteUrl(pkg.downloadUrl),
+                        url = expectedUrl,
                         savePath = saveFile.absolutePath,
                         title = pkg.packageName,
                         totalBytes = pkg.apkSize,
@@ -262,6 +263,9 @@ class DownloadManagerActivity : AppCompatActivity() {
                         status = DownloadTask.STATUS_PENDING,
                         fileMd5 = pkg.apkMd5
                     )
+                } else if (task.status != DownloadTask.STATUS_DOWNLOADING && task.url != expectedUrl) {
+                    task = task.copy(url = expectedUrl)
+                    dbHelper.insertOrUpdateTask(task)
                 }
                 tasks[taskId] = reconcileTaskFileState(task)
             }
@@ -308,14 +312,14 @@ class DownloadManagerActivity : AppCompatActivity() {
     // ---------- 下载控制 ----------
 
     private fun startDownload(taskId: String) {
-        val task = tasks[taskId] ?: return
+        val originalTask = tasks[taskId] ?: return
 
-        if (task.status == DownloadTask.STATUS_COMPLETED) {
-            ApkInstaller.installApk(this, File(task.savePath))
+        if (originalTask.status == DownloadTask.STATUS_COMPLETED) {
+            ApkInstaller.installApk(this, File(originalTask.savePath))
             return
         }
 
-        if (task.status == DownloadTask.STATUS_DOWNLOADING) {
+        if (originalTask.status == DownloadTask.STATUS_DOWNLOADING) {
             return
         }
 
@@ -323,6 +327,16 @@ class DownloadManagerActivity : AppCompatActivity() {
         if (currentDownloading != null) {
             Toast.makeText(this, "已有任务正在下载，请等待完成或暂停", Toast.LENGTH_SHORT).show()
             return
+        }
+
+        val freshUrl = getAbsoluteUrl(originalTask.url)
+        val task = if (originalTask.url != freshUrl) {
+            val updated = originalTask.copy(url = freshUrl)
+            dbHelper.insertOrUpdateTask(updated)
+            tasks[taskId] = updated
+            updated
+        } else {
+            originalTask
         }
 
         val serviceIntent = Intent(this, ForegroundDownloadService::class.java).apply {
@@ -446,13 +460,29 @@ class DownloadManagerActivity : AppCompatActivity() {
     }
 
     private fun getAbsoluteUrl(relativeUrl: String): String {
-        // GitHub Release 直链加速：若配置了代理（如自建 CF Worker gh-proxy），
+        // GitHub Release 直链加速：若配置了代理（如自建 CF Worker gh-proxy 或 ghproxy.net），
         // 改写为业界通用的 "代理域名/原始完整URL" 格式，由 Worker 流式转发下载体
-        val proxyHost = try {
+        var proxyHost = try {
             configManager.githubProxyHost.trim().trimEnd('/')
         } catch (_: Throwable) { "" }
-        if (proxyHost.isNotEmpty() && relativeUrl.startsWith("https://github.com/", ignoreCase = true)) {
-            return "$proxyHost/$relativeUrl"
+        if (proxyHost.isNotEmpty() && !proxyHost.startsWith("http://", ignoreCase = true) && !proxyHost.startsWith("https://", ignoreCase = true)) {
+            proxyHost = "https://$proxyHost"
+        }
+
+        // 提取真实的 GitHub 原目标地址（避免被重复拼接或嵌套代理）
+        val cleanRelative = if (relativeUrl.contains("/https://github.com/", ignoreCase = true)) {
+            relativeUrl.substring(relativeUrl.indexOf("https://github.com/", ignoreCase = true))
+        } else if (relativeUrl.contains("/http://github.com/", ignoreCase = true)) {
+            "https://" + relativeUrl.substring(relativeUrl.indexOf("http://github.com/", ignoreCase = true) + "http://".length)
+        } else {
+            relativeUrl
+        }
+
+        if (proxyHost.isNotEmpty() && cleanRelative.startsWith("https://github.com/", ignoreCase = true)) {
+            return "$proxyHost/$cleanRelative"
+        }
+        if (cleanRelative.startsWith("https://github.com/", ignoreCase = true)) {
+            return cleanRelative
         }
 
         val customDownloadHost = intent.getStringExtra("download_host")

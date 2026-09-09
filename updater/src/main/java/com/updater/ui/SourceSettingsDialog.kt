@@ -221,7 +221,12 @@ fun SourceSettingsDialogHost(
         },
         confirmButton = {
             Button(onClick = {
-                configManager.githubProxyHost = proxyHost.trim()
+                val oldProxy = configManager.githubProxyHost
+                val newProxy = proxyHost.trim()
+                configManager.githubProxyHost = newProxy
+                if (oldProxy != newProxy) {
+                    onSourceChanged?.invoke()
+                }
                 onDismiss()
             }) { Text("完成") }
         }
