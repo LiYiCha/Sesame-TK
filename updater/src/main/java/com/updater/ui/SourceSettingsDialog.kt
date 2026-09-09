@@ -24,7 +24,9 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
+import androidx.compose.material3.SecondaryTabRow
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -52,12 +54,27 @@ import java.io.IOException
 import java.util.UUID
 import java.util.concurrent.TimeUnit
 
+data class ProxyPreset(
+    val name: String,
+    val url: String,
+    val desc: String = ""
+)
+
+private val PRESET_GITHUB_PROXIES = listOf(
+    ProxyPreset("直连 (官方默认)", "", "不走加速代理，直连 GitHub 官方下载源"),
+    ProxyPreset("gh-proxy.com", "https://gh-proxy.com", "主流稳定，多线负载公益镜像"),
+    ProxyPreset("github.boki.moe", "https://github.boki.moe", "高速高带宽，低延迟镜像节点"),
+    ProxyPreset("ghproxy.net", "https://ghproxy.net", "老牌稳定，国内 CDN 双线优化节点"),
+    ProxyPreset("gh.ddlc.top", "https://gh.ddlc.top", "开源社区维护镜像节点"),
+    ProxyPreset("gh.con.sh", "https://gh.con.sh", "公益稳定转发节点")
+)
+
 /**
  * 更新源配置与检测模式设置（Jetpack Compose 版）
  *
  * 功能与旧 View 版完全一致：
  * 1. 更新检测模式切换（手动 / 启动静默检测）
- * 2. GitHub 下载加速代理配置（对接自建 CF Worker gh-proxy）
+ * 2. GitHub 下载加速代理配置（对接自建 CF Worker gh-proxy 及主流公共镜像，支持实时测速）
  * 3. 活跃更新源选择、添加与删除（预设源不可删）
  * 4. 源地址延迟测试（CF 源测服务根地址，GitHub 源测 api.github.com）
  *
@@ -76,13 +93,68 @@ fun SourceSettingsDialogHost(
     var selectedId by remember { mutableStateOf(configManager.selectedSourceId) }
     var updateMode by remember { mutableStateOf(configManager.updateMode) }
     var proxyHost by remember { mutableStateOf(configManager.githubProxyHost) }
+    var currentTab by remember { mutableStateOf(0) }
+    val tabs = remember { listOf("下载加速", "更新源", "检测偏好") }
     var showAddDialog by remember { mutableStateOf(false) }
     val latencyMap = remember { mutableStateMapOf<String, String>() }
+    val proxyLatencyMap = remember { mutableStateMapOf<String, String>() }
+    var isTestingProxies by remember { mutableStateOf(false) }
 
     fun refreshSources(notify: Boolean) {
         sources = configManager.getSources()
         selectedId = configManager.selectedSourceId
         if (notify) onSourceChanged?.invoke()
+    }
+
+    fun runProxyLatencyTests() {
+        if (isTestingProxies) return
+        isTestingProxies = true
+        val main = Handler(Looper.getMainLooper())
+        val client = OkHttpClient.Builder()
+            .connectTimeout(4, TimeUnit.SECONDS)
+            .readTimeout(4, TimeUnit.SECONDS)
+            .build()
+
+        Thread {
+            val allToTest = PRESET_GITHUB_PROXIES.map { it.url }.toMutableList()
+            val custom = proxyHost.trim()
+            if (custom.isNotEmpty() && !allToTest.contains(custom)) {
+                allToTest.add(custom)
+            }
+
+            for (url in allToTest) {
+                main.post { proxyLatencyMap[url] = "测速中..." }
+            }
+
+            for (p in allToTest) {
+                val fullUrl = if (p.isEmpty()) {
+                    "https://github.com/robots.txt"
+                } else {
+                    val cleanP = if (!p.startsWith("http://", ignoreCase = true) && !p.startsWith("https://", ignoreCase = true)) "https://$p" else p
+                    "${cleanP.trimEnd('/')}/https://github.com/robots.txt"
+                }
+
+                val t0 = System.currentTimeMillis()
+                try {
+                    val req = Request.Builder()
+                        .url(fullUrl)
+                        .addHeader("User-Agent", "Mozilla/5.0")
+                        .addHeader("Range", "bytes=0-0")
+                        .get()
+                        .build()
+                    val res = client.newCall(req).execute()
+                    val elapsed = System.currentTimeMillis() - t0
+                    val isOk = res.isSuccessful || res.code in 200..399
+                    res.close()
+                    val text = if (isOk) "${elapsed}ms" else "HTTP ${res.code}"
+                    main.post { proxyLatencyMap[p] = text }
+                } catch (e: Exception) {
+                    val elapsed = System.currentTimeMillis() - t0
+                    main.post { proxyLatencyMap[p] = if (elapsed >= 3800) "超时" else "不可用" }
+                }
+            }
+            main.post { isTestingProxies = false }
+        }.start()
     }
 
     fun runLatencyTests() {
@@ -116,106 +188,181 @@ fun SourceSettingsDialogHost(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("更新设置") },
+        title = {
+            Column(modifier = Modifier.fillMaxWidth()) {
+                Text(
+                    text = "更新设置",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+                Spacer(Modifier.height(10.dp))
+                SecondaryTabRow(
+                    selectedTabIndex = currentTab,
+                    containerColor = colors.surface,
+                    contentColor = colors.primary
+                ) {
+                    tabs.forEachIndexed { index, title ->
+                        Tab(
+                            selected = currentTab == index,
+                            onClick = { currentTab = index },
+                            text = {
+                                Text(
+                                    text = title,
+                                    fontSize = 13.sp,
+                                    fontWeight = if (currentTab == index) FontWeight.Bold else FontWeight.Normal
+                                )
+                            }
+                        )
+                    }
+                }
+            }
+        },
         text = {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .heightIn(max = 480.dp)
+                    .heightIn(min = 280.dp, max = 400.dp)
                     .verticalScroll(rememberScrollState())
             ) {
-                // 1. 更新检测模式
-                Text(
-                    text = "更新检测模式",
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Bold
-                )
-                Spacer(Modifier.height(6.dp))
-                ModeRadioRow(
-                    selected = updateMode == UpdaterConfigManager.UPDATE_MODE_MANUAL,
-                    label = "仅手动检测（推荐，仅在主动点击时检查）"
-                ) {
-                    updateMode = UpdaterConfigManager.UPDATE_MODE_MANUAL
-                    configManager.updateMode = UpdaterConfigManager.UPDATE_MODE_MANUAL
-                    Toast.makeText(context, "已切换为仅手动检测", Toast.LENGTH_SHORT).show()
-                }
-                ModeRadioRow(
-                    selected = updateMode == UpdaterConfigManager.UPDATE_MODE_AUTO,
-                    label = "启动时静默检测（打开应用时后台轻量检测）"
-                ) {
-                    updateMode = UpdaterConfigManager.UPDATE_MODE_AUTO
-                    configManager.updateMode = UpdaterConfigManager.UPDATE_MODE_AUTO
-                    Toast.makeText(context, "已开启启动时静默检测", Toast.LENGTH_SHORT).show()
-                }
-
-                HorizontalDivider(Modifier.padding(vertical = 12.dp))
-
-                // 2. GitHub 下载加速代理
-                Text(
-                    text = "GitHub 下载加速代理（可选）",
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Bold
-                )
-                Spacer(Modifier.height(4.dp))
-                Text(
-                    text = "填入 gh-proxy 类代理域名（如自建 CF Worker: https://xxx.workers.dev），下载 GitHub Release 直链时自动改写为「代理域名/原始URL」加速转发；留空则直连。",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = colors.onSurfaceVariant
-                )
-                Spacer(Modifier.height(6.dp))
-                OutlinedTextField(
-                    value = proxyHost,
-                    onValueChange = { proxyHost = it },
-                    singleLine = true,
-                    placeholder = { Text("https://your-gh-proxy.workers.dev", fontSize = 12.sp) },
-                    textStyle = MaterialTheme.typography.bodySmall,
-                    shape = RoundedCornerShape(10.dp),
-                    modifier = Modifier.fillMaxWidth()
-                )
-
-                HorizontalDivider(Modifier.padding(vertical = 12.dp))
-
-                // 3. 活跃更新源选择 + 测速
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        text = "活跃更新源选择",
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.weight(1f)
-                    )
-                    TextButton(onClick = { runLatencyTests() }) { Text("测速", fontSize = 12.sp) }
-                }
-                Spacer(Modifier.height(4.dp))
-
-                for (source in sources) {
-                    val isSelected = source.id == selectedId
-                    SourceCard(
-                        source = source,
-                        selected = isSelected,
-                        latency = latencyMap[source.id],
-                        onSelect = {
-                            configManager.selectedSourceId = source.id
-                            refreshSources(notify = true)
-                        },
-                        onDelete = {
-                            if (configManager.deleteSource(source.id)) {
-                                Toast.makeText(context, "更新源已删除", Toast.LENGTH_SHORT).show()
-                                refreshSources(notify = true)
+                when (currentTab) {
+                    0 -> {
+                        // 1. GitHub 下载加速代理
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                text = "GitHub 加速镜像",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.weight(1f)
+                            )
+                            TextButton(
+                                onClick = { runProxyLatencyTests() },
+                                enabled = !isTestingProxies
+                            ) {
+                                Text(if (isTestingProxies) "测速中..." else "一键测速", fontSize = 12.sp)
                             }
                         }
-                    )
-                    Spacer(Modifier.height(8.dp))
-                }
+                        Spacer(Modifier.height(2.dp))
+                        Text(
+                            text = "点击任一镜像节点即可选用并实时测速，或输入自建代理：",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = colors.onSurfaceVariant
+                        )
+                        Spacer(Modifier.height(8.dp))
 
-                Spacer(Modifier.height(4.dp))
-                OutlinedButton(
-                    onClick = { showAddDialog = true },
-                    shape = RoundedCornerShape(10.dp),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(42.dp)
-                ) {
-                    Text("+ 添加更新源", fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            for (preset in PRESET_GITHUB_PROXIES) {
+                                val isSelected = proxyHost.trim().trimEnd('/') == preset.url.trimEnd('/')
+                                ProxyPresetItem(
+                                    preset = preset,
+                                    selected = isSelected,
+                                    latency = proxyLatencyMap[preset.url],
+                                    onClick = {
+                                        proxyHost = preset.url
+                                    }
+                                )
+                            }
+                        }
+
+                        Spacer(Modifier.height(12.dp))
+                        Text(
+                            text = "自定义代理域名：",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = colors.onSurfaceVariant
+                        )
+                        Spacer(Modifier.height(4.dp))
+                        OutlinedTextField(
+                            value = proxyHost,
+                            onValueChange = { proxyHost = it },
+                            singleLine = true,
+                            placeholder = { Text("https://your-gh-proxy.workers.dev", fontSize = 12.sp) },
+                            textStyle = MaterialTheme.typography.bodySmall,
+                            shape = RoundedCornerShape(10.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+                    1 -> {
+                        // 2. 活跃更新源选择 + 测速
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                text = "活跃更新源选择",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.weight(1f)
+                            )
+                            TextButton(onClick = { runLatencyTests() }) { Text("源测速", fontSize = 12.sp) }
+                        }
+                        Spacer(Modifier.height(2.dp))
+                        Text(
+                            text = "勾选作为当前检测新版本的活跃更新源：",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = colors.onSurfaceVariant
+                        )
+                        Spacer(Modifier.height(8.dp))
+
+                        for (source in sources) {
+                            val isSelected = source.id == selectedId
+                            SourceCard(
+                                source = source,
+                                selected = isSelected,
+                                latency = latencyMap[source.id],
+                                onSelect = {
+                                    configManager.selectedSourceId = source.id
+                                    refreshSources(notify = true)
+                                },
+                                onDelete = {
+                                    if (configManager.deleteSource(source.id)) {
+                                        Toast.makeText(context, "更新源已删除", Toast.LENGTH_SHORT).show()
+                                        refreshSources(notify = true)
+                                    }
+                                }
+                            )
+                            Spacer(Modifier.height(8.dp))
+                        }
+
+                        Spacer(Modifier.height(4.dp))
+                        OutlinedButton(
+                            onClick = { showAddDialog = true },
+                            shape = RoundedCornerShape(10.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(42.dp)
+                        ) {
+                            Text("+ 添加更新源", fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                    2 -> {
+                        // 3. 更新检测模式
+                        Text(
+                            text = "更新检测偏好",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            text = "设置何时进行新版本检测：",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = colors.onSurfaceVariant
+                        )
+                        Spacer(Modifier.height(12.dp))
+                        ModeRadioRow(
+                            selected = updateMode == UpdaterConfigManager.UPDATE_MODE_MANUAL,
+                            label = "仅手动检测（推荐，仅在主动点击检查更新时触发）"
+                        ) {
+                            updateMode = UpdaterConfigManager.UPDATE_MODE_MANUAL
+                            configManager.updateMode = UpdaterConfigManager.UPDATE_MODE_MANUAL
+                            Toast.makeText(context, "已切换为仅手动检测", Toast.LENGTH_SHORT).show()
+                        }
+                        Spacer(Modifier.height(8.dp))
+                        ModeRadioRow(
+                            selected = updateMode == UpdaterConfigManager.UPDATE_MODE_AUTO,
+                            label = "启动时静默检测（打开应用时在后台轻量检测更新）"
+                        ) {
+                            updateMode = UpdaterConfigManager.UPDATE_MODE_AUTO
+                            configManager.updateMode = UpdaterConfigManager.UPDATE_MODE_AUTO
+                            Toast.makeText(context, "已开启启动时静默检测", Toast.LENGTH_SHORT).show()
+                        }
+                    }
                 }
             }
         },
@@ -242,6 +389,68 @@ fun SourceSettingsDialogHost(
                 showAddDialog = false
             }
         )
+    }
+}
+
+@Composable
+private fun ProxyPresetItem(
+    preset: ProxyPreset,
+    selected: Boolean,
+    latency: String?,
+    onClick: () -> Unit
+) {
+    val colors = MaterialTheme.colorScheme
+    val border = if (selected) BorderStroke(1.5.dp, colors.primary) else BorderStroke(1.dp, colors.outlineVariant)
+    val bg = if (selected) colors.primaryContainer.copy(alpha = 0.35f) else colors.surface
+
+    Surface(
+        onClick = onClick,
+        shape = RoundedCornerShape(10.dp),
+        border = border,
+        color = bg,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            RadioButton(
+                selected = selected,
+                onClick = onClick,
+                modifier = Modifier.padding(end = 6.dp)
+            )
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = preset.name,
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal
+                )
+                if (preset.desc.isNotEmpty()) {
+                    Text(
+                        text = preset.desc,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = colors.onSurfaceVariant,
+                        fontSize = 11.sp
+                    )
+                }
+            }
+            if (!latency.isNullOrEmpty()) {
+                val latencyColor = when {
+                    latency.endsWith("ms") -> {
+                        val ms = latency.removeSuffix("ms").toLongOrNull() ?: 999
+                        if (ms < 1000) colors.primary else colors.tertiary
+                    }
+                    else -> colors.error
+                }
+                Text(
+                    text = latency,
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = latencyColor,
+                    modifier = Modifier.padding(start = 8.dp)
+                )
+            }
+        }
     }
 }
 
