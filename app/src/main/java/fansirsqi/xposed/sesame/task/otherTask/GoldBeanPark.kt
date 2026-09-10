@@ -61,7 +61,7 @@ data class BeanScene(
  * @param manureExchangeAmount 肥料换豆量（-1 全换，0 关闭，>0 按配置量），仅农场版生效
  * @param scene 金豆场景（农场版/炼金版），决定全部 RPC 的 bizType/source/version/sceneCode
  */
-class GoldBeanPark(private val manureExchangeAmount: Int = -1, private val scene: BeanScene = BeanScene.FARM) {
+class GoldBeanPark @JvmOverloads constructor(private val manureExchangeAmount: Int = -1, private val scene: BeanScene = BeanScene.FARM) {
     private val TAG = "金豆乐园🎡"
 
     companion object {
