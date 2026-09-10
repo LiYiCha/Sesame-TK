@@ -371,7 +371,7 @@ class NpcChicken {
 
         // 默认预置项（保证页面初始展示：黄金鸡、芝麻大表鸽、农场小鸡、到店红包）
         private val DEFAULT_NPC_MAP = linkedMapOf(
-            "黄金鸡" to NpcSmartConfig("20250725105101013088000000000004", "npc_task_source", "黄金鸡", "ANTFARM_CAIFU_NPC_TASK", 4, 1088.0),
+            "黄金鸡" to NpcSmartConfig("20250725105101013088000000000004", "licaixiaoji_2025_3", "黄金鸡", "ANTFARM_CAIFU_NPC_TASK", 4, 1088.0),
             "芝麻大表鸽" to NpcSmartConfig("20250901105101013088000000000006", "zhimaxiaoji_lianjin", "芝麻大表鸽", "ANTFARM_ZHIMA_NPC_TASK", 1, 88.0),
             "农场小鸡" to NpcSmartConfig("20250613105101013088000000000002", "feiliaoji_202507", "农场小鸡", "ANTFARM_ORCHARD_NPC_TASK", 7, 500.0),
             "到店红包" to NpcSmartConfig("20260115105101013088000000000013", "offfarm_npc_task", "到店红包", "ANTFARM_OFFLINE_PAY_NPC_TASK", 1, 100.0)
@@ -786,8 +786,8 @@ class NpcChicken {
                 val nickname = animal.optString("name", "别人的小鸡")
                 Log.farm("$TAG 庄园位置不足，尝试驱赶: $nickname ($animalId)")
                 try {
-                    // 使用常规驱赶
-                    val s = AntFarmRpcCall.sendBackAnimal("常规", animalId, currentFarmId, masterFarmId)
+                    // 使用常规驱赶（sendType 必须是服务端枚举值 NORMAL/HIT，不能传中文显示名）
+                    val s = AntFarmRpcCall.sendBackAnimal("NORMAL", animalId, currentFarmId, masterFarmId)
                     val result = JSONObject(s)
                     if (result.optBoolean("success")) {
                         Log.farm("$TAG 成功赶走小鸡: $nickname")

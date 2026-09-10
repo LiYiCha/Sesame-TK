@@ -87,6 +87,15 @@ object AuthCodeHelper {
                     }
                 } catch (e: Throwable) {
                     Log.printStackTrace(TAG, "后台线程获取授权码失败: ${e.message}", e)
+//                    val msg = e.message ?: e.toString()
+//                    // 13/46/48 都是 RPC 通道的“当前网络不可用”，属可重试瞬态；1009 才是风控拦截
+//                    when {
+//                        msg.contains("1009") || msg.contains("请进行验证") ->
+//                            Log.error(TAG, "获取授权码被风控拦截: $msg")
+//                        msg.contains("[48]") || msg.contains("[46]") || msg.contains("[13]") || msg.contains("网络不可用") ->
+//                            Log.error(TAG, "获取授权码失败(网络不可用，可重试): ${e.javaClass.simpleName} - $msg")
+//                        else -> Log.printStackTrace(TAG, "后台线程获取授权码失败: $msg", e)
+//                    }
                 } finally {
                     latch.countDown()
                 }

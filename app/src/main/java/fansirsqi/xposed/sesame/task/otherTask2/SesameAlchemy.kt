@@ -7,6 +7,7 @@ import fansirsqi.xposed.sesame.task.otherTask2.AntMemberRpcCall
 import fansirsqi.xposed.sesame.util.GlobalThreadPools
 import fansirsqi.xposed.sesame.util.GlobalThreadPools.sleepCompat
 import fansirsqi.xposed.sesame.util.Log
+import fansirsqi.xposed.sesame.util.TaskBlacklist
 import fansirsqi.xposed.sesame.util.TimeUtil
 import org.json.JSONObject
 import java.util.concurrent.locks.ReentrantLock
@@ -64,6 +65,7 @@ class SesameAlchemy {
                 openTreasureBox() //开启炼金宝箱（内含得到更多任务与二次开箱）
                 handleTask() //处理剩余日常任务
                 collectAlchemyCredit() //一键收取芝麻粒
+                collectGoldenBean() //金豆累计收取
             } catch (e: Exception) {
                 Log.error(TAG, "执行过程中发生异常: $e")
             } finally {
@@ -126,6 +128,25 @@ class SesameAlchemy {
                     val alchemyJo = JSONObject(alchemyRes)
                     attemptCount++
 
+                    // 每10轮查一次体力状态，耗尽（EXHAUSTED）就用药水/做任务恢复
+                    if (attemptCount % 10 == 0) {
+                        try {
+                            val checkJo = JSONObject(AntMemberRpcCall.Zmxy.Alchemy.alchemyQueryHome())
+                            val checkData = checkJo.optJSONObject("data")
+                            if (checkJo.optBoolean("success") && checkData != null
+                                && checkData.optString("staminaStatus", "") == "EXHAUSTED"
+                            ) {
+                                Log.other("芝麻炼金⚗️炼金过程中体力耗尽，尝试恢复体力...")
+                                if (!ensureStamina(true)) {
+                                    Log.other("芝麻炼金⚗️体力恢复失败，退出炼金")
+                                    break
+                                }
+                            }
+                        } catch (e: Exception) {
+                            Log.error(TAG, "体力状态复查失败: $e")
+                        }
+                    }
+
                     if (alchemyJo.optBoolean("success")) {
                         val alData = alchemyJo.optJSONObject("data")
                         if (alData != null) {
@@ -163,10 +184,14 @@ class SesameAlchemy {
                     } else {
                         val resultView = alchemyJo.optString("resultView", "")
                         val resultCode = alchemyJo.optString("resultCode", "")
+                        val upperView = resultView.uppercase()
+                        val upperCode = resultCode.uppercase()
                         if (resultView.contains("CAP_REACHED") || resultView.contains("CURRENT_LEVEL_MAX")) {
                             capReached = true
                             Log.other("芝麻炼金⚗️已达上限")
-                        } else if (resultView.contains("体力") || resultCode.contains("STAMINA") || resultCode.contains("EXHAUSTED")) {
+                        } else if (resultView.contains("体力") || upperView.contains("STAMINA") || upperView.contains("EXHAUSTED")
+                            || upperCode.contains("STAMINA") || upperCode.contains("EXHAUSTED")
+                        ) {
                             Log.other("芝麻炼金⚗️炼金过程中体力耗尽，尝试恢复体力...")
                             val recovered = ensureStamina(hasBottleQuota = true)
                             if (recovered) {
@@ -177,7 +202,8 @@ class SesameAlchemy {
                                 break
                             }
                         } else {
-                            Log.runtime(TAG, "芝麻炼金失败: $resultView")
+                            // 未知失败原因必须可见，便于排查（原为 runtime 不可见）
+                            Log.error(TAG, "炼金失败: $resultView ($resultCode)")
                             break
                         }
                     }
@@ -210,6 +236,51 @@ class SesameAlchemy {
         }
     }
 
+
+    /** 查询金豆累计状态（null=查询失败） */
+    private fun queryGoldenBeanStatus(): JSONObject? {
+        return try {
+            val jo = JSONObject(AntMemberRpcCall.Zmxy.Alchemy.queryGoldenBean())
+            if (jo.optBoolean("success")) jo.optJSONObject("data") else null
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    /**
+     * 金豆收取与任务：炼金版金豆乐园复用 GoldBeanPark 的参数化实现（BeanScene.ZHIMA）
+     */
+    private fun collectGoldenBean() {
+        try {
+            // 1. 炼金累计金豆收取
+            val before = queryGoldenBeanStatus()
+            if (before != null) {
+                val pending = before.optInt("pendingBeans", 0)
+                if (pending > 10) {
+                    // 进入金豆页面触发自动领取
+                    AntMemberRpcCall.Zmxy.Alchemy.goldenBeanIndex()
+                    sleepCompat(2000)
+
+                    val after = queryGoldenBeanStatus()
+                    val collected = if (after == null) pending else pending - after.optInt("pendingBeans", pending)
+                    if (collected > 0) {
+                        Log.other("芝麻炼金⚗️金豆收取成功 +$collected 金豆")
+                    }
+                }
+            }
+
+            // 2. 金豆任务（复用金豆乐园的参数化流程：签到 + TRIGGER 类任务）
+            GlobalThreadPools.execute {
+                try {
+                    fansirsqi.xposed.sesame.task.otherTask.GoldBeanPark.forAlchemy().runAlchemyBeanTasks()
+                } catch (e: Exception) {
+                    Log.error(TAG, "runAlchemyBeanTasks: $e")
+                }
+            }
+        } catch (e: Exception) {
+            Log.error(TAG, "collectGoldenBean: $e")
+        }
+    }
 
     //芝麻炼金
     //初始化
@@ -324,7 +395,7 @@ class SesameAlchemy {
 
             // 2. 如果背包无药水，检查是否有兑换药水配额
             if (!hasBottleQuota) {
-                Log.runtime(TAG, "今日体力药水兑换配额已用完")
+                Log.other("芝麻炼金⚗️背包无药水且今日兑换配额已用完")
                 return false
             }
 
@@ -349,7 +420,7 @@ class SesameAlchemy {
                 if (task.optBoolean("shareAssist", false)) continue
 
                 if (bizType == "LIFE_RECORD") {
-                    val recordId = joinActivity(templateId)
+                    val recordId = joinActivity(templateId, title)
                     if (recordId.isEmpty()) continue
 
                     sleepCompat(9000 + (Math.random() * 1000).toLong())
@@ -438,7 +509,7 @@ class SesameAlchemy {
                     }
                 } else if (bizType == "LIFE_RECORD") {
                     Log.other("芝麻炼金⚗️开宝箱得到更多，正在完成任务[$title]...")
-                    val recordId = joinActivity(templateId)
+                    val recordId = joinActivity(templateId, title)
                     if (recordId.isEmpty()) continue
                     sleepCompat(9000 + (Math.random() * 1000).toLong())
                     feedbackTask(templateId)
@@ -613,7 +684,7 @@ class SesameAlchemy {
                             hasNewTasks = true
                         }else if (bizType.equals("LIFE_RECORD") && todo){
                             allTasksProcessed = false
-                            val recordId = joinActivity(templateId)
+                            val recordId = joinActivity(templateId, title)
                             if (recordId.isEmpty()){
                                 processedTasks.add(templateId)
                                 continue
@@ -700,7 +771,7 @@ class SesameAlchemy {
     }
 
     //领取任务
-    private fun joinActivity(templateId: String): String{
+    private fun joinActivity(templateId: String, title: String = ""): String{
         var recordId = ""
         try {
             val result = JSONObject(AntMemberRpcCall.Zmxy.Alchemy.joinActivity(templateId))
@@ -709,9 +780,15 @@ class SesameAlchemy {
                 val data = result.getJSONObject("data")
                 recordId = data.optString("recordId")
                 return recordId
-            }else{
-                Log.error(TAG, "领取任务[$templateId]失败: ${result}")
             }
+            // 存在进行中的生活记录：不可自动恢复，加入黑名单安静跳过
+            val errorCode = result.optString("resultCode", result.optString("errorCode", ""))
+            val errorMsg = result.optString("resultView", result.optString("errorMsg", ""))
+            if (errorCode == "PROMISE_HAS_PROCESSING_TEMPLATE" || errorMsg.contains("进行中的生活记录")) {
+                TaskBlacklist.autoAddToBlacklist(title.ifEmpty { templateId }, title, errorCode, errorMsg)
+                return recordId
+            }
+            Log.error(TAG, "领取任务[$templateId]失败: $result")
 
         }catch (e: Exception){
             Log.error(TAG, "joinActivity: $e")
@@ -901,7 +978,7 @@ class SesameAlchemy {
                 val templateId = browseTaskVO.optString("templateId","")
                 if (templateId != ""){
                     //领取任务
-                    val recordId = joinActivity(templateId)
+                    val recordId = joinActivity(templateId, "芝麻信用首页浏览任务")
                     if (recordId.isEmpty()){
                         return
                     }

@@ -1106,6 +1106,8 @@ public class AntMemberRpcCall {
         public static String queryScoreProgress() {
             try {
                 JSONObject args = new JSONObject();
+                args.put("channelCode", "");
+                args.put("hitExperiment", true);
                 args.put("needTotalProcess", "TRUE");
                 args.put("queryGuideInfo", true);
                 args.put("switchNewPage", true);
@@ -1125,10 +1127,20 @@ public class AntMemberRpcCall {
          * 接口: com.antgroup.zmxy.zmcustprod.biz.rpc.growthbehavior.api.GrowthBehaviorRpcManager.collectProgressBall
          */
         public static String collectProgressBall(JSONArray ballIdList) {
+            return collectProgressBall(ballIdList, new JSONArray());
+        }
+
+        /**
+         * 批量领取进度球（按版本分字段）：
+         * 新格式球ID（来自 newProgressBallIds / newProgressAggregateMap）放 newProgressBallIds；
+         * 老格式球ID（来自 totalWaitProcessVO.totalProgressIdList）放 ballIdList。
+         * 真实抓包仅有新格式球时 ballIdList 为空数组。
+         */
+        public static String collectProgressBall(JSONArray newIds, JSONArray legacyIds) {
             try {
                 JSONObject args = new JSONObject();
-                args.put("newProgressBallIds", ballIdList);
-                args.put("ballIdList", ballIdList); // Populate both fields to support all ball versions
+                args.put("newProgressBallIds", newIds);
+                args.put("ballIdList", legacyIds);
                 args.put("hitExperiment", true);
 
                 return RequestManager.requestString(
@@ -1263,7 +1275,7 @@ public class AntMemberRpcCall {
                         "[{\"recordId\":\"" + recordId + "\"}]");
             }
             /**
-             * [日志对应] 芝麻炼金 - 领取奖励
+             * 芝麻炼金 - 领取奖励
              *
              * Method: com.antgroup.zmxy.zmmemberop.biz.rpc.AlchemyRpcManager.claimAward
              */

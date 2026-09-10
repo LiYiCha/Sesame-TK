@@ -1458,7 +1458,9 @@ class AntForest : ModelTask(), EnergyCollectCallback {
             userHomeObj = JSONObject(response)
             // 检查响应是否成功
             if (!ResChecker.checkRes(TAG + "查询自己主页失败:", userHomeObj)) {
-                Log.error(TAG, "查询自己主页失败: " + userHomeObj.optString("resultDesc", "未知错误"))
+                // resultDesc 缺失时直接打完整响应，避免出现无信息量的“未知错误”
+                val desc = userHomeObj.optString("resultDesc", "")
+                Log.error(TAG, "查询自己主页失败: " + if (desc.isEmpty()) userHomeObj.toString() else desc)
                 return null
             }
 

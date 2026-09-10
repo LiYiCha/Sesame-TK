@@ -8,10 +8,7 @@ import fansirsqi.xposed.sesame.util.GlobalThreadPools
 import fansirsqi.xposed.sesame.util.Log
 import fansirsqi.xposed.sesame.util.TimeUtil
 import fansirsqi.xposed.sesame.util.maps.UserMap
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 import org.json.JSONArray
 import org.json.JSONObject
 import java.text.SimpleDateFormat
@@ -19,20 +16,74 @@ import java.util.Date
 import java.util.Locale
 
 /**
- * 金豆乐园 🎡
+ * 金豆场景配置
+ *
+ * 农场版与炼金版金豆乐园的接口结构完全相同，仅参数不同，
+ * 通过替换 bizType/source/version/sceneCode 即可复用同一套任务流程
  */
-class GoldBeanPark(private val manureExchangeAmount: Int = -1) {
+data class BeanScene(
+    val bizType: String,
+    val sourceMain: String,
+    val sourceTask: String,
+    val version: String,
+    val defaultSceneCode: String,
+    val indexDarwinSceneList: String,
+    val flagPrefix: String
+) {
+    companion object {
+        /** 农场版金豆乐园（芭芭农场入口） */
+        val FARM = BeanScene(
+            bizType = "MASTER",
+            sourceMain = "babafarm",
+            sourceTask = "index_baping",
+            version = "20260901.01",
+            defaultSceneCode = "GOLDEN_BEAN_MASTER_TASK",
+            indexDarwinSceneList = "[\"indexLayoutTwo\",\"taskFlowHandGuide\",\"indexLoadingOptimization\"]",
+            flagPrefix = "goldBeanPark"
+        )
+
+        /** 炼金版金豆乐园（芝麻炼金入口） */
+        val ZHIMA = BeanScene(
+            bizType = "ZHIMA",
+            sourceMain = "lianjin",
+            sourceTask = "lianjin",
+            version = "20260901.01",
+            defaultSceneCode = "GOLDEN_BEAN_ZHIMA_LIST",
+            indexDarwinSceneList = "[\"indexLayoutTwo\",\"taskFlowHandGuide\",\"indexLoadingOptimization\"]",
+            flagPrefix = "alchemyGoldenBean"
+        )
+    }
+}
+
+/**
+ * 金豆乐园 🎡
+ *
+ * @param manureExchangeAmount 肥料换豆量（-1 全换，0 关闭，>0 按配置量），仅农场版生效
+ * @param scene 金豆场景（农场版/炼金版），决定全部 RPC 的 bizType/source/version/sceneCode
+ */
+class GoldBeanPark(private val manureExchangeAmount: Int = -1, private val scene: BeanScene = BeanScene.FARM) {
     private val TAG = "金豆乐园🎡"
 
     companion object {
-        private const val SOURCE = "babafarm"
-        private const val VERSION = "20260723.01"
+        private const val THEMES_FOLDER = "themes"
         private const val MINER_SOURCE = "ch_url-https://render.alipay.com/p/yuyan/180020010001291350/index.html"
+
+        /** 炼金版入口：供芝麻炼金模块调用，只做签到与可自动完成的任务 */
+        fun forAlchemy(): GoldBeanPark = GoldBeanPark(scene = BeanScene.ZHIMA)
     }
+
+    private val fullSyncTypes = listOf(
+        "JAR_INFO", "SIGN", "MARKETING_POPUP", "TASK_LIST", "FORTUNE_DRAW",
+        "EXCHANGE_MANURE", "FARM_TASK", "GAME_CENTER_FOR_INDEX", "DRAINAGE", "SPROUT_INFO"
+    )
+    private val taskSyncTypes = listOf(
+        "JAR_INFO", "TASK_LIST", "FORTUNE_DRAW", "EXCHANGE_MANURE", "FARM_TASK",
+        "GAME_CENTER_FOR_INDEX", "DRAINAGE", "SPROUT_INFO"
+    )
 
     fun run() {
         val hour = TimeUtil.getHourOfDay()
-        if (hour < 7 || Status.hasFlagToday("goldBeanPark::allTask")) {
+        if (hour < 7 || Status.hasFlagToday("${scene.flagPrefix}::allTask")) {
             return
         }
         // 通过 GlobalThreadPools 执行：纳入统一追踪，"停止运行"时随 cancelAll 一并取消
@@ -43,44 +94,138 @@ class GoldBeanPark(private val manureExchangeAmount: Int = -1) {
                 Log.error(TAG, "handleGoldBeanPark error: $e")
             }
         }
-        Status.setFlagToday("goldBeanPark::allTask")
+        Status.setFlagToday("${scene.flagPrefix}::allTask")
     }
 
     private suspend fun handleGoldBeanPark() {
         try {
             // 1. 首页初始化与数据同步
             goldenBeanIndex()
-            listTopItemsByScene()
-            val syncRes = goldenBeanSync(listOf("JAR_INFO", "SIGN", "MARKETING_POPUP", "TASK_LIST", "FORTUNE_DRAW", "EXCHANGE_MANURE", "FARM_TASK", "GAME_CENTER_FOR_INDEX", "DRAINAGE", "SPROUT_INFO"))
+            if (scene == BeanScene.FARM) {
+                listTopItemsByScene()
+            }
+            val syncRes = goldenBeanSync(fullSyncTypes)
             if (!syncRes.optBoolean("success", true) && syncRes.has("resultDesc")) {
                 Log.error(TAG, "金豆同步异常: ${syncRes.optString("resultDesc")}")
             }
 
-            // 2. 金豆签到 (增加每日标记限制，防止多次重复执行)
-            if (!Status.hasFlagToday("goldBeanPark::sign")) {
-                val todayStr = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
-                val signRes = goldenBeanSign(todayStr)
-                if (signRes.optBoolean("success")) {
-                    Status.setFlagToday("goldBeanPark::sign")
-                    val incCount = extractAwardBeanCount(signRes)
-                    if (incCount > 0) {
-                        Log.other(TAG, "金豆签到成功+$incCount 金豆")
-                    } else {
-                        val desc = signRes.optString("desc", signRes.optString("resultDesc", "成功"))
-                        Log.other(TAG, "金豆签到: $desc")
-                    }
-                } else {
-                    val desc = signRes.optString("resultDesc", signRes.optString("desc", ""))
-                    if (desc.contains("已签") || desc.contains("重复") || desc.contains("签过")) {
-                        Status.setFlagToday("goldBeanPark::sign")
+            // 2. 金豆签到
+            doSign()
+
+            // 3. 任务处理：每完成/领取一个任务就重新 sync，模拟真实操作节奏
+            doTaskLoop()
+
+            // 以下为农场版专属（炼金版金豆页无对应接口语义）
+            if (scene != BeanScene.FARM) return
+
+            // 4. 金豆对对碰游戏自动上报与开金蛋/开宝箱 (charitygamecenter)
+            if (!Status.hasFlagToday("${scene.flagPrefix}::gameFinished")) {
+                val gameListRes = queryCharityGameList()
+                if (gameListRes.optBoolean("success") || gameListRes.optString("desc") == "SUCCESS") {
+                    val drawRights = gameListRes.optJSONObject("gameCenterDrawRights")
+                    if (drawRights != null) {
+                        var quotaCanUse = drawRights.optInt("quotaCanUse", 0)
+                        val quotaLimit = drawRights.optInt("quotaLimit", 20)
+                        val usedQuota = drawRights.optInt("usedQuota", 0)
+
+                        val remainToTask = quotaLimit - usedQuota
+                        if (remainToTask > 0 && quotaCanUse < remainToTask) {
+                            Log.other(TAG, "金豆乐园宝箱/金蛋进度 $usedQuota/$quotaLimit，自动执行【金豆对对碰/吃草草】上报补齐...")
+                            try {
+                                GameTask.GoldenBean_ddply.report(remainToTask)
+                            } catch (e: Exception) {
+                                Log.error(TAG, "GoldenBean_ddply report error: $e")
+                            }
+                            try {
+                                GameTask.GoldenBean_nccmx.report(remainToTask)
+                            } catch (e: Exception) {
+                                Log.error(TAG, "GoldenBean_nccmx report error: $e")
+                            }
+                            delay(2000)
+                            val refreshRes = queryCharityGameList()
+                            quotaCanUse = refreshRes.optJSONObject("gameCenterDrawRights")?.optInt("quotaCanUse") ?: remainToTask
+                        }
+
+                        if (quotaCanUse > 0) {
+                            val drawRes = drawCharityGameCenterAward(quotaCanUse)
+                            if (drawRes.optBoolean("success") || drawRes.optString("desc") == "SUCCESS") {
+                                val awardList = drawRes.optJSONArray("gameCenterDrawAwardList")
+                                var totalEarned = 0
+                                if (awardList != null) {
+                                    for (k in 0 until awardList.length()) {
+                                        val item = awardList.getJSONObject(k)
+                                        totalEarned += item.optInt("awardCount", 0)
+                                    }
+                                }
+                                Log.other(TAG, "金豆乐园砸蛋成功获得+$totalEarned 金豆")
+                            }
+                        }
+
+                        if (usedQuota >= quotaLimit || remainToTask <= 0) {
+                            Status.setFlagToday("${scene.flagPrefix}::gameFinished")
+                        }
                     }
                 }
             }
 
-            // 3. 任务处理：每完成/领取一个任务就重新 sync，模拟真实操作节奏
+            // 5. 肥料换豆
+            handleManureExchange()
+
+            // 6. 金猫矿工
+            handleMiner()
+
+        } catch (e: Exception) {
+            Log.error(TAG, "handleGoldBeanPark error: $e")
+        }
+    }
+
+    /**
+     * 炼金版入口：只做签到与可自动完成的任务（TRIGGER 类），
+     * 不含农场版专属的对对碰/肥料换豆/金猫矿工
+     */
+    suspend fun runAlchemyBeanTasks() {
+        if (Status.hasFlagToday("${scene.flagPrefix}::allTask")) {
+            return
+        }
+        try {
+            goldenBeanIndex()
+            doSign()
+            doTaskLoop()
+        } catch (e: Exception) {
+            Log.error(TAG, "runAlchemyBeanTasks error: $e")
+        }
+        Status.setFlagToday("${scene.flagPrefix}::allTask")
+    }
+
+    private suspend fun doSign() {
+        if (Status.hasFlagToday("${scene.flagPrefix}::sign")) return
+        try {
+            val todayStr = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
+            val signRes = goldenBeanSign(todayStr)
+            if (signRes.optBoolean("success")) {
+                Status.setFlagToday("${scene.flagPrefix}::sign")
+                val incCount = extractAwardBeanCount(signRes)
+                if (incCount > 0) {
+                    Log.other(TAG, "金豆签到成功+$incCount 金豆")
+                } else {
+                    Log.other(TAG, "金豆签到: ${signRes.optString("desc", signRes.optString("resultDesc", "成功"))}")
+                }
+            } else {
+                val desc = signRes.optString("resultDesc", signRes.optString("desc", ""))
+                if (desc.contains("已签") || desc.contains("重复") || desc.contains("签过")) {
+                    Status.setFlagToday("${scene.flagPrefix}::sign")
+                }
+            }
+        } catch (e: Exception) {
+            Log.error(TAG, "doSign error: $e")
+        }
+    }
+
+    private suspend fun doTaskLoop() {
+        try {
             while (true) {
                 // ── 拉取最新任务列表 ──
-                val syncTaskRes = goldenBeanSync(listOf("JAR_INFO", "TASK_LIST", "FORTUNE_DRAW", "EXCHANGE_MANURE", "FARM_TASK", "GAME_CENTER_FOR_INDEX", "DRAINAGE", "SPROUT_INFO"))
+                val syncTaskRes = goldenBeanSync(taskSyncTypes)
                 val taskList = syncTaskRes.optJSONArray("taskList")
                 if (taskList == null || taskList.length() == 0) break
 
@@ -92,7 +237,7 @@ class GoldBeanPark(private val manureExchangeAmount: Int = -1) {
                     val taskType = task.optString("taskType").ifEmpty { taskId }
                     val taskStatus = task.optString("taskStatus")
                     val actionType = task.optString("actionType")
-                    val taskSceneCode = task.optString("sceneCode", "GOLDENBEAN")
+                    val taskSceneCode = task.optString("sceneCode", scene.defaultSceneCode)
                     val displayConfig = task.optJSONObject("taskDisplayConfig")
                     val title = displayConfig?.optString("title") ?: taskId
                     val type = displayConfig?.optString("type") ?: ""
@@ -102,15 +247,15 @@ class GoldBeanPark(private val manureExchangeAmount: Int = -1) {
 
                     // 1. 抽签任务（一次性，不需 re-sync）
                     if (actionType == "FORTUNE_DRAW" || taskType == "FORTUNE_DRAW" || taskId == "FORTUNE_DRAW") {
-                        if (!Status.hasFlagToday("goldBeanPark::fortuneDraw")) {
+                        if (!Status.hasFlagToday("${scene.flagPrefix}::fortuneDraw")) {
                             val drawRes = goldenBeanFortuneDraw()
                             if (drawRes.optBoolean("success")) {
-                                Status.setFlagToday("goldBeanPark::fortuneDraw")
-                                val incCount = drawRes.optInt("beanDelta", 0)
+                                Status.setFlagToday("${scene.flagPrefix}::fortuneDraw")
+                                val incCount = extractAwardBeanCount(drawRes)
                                 Log.other(TAG, "金豆抽签成功+$incCount 金豆")
                             } else {
                                 Log.other(TAG, "金豆抽签: ${drawRes.optString("resultDesc", "完成")}")
-                                Status.setFlagToday("goldBeanPark::fortuneDraw")
+                                Status.setFlagToday("${scene.flagPrefix}::fortuneDraw")
                             }
                         }
                         continue
@@ -119,8 +264,8 @@ class GoldBeanPark(private val manureExchangeAmount: Int = -1) {
                     // 2. 待领奖状态 (FINISHED)：领奖后 re-sync
                     if (taskStatus == "FINISHED") {
                         var awardRes = receiveTaskAwardAntOrchard(taskType, taskSceneCode)
-                        if (!awardRes.optBoolean("success") && taskSceneCode != "GOLDEN_BEAN_MASTER_TASK") {
-                            awardRes = receiveTaskAwardAntOrchard(taskType, "GOLDEN_BEAN_MASTER_TASK")
+                        if (!awardRes.optBoolean("success") && taskSceneCode != scene.defaultSceneCode) {
+                            awardRes = receiveTaskAwardAntOrchard(taskType, scene.defaultSceneCode)
                         }
                         if (awardRes.optBoolean("success")) {
                             val incCount = extractAwardBeanCount(awardRes)
@@ -172,8 +317,8 @@ class GoldBeanPark(private val manureExchangeAmount: Int = -1) {
                             }
                             delay(1000 + (0..1000).random().toLong())
                             var awardRes = receiveTaskAwardAntOrchard(taskType, taskSceneCode)
-                            if (!awardRes.optBoolean("success") && taskSceneCode != "GOLDEN_BEAN_MASTER_TASK") {
-                                awardRes = receiveTaskAwardAntOrchard(taskType, "GOLDEN_BEAN_MASTER_TASK")
+                            if (!awardRes.optBoolean("success") && taskSceneCode != scene.defaultSceneCode) {
+                                awardRes = receiveTaskAwardAntOrchard(taskType, scene.defaultSceneCode)
                             }
                             if (awardRes.optBoolean("success")) {
                                 val incCount = extractAwardBeanCount(awardRes)
@@ -193,65 +338,8 @@ class GoldBeanPark(private val manureExchangeAmount: Int = -1) {
                 // 本轮未处理任何任务，退出 while
                 if (!hasWorkDone) break
             }
-
-            // 4. 金豆对对碰游戏自动上报与开金蛋/开宝箱 (charitygamecenter)
-            if (!Status.hasFlagToday("goldBeanPark::gameFinished")) {
-                val gameListRes = queryCharityGameList()
-                if (gameListRes.optBoolean("success") || gameListRes.optString("desc") == "SUCCESS") {
-                    val drawRights = gameListRes.optJSONObject("gameCenterDrawRights")
-                    if (drawRights != null) {
-                        var quotaCanUse = drawRights.optInt("quotaCanUse", 0)
-                        val quotaLimit = drawRights.optInt("quotaLimit", 20)
-                        val usedQuota = drawRights.optInt("usedQuota", 0)
-
-                        val remainToTask = quotaLimit - usedQuota
-                        if (remainToTask > 0 && quotaCanUse < remainToTask) {
-                            Log.other(TAG, "金豆乐园宝箱/金蛋进度 $usedQuota/$quotaLimit，自动执行【金豆对对碰/吃草草】上报补齐...")
-                            try {
-                                GameTask.GoldenBean_ddply.report(remainToTask)
-                            } catch (e: Exception) {
-                                Log.error(TAG, "GoldenBean_ddply report error: $e")
-                            }
-                            try {
-                                GameTask.GoldenBean_nccmx.report(remainToTask)
-                            } catch (e: Exception) {
-                                Log.error(TAG, "GoldenBean_nccmx report error: $e")
-                            }
-                            delay(2000)
-                            val refreshRes = queryCharityGameList()
-                            quotaCanUse = refreshRes.optJSONObject("gameCenterDrawRights")?.optInt("quotaCanUse") ?: remainToTask
-                        }
-
-                        if (quotaCanUse > 0) {
-                            val drawRes = drawCharityGameCenterAward(quotaCanUse)
-                            if (drawRes.optBoolean("success") || drawRes.optString("desc") == "SUCCESS") {
-                                val awardList = drawRes.optJSONArray("gameCenterDrawAwardList")
-                                var totalEarned = 0
-                                if (awardList != null) {
-                                    for (k in 0 until awardList.length()) {
-                                        val item = awardList.getJSONObject(k)
-                                        totalEarned += item.optInt("awardCount", 0)
-                                    }
-                                }
-                                Log.other(TAG, "金豆乐园砸蛋成功获得+$totalEarned 金豆")
-                            }
-                        }
-
-                        if (usedQuota >= quotaLimit || remainToTask <= 0) {
-                            Status.setFlagToday("goldBeanPark::gameFinished")
-                        }
-                    }
-                }
-            }
-
-            // 5. 肥料换豆
-            handleManureExchange()
-
-            // 6. 金猫矿工
-            handleMiner()
-
         } catch (e: Exception) {
-            Log.error(TAG, "handleGoldBeanPark error: $e")
+            Log.error(TAG, "doTaskLoop error: $e")
         }
     }
 
@@ -259,7 +347,12 @@ class GoldBeanPark(private val manureExchangeAmount: Int = -1) {
 
     private fun goldenBeanIndex(): JSONObject {
         val method = "com.alipay.goldenbean.index"
-        val params = "[{\"bizType\":\"MASTER\",\"darwinSceneList\":[],\"source\":\"babafarm\",\"version\":\"20260723.01\"}]"
+        val req = JSONObject()
+        req.put("bizType", scene.bizType)
+        req.put("darwinSceneList", JSONArray(scene.indexDarwinSceneList))
+        req.put("source", scene.sourceMain)
+        req.put("version", scene.version)
+        val params = JSONArray().put(req).toString()
         return try {
             JSONObject(RequestManager.requestString(method, params))
         } catch (e: Exception) {
@@ -267,17 +360,17 @@ class GoldBeanPark(private val manureExchangeAmount: Int = -1) {
         }
     }
 
-    private fun goldenBeanSync(syncTypeList: List<String>,): JSONObject {
+    private fun goldenBeanSync(syncTypeList: List<String>): JSONObject {
         val method = "com.alipay.goldenbean.sync"
         val syncTypeArr = JSONArray()
         for (item in syncTypeList) {
             syncTypeArr.put(item)
         }
         val req = JSONObject()
-        req.put("bizType", "MASTER")
-        req.put("source", "babafarm")
+        req.put("bizType", scene.bizType)
+        req.put("source", scene.sourceMain)
         req.put("syncTypeList", syncTypeArr)
-        req.put("version", "20260723.01")
+        req.put("version", scene.version)
         val params = JSONArray().put(req).toString()
         return try {
             JSONObject(RequestManager.requestString(method, params))
@@ -289,10 +382,10 @@ class GoldBeanPark(private val manureExchangeAmount: Int = -1) {
     private fun goldenBeanSign(signKey: String): JSONObject {
         val method = "com.alipay.goldenbean.sign"
         val req = JSONObject()
-        req.put("bizType", "MASTER")
+        req.put("bizType", scene.bizType)
         req.put("signKey", signKey)
-        req.put("source", "babafarm")
-        req.put("version", "20260723.01")
+        req.put("source", scene.sourceMain)
+        req.put("version", scene.version)
         val params = JSONArray().put(req).toString()
         return try {
             JSONObject(RequestManager.requestString(method, params))
@@ -304,9 +397,9 @@ class GoldBeanPark(private val manureExchangeAmount: Int = -1) {
     private fun goldenBeanFortuneDraw(): JSONObject {
         val method = "com.alipay.goldenbean.fortuneDraw"
         val req = JSONObject()
-        req.put("bizType", "MASTER")
-        req.put("source", "babafarm")
-        req.put("version", "20260723.01")
+        req.put("bizType", scene.bizType)
+        req.put("source", scene.sourceMain)
+        req.put("version", scene.version)
         val params = JSONArray().put(req).toString()
         return try {
             JSONObject(RequestManager.requestString(method, params))
@@ -318,11 +411,11 @@ class GoldBeanPark(private val manureExchangeAmount: Int = -1) {
     private fun goldenBeanTrigger(taskId: String, triggerType: String): JSONObject {
         val method = "com.alipay.goldenbean.trigger"
         val req = JSONObject()
-        req.put("bizType", "MASTER")
-        req.put("source", "babafarm")
+        req.put("bizType", scene.bizType)
+        req.put("source", scene.sourceMain)
         req.put("taskId", taskId)
         req.put("triggerType", triggerType)
-        req.put("version", "20260723.01")
+        req.put("version", scene.version)
         val params = JSONArray().put(req).toString()
         return try {
             JSONObject(RequestManager.requestString(method, params))
@@ -348,17 +441,17 @@ class GoldBeanPark(private val manureExchangeAmount: Int = -1) {
         return count
     }
 
-    private fun finishTaskAntOrchard(taskType: String, userId: String, sceneCode: String = "GOLDEN_BEAN_MASTER_TASK"): JSONObject {
+    private fun finishTaskAntOrchard(taskType: String, userId: String, sceneCode: String = scene.defaultSceneCode): JSONObject {
         val method = "com.alipay.antieptask.finishTaskantorchard"
         val req = JSONObject()
-        req.put("bizType", "MASTER")
-        req.put("finishBusinessInfo", JSONObject().put("bizType", "MASTER"))
+        req.put("bizType", scene.bizType)
+        req.put("finishBusinessInfo", JSONObject().put("bizType", scene.bizType))
         req.put("outBizNo", "$userId${System.currentTimeMillis()}")
-        val targetScene = if (sceneCode.isEmpty() || sceneCode == "GOLDENBEAN") "GOLDEN_BEAN_MASTER_TASK" else sceneCode
+        val targetScene = if (sceneCode.isEmpty() || sceneCode == "GOLDENBEAN") scene.defaultSceneCode else sceneCode
         req.put("sceneCode", targetScene)
-        req.put("source", "index_baping")
+        req.put("source", scene.sourceTask)
         req.put("taskType", taskType)
-        req.put("version", "20260723.01")
+        req.put("version", scene.version)
         val params = JSONArray().put(req).toString()
         return try {
             JSONObject(RequestManager.requestString(method, params))
@@ -367,17 +460,17 @@ class GoldBeanPark(private val manureExchangeAmount: Int = -1) {
         }
     }
 
-    private fun receiveTaskAwardAntOrchard(taskType: String, sceneCode: String = "GOLDEN_BEAN_MASTER_TASK"): JSONObject {
+    private fun receiveTaskAwardAntOrchard(taskType: String, sceneCode: String = scene.defaultSceneCode): JSONObject {
         val method = "com.alipay.antieptask.receiveTaskAwardantorchard"
         val req = JSONObject()
-        req.put("bizInfo", JSONObject().put("bizType", "MASTER"))
-        req.put("bizType", "MASTER")
+        req.put("bizInfo", JSONObject().put("bizType", scene.bizType))
+        req.put("bizType", scene.bizType)
         req.put("ignoreLimit", true)
-        val targetScene = if (sceneCode.isEmpty() || sceneCode == "GOLDENBEAN") "GOLDEN_BEAN_MASTER_TASK" else sceneCode
+        val targetScene = if (sceneCode.isEmpty() || sceneCode == "GOLDENBEAN") scene.defaultSceneCode else sceneCode
         req.put("sceneCode", targetScene)
-        req.put("source", "index_baping")
+        req.put("source", scene.sourceTask)
         req.put("taskType", taskType)
-        req.put("version", "20260723.01")
+        req.put("version", scene.version)
         val params = JSONArray().put(req).toString()
         return try {
             JSONObject(RequestManager.requestString(method, params))
@@ -467,7 +560,7 @@ class GoldBeanPark(private val manureExchangeAmount: Int = -1) {
         title: String
     ): Boolean {
         // 1. 行为与类型黑名单 (外部跳转、支付、理财)
-        if (actionType == "VISIT" || actionType == "JUMP_APP" || type.contains("APP") || 
+        if (actionType == "VISIT" || actionType == "JUMP_APP" || type.contains("APP") ||
             type == "XIANSHANGZHIFU" || type == "XIANXIAZHIFU" || type == "YUEBAO") {
             return true
         }
@@ -486,7 +579,7 @@ class GoldBeanPark(private val manureExchangeAmount: Int = -1) {
     // --- 肥料换豆 ---
 
     private suspend fun handleManureExchange() {
-        if (manureExchangeAmount == 0 || Status.hasFlagToday("goldBeanPark::manureExchange")) return
+        if (manureExchangeAmount == 0 || Status.hasFlagToday("${scene.flagPrefix}::manureExchange")) return
         try {
             val indexRes = goldenBeanIndex()
             val exchangeInfo = indexRes.optJSONObject("manureExchangeInfo") ?: return
@@ -521,7 +614,7 @@ class GoldBeanPark(private val manureExchangeAmount: Int = -1) {
             val afterManure = afterInfo?.optInt("currentManure", -1) ?: -1
             val afterQuota = afterInfo?.optInt("remainQuota", -1) ?: -1
             Log.other(TAG, "肥料换豆成功 amount=$toExchange remainManure=$afterManure remainQuota=$afterQuota")
-            Status.setFlagToday("goldBeanPark::manureExchange")
+            Status.setFlagToday("${scene.flagPrefix}::manureExchange")
         } catch (e: Exception) {
             Log.error(TAG, "handleManureExchange error: $e")
         }
@@ -597,10 +690,10 @@ class GoldBeanPark(private val manureExchangeAmount: Int = -1) {
     private fun goldenBeanManureExchange(exchangeBeanAmount: Int): JSONObject {
         val method = "com.alipay.goldenbean.manureExchange"
         val req = JSONObject()
-        req.put("bizType", "MASTER")
+        req.put("bizType", scene.bizType)
         req.put("exchangeBeanAmount", exchangeBeanAmount)
-        req.put("source", SOURCE)
-        req.put("version", VERSION)
+        req.put("source", scene.sourceMain)
+        req.put("version", scene.version)
         return try {
             JSONObject(RequestManager.requestString(method, JSONArray().put(req).toString()))
         } catch (e: Exception) {
@@ -611,9 +704,9 @@ class GoldBeanPark(private val manureExchangeAmount: Int = -1) {
     private fun goldenBeanMinerIndex(): JSONObject {
         val method = "com.alipay.goldenbean.miner.index"
         val req = JSONObject()
-        req.put("bizType", "MASTER")
+        req.put("bizType", scene.bizType)
         req.put("source", MINER_SOURCE)
-        req.put("version", VERSION)
+        req.put("version", scene.version)
         return try {
             JSONObject(RequestManager.requestString(method, JSONArray().put(req).toString()))
         } catch (e: Exception) {
@@ -627,14 +720,14 @@ class GoldBeanPark(private val manureExchangeAmount: Int = -1) {
     ): JSONObject {
         val method = "com.alipay.goldenbean.miner.grab"
         val req = JSONObject()
-        req.put("bizType", "MASTER")
+        req.put("bizType", scene.bizType)
         req.put("grabId", java.util.UUID.randomUUID().toString())
         req.put("grabResult", grabResult)
         if (itemId.isNotBlank()) {
             req.put("itemId", itemId)
         }
         req.put("source", MINER_SOURCE)
-        req.put("version", VERSION)
+        req.put("version", scene.version)
         return try {
             JSONObject(RequestManager.requestString(method, JSONArray().put(req).toString()))
         } catch (e: Exception) {

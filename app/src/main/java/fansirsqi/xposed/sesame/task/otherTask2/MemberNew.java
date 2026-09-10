@@ -427,7 +427,8 @@ public class MemberNew extends BaseCommTask {
             }
             GlobalThreadPools.sleep(RandomUtil.nextInt(5000, 10000));
         } catch (Exception e) {
-            Log.error(TAG, "广告任务处理异常: " + e.getMessage());
+            String detail = (e.getMessage() == null) ? "无详细信息" : e.getMessage();
+            Log.error(TAG, "广告任务处理异常: " + e.getClass().getSimpleName() + " - " + detail);
         }
     }
 

@@ -188,7 +188,7 @@ class TopUpGold {
             }
 
             val miniMark = AlipayMiniMarkHelper.getAlipayMiniMark(APP_ID, VERSION)
-            val url = "https://gdbizweb.alipay-eco.com/goduck/getToken?authCode=$authCode&version=3&channelSource=self"
+            val url = "https://gdbizweb.alipay-eco.com/goduck/getToken?authCode=$authCode&version=4&channelSource=self"
 
             val request = Request.Builder()
                 .url(url)
@@ -285,7 +285,7 @@ class TopUpGold {
     private fun querySignInStatus(token: String, userId: String): JSONObject? {
         try {
             val miniMark = AlipayMiniMarkHelper.getAlipayMiniMark(APP_ID, VERSION)
-            val url = "https://gdbizweb.alipay-eco.com/gdbizweb/task/signin/query?channelSource=self&token=$token&version=3"
+            val url = "https://gdbizweb.alipay-eco.com/gdbizweb/task/signin/query?channelSource=self&version=4"
             val mediaType = "application/json".toMediaType()
             val body = "{\"channelSource\":\"self\"}".toRequestBody(mediaType)
 
@@ -321,7 +321,7 @@ class TopUpGold {
     private fun executeSignIn(token: String, userId: String): Boolean {
         try {
             val miniMark = AlipayMiniMarkHelper.getAlipayMiniMark(APP_ID, VERSION)
-            val url = "https://gdbizweb.alipay-eco.com/gdbizweb/task/signin/execute/v3?channelSource=self&token=$token&version=3"
+            val url = "https://gdbizweb.alipay-eco.com/gdbizweb/task/signin/execute/v3?channelSource=self&version=4"
             val mediaType = "application/json".toMediaType()
             val body = "{\"channelSource\":\"self\"}".toRequestBody(mediaType)
 
@@ -408,6 +408,7 @@ class TopUpGold {
                 put("taskId", taskId)
                 put("taskName", taskName)
                 put("type", "BROWSER")
+                put("taskCenId", TASK_CEN_ID)
                 put("acType", "")
             }
             val body = signupJson.toString().toRequestBody(mediaType)

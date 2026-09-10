@@ -274,6 +274,8 @@ class AntMember : ModelTask() {
                                 doSesameAlchemyNextDayAward()
                             }
 //                            else Log.runtime(TAG, "✅ 芝麻粒次日奖励已领取，今天不再执行")
+                            // ===== 金豆任务（炼金版金豆乐园，复用 GoldBeanPark 参数化实现） =====
+                            fansirsqi.xposed.sesame.task.otherTask.GoldBeanPark.forAlchemy().runAlchemyBeanTasks()
                         })
                     }
 
@@ -1983,7 +1985,7 @@ class AntMember : ModelTask() {
                 if (task.optBoolean("shareAssist", false)) continue
 
                 if (bizType == "LIFE_RECORD") {
-                    val recordId = joinSesameTask(templateId)
+                    val recordId = joinSesameTask(templateId, title)
                     if (recordId.isEmpty()) continue
 
                     delay(9000 + (Math.random() * 1000).toLong())
@@ -2008,13 +2010,26 @@ class AntMember : ModelTask() {
         return@run false
     }
 
-    private fun joinSesameTask(templateId: String): String {
+    /**
+     * 领取生活记录任务。
+     *
+     * 返回 PROMISE_HAS_PROCESSING_TEMPLATE / "存在进行中的生活记录" 表示该任务已有在途记录，
+     * 属于不可自动恢复状态：加入黑名单并安静跳过，不再让 ResChecker 打 Check failed 错误日志。
+     */
+    private fun joinSesameTask(templateId: String, title: String = ""): String {
         try {
             val joinRes = AntMemberRpcCall.Zmxy.Alchemy.joinActivity(templateId)
             val joinJo = JSONObject(joinRes)
-            if (ResChecker.checkRes(TAG, joinJo)) {
+            if (joinJo.optBoolean("success") || joinJo.optBoolean("isSuccess")) {
                 return joinJo.optJSONObject("data")?.optString("recordId", "") ?: ""
             }
+            val errorCode = joinJo.optString("resultCode", joinJo.optString("errorCode", ""))
+            val errorMsg = joinJo.optString("resultView", joinJo.optString("errorMsg", ""))
+            if (errorCode == "PROMISE_HAS_PROCESSING_TEMPLATE" || errorMsg.contains("进行中的生活记录")) {
+                autoAddToBlacklist(title.ifEmpty { templateId }, title, errorCode, errorMsg)
+                return ""
+            }
+            Log.error(TAG, "领取任务失败[$templateId]: $joinRes")
         } catch (e: Exception) {
             Log.error(TAG, "joinSesameTask: $e")
         }
@@ -2087,7 +2102,7 @@ class AntMember : ModelTask() {
                     }
                 } else if (bizType == "LIFE_RECORD") {
                     Log.other("芝麻炼金⚗️开宝箱得到更多，正在完成任务[$title]...")
-                    val recordId = joinSesameTask(templateId)
+                    val recordId = joinSesameTask(templateId, title)
                     if (recordId.isEmpty()) continue
                     delay(9000 + (Math.random() * 1000).toLong())
                     AntMemberRpcCall.Zmxy.Alchemy.taskFeedback(templateId)
@@ -3039,11 +3054,13 @@ class AntMember : ModelTask() {
 
                 val score = json.optInt("score", 0)
 
-                // 合并新老字段中的进度球ID
-                val idList = JSONArray()
-                val idSet = mutableSetOf<String>()
+                // 按版本分字段收集进度球ID（批量领取时新格式ID与老格式ID分开放）
+                val newIdList = JSONArray()
+                val legacyIdList = JSONArray()
+                val newIdSet = mutableSetOf<String>()
+                val legacyIdSet = mutableSetOf<String>()
 
-                // 1. 解析老字段 totalWaitProcessVO
+                // 1. 解析老字段 totalWaitProcessVO -> ballIdList
                 val totalWait = json.optJSONObject("totalWaitProcessVO")
                 if (totalWait != null) {
                     val progressIds = totalWait.optJSONArray("totalProgressIdList")
@@ -3051,24 +3068,24 @@ class AntMember : ModelTask() {
                         for (i in 0 until progressIds.length()) {
                             val id = progressIds.optString(i)
                             if (!id.isNullOrEmpty()) {
-                                idSet.add(id)
+                                legacyIdSet.add(id)
                             }
                         }
                     }
                 }
 
-                // 2. 解析新字段 newProgressBallIds (root级)
+                // 2. 解析新字段 newProgressBallIds (root级) -> newProgressBallIds
                 val newProgressBallIds = json.optJSONArray("newProgressBallIds")
                 if (newProgressBallIds != null) {
                     for (i in 0 until newProgressBallIds.length()) {
                         val id = newProgressBallIds.optString(i)
                         if (!id.isNullOrEmpty()) {
-                            idSet.add(id)
+                            newIdSet.add(id)
                         }
                     }
                 }
 
-                // 3. 解析新字段 newProgressAggregateMap (嵌套的维度数组)
+                // 3. 解析新字段 newProgressAggregateMap (嵌套的维度数组) -> newProgressBallIds
                 val aggregateMap = json.optJSONObject("newProgressAggregateMap")
                 if (aggregateMap != null) {
                     val keys = aggregateMap.keys()
@@ -3083,7 +3100,7 @@ class AntMember : ModelTask() {
                                     for (j in 0 until ballIds.length()) {
                                         val id = ballIds.optString(j)
                                         if (!id.isNullOrEmpty()) {
-                                            idSet.add(id)
+                                            newIdSet.add(id)
                                         }
                                     }
                                 }
@@ -3093,14 +3110,15 @@ class AntMember : ModelTask() {
                 }
 
                 // 填充至 JSONArray
-                idSet.forEach { idList.put(it) }
+                newIdSet.forEach { newIdList.put(it) }
+                legacyIdSet.forEach { legacyIdList.put(it) }
 
                 var finalEco = json.optJSONObject("economicDimension")
                 var finalSoc = json.optJSONObject("socialDimension")
 
-                if (idList.length() > 0) {
-                    // 直接传 JSONArray 领取
-                    val collectResp = AntMemberRpcCall.Zmxy.collectProgressBall(idList)
+                if (newIdList.length() > 0 || legacyIdList.length() > 0) {
+                    // 批量领取：新格式ID放 newProgressBallIds，老格式ID放 ballIdList（均为 JSON 数组，非分隔符）
+                    val collectResp = AntMemberRpcCall.Zmxy.collectProgressBall(newIdList, legacyIdList)
                     if (collectResp != null && !collectResp.isEmpty()) {
                         val collectJson = JSONObject(collectResp)
                         if (collectJson.optBoolean("success")) {

@@ -253,6 +253,26 @@ public class AntMemberRpcCall {
             }
 
             /**
+             * 芝麻炼金-查询金豆累计（进入金豆页面时自动触发，页面会自动领取已累计金豆）
+             * 响应 data: {"maxAccumulated":100,"pendingBeans":0,"status":"SPROUT"}
+             */
+            public static String queryGoldenBean() {
+                return RequestManager.requestString(
+                        "com.antgroup.zmxy.zmmemberop.biz.rpc.AlchemyRpcManager.queryGoldenBean",
+                        "[{}]");
+            }
+
+            /**
+             * 芝麻炼金-进入金豆页面（服务端自动领取待领取金豆）
+             * 与农场金豆乐园同接口，仅 bizType/source 不同；响应结构与农场一致
+             */
+            public static String goldenBeanIndex() {
+                return RequestManager.requestString(
+                        "com.alipay.goldenbean.index",
+                        "[{\"bizType\":\"ZHIMA\",\"darwinSceneList\":[\"indexLayoutTwo\",\"indexPreRequestCacheAB\",\"taskFlowHandGuide\"],\"source\":\"lianjin\",\"version\":\"20260901.01\"}]");
+            }
+
+            /**
              * 芝麻炼金-执行炼金
              */
             public static String alchemyExecute() {

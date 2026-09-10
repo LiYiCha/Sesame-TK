@@ -217,17 +217,6 @@ object ThemeManager {
     }
 
     /**
-     * 执行更新操作
-     *
-     * 完整模拟支付宝内部切换主题的流程：
-     * 1. 删除旧的自定义主题（可选）
-     * 2. 导入新主题文件
-     * 3. 更新 SharedPreferences
-     * 4. 清除内存缓存
-     * 5. 重新读取缓存
-     * 6. 刷新 UI
-     */
-    /**
      * 自动恢复主题（如果缺失）
      */
     fun restoreThemeIfMissing(userId: String) {
@@ -361,30 +350,6 @@ object ThemeManager {
             if (!quiet) showToast("主题更新失败: ${e.message}")
         }
     }
-
-    /**
-     * 复制目录内容
-     *
-     * 将源目录的所有文件复制到目标目录（不包括子目录）
-     */
-    private fun copyDirectoryContents(source: File, destination: File) {
-        if (!source.exists() || !source.isDirectory) {
-            return
-        }
-
-        if (!destination.exists()) {
-            destination.mkdirs()
-        }
-
-        source.listFiles()?.forEach { file ->
-            if (file.isFile) {
-                val destFile = File(destination, file.name)
-                copyFile(file, destFile)
-            }
-        }
-    }
-
-
 
     /**
      * 复制目录

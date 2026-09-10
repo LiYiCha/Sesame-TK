@@ -168,8 +168,8 @@ object ThemeHookV2 {
                             Log.runtime(TAG, "   皮肤ID: ${themeInfo.skinId}")
                             Log.runtime(TAG, "   MD5: ${themeInfo.md5}")
 
-                            // 可选：持久化到磁盘
-                            // persistCacheToDisk(classLoader, cacheMap)
+                            // 持久化到磁盘：防止支付宝清理缓存后主题丢失需重新设置
+                            persistCacheToDisk(classLoader, cacheMap)
 
                         } catch (e: Exception) {
                             Log.runtime(TAG, "❌ 注入缓存失败: ${e.message}")
@@ -193,6 +193,55 @@ object ThemeHookV2 {
     @Volatile
     private var cachedUserId: String? = null
     private var lastThemeFileModified: Long = 0
+
+    /**
+     * 持久化主题缓存到 SharedPreferences
+     *
+     * 支付宝可能周期性清理皮肤缓存（内存 Map g 与 cached_skin_info_v2 持久层），
+     * 导致自定义主题丢失、需要重新设置。
+     * 直接序列化实际注入到内存 Map g 的 SCCacheInfoModel（与内存内容严格一致），
+     * 写回 prefs_skincenter_file 的 cached_skin_info_v2#userId，
+     * 这样即使缓存被清理，下次 K() 重读持久层时主题信息依然存在。
+     */
+    private fun persistCacheToDisk(classLoader: ClassLoader, cacheMap: Map<String, Any>) {
+        try {
+            val customCache = cacheMap["theme"] ?: return
+            val userId = getCurrentUserId(classLoader) ?: return
+
+            // 直接从实际注入的 SCCacheInfoModel 读取字段，保证与内存内容一致
+            val cacheInfo = mapOf(
+                "theme" to mapOf(
+                    "usageScene" to XposedHelpers.getObjectField(customCache, "usageScene"),
+                    "skinId" to XposedHelpers.getObjectField(customCache, "skinId"),
+                    "userSkinId" to XposedHelpers.getObjectField(customCache, "userSkinId"),
+                    "userId" to XposedHelpers.getObjectField(customCache, "userId"),
+                    "md5" to XposedHelpers.getObjectField(customCache, "md5"),
+                    "appSquareMd5" to XposedHelpers.getObjectField(customCache, "appSquareMd5"),
+                    "cacheTime" to XposedHelpers.getLongField(customCache, "cacheTime"),
+                    "versionLimit" to XposedHelpers.getObjectField(customCache, "versionLimit"),
+                    "isDiySkin" to XposedHelpers.getBooleanField(customCache, "isDiySkin"),
+                    "name" to XposedHelpers.getObjectField(customCache, "name"),
+                    "expireDate" to XposedHelpers.getObjectField(customCache, "expireDate"),
+                    "skinType" to XposedHelpers.getObjectField(customCache, "skinType"),
+                    "materialId" to XposedHelpers.getObjectField(customCache, "materialId"),
+                    "diyExpiredTime" to XposedHelpers.getLongField(customCache, "diyExpiredTime")
+                )
+            )
+
+            val context = fansirsqi.xposed.sesame.hook.context.AppContext.getAppContext() ?: return
+            val prefs = context.getSharedPreferences(
+                "prefs_skincenter_file",
+                android.content.Context.MODE_PRIVATE
+            )
+            prefs.edit()
+                .putString("cached_skin_info_v2#$userId", JsonUtil.formatJson(cacheInfo))
+                .apply()
+
+            Log.runtime(TAG, "💾 已持久化主题缓存到 SharedPreferences")
+        } catch (e: Exception) {
+            Log.runtime(TAG, "⚠️ 持久化主题缓存失败: ${e.message}")
+        }
+    }
 
     /**
      * 动态读取主题信息 - 增加内存缓存优化

@@ -165,8 +165,9 @@ class PrivilegeTask {
                                 // ✅ 成功：立即 break，回到外层 while 重新拉取任务列表
                                 break
                             } else {
-                                val desc = completeResult.optString("resultMessage", completeResult.optString("resultDesc", "未知原因"))
-                                Log.error(TAG, "任务[$taskName]完成失败：$desc")
+                                val desc = completeResult.optString("resultMessage", completeResult.optString("resultDesc", ""))
+                                // 无描述时直接打完整响应，避免出现无信息量的“未知原因”
+                                Log.error(TAG, "任务[$taskName]完成失败：" + if (desc.isEmpty()) completeResult.toString() else desc)
                                 taskErrorCounts[taskName] = errorCount + 1
                             }
                         } catch (e: Exception) {

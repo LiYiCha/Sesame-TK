@@ -1595,8 +1595,10 @@ class AntFarm : ModelTask() {
                     }
                     val sendTypeInt = sendBackAnimalWay!!.value
                     user = UserMap.getMaskName(user)
+                    // sendType 必须传服务端枚举值（NORMAL=常规/HIT=攻击），nickNames 仅为显示名
+                    val sendType = if (sendTypeInt == SendBackAnimalWay.HIT) "HIT" else "NORMAL"
                     val s = AntFarmRpcCall.sendBackAnimal(
-                        SendBackAnimalWay.nickNames[sendTypeInt],
+                        sendType,
                         animal.animalId,
                         animal.currentFarmId,
                         animal.masterFarmId
@@ -4166,7 +4168,17 @@ class AntFarm : ModelTask() {
     private suspend fun handleLeyuanDailyTasks() {
         try {
             val queryRes = AntFarmRpcCall.queryOptionalPlay()
-            val jo = JSONObject(queryRes)
+            // 该接口在部分版本不存在，会返回空串（NewRpcBridge 内部 NPE），此处安静跳过
+            if (queryRes.isBlank()) {
+                Log.runtime(TAG, "queryOptionalPlay 无响应（接口不可用），跳过乐园日常任务")
+                return
+            }
+            val jo = try {
+                JSONObject(queryRes)
+            } catch (e: Exception) {
+                Log.runtime(TAG, "queryOptionalPlay 响应解析失败，跳过乐园日常任务: $queryRes")
+                return
+            }
             if (!jo.optBoolean("success")) {
                 Log.runtime(TAG, "queryOptionalPlay 失败: $queryRes")
                 return
