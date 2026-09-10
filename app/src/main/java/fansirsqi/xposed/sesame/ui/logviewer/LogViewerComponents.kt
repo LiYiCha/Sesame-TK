@@ -178,27 +178,15 @@ fun SearchPanelContent(
                             searchText = ""
                             onClearSearch()
                         },
-                        modifier = Modifier.size(26.dp)
+                        modifier = Modifier.size(28.dp)
                     ) {
                         Icon(
                             Icons.Rounded.Close,
                             contentDescription = "清除输入",
-                            modifier = Modifier.size(15.dp),
+                            modifier = Modifier.size(16.dp),
                             tint = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
-                }
-
-                IconButton(
-                    onClick = onDismiss,
-                    modifier = Modifier.size(26.dp)
-                ) {
-                    Icon(
-                        Icons.Rounded.Close,
-                        contentDescription = "关闭搜索",
-                        modifier = Modifier.size(16.dp),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
                 }
             }
 
@@ -409,27 +397,15 @@ fun FilterPanelContent(
                             filterText = ""
                             onClearFilter()
                         },
-                        modifier = Modifier.size(26.dp)
+                        modifier = Modifier.size(28.dp)
                     ) {
                         Icon(
                             Icons.Rounded.Close,
                             contentDescription = "清除关键字",
-                            modifier = Modifier.size(15.dp),
+                            modifier = Modifier.size(16.dp),
                             tint = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
-                }
-
-                IconButton(
-                    onClick = onDismiss,
-                    modifier = Modifier.size(26.dp)
-                ) {
-                    Icon(
-                        Icons.Rounded.Close,
-                        contentDescription = "关闭筛选",
-                        modifier = Modifier.size(16.dp),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
                 }
             }
 
@@ -685,12 +661,6 @@ fun LogLineRow(
                 }
             }
 
-            // 截断提示
-            if (isLongLine && !isExpanded) {
-                withStyle(style = SpanStyle(color = Color(0xFFFFB74D), fontStyle = FontStyle.Italic)) {
-                    append("\n... [已截断 ${line.length - MAX_DISPLAY_LENGTH} 字符，点击展开全部]")
-                }
-            }
         }
     }
 
@@ -700,41 +670,54 @@ fun LogLineRow(
         else -> Color.Transparent
     }
 
-    Row(
+    Column(
         modifier = Modifier
             .fillMaxWidth()
             .background(rowBgColor)
-            .combinedClickable(
-                onClick = {
-                    // 超长行点击切换展开/折叠
-                    if (isLongLine) isExpanded = !isExpanded
-                    onLineClick()
-                },
-                onLongClick = onLineLongClick
-            )
-            .padding(vertical = 2.dp, horizontal = 4.dp),
-        verticalAlignment = Alignment.CenterVertically
     ) {
-        if (isSelectionMode) {
-            Checkbox(
-                checked = isSelected,
-                onCheckedChange = onCheckedChange,
-                modifier = Modifier
-                    .padding(end = 2.dp)
-                    .size(width = 20.dp, height = 0.dp) // 极简占位：强制压缩宽高以缩小边距
-                    .wrapContentSize(unbounded = true) // 允许超出边界绘制而不撑高、撑宽父 Row
-                    .scale(0.8f)
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .combinedClickable(
+                    onClick = onLineClick,
+                    onLongClick = onLineLongClick
+                )
+                .padding(vertical = 2.dp, horizontal = 4.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            if (isSelectionMode) {
+                Checkbox(
+                    checked = isSelected,
+                    onCheckedChange = onCheckedChange,
+                    modifier = Modifier
+                        .padding(end = 2.dp)
+                        .size(width = 20.dp, height = 0.dp) // 极简占位：强制压缩宽高以缩小边距
+                        .wrapContentSize(unbounded = true) // 允许超出边界绘制而不撑高、撑宽父 Row
+                        .scale(0.8f)
+                )
+            }
+
+            Text(
+                text = lineAnnotatedString,
+                fontFamily = FontFamily.Monospace,
+                fontSize = effectiveFontSize.sp,
+                lineHeight = (effectiveFontSize + 4).sp,
+                color = MaterialTheme.colorScheme.onBackground,
+                softWrap = true
             )
         }
 
-        Text(
-            text = lineAnnotatedString,
-            fontFamily = FontFamily.Monospace,
-            fontSize = effectiveFontSize.sp,
-            lineHeight = (effectiveFontSize + 4).sp,
-            color = MaterialTheme.colorScheme.onBackground,
-            softWrap = true
-        )
+        if (isLongLine) {
+            Text(
+                text = if (isExpanded) "▲ 收起超长内容" else "▼ [已截断 ${line.length - MAX_DISPLAY_LENGTH} 字符，点击仅在此处展开]",
+                style = MaterialTheme.typography.labelSmall,
+                fontStyle = FontStyle.Italic,
+                color = Color(0xFFFFB74D),
+                modifier = Modifier
+                    .clickable { isExpanded = !isExpanded }
+                    .padding(start = 8.dp, top = 2.dp, bottom = 4.dp)
+            )
+        }
     }
 }
 
@@ -866,7 +849,7 @@ fun LogContent(
                             // 延迟到点击时读取最新的 displayedLines，避免闭包捕获导致重组
                             val currentLines = viewModel.uiState.value.displayedLines
                             activeDetailLine = currentLines.getOrNull(index) ?: line
-                            activeDetailBlock = findRpcBlockAround(currentLines, index)
+                            activeDetailBlock = viewModel.findRpcBlockForDisplayedLine(index) ?: findRpcBlockAround(currentLines, index)
                         }
                     }
                 }
@@ -1129,8 +1112,8 @@ data class RpcBlock(
 
 fun findRpcBlockAround(lines: List<String>, clickedIndex: Int): RpcBlock? {
     var start = -1
-    // 向上扫描最多 50 行寻找请求起点
-    for (i in clickedIndex downTo (clickedIndex - 50).coerceAtLeast(0)) {
+    // 向上扫描最多 500 行寻找请求起点
+    for (i in clickedIndex downTo (clickedIndex - 500).coerceAtLeast(0)) {
         if (lines[i].contains("========================>")) {
             start = i
             break
@@ -1142,8 +1125,8 @@ fun findRpcBlockAround(lines: List<String>, clickedIndex: Int): RpcBlock? {
     if (start == -1) return null
 
     var end = -1
-    // 向下扫描最多 100 行寻找请求终点
-    for (i in clickedIndex until (clickedIndex + 100).coerceAtMost(lines.size)) {
+    // 向下扫描最多 1000 行寻找请求终点
+    for (i in clickedIndex until (clickedIndex + 1000).coerceAtMost(lines.size)) {
         if (lines[i].contains("<========================")) {
             end = i
             break
@@ -1158,19 +1141,42 @@ fun findRpcBlockAround(lines: List<String>, clickedIndex: Int): RpcBlock? {
     val rawText = blockLines.joinToString("\n")
 
     var method: String? = null
-    var params: String? = null
-    var data: String? = null
+    val paramsBuilder = StringBuilder()
+    val dataBuilder = StringBuilder()
+    var currentSection: String? = null
 
     blockLines.forEach { line ->
         val trimmed = line.trim()
-        if (trimmed.startsWith("Method:")) {
-            method = trimmed.substring("Method:".length).trim()
-        } else if (trimmed.startsWith("Params:")) {
-            params = trimmed.substring("Params:".length).trim()
-        } else if (trimmed.startsWith("Data:")) {
-            data = trimmed.substring("Data:".length).trim()
+        when {
+            trimmed.startsWith("Method:") -> {
+                currentSection = null
+                method = trimmed.substring("Method:".length).trim()
+            }
+            trimmed.startsWith("Params:") -> {
+                currentSection = "PARAMS"
+                paramsBuilder.append(trimmed.substring("Params:".length).trim())
+            }
+            trimmed.startsWith("Data:") -> {
+                currentSection = "DATA"
+                dataBuilder.append(trimmed.substring("Data:".length).trim())
+            }
+            trimmed.startsWith("<========================") || trimmed.startsWith("========================>") -> {
+                currentSection = null
+            }
+            else -> {
+                if (currentSection == "PARAMS") {
+                    if (paramsBuilder.isNotEmpty()) paramsBuilder.append("\n")
+                    paramsBuilder.append(line)
+                } else if (currentSection == "DATA") {
+                    if (dataBuilder.isNotEmpty()) dataBuilder.append("\n")
+                    dataBuilder.append(line)
+                }
+            }
         }
     }
+
+    val params = if (paramsBuilder.isNotEmpty()) paramsBuilder.toString() else null
+    val data = if (dataBuilder.isNotEmpty()) dataBuilder.toString() else null
 
     return RpcBlock(method, params, data, rawText)
 }
@@ -1229,22 +1235,41 @@ fun LineDetailDialog(
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 if (block != null) {
-                    // 第一行：主要操作
+                    // 第一行：主要核心操作（突出复制全文与复制完整请求，两等分）
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
+                        Button(
+                            onClick = {
+                                copyToClipboard(context, block.rawText)
+                                onDismiss()
+                            },
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(10.dp),
+                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
+                        ) {
+                            Text("复制全文", maxLines = 1, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
+                        }
                         if (!block.method.isNullOrEmpty() && !block.params.isNullOrEmpty()) {
-                            Button(
+                            OutlinedButton(
                                 onClick = {
                                     copyToClipboard(context, "Method: ${block.method}\nParams: ${block.params}")
                                     onDismiss()
                                 },
                                 modifier = Modifier.weight(1f),
                                 shape = RoundedCornerShape(10.dp),
-                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
-                            ) { Text("复制请求", maxLines = 1, style = MaterialTheme.typography.labelMedium) }
+                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
+                            ) {
+                                Text("复制请求", maxLines = 1, style = MaterialTheme.typography.labelLarge)
+                            }
                         }
+                    }
+                    // 第二行：细粒度字段单独复制（文字简洁明确，平铺展示，绝不截断）
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
                         if (!block.method.isNullOrEmpty()) {
                             OutlinedButton(
                                 onClick = {
@@ -1252,8 +1277,8 @@ fun LineDetailDialog(
                                     onDismiss()
                                 },
                                 modifier = Modifier.weight(1f),
-                                shape = RoundedCornerShape(10.dp),
-                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                                shape = RoundedCornerShape(8.dp),
+                                contentPadding = PaddingValues(horizontal = 4.dp, vertical = 6.dp)
                             ) { Text("复制 Method", maxLines = 1, style = MaterialTheme.typography.labelMedium) }
                         }
                         if (!block.params.isNullOrEmpty()) {
@@ -1263,16 +1288,10 @@ fun LineDetailDialog(
                                     onDismiss()
                                 },
                                 modifier = Modifier.weight(1f),
-                                shape = RoundedCornerShape(10.dp),
-                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                                shape = RoundedCornerShape(8.dp),
+                                contentPadding = PaddingValues(horizontal = 4.dp, vertical = 6.dp)
                             ) { Text("复制 Params", maxLines = 1, style = MaterialTheme.typography.labelMedium) }
                         }
-                    }
-                    // 第二行：次要操作
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
                         if (!block.data.isNullOrEmpty()) {
                             OutlinedButton(
                                 onClick = {
@@ -1280,19 +1299,10 @@ fun LineDetailDialog(
                                     onDismiss()
                                 },
                                 modifier = Modifier.weight(1f),
-                                shape = RoundedCornerShape(10.dp),
-                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                                shape = RoundedCornerShape(8.dp),
+                                contentPadding = PaddingValues(horizontal = 4.dp, vertical = 6.dp)
                             ) { Text("复制 Data", maxLines = 1, style = MaterialTheme.typography.labelMedium) }
                         }
-                        OutlinedButton(
-                            onClick = {
-                                copyToClipboard(context, block.rawText)
-                                onDismiss()
-                            },
-                            modifier = Modifier.weight(1f),
-                            shape = RoundedCornerShape(10.dp),
-                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
-                        ) { Text("复制全文", maxLines = 1, style = MaterialTheme.typography.labelMedium) }
                     }
                     // 第三行：搜索操作
                     Row(
@@ -1307,7 +1317,7 @@ fun LineDetailDialog(
                                     onDismiss()
                                 },
                                 modifier = Modifier.weight(1f),
-                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
                             ) { Text("搜索 Method", maxLines = 1, style = MaterialTheme.typography.labelMedium) }
                         }
                         if (!block.params.isNullOrEmpty()) {
@@ -1319,7 +1329,7 @@ fun LineDetailDialog(
                                     onDismiss()
                                 },
                                 modifier = Modifier.weight(1f),
-                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
                             ) { Text("搜索 Params", maxLines = 1, style = MaterialTheme.typography.labelMedium) }
                         }
                     }

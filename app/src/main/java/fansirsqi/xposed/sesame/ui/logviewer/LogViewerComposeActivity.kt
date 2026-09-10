@@ -285,12 +285,32 @@ fun LogViewerScreen(
                 ),
                 actions = {
                     // 搜索按钮
-                    IconButton(onClick = { viewModel.setSearchPanelVisible(!uiState.showSearchPanel) }) {
-                        Icon(Icons.Rounded.Search, "搜索", tint = topBarContent)
+                    IconButton(
+                        onClick = {
+                            val targetState = !uiState.showSearchPanel
+                            viewModel.setSearchPanelVisible(targetState)
+                            if (targetState) showFilterPanel = false
+                        }
+                    ) {
+                        Icon(
+                            Icons.Rounded.Search,
+                            "搜索",
+                            tint = if (uiState.showSearchPanel) MaterialTheme.colorScheme.primary else topBarContent
+                        )
                     }
                     // 筛选按钮
-                    IconButton(onClick = { showFilterPanel = !showFilterPanel }) {
-                        Icon(Icons.Rounded.FilterList, "筛选", tint = topBarContent)
+                    IconButton(
+                        onClick = {
+                            val targetState = !showFilterPanel
+                            showFilterPanel = targetState
+                            if (targetState) viewModel.setSearchPanelVisible(false)
+                        }
+                    ) {
+                        Icon(
+                            Icons.Rounded.FilterList,
+                            "筛选",
+                            tint = if (showFilterPanel) MaterialTheme.colorScheme.primary else topBarContent
+                        )
                     }
                     // 齿轮按钮（点击弹出视图与文本控制面板）
                     IconButton(onClick = { showSettingsMenu = true }) {

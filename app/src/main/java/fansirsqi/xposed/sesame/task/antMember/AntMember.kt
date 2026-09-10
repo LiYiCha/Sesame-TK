@@ -21,6 +21,8 @@ import fansirsqi.xposed.sesame.task.ModelTask
 import fansirsqi.xposed.sesame.task.antOrchard.AntOrchardRpcCall.orchardSpreadManure
 import fansirsqi.xposed.sesame.util.CoroutineUtils
 import fansirsqi.xposed.sesame.util.GlobalThreadPools
+import fansirsqi.xposed.sesame.task.otherTask.GoldBeanPark
+import fansirsqi.xposed.sesame.task.otherTask2.OtherTask2
 import fansirsqi.xposed.sesame.util.Log
 import fansirsqi.xposed.sesame.util.ResChecker
 import fansirsqi.xposed.sesame.util.TaskBlacklist
@@ -274,8 +276,9 @@ class AntMember : ModelTask() {
                                 doSesameAlchemyNextDayAward()
                             }
 //                            else Log.runtime(TAG, "✅ 芝麻粒次日奖励已领取，今天不再执行")
-                            // ===== 金豆任务（炼金版金豆乐园，复用 GoldBeanPark 参数化实现） =====
-                            fansirsqi.xposed.sesame.task.otherTask.GoldBeanPark.forAlchemy().runAlchemyBeanTasks()
+                            // ===== 金豆任务（炼金版金豆乐园，复用 GoldBeanPark 参数化实现：签到+抽签+换量任务+芝麻粒换金豆） =====
+                            val exchangeAmount = OtherTask2.alchemyGoldenBeanExchange.value ?: 0
+                            GoldBeanPark.forAlchemy(exchangeAmount).runAlchemyBeanTasks()
                         })
                     }
 

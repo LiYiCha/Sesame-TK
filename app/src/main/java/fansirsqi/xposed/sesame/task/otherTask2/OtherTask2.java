@@ -65,6 +65,7 @@ public class OtherTask2 extends ModelTask {
     //private BooleanModelField UgShooping = new BooleanModelField("UgShooping", "天天秒杀|天天领现金", false);
     private BooleanModelField rceduService = new BooleanModelField("rceduService", "多懂一点小程序|学分", false);
     private BooleanModelField sesameAlchemyMy = new BooleanModelField("sesameAlchemyMy","芝麻炼金",false);
+    public static final IntegerModelField alchemyGoldenBeanExchange = new IntegerModelField("alchemyGoldenBeanExchange", "芝麻炼金 | 芝麻粒换金豆(0关/-1全换)", 0);
     private BooleanModelField playConsultFacade = new BooleanModelField("playConsultFacade","会员|转盘",false);
     private IntegerModelField playConsultFacadeNum = new IntegerModelField("playConsultFacadeNum","会员|转盘-次数",10);
     private BooleanModelField topUpGoldTask = new BooleanModelField("topUpGoldTask", "充值金任务", false);
@@ -94,6 +95,7 @@ public class OtherTask2 extends ModelTask {
         //modelFields.addField(UgShooping);
         modelFields.addField(rceduService);
         modelFields.addField(sesameAlchemyMy);
+        modelFields.addField(alchemyGoldenBeanExchange);
         modelFields.addField(playConsultFacade);
         modelFields.addField(playConsultFacadeNum);
         modelFields.addField(topUpGoldTask);

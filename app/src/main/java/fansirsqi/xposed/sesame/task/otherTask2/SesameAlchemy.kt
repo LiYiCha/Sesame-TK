@@ -3,6 +3,7 @@ package fansirsqi.xposed.sesame.task.otherTask2
 import fansirsqi.xposed.sesame.data.Status
 import fansirsqi.xposed.sesame.hook.RequestManager
 import fansirsqi.xposed.sesame.util.DataStore
+import fansirsqi.xposed.sesame.task.otherTask.GoldBeanPark
 import fansirsqi.xposed.sesame.task.otherTask2.AntMemberRpcCall
 import fansirsqi.xposed.sesame.util.GlobalThreadPools
 import fansirsqi.xposed.sesame.util.GlobalThreadPools.sleepCompat
@@ -269,10 +270,11 @@ class SesameAlchemy {
                 }
             }
 
-            // 2. 金豆任务（复用金豆乐园的参数化流程：签到 + TRIGGER 类任务）
+            // 2. 金豆任务（复用金豆乐园的参数化流程：签到 + 抽财运签 + 换量任务 + 芝麻粒换金豆）
             GlobalThreadPools.execute {
                 try {
-                    fansirsqi.xposed.sesame.task.otherTask.GoldBeanPark.forAlchemy().runAlchemyBeanTasks()
+                    val exchangeAmount = OtherTask2.alchemyGoldenBeanExchange.value ?: 0
+                    GoldBeanPark.forAlchemy(exchangeAmount).runAlchemyBeanTasks()
                 } catch (e: Exception) {
                     Log.error(TAG, "runAlchemyBeanTasks: $e")
                 }

@@ -68,8 +68,8 @@ class GoldBeanPark @JvmOverloads constructor(private val manureExchangeAmount: I
         private const val THEMES_FOLDER = "themes"
         private const val MINER_SOURCE = "ch_url-https://render.alipay.com/p/yuyan/180020010001291350/index.html"
 
-        /** 炼金版入口：供芝麻炼金模块调用，只做签到与可自动完成的任务 */
-        fun forAlchemy(): GoldBeanPark = GoldBeanPark(scene = BeanScene.ZHIMA)
+        /** 炼金版入口：供芝麻炼金模块调用，做签到、抽财运签、换量任务及芝麻粒换金豆 */
+        fun forAlchemy(exchangeAmount: Int = 0): GoldBeanPark = GoldBeanPark(manureExchangeAmount = exchangeAmount, scene = BeanScene.ZHIMA)
     }
 
     private val fullSyncTypes = listOf(
@@ -168,8 +168,8 @@ class GoldBeanPark @JvmOverloads constructor(private val manureExchangeAmount: I
                 }
             }
 
-            // 5. 肥料换豆
-            handleManureExchange()
+            // 5. 肥料换豆（农场版）
+            handleExchange()
 
             // 6. 金猫矿工
             handleMiner()
@@ -180,8 +180,8 @@ class GoldBeanPark @JvmOverloads constructor(private val manureExchangeAmount: I
     }
 
     /**
-     * 炼金版入口：只做签到与可自动完成的任务（TRIGGER 类），
-     * 不含农场版专属的对对碰/肥料换豆/金猫矿工
+     * 炼金版入口：做签到、抽财运签、换量任务及芝麻粒换金豆，
+     * 不含农场版专属的对对碰/金猫矿工
      */
     suspend fun runAlchemyBeanTasks() {
         if (Status.hasFlagToday("${scene.flagPrefix}::allTask")) {
@@ -191,6 +191,7 @@ class GoldBeanPark @JvmOverloads constructor(private val manureExchangeAmount: I
             goldenBeanIndex()
             doSign()
             doTaskLoop()
+            handleExchange()
         } catch (e: Exception) {
             Log.error(TAG, "runAlchemyBeanTasks error: $e")
         }
@@ -246,13 +247,15 @@ class GoldBeanPark @JvmOverloads constructor(private val manureExchangeAmount: I
                     if (taskStatus == "DONE" || taskStatus == "RECEIVED") continue
 
                     // 1. 抽签任务（一次性，不需 re-sync）
-                    if (actionType == "FORTUNE_DRAW" || taskType == "FORTUNE_DRAW" || taskId == "FORTUNE_DRAW") {
+                    if (actionType == "FORTUNE_DRAW" || taskType.contains("FORTUNE_DRAW") || taskId.contains("FORTUNE_DRAW")) {
                         if (!Status.hasFlagToday("${scene.flagPrefix}::fortuneDraw")) {
-                            val drawRes = goldenBeanFortuneDraw()
+                            val drawRes = goldenBeanFortuneDraw(taskId)
                             if (drawRes.optBoolean("success")) {
                                 Status.setFlagToday("${scene.flagPrefix}::fortuneDraw")
+                                val stickName = drawRes.optJSONObject("fortuneStick")?.optString("name")
+                                val tagMsg = if (!stickName.isNullOrEmpty()) "[${stickName}签]" else ""
                                 val incCount = extractAwardBeanCount(drawRes)
-                                Log.other(TAG, "金豆抽签成功+$incCount 金豆")
+                                Log.other(TAG, "金豆抽签成功$tagMsg+$incCount 金豆")
                             } else {
                                 Log.other(TAG, "金豆抽签: ${drawRes.optString("resultDesc", "完成")}")
                                 Status.setFlagToday("${scene.flagPrefix}::fortuneDraw")
@@ -394,11 +397,14 @@ class GoldBeanPark @JvmOverloads constructor(private val manureExchangeAmount: I
         }
     }
 
-    private fun goldenBeanFortuneDraw(): JSONObject {
+    private fun goldenBeanFortuneDraw(taskId: String = ""): JSONObject {
         val method = "com.alipay.goldenbean.fortuneDraw"
         val req = JSONObject()
         req.put("bizType", scene.bizType)
         req.put("source", scene.sourceMain)
+        if (taskId.isNotBlank()) {
+            req.put("taskId", taskId)
+        }
         req.put("version", scene.version)
         val params = JSONArray().put(req).toString()
         return try {
@@ -576,47 +582,71 @@ class GoldBeanPark @JvmOverloads constructor(private val manureExchangeAmount: I
         return blackListKeywords.any { title.contains(it) }
     }
 
-    // --- 肥料换豆 ---
+    // --- 资产换金豆（农场肥料换豆 / 芝麻粒换豆） ---
 
-    private suspend fun handleManureExchange() {
-        if (manureExchangeAmount == 0 || Status.hasFlagToday("${scene.flagPrefix}::manureExchange")) return
+    private suspend fun handleExchange() {
+        if (manureExchangeAmount == 0 || Status.hasFlagToday("${scene.flagPrefix}::exchange")) return
         try {
             val indexRes = goldenBeanIndex()
             val exchangeInfo = indexRes.optJSONObject("manureExchangeInfo") ?: return
-            val farmOpened = exchangeInfo.optBoolean("farmOpened")
             val pageOpened = exchangeInfo.optBoolean("pageOpened")
-            val taobaoBinding = exchangeInfo.optBoolean("taobaoBinding")
-            val currentManure = exchangeInfo.optInt("currentManure", 0)
-            val minExchangeAmount = exchangeInfo.optInt("minExchangeAmount", 0)
-            val remainQuota = exchangeInfo.optInt("remainQuota", 0)
+            if (!pageOpened) return
 
-            if (!farmOpened || !pageOpened || !taobaoBinding) return
-            if (remainQuota <= 0) return
-            // -1 全换，>0 按配置量（不超配额）
-            val toExchange = if (manureExchangeAmount == -1) {
-                if (minExchangeAmount <= 0) return
-                minOf(minExchangeAmount, remainQuota)
-            } else {
-                minOf(manureExchangeAmount, remainQuota)
+            // 农场版专有校验：需同时开通农场并绑定淘宝
+            if (scene == BeanScene.FARM) {
+                val farmOpened = exchangeInfo.optBoolean("farmOpened")
+                val taobaoBinding = exchangeInfo.optBoolean("taobaoBinding")
+                if (!farmOpened || !taobaoBinding) return
             }
-            if (toExchange <= 0 || currentManure < toExchange) return
 
-            val beforeRes = goldenBeanSync(listOf("JAR_INFO", "EXCHANGE_MANURE", "TASK_LIST"))
+            val currentManure = exchangeInfo.optInt("currentManure", 0)
+            val minExchangeAmount = exchangeInfo.optInt("minExchangeAmount", 80)
+            val remainQuota = exchangeInfo.optInt("remainQuota", 0)
+            val manurePrice = exchangeInfo.optInt("manurePrice", 1)
+            val beanReward = exchangeInfo.optInt("beanReward", 80)
+
+            if (remainQuota <= 0 || currentManure <= 0) return
+
+            // 计算当前资产最多可兑换的金豆数
+            val maxCanExchangeBeans = if (manurePrice > 0 && beanReward > 0) {
+                (currentManure / manurePrice) * beanReward
+            } else {
+                currentManure
+            }
+            if (maxCanExchangeBeans < minExchangeAmount) return
+
+            // -1 全换（受每日配额与资产上限限制），>0 按配置量兑换
+            var toExchange = if (manureExchangeAmount == -1) {
+                minOf(maxCanExchangeBeans, remainQuota)
+            } else {
+                minOf(manureExchangeAmount, minOf(maxCanExchangeBeans, remainQuota))
+            }
+
+            // 按单次步长 beanReward 向下对齐整倍数
+            if (beanReward > 0) {
+                toExchange = (toExchange / beanReward) * beanReward
+            }
+            if (toExchange < minExchangeAmount) return
+
+            val assetName = if (scene == BeanScene.ZHIMA) "芝麻粒" else "肥料"
+            val costAsset = if (beanReward > 0) (toExchange / beanReward) * manurePrice else toExchange
+
+            goldenBeanSync(listOf("JAR_INFO", "EXCHANGE_MANURE", "TASK_LIST"))
             val exchangeRes = goldenBeanManureExchange(toExchange)
             if (!exchangeRes.optBoolean("success", true)) {
-                Log.error(TAG, "肥料换豆失败: ${exchangeRes.optString("resultDesc", "未知错误")}")
+                Log.error(TAG, "$assetName 换金豆失败: ${exchangeRes.optString("resultDesc", exchangeRes.optString("desc", "未知错误"))}")
                 return
             }
             delay(1000)
             val afterRes = goldenBeanSync(listOf("JAR_INFO", "EXCHANGE_MANURE", "TASK_LIST"))
 
             val afterInfo = afterRes.optJSONObject("manureExchangeInfo")
-            val afterManure = afterInfo?.optInt("currentManure", -1) ?: -1
-            val afterQuota = afterInfo?.optInt("remainQuota", -1) ?: -1
-            Log.other(TAG, "肥料换豆成功 amount=$toExchange remainManure=$afterManure remainQuota=$afterQuota")
-            Status.setFlagToday("${scene.flagPrefix}::manureExchange")
+            val afterManure = afterInfo?.optInt("currentManure", -1) ?: exchangeRes.optInt("remainManure", -1)
+            val afterQuota = afterInfo?.optInt("remainQuota", -1) ?: exchangeRes.optInt("remainQuota", -1)
+            Log.other(TAG, "$assetName 换金豆成功: 消耗 $costAsset $assetName，获得 +$toExchange 金豆 (剩余$assetName: $afterManure，剩余配额: $afterQuota)")
+            Status.setFlagToday("${scene.flagPrefix}::exchange")
         } catch (e: Exception) {
-            Log.error(TAG, "handleManureExchange error: $e")
+            Log.error(TAG, "handleExchange error: $e")
         }
     }
 

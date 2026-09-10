@@ -995,6 +995,118 @@ class LogViewerViewModel : ViewModel() {
         }
     }
 
+    /**
+     * 在全量日志（allLines）中精准定位当前展示行对应的完整 RPC 请求与响应块，
+     * 解决在搜索或级别过滤状态下，边界被隐藏导致"复制全文"残缺或失败的问题。
+     */
+    fun findRpcBlockForDisplayedLine(displayedIndex: Int): RpcBlock? {
+        val displayedList = _uiState.value.displayedLines
+        val targetLine = displayedList.getOrNull(displayedIndex) ?: return null
+
+        val fullLines = synchronized(allLines) { allLines.toList() }
+        if (fullLines.isEmpty()) return null
+
+        // 定位目标行在全量 fullLines 中的索引
+        var globalIndex = -1
+        if (displayedList.size == fullLines.size) {
+            globalIndex = displayedIndex
+        } else {
+            // 在过滤状态下，从 displayedIndex 的大致比例位置向前后搜索精确匹配
+            val estimatedIndex = ((displayedIndex.toDouble() / displayedList.size.coerceAtLeast(1)) * fullLines.size).toInt().coerceIn(0, fullLines.size - 1)
+            var found = false
+            val maxRadius = 10000
+            for (radius in 0..maxRadius) {
+                val up = estimatedIndex - radius
+                if (up >= 0 && fullLines[up] == targetLine) {
+                    globalIndex = up
+                    found = true
+                    break
+                }
+                val down = estimatedIndex + radius
+                if (down < fullLines.size && fullLines[down] == targetLine) {
+                    globalIndex = down
+                    found = true
+                    break
+                }
+            }
+            if (!found) {
+                globalIndex = fullLines.indexOf(targetLine)
+            }
+        }
+
+        val searchLines = if (globalIndex >= 0) fullLines else displayedList
+        val targetIndex = if (globalIndex >= 0) globalIndex else displayedIndex
+
+        var start = -1
+        // 向上扫描最多 2000 行寻找请求起点
+        for (i in targetIndex downTo (targetIndex - 2000).coerceAtLeast(0)) {
+            if (searchLines[i].contains("========================>")) {
+                start = i
+                break
+            }
+            if (i < targetIndex && searchLines[i].contains("<========================")) {
+                break
+            }
+        }
+        if (start == -1) return null
+
+        var end = -1
+        // 向下扫描最多 2000 行寻找请求终点
+        for (i in targetIndex until (targetIndex + 2000).coerceAtMost(searchLines.size)) {
+            if (searchLines[i].contains("<========================")) {
+                end = i
+                break
+            }
+            if (i > targetIndex && searchLines[i].contains("========================>")) {
+                break
+            }
+        }
+        if (end == -1) return null
+
+        val blockLines = searchLines.subList(start, end + 1)
+        val rawText = blockLines.joinToString("\n")
+
+        var method: String? = null
+        val paramsBuilder = StringBuilder()
+        val dataBuilder = StringBuilder()
+        var currentSection: String? = null
+
+        blockLines.forEach { line ->
+            val trimmed = line.trim()
+            when {
+                trimmed.startsWith("Method:") -> {
+                    currentSection = null
+                    method = trimmed.substring("Method:".length).trim()
+                }
+                trimmed.startsWith("Params:") -> {
+                    currentSection = "PARAMS"
+                    paramsBuilder.append(trimmed.substring("Params:".length).trim())
+                }
+                trimmed.startsWith("Data:") -> {
+                    currentSection = "DATA"
+                    dataBuilder.append(trimmed.substring("Data:".length).trim())
+                }
+                trimmed.startsWith("<========================") || trimmed.startsWith("========================>") -> {
+                    currentSection = null
+                }
+                else -> {
+                    if (currentSection == "PARAMS") {
+                        if (paramsBuilder.isNotEmpty()) paramsBuilder.append("\n")
+                        paramsBuilder.append(line)
+                    } else if (currentSection == "DATA") {
+                        if (dataBuilder.isNotEmpty()) dataBuilder.append("\n")
+                        dataBuilder.append(line)
+                    }
+                }
+            }
+        }
+
+        val params = if (paramsBuilder.isNotEmpty()) paramsBuilder.toString() else null
+        val data = if (dataBuilder.isNotEmpty()) dataBuilder.toString() else null
+
+        return RpcBlock(method, params, data, rawText)
+    }
+
     override fun onCleared() {
         super.onCleared()
         stopWatchingFile()
