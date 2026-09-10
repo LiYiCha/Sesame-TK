@@ -234,6 +234,7 @@ class UpdaterConfigManager(context: Context) {
                         put("downloadUrl", p.downloadUrl)
                         put("apkSize", p.apkSize)
                         put("apkMd5", p.apkMd5)
+                        put("updatedAt", p.updatedAt)
                     }
                     pkgs.put(pObj)
                 }
@@ -266,7 +267,8 @@ class UpdaterConfigManager(context: Context) {
                             description = pObj.optString("description"),
                             downloadUrl = pObj.optString("downloadUrl"),
                             apkSize = pObj.optLong("apkSize"),
-                            apkMd5 = pObj.optString("apkMd5")
+                            apkMd5 = pObj.optString("apkMd5"),
+                            updatedAt = pObj.optLong("updatedAt", 0L)
                         )
                     )
                 }

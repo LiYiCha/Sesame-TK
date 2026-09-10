@@ -27,6 +27,10 @@ import com.updater.utils.UpdaterLog
 import okhttp3.*
 import org.json.JSONObject
 import java.io.IOException
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+import java.util.TimeZone
 
 class Updater private constructor(
     private val context: Context,
@@ -388,7 +392,13 @@ class Updater private constructor(
                     val latestVersionName = json.optString("latestVersionName")
                     val updateLog = json.optString("updateLog")
                     val isForceUpdate = json.optBoolean("isForceUpdate")
-                    val lastUpdated = json.optLong("lastUpdated")
+                    var lastUpdated = json.optLong("lastUpdated", 0L)
+                    if (lastUpdated <= 0L) {
+                        lastUpdated = parseIso8601ToMillis(json.optString("updateTime").ifEmpty { json.optString("publishedAt") })
+                    }
+                    if (lastUpdated <= 0L) {
+                        lastUpdated = System.currentTimeMillis()
+                    }
 
                     if (appIdVal.isEmpty() || (latestVersionCode <= 0 && latestVersionName.isEmpty())) {
                         handler.post { onNoUpdate() }
@@ -400,6 +410,13 @@ class Updater private constructor(
                     if (packagesArray != null) {
                         for (i in 0 until packagesArray.length()) {
                             val pkgJson = packagesArray.getJSONObject(i)
+                            var pkgTime = pkgJson.optLong("updatedAt", 0L)
+                            if (pkgTime <= 0L) {
+                                pkgTime = parseIso8601ToMillis(pkgJson.optString("updateTime"))
+                            }
+                            if (pkgTime <= 0L) {
+                                pkgTime = lastUpdated
+                            }
                             packagesList.add(
                                 UpdatePackage(
                                     packageId = pkgJson.optString("packageId"),
@@ -409,7 +426,8 @@ class Updater private constructor(
                                     description = pkgJson.optString("description"),
                                     downloadUrl = pkgJson.optString("downloadUrl"),
                                     apkSize = pkgJson.optLong("apkSize"),
-                                    apkMd5 = pkgJson.optString("apkMd5")
+                                    apkMd5 = pkgJson.optString("apkMd5"),
+                                    updatedAt = pkgTime
                                 )
                             )
                         }
@@ -428,7 +446,8 @@ class Updater private constructor(
                                     description = "标准版安装包",
                                     downloadUrl = singleUrl,
                                     apkSize = json.optLong("apkSize", 0L),
-                                    apkMd5 = json.optString("apkMd5", "")
+                                    apkMd5 = json.optString("apkMd5", ""),
+                                    updatedAt = lastUpdated
                                 )
                             )
                         }
@@ -506,6 +525,12 @@ class Updater private constructor(
                     val cleanVersionName = tagName.removePrefix("v").removePrefix("V")
                     val latestVersionCode = parseVersionCode(cleanVersionName, body)
 
+                    val publishedAtStr = json.optString("published_at").ifEmpty { json.optString("created_at") }
+                    var releaseTime = parseIso8601ToMillis(publishedAtStr)
+                    if (releaseTime <= 0L) {
+                        releaseTime = System.currentTimeMillis()
+                    }
+
                     val packagesList = ArrayList<UpdatePackage>()
                     val assets = json.optJSONArray("assets")
                     if (assets != null) {
@@ -513,6 +538,8 @@ class Updater private constructor(
                             val asset = assets.getJSONObject(i)
                             val name = asset.optString("name")
                             if (name.endsWith(".apk", ignoreCase = true)) {
+                                val assetUpdatedStr = asset.optString("updated_at").ifEmpty { asset.optString("created_at") }
+                                val assetTime = parseIso8601ToMillis(assetUpdatedStr).let { if (it > 0L) it else releaseTime }
                                 packagesList.add(
                                     UpdatePackage(
                                         packageId = "gh_asset_${asset.optLong("id", i.toLong())}",
@@ -522,7 +549,8 @@ class Updater private constructor(
                                         description = "GitHub Release 发布文件: $name",
                                         downloadUrl = asset.optString("browser_download_url"),
                                         apkSize = asset.optLong("size", 0L),
-                                        apkMd5 = ""
+                                        apkMd5 = "",
+                                        updatedAt = assetTime
                                     )
                                 )
                             }
@@ -542,7 +570,7 @@ class Updater private constructor(
                         updateLog = body,
                         isForceUpdate = false,
                         packages = packagesList,
-                        lastUpdated = System.currentTimeMillis()
+                        lastUpdated = releaseTime
                     )
 
                     lastUpdateInfo = updateInfo
@@ -553,6 +581,33 @@ class Updater private constructor(
                 }
             }
         })
+    }
+
+    /**
+     * 解析 ISO-8601 国际标准时间格式为本地毫秒时间戳
+     */
+    private fun parseIso8601ToMillis(isoStr: String?): Long {
+        if (isoStr.isNullOrBlank()) return 0L
+        val clean = isoStr.trim()
+        val patterns = arrayOf(
+            "yyyy-MM-dd'T'HH:mm:ss'Z'",
+            "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'",
+            "yyyy-MM-dd'T'HH:mm:ssXXX",
+            "yyyy-MM-dd'T'HH:mm:ss.SSSXXX",
+            "yyyy-MM-dd HH:mm:ss"
+        )
+        for (pattern in patterns) {
+            try {
+                val sdf = SimpleDateFormat(pattern, Locale.US).apply {
+                    if (pattern.endsWith("'Z'")) {
+                        timeZone = TimeZone.getTimeZone("UTC")
+                    }
+                }
+                val date = sdf.parse(clean)
+                if (date != null) return date.time
+            } catch (_: Exception) {}
+        }
+        return 0L
     }
 
     /**

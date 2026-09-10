@@ -16,15 +16,19 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.appcompat.app.AppCompatActivity
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -75,6 +79,10 @@ import com.updater.utils.MarkdownUtils
 import com.updater.utils.UpdatePathManager
 import com.updater.utils.UpdaterLog
 import java.io.File
+import java.text.SimpleDateFormat
+import java.util.Calendar
+import java.util.Date
+import java.util.Locale
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
@@ -99,6 +107,9 @@ class DownloadManagerActivity : AppCompatActivity() {
     private val tasks = mutableStateMapOf<String, DownloadTask>()
     private val speedMap = mutableStateMapOf<String, Long>() // taskId -> 实时速度 (字节/秒)
     private val isRefreshingUpdates = AtomicBoolean(false)
+    private var apkCacheSize by mutableStateOf(0L)
+    private var isActivityResumed = false
+    private val autoInstalledTasks = mutableSetOf<String>()
 
     private var errorDialog by mutableStateOf<ErrorDialogData?>(null)
     private var showSourceSettings by mutableStateOf(false)
@@ -106,6 +117,17 @@ class DownloadManagerActivity : AppCompatActivity() {
     private data class ErrorDialogData(val title: String, val details: String)
 
     // ---------- 生命周期 ----------
+
+    override fun onResume() {
+        super.onResume()
+        isActivityResumed = true
+        apkCacheSize = getDownloadedApkCacheSize()
+    }
+
+    override fun onPause() {
+        super.onPause()
+        isActivityResumed = false
+    }
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
@@ -180,11 +202,19 @@ class DownloadManagerActivity : AppCompatActivity() {
 
             val task = tasks[taskId] ?: return
             if (status == DownloadTask.STATUS_DOWNLOADING) speedMap[taskId] = speed else speedMap.remove(taskId)
+            val prevStatus = task.status
             tasks[taskId] = task.copy(
                 downloadedBytes = downloaded,
                 status = status,
                 errorMsg = error ?: task.errorMsg
             )
+            if (status == DownloadTask.STATUS_COMPLETED) {
+                apkCacheSize = getDownloadedApkCacheSize()
+                if (prevStatus != DownloadTask.STATUS_COMPLETED && isActivityResumed && !autoInstalledTasks.contains(taskId)) {
+                    autoInstalledTasks.add(taskId)
+                    installApk(taskId)
+                }
+            }
         }
     }
 
@@ -310,6 +340,14 @@ class DownloadManagerActivity : AppCompatActivity() {
     }
 
     // ---------- 下载控制 ----------
+
+    private fun installApk(taskId: String) {
+        val task = tasks[taskId] ?: return
+        val file = File(task.savePath)
+        if (file.exists()) {
+            ApkInstaller.installApk(this, file)
+        }
+    }
 
     private fun startDownload(taskId: String) {
         val originalTask = tasks[taskId] ?: return
@@ -531,6 +569,50 @@ class DownloadManagerActivity : AppCompatActivity() {
         return String.format("%.1f %s", size, units[i])
     }
 
+    private fun getDownloadedApkCacheSize(): Long {
+        return try {
+            val apkDir = UpdatePathManager.getUpdateDir(this)
+            apkDir.listFiles { file -> file.isFile && file.name.endsWith(".apk", ignoreCase = true) }
+                ?.sumOf { it.length() } ?: 0L
+        } catch (_: Exception) {
+            0L
+        }
+    }
+
+    private fun cleanDownloadedApkCache(): Long {
+        return try {
+            val apkDir = UpdatePathManager.getUpdateDir(this)
+            var freedBytes = 0L
+            apkDir.listFiles { file -> file.isFile && file.name.endsWith(".apk", ignoreCase = true) }
+                ?.forEach { file ->
+                    freedBytes += file.length()
+                    file.delete()
+                }
+            freedBytes
+        } catch (_: Exception) {
+            0L
+        }
+    }
+
+    private fun formatTimestamp(timestampMs: Long): String {
+        if (timestampMs <= 0L) return ""
+        return try {
+            val now = System.currentTimeMillis()
+            val calNow = Calendar.getInstance().apply { timeInMillis = now }
+            val calTarget = Calendar.getInstance().apply { timeInMillis = timestampMs }
+            val isToday = calNow.get(Calendar.YEAR) == calTarget.get(Calendar.YEAR) &&
+                    calNow.get(Calendar.DAY_OF_YEAR) == calTarget.get(Calendar.DAY_OF_YEAR)
+            val isSameYear = calNow.get(Calendar.YEAR) == calTarget.get(Calendar.YEAR)
+            when {
+                isToday -> SimpleDateFormat("今天 HH:mm", Locale.CHINA).format(Date(timestampMs))
+                isSameYear -> SimpleDateFormat("MM-dd HH:mm", Locale.CHINA).format(Date(timestampMs))
+                else -> SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.CHINA).format(Date(timestampMs))
+            }
+        } catch (_: Exception) {
+            ""
+        }
+    }
+
     // ================= Compose UI =================
 
     @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
@@ -576,11 +658,37 @@ class DownloadManagerActivity : AppCompatActivity() {
             ) {
                 item { UpdateInfoCard() }
                 item {
-                    Text(
-                        text = "安装包列表",
-                        style = MaterialTheme.typography.labelLarge,
-                        color = colors.onSurfaceVariant
-                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "安装包列表",
+                            style = MaterialTheme.typography.labelLarge,
+                            color = colors.onSurfaceVariant
+                        )
+                        if (apkCacheSize > 0L) {
+                            Surface(
+                                shape = RoundedCornerShape(6.dp),
+                                color = colors.primary.copy(alpha = 0.08f),
+                                border = androidx.compose.foundation.BorderStroke(0.5.dp, colors.primary.copy(alpha = 0.25f)),
+                                modifier = Modifier.clickable {
+                                    val freed = cleanDownloadedApkCache()
+                                    apkCacheSize = getDownloadedApkCacheSize()
+                                    syncTasksFromDb()
+                                    Toast.makeText(applicationContext, "已清理本地安装包缓存，释放 ${formatSize(freed)}", Toast.LENGTH_SHORT).show()
+                                }
+                            ) {
+                                Text(
+                                    text = "已占用 ${formatSize(apkCacheSize)} (点击清理)",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = colors.primary,
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                                )
+                            }
+                        }
+                    }
                 }
                 taskItems()
             }
@@ -602,6 +710,7 @@ class DownloadManagerActivity : AppCompatActivity() {
     private fun UpdateInfoCard() {
         val colors = MaterialTheme.colorScheme
         val info = updateInfo
+        var isLogExpanded by remember { mutableStateOf(false) }
 
         Card(
             modifier = Modifier.fillMaxWidth(),
@@ -633,17 +742,67 @@ class DownloadManagerActivity : AppCompatActivity() {
 
                 if (info != null) {
                     Spacer(Modifier.height(6.dp))
-                    Text(
-                        text = "最新版本: v${info.latestVersionName} (${info.latestVersionCode})",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = colors.primary,
-                        fontWeight = FontWeight.Bold
-                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "最新版本: v${info.latestVersionName} (${info.latestVersionCode})",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = colors.primary,
+                            fontWeight = FontWeight.Bold
+                        )
+                        val timeStr = formatTimestamp(info.lastUpdated)
+                        if (timeStr.isNotEmpty()) {
+                            Surface(
+                                shape = RoundedCornerShape(4.dp),
+                                color = colors.primary.copy(alpha = 0.1f)
+                            ) {
+                                Text(
+                                    text = "发布于 $timeStr",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = colors.primary,
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                )
+                            }
+                        }
+                    }
                     Spacer(Modifier.height(8.dp))
-                    MarkdownText(
-                        markdown = info.updateLog.ifBlank { "优化了用户体验和细节。" },
-                        modifier = Modifier.fillMaxWidth()
-                    )
+                    val logText = info.updateLog.ifBlank { "优化了用户体验和细节。" }
+                    val isLong = logText.length > 200 || logText.count { it == '\n' } > 5
+                    Box(
+                        modifier = if (isLong && !isLogExpanded) {
+                            Modifier
+                                .fillMaxWidth()
+                                .heightIn(max = 130.dp)
+                        } else {
+                            Modifier.fillMaxWidth()
+                        }
+                    ) {
+                        MarkdownText(
+                            markdown = logText,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+                    if (isLong) {
+                        Spacer(Modifier.height(4.dp))
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { isLogExpanded = !isLogExpanded },
+                            horizontalArrangement = Arrangement.Center,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = if (isLogExpanded) "收起说明 ▲" else "查看完整更新说明 ▼",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = colors.primary,
+                                fontWeight = FontWeight.SemiBold,
+                                modifier = Modifier.padding(vertical = 4.dp)
+                            )
+                        }
+                    }
                 } else {
                     Spacer(Modifier.height(6.dp))
                     Text(
@@ -687,7 +846,9 @@ class DownloadManagerActivity : AppCompatActivity() {
                         taskId = taskId,
                         title = pkg.packageName,
                         nominalSize = pkg.apkSize,
-                        description = pkg.description
+                        description = pkg.description,
+                        updatedAt = pkg.updatedAt,
+                        expectedMd5 = pkg.apkMd5
                     )
                 }
             }
@@ -698,7 +859,9 @@ class DownloadManagerActivity : AppCompatActivity() {
                         taskId = id,
                         title = task.title,
                         nominalSize = task.totalBytes,
-                        description = "本地安装包: ${File(task.savePath).name}"
+                        description = "本地安装包: ${File(task.savePath).name}",
+                        updatedAt = File(task.savePath).takeIf { it.exists() }?.lastModified() ?: 0L,
+                        expectedMd5 = ""
                     )
                 }
             }
@@ -725,7 +888,14 @@ class DownloadManagerActivity : AppCompatActivity() {
 
     @OptIn(ExperimentalFoundationApi::class)
     @Composable
-    private fun TaskCard(taskId: String, title: String, nominalSize: Long, description: String) {
+    private fun TaskCard(
+        taskId: String,
+        title: String,
+        nominalSize: Long,
+        description: String,
+        updatedAt: Long = 0L,
+        expectedMd5: String = ""
+    ) {
         val colors = MaterialTheme.colorScheme
         val task = tasks[taskId]
         val status = task?.status ?: DownloadTask.STATUS_PENDING
@@ -757,12 +927,31 @@ class DownloadManagerActivity : AppCompatActivity() {
                     }
                 }
 
-                Spacer(Modifier.height(2.dp))
-                Text(
-                    text = description,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = colors.onSurfaceVariant
-                )
+                Spacer(Modifier.height(3.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = description,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = colors.onSurfaceVariant,
+                        modifier = Modifier.weight(1f, fill = false),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    val effectiveTime = if (updatedAt > 0L) updatedAt else (task?.let { File(it.savePath).takeIf { f -> f.exists() }?.lastModified() } ?: 0L)
+                    val timeStr = formatTimestamp(effectiveTime)
+                    if (timeStr.isNotEmpty()) {
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            text = timeStr,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = colors.outline
+                        )
+                    }
+                }
 
                 // 进度条（下载中 / 已暂停可见）
                 val showProgress = status == DownloadTask.STATUS_DOWNLOADING || status == DownloadTask.STATUS_PAUSED
@@ -788,26 +977,42 @@ class DownloadManagerActivity : AppCompatActivity() {
                 // 状态行 + 操作按钮行
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
-                        Text(
-                            text = statusLabel(status, task, speedBps),
-                            style = MaterialTheme.typography.labelMedium,
-                            color = when (status) {
-                                DownloadTask.STATUS_DOWNLOADING, DownloadTask.STATUS_COMPLETED -> colors.primary
-                                DownloadTask.STATUS_FAILED -> colors.error
-                                else -> colors.onSurfaceVariant
-                            },
-                            fontWeight = if (status == DownloadTask.STATUS_FAILED) FontWeight.Bold else FontWeight.Normal,
-                            modifier = if (status == DownloadTask.STATUS_FAILED && task != null) {
-                                Modifier.combinedClickable(onClick = {
-                                    errorDialog = ErrorDialogData(
-                                        title = "失败详情",
-                                        details = "名称: ${task.title}\n地址: ${task.url}\n路径: ${task.savePath}\n原因: ${task.errorMsg ?: "网络连接异常"}"
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                text = statusLabel(status, task, speedBps),
+                                style = MaterialTheme.typography.labelMedium,
+                                color = when (status) {
+                                    DownloadTask.STATUS_DOWNLOADING, DownloadTask.STATUS_COMPLETED -> colors.primary
+                                    DownloadTask.STATUS_FAILED -> colors.error
+                                    else -> colors.onSurfaceVariant
+                                },
+                                fontWeight = if (status == DownloadTask.STATUS_FAILED) FontWeight.Bold else FontWeight.Normal,
+                                modifier = if (status == DownloadTask.STATUS_FAILED && task != null) {
+                                    Modifier.combinedClickable(onClick = {
+                                        errorDialog = ErrorDialogData(
+                                            title = "失败详情",
+                                            details = "名称: ${task.title}\n地址: ${task.url}\n路径: ${task.savePath}\n原因: ${task.errorMsg ?: "网络连接异常"}"
+                                        )
+                                    })
+                                } else {
+                                    Modifier
+                                }
+                            )
+                            if (status == DownloadTask.STATUS_COMPLETED && expectedMd5.isNotEmpty()) {
+                                Spacer(Modifier.width(6.dp))
+                                Surface(
+                                    shape = RoundedCornerShape(4.dp),
+                                    color = Color(0xFF4CAF50).copy(alpha = 0.12f)
+                                ) {
+                                    Text(
+                                        text = "✔ MD5已校验",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = Color(0xFF2E7D32),
+                                        modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
                                     )
-                                })
-                            } else {
-                                Modifier
+                                }
                             }
-                        )
+                        }
                     }
                     TaskActionButtons(taskId, status)
                 }

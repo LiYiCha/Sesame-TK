@@ -21,5 +21,6 @@ data class UpdatePackage(
     val description: String,
     val downloadUrl: String,
     val apkSize: Long,
-    val apkMd5: String
+    val apkMd5: String,
+    val updatedAt: Long = 0L
 ) : Serializable
