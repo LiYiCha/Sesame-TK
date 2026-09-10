@@ -4,6 +4,7 @@ import java.util.Calendar;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
@@ -44,6 +45,9 @@ public class TaskScheduler {
     private static final AtomicBoolean isShuttingDown = new AtomicBoolean(false);
     private static final AtomicBoolean isPaused = new AtomicBoolean(false);
     private static final AtomicBoolean isStopped = new AtomicBoolean(false);
+
+    // 当前正在执行的主任务句柄：停止时用于立即中断（引用由下次提交覆盖，不在任务 finally 中清空以避免误清新任务）
+    private static volatile Future<?> executingTask;
 
     public static void setPaused(boolean paused) {
         isPaused.set(paused);
@@ -135,10 +139,18 @@ public class TaskScheduler {
         }
 
         try {
+            // 立即中断当前正在执行的主任务（cancel(true) 发送中断信号）
+            Future<?> runningTask = executingTask;
+            executingTask = null;
+
+            if (runningTask != null && !runningTask.isDone()) {
+                runningTask.cancel(true);
+            }
+
             // 先取消调度任务
             synchronized (schedulerLock) {
                 if (scheduledTask != null) {
-                    scheduledTask.cancel(false);
+                    scheduledTask.cancel(true);
                     scheduledTask = null;
                 }
                 isScheduled.set(false);
@@ -281,7 +293,7 @@ public class TaskScheduler {
         synchronized (schedulerLock) {
             try {
                 if (scheduledTask != null && !scheduledTask.isDone()) {
-                    scheduledTask.cancel(false);
+                    scheduledTask.cancel(true);
                     scheduledTask = null;
                 }
 
@@ -330,7 +342,10 @@ public class TaskScheduler {
         }
 
         try {
-            executor.submit(() -> {
+            // 保存任务句柄供 shutdownExecutors() 立即中断；
+            // 任务完成时不在 finally 中清空 executingTask（isExecuting 已用 CAS 串行化提交，
+            // 陈旧引用只会被下一次提交覆盖或被 shutdown 的 isDone 判断无害化，避免误清新任务）
+            executingTask = executor.submit(() -> {
                 try {
                     executeMainTask();
                 } finally {
@@ -362,7 +377,7 @@ public class TaskScheduler {
         synchronized (schedulerLock) {
             try {
                 if (scheduledTask != null && !scheduledTask.isDone()) {
-                    scheduledTask.cancel(false);
+                    scheduledTask.cancel(true);
                     scheduledTask = null;
                 }
 
@@ -398,7 +413,7 @@ public class TaskScheduler {
     public static void cancelScheduledTask() {
         synchronized (schedulerLock) {
             if (scheduledTask != null) {
-                scheduledTask.cancel(false);
+                scheduledTask.cancel(true);
                 scheduledTask = null;
             }
             isScheduled.set(false);

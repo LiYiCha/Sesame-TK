@@ -4,6 +4,7 @@ import fansirsqi.xposed.sesame.data.Status
 import fansirsqi.xposed.sesame.hook.ApplicationHook
 import fansirsqi.xposed.sesame.hook.RequestManager
 import fansirsqi.xposed.sesame.task.antOrchard.GameTask
+import fansirsqi.xposed.sesame.util.GlobalThreadPools
 import fansirsqi.xposed.sesame.util.Log
 import fansirsqi.xposed.sesame.util.TimeUtil
 import fansirsqi.xposed.sesame.util.maps.UserMap
@@ -34,7 +35,8 @@ class GoldBeanPark(private val manureExchangeAmount: Int = -1) {
         if (hour < 7 || Status.hasFlagToday("goldBeanPark::allTask")) {
             return
         }
-        CoroutineScope(Dispatchers.IO).launch {
+        // 通过 GlobalThreadPools 执行：纳入统一追踪，"停止运行"时随 cancelAll 一并取消
+        GlobalThreadPools.execute {
             try {
                 handleGoldBeanPark()
             } catch (e: Exception) {

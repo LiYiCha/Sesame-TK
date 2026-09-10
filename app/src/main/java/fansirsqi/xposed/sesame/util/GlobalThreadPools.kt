@@ -79,6 +79,24 @@ object GlobalThreadPools {
     private val scheduledTasks = ConcurrentHashMap<Int, Job>()
 
     /**
+     * 通过 execute/submit 创建的活动任务集合
+     * 用于停止运行时统一取消（不取消作用域本身，作用域可继续复用）
+     */
+    private val activeJobs = ConcurrentHashMap.newKeySet<Job>()
+
+    /**
+     * 注册任务到活动集合，完成后自动移除。
+     * 泛型保持 Job / Deferred<T> 的原始返回类型，无需强制转换。
+     */
+    private fun <T : Job> track(job: T): T {
+        activeJobs.add(job)
+        job.invokeOnCompletion {
+            activeJobs.remove(job)
+        }
+        return job
+    }
+
+    /**
      * 在全局协程作用域中执行一个任务。
      *
      * @param block 要执行的挂起函数代码块
@@ -89,16 +107,18 @@ object GlobalThreadPools {
         context: CoroutineContext = computeDispatcher,
         block: suspend CoroutineScope.() -> Unit
     ): Job {
-        return globalScope.launch(context) {
-            try {
-                block()
-            } catch (_: CancellationException) {
-                // 协程取消异常，正常流程，不记录
-            } catch (e: Exception) {
-                Log.error(TAG, "执行任务异常: ${e.message}")
-                Log.printStackTrace(e)
+        return track(
+            globalScope.launch(context) {
+                try {
+                    block()
+                } catch (_: CancellationException) {
+                    // 协程取消异常，正常流程，不记录
+                } catch (e: Exception) {
+                    Log.error(TAG, "执行任务异常: ${e.message}")
+                    Log.printStackTrace(e)
+                }
             }
-        }
+        )
     }
 
     /**
@@ -113,9 +133,11 @@ object GlobalThreadPools {
         context: CoroutineContext = computeDispatcher,
         block: suspend CoroutineScope.() -> T
     ): Deferred<T> {
-        return globalScope.async(context) {
-            block()
-        }
+        return track(
+            globalScope.async(context) {
+                block()
+            }
+        )
     }
 
     /**
@@ -249,8 +271,39 @@ object GlobalThreadPools {
     }
     
     /**
+     * 取消所有通过本对象创建的活动任务（execute/submit/schedule/scheduleAtFixedRate）
+     *
+     * 注意：与 [shutdown] 不同，本方法只取消任务本身，不取消 globalScope/schedulerScope，
+     * 作用域保持可用，停止运行后再次启动任务不受影响。
+     * 停止运行应调用本方法，严禁调用 shutdown()（作用域被取消后无法恢复）。
+     */
+    @JvmStatic
+    fun cancelAll() {
+        val jobs = activeJobs.toList()
+
+        scheduledTasks.values.toList().forEach { job ->
+            try {
+                job.cancel()
+            } catch (_: Throwable) {}
+        }
+        scheduledTasks.clear()
+
+        jobs.forEach { job ->
+            try {
+                job.cancel()
+            } catch (_: Throwable) {}
+        }
+        activeJobs.clear()
+
+        Log.runtime(TAG, "已取消全局协程任务，共 ${jobs.size} 个")
+    }
+
+    /**
      * 关闭全局协程调度器
      * 取消所有正在执行的任务
+     *
+     * 【警告】本方法会永久取消 globalScope/schedulerScope，之后无法再创建新任务。
+     * 仅在进程级销毁时使用；"停止运行"应使用 [cancelAll]。
      */
     fun shutdown() {
         scheduledTasks.clear()

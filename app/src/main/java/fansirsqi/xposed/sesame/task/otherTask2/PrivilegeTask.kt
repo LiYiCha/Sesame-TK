@@ -29,14 +29,29 @@ class PrivilegeTask {
             return (hour == 9 && minute >= 50) || (hour == 10 && minute <= 2)
         }
 
-        // 全局单线程池
-        private val singleThreadExecutor: ExecutorService = Executors.newSingleThreadExecutor { r ->
-            Thread(r, "YouthPrivilegeTaskThread").apply {
-                isDaemon = false // 设置为非守护线程
-            }
-        }
+        // 全局单线程池（惰性创建：被停止销毁后，下次执行自动重建）
+        @Volatile
+        private var singleThreadExecutor: ExecutorService? = null
 
         private val isTaskRunning = AtomicBoolean(false)
+
+        private fun getExecutor(): ExecutorService {
+            var e = singleThreadExecutor
+            if (e == null || e.isShutdown) {
+                synchronized(PrivilegeTask::class.java) {
+                    e = singleThreadExecutor
+                    if (e == null || e.isShutdown) {
+                        e = Executors.newSingleThreadExecutor { r ->
+                            Thread(r, "YouthPrivilegeTaskThread").apply {
+                                isDaemon = false // 设置为非守护线程
+                            }
+                        }
+                        singleThreadExecutor = e
+                    }
+                }
+            }
+            return e!!
+        }
 
         fun executeProcessStudentTasks() {
             if (!isTaskRunning.compareAndSet(false, true)) {
@@ -44,7 +59,7 @@ class PrivilegeTask {
                 return
             }
 
-            singleThreadExecutor.submit {
+            getExecutor().submit {
                 try {
                     processStudentTasks()
                 } catch (e: Exception) {
@@ -53,6 +68,18 @@ class PrivilegeTask {
                     isTaskRunning.set(false)
                 }
             }
+        }
+
+        /**
+         * 停止任务：中断执行线程并销毁线程池（下次执行自动重建）。
+         * 任务循环内的 waitForDuration 感知中断后抛出异常退出，防止 while(true) 空转。
+         */
+        @JvmStatic
+        fun stopTask() {
+            singleThreadExecutor?.shutdownNow()
+            singleThreadExecutor = null
+            isTaskRunning.set(false)
+            Log.runtime(TAG, "青春特权任务已停止")
         }
 
         private fun processStudentTasks() {
@@ -215,13 +242,13 @@ class PrivilegeTask {
             }
         }
 
-        // 等待方法
+        // 等待方法（中断后向上抛出，确保 while(true) 任务循环能退出而不是继续空转）
         private fun waitForDuration(duration: Long) {
             try {
                 Thread.sleep(duration)
             } catch (e: InterruptedException) {
                 Thread.currentThread().interrupt()
-                Log.error(TAG, "等待被中断")
+                throw IllegalStateException("$TAG 任务等待被中断，退出执行", e)
             }
         }
     }

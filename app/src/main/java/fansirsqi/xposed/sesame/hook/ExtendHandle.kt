@@ -111,10 +111,27 @@ class ExtendHandle {
                         Toast.show("任务已暂停", true)
                     }
                     ACTION_STOP -> {
+                        Log.runtime("[StopRunReceiver]已发送任务停止信号，正在清理后台任务")
+
+                        // 第一层：阻止调度器再次创建任务，并清除暂停态
                         TaskScheduler.setStopped(true)
+                        TaskScheduler.setPaused(false)
+
+                        // 第二层：停止批量启动流程和已启动的 ModelTask（必须在关闭调度器之前，
+                        // 先掐断任务来源，再关执行器，否则留下"调度器已停但任务还在启动"的竞态窗口）
+                        fansirsqi.xposed.sesame.task.ModelTask.stopAllTask()
+
+                        // 第三层：停止通过 GlobalThreadPools 创建的任务（只取消任务，不取消作用域）
+                        GlobalThreadPools.cancelAll()
+
+                        // 第四层：停止生命周期和定时调度
                         LifecycleManager.stopHandler()
                         TaskScheduler.shutdownExecutors()
-                        fansirsqi.xposed.sesame.task.ModelTask.stopAllTask()
+
+                        // 第五层：停止脱离统一生命周期的独立任务资源
+                        fansirsqi.xposed.sesame.task.otherTask2.PrivilegeTask.stopTask()
+                        fansirsqi.xposed.sesame.task.exchange.ThreadPoolManager.shutdownNow()
+
                         fansirsqi.xposed.sesame.task.antForest.EnergyWaitingManager.clearAllWaitingTasks()
                         fansirsqi.xposed.sesame.hook.keepalive.SmartSchedulerManager.cancelAll()
                         fansirsqi.xposed.sesame.hook.keepalive.SmartSchedulerManager.cleanup()
@@ -124,7 +141,7 @@ class ExtendHandle {
                             fansirsqi.xposed.sesame.util.Notify.setStatusTextDisabled()
                             fansirsqi.xposed.sesame.util.Notify.updateNextExecText(-1)
                         } catch (t: Throwable) {}
-                        Log.runtime("[StopRunReceiver]任务已清空并停止运行🛑")
+                        Log.runtime("[StopRunReceiver]停止信号已全部下发，后台任务将陆续退出")
                         Toast.show("任务已停止并清除", true)
                     }
                 }

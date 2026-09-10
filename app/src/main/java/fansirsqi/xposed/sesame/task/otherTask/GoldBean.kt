@@ -1,6 +1,7 @@
 package fansirsqi.xposed.sesame.task.otherTask
 
 import fansirsqi.xposed.sesame.hook.RequestManager
+import fansirsqi.xposed.sesame.util.GlobalThreadPools
 import fansirsqi.xposed.sesame.util.Log
 import fansirsqi.xposed.sesame.util.TimeUtil
 import kotlinx.coroutines.CoroutineScope
@@ -23,8 +24,8 @@ class GoldBean {
         }
         //初始化
         if (init()) {
-            //处理任务
-            CoroutineScope(Dispatchers.IO).launch {
+            //处理任务（通过 GlobalThreadPools 执行，纳入停止运行统一取消）
+            GlobalThreadPools.execute {
                 try {
                     handleTask()
                 } catch (e: Exception) {
@@ -205,4 +206,4 @@ class GoldBean {
                 "\"taskCenterId\":\"$taskCenterId\",\"taskId\":\"$appletId\"}]"
         return JSONObject(RequestManager.requestString(method, params))
     }
-}
+}

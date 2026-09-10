@@ -602,52 +602,98 @@ abstract class ModelTask : Model() {
             Dispatchers.Default + SupervisorJob() + CoroutineName("GlobalTaskManager")
         )
 
+        /** 批量启动锁：保护 startAllJob 的读写 */
+        private val startAllLock = Any()
+
+        /** 当前批量启动协程：保存以便停止时取消，杜绝"停止后继续启动后续模块"的竞态 */
+        @Volatile
+        private var startAllJob: Job? = null
+
         /**
          * 启动所有任务（协程版本）
          *
          * 遍历所有已注册的模型，启动所有 ModelTask 类型的任务。
-         * 使用协程实现异步启动，任务之间有短暂延迟以避免资源竞争。
+         * 批量启动协程被保存到 startAllJob，stopAllTask() 会先取消它，
+         * 防止"任务 A 被停止后，批量协程继续启动 B/C/D"的竞态。
          *
          * @param force 是否强制重启任务（即使任务已在运行）
          */
         @JvmStatic
         @JvmOverloads
         fun startAllTask(force: Boolean = false) {
-            globalTaskScope.launch {
+            val oldJob = synchronized(startAllLock) {
+                startAllJob.also {
+                    startAllJob = null
+                }
+            }
+            // 取消上一次尚未完成的批量启动流程（快速重启场景）
+            oldJob?.cancel()
+
+            val newJob = globalTaskScope.launch(start = CoroutineStart.LAZY) {
                 try {
                     // 设置状态文本为"执行中"
                     fansirsqi.xposed.sesame.util.Notify.setStatusTextExec()
 
-                    // 遍历所有模型，启动 ModelTask 类型的任务
                     for (model in modelArray) {
-                        if (model is ModelTask) {
-                            try {
-                                // 启动任务（返回 Job 对象）
-                                model.startTask(force)
-                                // 任务之间延迟10ms，避免资源竞争
-                                delay(10)
-                            } catch (e: Exception) {
-                                Log.printStackTrace("启动任务异常: ${model.getName()}", e)
-                            }
+                        currentCoroutineContext().ensureActive()
+
+                        if (model !is ModelTask) {
+                            continue
+                        }
+
+                        try {
+                            currentCoroutineContext().ensureActive()
+                            model.startTask(force)
+                            // 任务之间延迟10ms，避免资源竞争
+                            delay(10)
+                        } catch (e: CancellationException) {
+                            // 必须重新抛出，不能吞掉取消信号
+                            throw e
+                        } catch (e: Exception) {
+                            Log.printStackTrace("启动任务异常: ${model.getName()}", e)
                         }
                     }
+                } catch (_: CancellationException) {
+                    Log.runtime(TAG, "批量启动任务已取消")
                 } catch (e: Exception) {
                     Log.printStackTrace(TAG, "startAllTask err", e)
+                } finally {
+                    val currentJob = currentCoroutineContext()[Job]
+                    synchronized(startAllLock) {
+                        if (startAllJob === currentJob) {
+                            startAllJob = null
+                        }
+                    }
                 }
             }
+
+            synchronized(startAllLock) {
+                startAllJob = newJob
+            }
+
+            newJob.start()
         }
 
         /**
          * 停止所有任务（同步执行，确保调用后任务立即停止）
+         *
+         * 顺序：先取消批量启动协程（防止继续启动后续模块），再停止已启动的 ModelTask。
          */
         @JvmStatic
         fun stopAllTask() {
+            val startupJob = synchronized(startAllLock) {
+                startAllJob.also {
+                    startAllJob = null
+                }
+            }
+            startupJob?.cancel()
+
             for (model in modelArray) {
                 if (model is ModelTask) {
                     try {
                         model.stopTask()
                     } catch (e: Exception) {
-                        Log.printStackTrace("停止任务异常", e)
+                        Log.printStackTrace("停止任务异常: ${model.getName()}", e)
                     }
                 }
             }

@@ -125,7 +125,11 @@ fun DeviceInfoCard(info: Map<String, String>, oneWord: String? = null) {
                 
                 HorizontalPager(
                     state = pagerState,
-                    modifier = Modifier.fillMaxWidth().height(360.dp)
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        // 440dp：容纳欢迎卡完整内容（头部 + 寄语盒 + 时段行 + 主题行 + 一言区），
+                        // 三页统一高度，避免一言与节日信息被裁切
+                        .height(440.dp)
                 ) { page ->
                     when (page) {
                         0 -> {

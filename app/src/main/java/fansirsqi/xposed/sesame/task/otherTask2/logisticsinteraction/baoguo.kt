@@ -1,6 +1,7 @@
 package fansirsqi.xposed.sesame.task.otherTask2.logisticsinteraction
 
 import fansirsqi.xposed.sesame.data.Status
+import fansirsqi.xposed.sesame.util.GlobalThreadPools
 import fansirsqi.xposed.sesame.util.Log
 import fansirsqi.xposed.sesame.util.TaskBlacklist
 import kotlinx.coroutines.*
@@ -16,10 +17,11 @@ object baoguo {
     private const val taskCenInfo = "MZVPQ0DScvD6NjaPJzk8iE31OtnKddQY"
 
     fun handle() {
-        CoroutineScope(Dispatchers.IO).launch {
+        // 通过 GlobalThreadPools 执行：纳入统一追踪，"停止运行"时随 cancelAll 一并取消
+        GlobalThreadPools.execute {
             mutex.withLock {
                 if (currentJob?.isActive == true) {
-                    return@launch
+                    return@execute
                 }
                 currentJob = launch {
                     try {

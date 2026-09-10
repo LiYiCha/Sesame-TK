@@ -2,12 +2,9 @@ package fansirsqi.xposed.sesame.task.otherTask2
 
 import fansirsqi.xposed.sesame.data.Status
 import fansirsqi.xposed.sesame.hook.RequestManager
+import fansirsqi.xposed.sesame.util.GlobalThreadPools
 import fansirsqi.xposed.sesame.util.Log
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import org.json.JSONObject
@@ -28,12 +25,11 @@ class PlayConsultFacade {
     private var hasError1009 = false
 
     /**
-     * 使用协程进行处理，然后由java直接调用
+     * 使用协程进行处理，然后由java直接调用。
+     * 通过 GlobalThreadPools 执行：纳入统一追踪，"停止运行"时随 cancelAll 一并取消。
      */
-    private val handlerScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
-
     fun handleAsync(count: Int) {
-        handlerScope.launch {
+        GlobalThreadPools.execute {
             taskMutex.withLock {
                 try {
                     handle(count)

@@ -30,7 +30,6 @@ object WhackMole {
     @Volatile
     private var moleCount = 15 // 兼容模式默认击打数
     private const val GAME_DURATION_MS = 12000L
-    private val globalScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val startTime = AtomicLong(0)
 
     @Volatile
@@ -81,7 +80,8 @@ object WhackMole {
     }
 
     fun start(mode: Mode) {
-        globalScope.launch {
+        // 通过 GlobalThreadPools 执行：纳入统一追踪，"停止运行"时随 cancelAll 一并取消
+        fansirsqi.xposed.sesame.util.GlobalThreadPools.execute {
             startSuspend(mode)
         }
     }
