@@ -58,10 +58,15 @@ data class BeanScene(
 /**
  * 金豆夺宝 🎡
  *
- * @param manureExchangeAmount 肥料换豆量（-1 全换，0 关闭，>0 按配置量），仅农场版生效
+ * @param manureExchangeAmount 农场版：肥料换豆量（-1 全换，0 关闭，>0 按配置量）
+ * @param sesameExchangeAmount 炼金版：芝麻粒换豆量（-1 全换，0 关闭，>0 按配置量），与农场版互不影响
  * @param scene 金豆场景（农场版/炼金版），决定全部 RPC 的 bizType/source/version/sceneCode
  */
-class GoldBeanPark @JvmOverloads constructor(private val manureExchangeAmount: Int = -1, private val scene: BeanScene = BeanScene.FARM) {
+class GoldBeanPark @JvmOverloads constructor(
+    private val manureExchangeAmount: Int = -1,
+    private val sesameExchangeAmount: Int = 0,
+    private val scene: BeanScene = BeanScene.FARM
+) {
     private val TAG = "金豆夺宝🎡"
 
     companion object {
@@ -69,7 +74,7 @@ class GoldBeanPark @JvmOverloads constructor(private val manureExchangeAmount: I
         private const val MINER_SOURCE = "ch_url-https://render.alipay.com/p/yuyan/180020010001291350/index.html"
 
         /** 炼金版入口：供芝麻炼金模块调用，做签到、抽财运签、换量任务及芝麻粒换金豆 */
-        fun forAlchemy(exchangeAmount: Int = 0): GoldBeanPark = GoldBeanPark(manureExchangeAmount = exchangeAmount, scene = BeanScene.ZHIMA)
+        fun forAlchemy(exchangeAmount: Int = 0): GoldBeanPark = GoldBeanPark(sesameExchangeAmount = exchangeAmount, scene = BeanScene.ZHIMA)
     }
 
     private val fullSyncTypes = listOf(
@@ -579,7 +584,9 @@ class GoldBeanPark @JvmOverloads constructor(private val manureExchangeAmount: I
     // --- 资产换金豆（农场肥料换豆 / 芝麻粒换豆） ---
 
     private suspend fun handleExchange() {
-        if (manureExchangeAmount == 0 || Status.hasFlagToday("${scene.flagPrefix}::exchange")) return
+        // 农场版（肥料）与炼金版（芝麻粒）使用各自独立的换豆量字段，互不影响
+        val configuredAmount = if (scene == BeanScene.ZHIMA) sesameExchangeAmount else manureExchangeAmount
+        if (configuredAmount == 0 || Status.hasFlagToday("${scene.flagPrefix}::exchange")) return
         try {
             val indexRes = goldenBeanIndex()
             val exchangeInfo = indexRes.optJSONObject("manureExchangeInfo") ?: return
@@ -610,10 +617,10 @@ class GoldBeanPark @JvmOverloads constructor(private val manureExchangeAmount: I
             if (maxCanExchangeBeans < minExchangeAmount) return
 
             // -1 全换（受每日配额与资产上限限制），>0 按配置量兑换
-            var toExchange = if (manureExchangeAmount == -1) {
+            var toExchange = if (configuredAmount == -1) {
                 minOf(maxCanExchangeBeans, remainQuota)
             } else {
-                minOf(manureExchangeAmount, minOf(maxCanExchangeBeans, remainQuota))
+                minOf(configuredAmount, minOf(maxCanExchangeBeans, remainQuota))
             }
 
             // 按单次步长 beanReward 向下对齐整倍数

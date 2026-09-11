@@ -38,6 +38,7 @@ class AntOrchard : ModelTask() {
     private lateinit var receiveSevenDayGift: BooleanModelField
     private lateinit var limitedTask: BooleanModelField
     private lateinit var receiveOrchardTaskAward: BooleanModelField
+    private lateinit var orchardChouChouLe: BooleanModelField
     private lateinit var orchardSpreadManureCount: IntegerModelField
     private lateinit var assistFriendList: SelectModelField
     //模式选择
@@ -76,6 +77,9 @@ class AntOrchard : ModelTask() {
         )
         modelFields.addField(
             BooleanModelField("receiveOrchardTaskAward", "收取农场任务奖励", false).also { receiveOrchardTaskAward = it }
+        )
+        modelFields.addField(
+            BooleanModelField("orchardChouChouLe", "农场抽抽乐", false).also { orchardChouChouLe = it }
         )
         modelFields.addField(
             IntegerModelField("orchardSpreadManureCount", "农场每日施肥次数", 0).also { orchardSpreadManureCount = it }
@@ -166,6 +170,12 @@ class AntOrchard : ModelTask() {
                 doOrchardDailyTask(userId!!)
                 triggerTbTask()
                 handleLeyuanDailyTasks()
+            }
+
+            // 农场抽抽乐
+            if (orchardChouChouLe.value) {
+                CoroutineUtils.sleepCompat(200)
+                OrchardChouChouLe(executeIntervalInt).run(userId!!)
             }
 
             // 摇钱树余额奖励 (每天7点后)

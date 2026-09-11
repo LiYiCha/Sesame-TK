@@ -386,4 +386,95 @@ object AntOrchardRpcCall {
             return ""
         }
     }
+
+    // ==================== 农场抽抽乐（移植自 Sesame-AG d2cf4c89） ====================
+
+    /** 农场抽抽乐-进入活动（返回 drawActivity.activityId / drawAsset.blance） */
+    fun enterDrawActivity(activityId: String = ""): String {
+        val data = JSONObject().apply {
+            put("activityId", activityId)
+            put("context", JSONObject().put("appMode", "normal"))
+            put("requestType", "RPC")
+            put("sceneCode", "ANTORCHARD_DRAW_TIMES")
+            put("source", "antorchard")
+        }
+        return RequestManager.requestString(
+            "com.alipay.antiepdrawprod.enterDrawActivityantorchard",
+            JSONArray().put(data).toString()
+        )
+    }
+
+    /** 农场抽抽乐-查询任务列表 */
+    fun listDrawTasks(): String {
+        val data = JSONObject().apply {
+            put("extend", JSONObject().put("appMode", "normal"))
+            put("requestType", "RPC")
+            put("sceneCode", "ANTORCHARD_DRAW_TIMES_TASK")
+            put("source", "antorchard")
+        }
+        return RequestManager.requestString(
+            "com.alipay.antieptask.listTaskantorchard",
+            JSONArray().put(data).toString()
+        )
+    }
+
+    /** 农场抽抽乐-完成任务 */
+    fun finishDrawTask(sceneCode: String, taskType: String): String {
+        val data = JSONObject().apply {
+            put("outBizNo", "${taskType}_${System.currentTimeMillis()}_${RandomUtil.getRandomString(8)}")
+            put("sceneCode", sceneCode)
+            put("source", "antorchard")
+            put("taskType", taskType)
+        }
+        return RequestManager.requestString(
+            "com.alipay.antieptask.finishTaskantorchard",
+            JSONArray().put(data).toString()
+        )
+    }
+
+    /** 农场抽抽乐-领取任务奖励（抽奖次数） */
+    fun receiveDrawTaskAward(sceneCode: String, taskType: String): String {
+        val data = JSONObject().apply {
+            put("ignoreLimit", true)
+            put("requestType", "RPC")
+            put("sceneCode", sceneCode)
+            put("source", "antorchard")
+            put("taskType", taskType)
+        }
+        return RequestManager.requestString(
+            "com.alipay.antieptask.receiveTaskAwardantorchard",
+            JSONArray().put(data).toString()
+        )
+    }
+
+    /** 农场抽抽乐-同步余额（注意此接口 source 与其他抽抽乐接口不同，为 taskaward） */
+    fun syncDrawBalance(activityId: String): String {
+        val data = JSONObject().apply {
+            put("activityId", activityId)
+            put("context", JSONObject().put("appMode", "normal"))
+            put("requestType", "RPC")
+            put("sceneCode", "ANTORCHARD_DRAW_TIMES")
+            put("source", "taskaward")
+        }
+        return RequestManager.requestString(
+            "com.alipay.antiepdrawprod.drawSyncantorchard",
+            JSONArray().put(data).toString()
+        )
+    }
+
+    /** 农场抽抽乐-批量抽奖 */
+    fun batchDraw(activityId: String, times: Int, userId: String): String {
+        val data = JSONObject().apply {
+            put("activityId", activityId)
+            put("requestType", "RPC")
+            put("sceneCode", "ANTORCHARD_DRAW_TIMES")
+            put("source", "antorchard")
+            put("times", times)
+            put("userId", userId)
+        }
+        return RequestManager.requestString(
+            "com.alipay.antiepdrawprod.batchDrawantorchard",
+            JSONArray().put(data).toString()
+        )
+    }
 }
