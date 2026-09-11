@@ -722,10 +722,10 @@ class AntOrchard : ModelTask() {
                     Log.runtime(TAG, joSign.toString())
                 }
 
-                // 访问金豆乐园
+                // 访问金豆夺宝
                 val joBean = JSONObject(AntOrchardRpcCall.orchardToGoldenBeanIndex())
                 if (!joBean.optBoolean("success")){
-                    Log.error(TAG,"农场访问金豆乐园失败:[$joBean]")
+                    Log.error(TAG,"农场访问金豆夺宝失败:[$joBean]")
                 }
             }
         } catch (t: Throwable) {

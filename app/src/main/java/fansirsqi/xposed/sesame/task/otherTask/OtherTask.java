@@ -128,8 +128,8 @@ public class OtherTask extends ModelTask {
     private final static BooleanModelField neverLandJumpLess = new BooleanModelField("neverLandJumpLess", "健康岛|不设置完成状态", false);
     private final BooleanModelField luckCode = new BooleanModelField("luckcode", "收益天天乐", false);
     private final BooleanModelField goldbean = new BooleanModelField("goldbean", "天天来财", false);
-    private final BooleanModelField goldenBeanPark = new BooleanModelField("goldenBeanPark", "金豆乐园", false);
-    private final IntegerModelField goldenBeanManureExchangeAmount = new IntegerModelField("goldenBeanManureExchangeAmount", "金豆乐园 | 肥料换豆量(0关/-1全换)", 0);
+    private final BooleanModelField goldenBeanPark = new BooleanModelField("goldenBeanPark", "金豆夺宝", false);
+    private final IntegerModelField goldenBeanManureExchangeAmount = new IntegerModelField("goldenBeanManureExchangeAmount", "金豆夺宝 | 肥料换豆量(0关/-1全换)", 0);
     private final BooleanModelField goldTicket = new BooleanModelField("goldTicket", "黄金票", false);
     @Getter
     private final static BooleanModelField huabeijin = new BooleanModelField("huabeijin", "花呗金", false);
@@ -167,8 +167,8 @@ public class OtherTask extends ModelTask {
         modelFields.addField(neverLandJumpLess);  // 悦动健康跳一跳 不设置完成状态
         modelFields.addField(luckCode);  // 收益天天乐
         modelFields.addField(goldbean);  // 天天来财
-        modelFields.addField(goldenBeanPark);  // 金豆乐园
-        modelFields.addField(goldenBeanManureExchangeAmount);  // 金豆乐园|肥料换豆量(0关/-1全换)
+        modelFields.addField(goldenBeanPark);  // 金豆夺宝
+        modelFields.addField(goldenBeanManureExchangeAmount);  // 金豆夺宝|肥料换豆量(0关/-1全换)
         modelFields.addField(goldTicket);  // 黄金票
         modelFields.addField(huabeijin);  // 花呗金
         modelFields.addField(travelDeals);  // 出行特惠
@@ -504,12 +504,12 @@ public class OtherTask extends ModelTask {
                 Log.error(TAG + "天天来财--error:" + e);
             }
             try {
-                // 金豆乐园
+                // 金豆夺宝
                 if (goldenBeanPark.getValue()) {
                     new GoldBeanPark(goldenBeanManureExchangeAmount.getValue()).run();
                 }
             } catch (Exception e) {
-                Log.error(TAG + "金豆乐园--error:" + e);
+                Log.error(TAG + "金豆夺宝--error:" + e);
             }
 
             try {

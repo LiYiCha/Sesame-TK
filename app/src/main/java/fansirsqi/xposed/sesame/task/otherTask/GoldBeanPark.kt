@@ -16,9 +16,9 @@ import java.util.Date
 import java.util.Locale
 
 /**
- * 金豆场景配置
+ * 金豆夺宝配置
  *
- * 农场版与炼金版金豆乐园的接口结构完全相同，仅参数不同，
+ * 农场版与炼金版金豆夺宝的接口结构完全相同，仅参数不同，
  * 通过替换 bizType/source/version/sceneCode 即可复用同一套任务流程
  */
 data class BeanScene(
@@ -31,7 +31,7 @@ data class BeanScene(
     val flagPrefix: String
 ) {
     companion object {
-        /** 农场版金豆乐园（芭芭农场入口） */
+        /** 农场版金豆夺宝（芭芭农场入口） */
         val FARM = BeanScene(
             bizType = "MASTER",
             sourceMain = "babafarm",
@@ -42,7 +42,7 @@ data class BeanScene(
             flagPrefix = "goldBeanPark"
         )
 
-        /** 炼金版金豆乐园（芝麻炼金入口） */
+        /** 炼金版金豆夺宝（芝麻炼金入口） */
         val ZHIMA = BeanScene(
             bizType = "ZHIMA",
             sourceMain = "lianjin",
@@ -56,13 +56,13 @@ data class BeanScene(
 }
 
 /**
- * 金豆乐园 🎡
+ * 金豆夺宝 🎡
  *
  * @param manureExchangeAmount 肥料换豆量（-1 全换，0 关闭，>0 按配置量），仅农场版生效
  * @param scene 金豆场景（农场版/炼金版），决定全部 RPC 的 bizType/source/version/sceneCode
  */
 class GoldBeanPark @JvmOverloads constructor(private val manureExchangeAmount: Int = -1, private val scene: BeanScene = BeanScene.FARM) {
-    private val TAG = "金豆乐园🎡"
+    private val TAG = "金豆夺宝🎡"
 
     companion object {
         private const val THEMES_FOLDER = "themes"
@@ -130,7 +130,7 @@ class GoldBeanPark @JvmOverloads constructor(private val manureExchangeAmount: I
 
                         val remainToTask = quotaLimit - usedQuota
                         if (remainToTask > 0 && quotaCanUse < remainToTask) {
-                            Log.other(TAG, "金豆乐园宝箱/金蛋进度 $usedQuota/$quotaLimit，自动执行【金豆对对碰/吃草草】上报补齐...")
+                            Log.other(TAG, "金豆夺宝宝箱/金蛋进度 $usedQuota/$quotaLimit，自动执行【金豆对对碰/吃草草】上报补齐...")
                             try {
                                 GameTask.GoldenBean_ddply.report(remainToTask)
                             } catch (e: Exception) {
@@ -157,7 +157,7 @@ class GoldBeanPark @JvmOverloads constructor(private val manureExchangeAmount: I
                                         totalEarned += item.optInt("awardCount", 0)
                                     }
                                 }
-                                Log.other(TAG, "金豆乐园砸蛋成功获得+$totalEarned 金豆")
+                                Log.other(TAG, "金豆夺宝砸蛋成功获得+$totalEarned 金豆")
                             }
                         }
 
@@ -313,8 +313,8 @@ class GoldBeanPark @JvmOverloads constructor(private val manureExchangeAmount: I
 
                         if (finishRes.optBoolean("success")) {
                             val directIncCount = extractAwardBeanCount(finishRes)
-                            if (directIncCount > 0 || finishRes.has("awardInfo")) {
-                                Log.other(TAG, "完成[$title]+$directIncCount 金豆")
+                            if (directIncCount > 0 || (finishRes.has("awardInfo") && directIncCount > 0)) {
+                                Log.other(TAG, "完成任务[$title]+$directIncCount 金豆")
                                 hasWorkDone = true
                                 break
                             }
@@ -325,7 +325,7 @@ class GoldBeanPark @JvmOverloads constructor(private val manureExchangeAmount: I
                             }
                             if (awardRes.optBoolean("success")) {
                                 val incCount = extractAwardBeanCount(awardRes)
-                                Log.other(TAG, "完成[$title]+$incCount 金豆")
+                                Log.other(TAG, "领取任务[$title]+$incCount 金豆")
                                 hasWorkDone = true
                                 break
                             } else {
@@ -346,7 +346,7 @@ class GoldBeanPark @JvmOverloads constructor(private val manureExchangeAmount: I
         }
     }
 
-    // --- 金豆乐园 RPC 调方 ---
+    // --- 金豆夺宝 RPC 调方 ---
 
     private fun goldenBeanIndex(): JSONObject {
         val method = "com.alipay.goldenbean.index"
@@ -556,7 +556,7 @@ class GoldBeanPark @JvmOverloads constructor(private val manureExchangeAmount: I
     }
 
     /**
-     * 检查金豆乐园任务是否处于黑名单中（无法通过纯 RPC 完成的支付/理财/跳转/订阅类任务）
+     * 检查金豆夺宝任务是否处于黑名单中（无法通过纯 RPC 完成的支付/理财/跳转/订阅类任务）
      */
     private fun isBlacklistedTask(
         taskId: String,

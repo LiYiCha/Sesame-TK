@@ -276,7 +276,7 @@ class AntMember : ModelTask() {
                                 doSesameAlchemyNextDayAward()
                             }
 //                            else Log.runtime(TAG, "✅ 芝麻粒次日奖励已领取，今天不再执行")
-                            // ===== 金豆任务（炼金版金豆乐园，复用 GoldBeanPark 参数化实现：签到+抽签+换量任务+芝麻粒换金豆） =====
+                            // ===== 金豆任务（炼金版金豆夺宝，复用 GoldBeanPark 参数化实现：签到+抽签+换量任务+芝麻粒换金豆） =====
                             val exchangeAmount = OtherTask2.alchemyGoldenBeanExchange.value ?: 0
                             GoldBeanPark.forAlchemy(exchangeAmount).runAlchemyBeanTasks()
                         })

@@ -249,7 +249,7 @@ class SesameAlchemy {
     }
 
     /**
-     * 金豆收取与任务：炼金版金豆乐园复用 GoldBeanPark 的参数化实现（BeanScene.ZHIMA）
+     * 金豆收取与任务：炼金版金豆夺宝复用 GoldBeanPark 的参数化实现（BeanScene.ZHIMA）
      */
     private fun collectGoldenBean() {
         try {
@@ -270,7 +270,7 @@ class SesameAlchemy {
                 }
             }
 
-            // 2. 金豆任务（复用金豆乐园的参数化流程：签到 + 抽财运签 + 换量任务 + 芝麻粒换金豆）
+            // 2. 金豆任务（复用金豆夺宝的参数化流程：签到 + 抽财运签 + 换量任务 + 芝麻粒换金豆）
             GlobalThreadPools.execute {
                 try {
                     val exchangeAmount = OtherTask2.alchemyGoldenBeanExchange.value ?: 0

@@ -264,7 +264,7 @@ public class AntMemberRpcCall {
 
             /**
              * 芝麻炼金-进入金豆页面（服务端自动领取待领取金豆）
-             * 与农场金豆乐园同接口，仅 bizType/source 不同；响应结构与农场一致
+             * 与农场金豆夺宝同接口，仅 bizType/source 不同；响应结构与农场一致
              */
             public static String goldenBeanIndex() {
                 return RequestManager.requestString(
