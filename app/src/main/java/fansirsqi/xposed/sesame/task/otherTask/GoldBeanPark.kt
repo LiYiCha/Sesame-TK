@@ -312,12 +312,6 @@ class GoldBeanPark @JvmOverloads constructor(private val manureExchangeAmount: I
                         val finishRes = finishTaskAntOrchard(taskType, userId, taskSceneCode)
 
                         if (finishRes.optBoolean("success")) {
-                            val directIncCount = extractAwardBeanCount(finishRes)
-                            if (directIncCount > 0 || (finishRes.has("awardInfo") && directIncCount > 0)) {
-                                Log.other(TAG, "完成任务[$title]+$directIncCount 金豆")
-                                hasWorkDone = true
-                                break
-                            }
                             delay(1000 + (0..1000).random().toLong())
                             var awardRes = receiveTaskAwardAntOrchard(taskType, taskSceneCode)
                             if (!awardRes.optBoolean("success") && taskSceneCode != scene.defaultSceneCode) {
