@@ -77,7 +77,6 @@ private fun HelpScreen(activity: android.app.Activity, onBackClick: () -> Unit) 
     var selectedSourceId by remember { mutableStateOf(configManager.selectedSourceId) }
     var showSourceDialog by remember { mutableStateOf(false) }
     var showClearLogDialog by remember { mutableStateOf(false) }
-    var isCheckingUpdate by remember { mutableStateOf(false) }
 
     // 存储与日志大小状态
     var storageRefreshTrigger by remember { mutableIntStateOf(0) }
@@ -124,27 +123,16 @@ private fun HelpScreen(activity: android.app.Activity, onBackClick: () -> Unit) 
                     configManager = configManager,
                     updateMode = updateMode,
                     selectedSourceId = selectedSourceId,
-                    isCheckingUpdate = isCheckingUpdate,
                     onUpdateModeChanged = { newMode ->
                         updateMode = newMode
                         configManager.updateMode = newMode
                         Toast.makeText(
                             context.applicationContext,
-                            if (newMode == UpdaterConfigManager.UPDATE_MODE_MANUAL) "已设为：手动更新 (仅点击时检查)" else "已设为：自动更新 (启动时静默检测)",
+                            if (newMode == UpdaterConfigManager.UPDATE_MODE_MANUAL) "已设为：手动更新 (仅在下载列表点击刷新时检查)" else "已设为：自动更新 (启动时静默检测)",
                             Toast.LENGTH_SHORT
                         ).show()
                     },
                     onOpenSourceDialog = { showSourceDialog = true },
-                    onCheckUpdateClick = {
-                        isCheckingUpdate = true
-                        try {
-                            Toast.makeText(context.applicationContext, "正在检查更新...", Toast.LENGTH_SHORT).show()
-                        } catch (_: Throwable) {}
-                        AppUpdaterManager.checkUpdateManual(context)
-                        activity.window?.decorView?.postDelayed({
-                            isCheckingUpdate = false
-                        }, 1800)
-                    },
                     onOpenDownloadListClick = {
                         AppUpdaterManager.openDownloadList(context)
                     }
@@ -230,10 +218,8 @@ private fun UpdateSettingsCard(
     configManager: UpdaterConfigManager,
     updateMode: Int,
     selectedSourceId: String,
-    isCheckingUpdate: Boolean,
     onUpdateModeChanged: (Int) -> Unit,
     onOpenSourceDialog: () -> Unit,
-    onCheckUpdateClick: () -> Unit,
     onOpenDownloadListClick: () -> Unit
 ) {
     val activeSource = remember(selectedSourceId) { configManager.getSelectedSource() }
@@ -289,35 +275,6 @@ private fun UpdateSettingsCard(
                     }
                 }
 
-                // 立即检查更新按钮
-                Button(
-                    onClick = onCheckUpdateClick,
-                    enabled = !isCheckingUpdate,
-                    shape = RoundedCornerShape(20.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.primary,
-                        contentColor = MaterialTheme.colorScheme.onPrimary
-                    ),
-                    contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp)
-                ) {
-                    if (isCheckingUpdate) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(15.dp),
-                            strokeWidth = 2.dp,
-                            color = MaterialTheme.colorScheme.onPrimary
-                        )
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text(text = "检查中...", fontSize = 13.sp, fontWeight = FontWeight.Bold)
-                    } else {
-                        Icon(
-                            imageVector = Icons.Rounded.Refresh,
-                            contentDescription = null,
-                            modifier = Modifier.size(16.dp)
-                        )
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text(text = "检查更新", fontSize = 13.sp, fontWeight = FontWeight.Bold)
-                    }
-                }
             }
 
             HorizontalDivider(

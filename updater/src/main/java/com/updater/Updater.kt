@@ -399,7 +399,6 @@ class Updater private constructor(
                     if (lastUpdated <= 0L) {
                         lastUpdated = System.currentTimeMillis()
                     }
-
                     if (appIdVal.isEmpty() || (latestVersionCode <= 0 && latestVersionName.isEmpty())) {
                         handler.post { onNoUpdate() }
                         return
@@ -530,7 +529,6 @@ class Updater private constructor(
                     if (releaseTime <= 0L) {
                         releaseTime = System.currentTimeMillis()
                     }
-
                     val packagesList = ArrayList<UpdatePackage>()
                     val assets = json.optJSONArray("assets")
                     if (assets != null) {

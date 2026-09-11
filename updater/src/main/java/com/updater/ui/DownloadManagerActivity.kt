@@ -223,10 +223,14 @@ class DownloadManagerActivity : AppCompatActivity() {
             if (context == null || intent == null) return
             // 仅在系统确认某包真正安装/覆盖生效后，对该包做精准清理，绝不在页面恢复时全量扫描
             val pkgName = intent.dataString?.removePrefix("package:")
-            if (!pkgName.isNullOrBlank()) {
-                ApkCleanupManager.cleanInstalledApkForPackage(this@DownloadManagerActivity, pkgName)
+            if (pkgName.isNullOrBlank()) {
+                syncTasksFromDb()
+                return
             }
-            syncTasksFromDb()
+            // 清理在后台线程执行（含 APK 哈希计算），完成后回到主线程刷新列表
+            ApkCleanupManager.cleanInstalledApkForPackage(this@DownloadManagerActivity, pkgName) {
+                syncTasksFromDb()
+            }
         }
     }
 
@@ -333,9 +337,16 @@ class DownloadManagerActivity : AppCompatActivity() {
     }
 
     private fun syncTasksFromDb() {
-        for ((taskId, _) in tasks) {
-            val dbTask = dbHelper.getTask(taskId) ?: continue
-            tasks[taskId] = reconcileTaskFileState(dbTask)
+        // 快照遍历，避免边遍历边移除导致并发修改异常
+        for (taskId in tasks.keys.toList()) {
+            val dbTask = dbHelper.getTask(taskId)
+            if (dbTask == null) {
+                // 安装生效后已被清理（或手动清理了缓存）→ 同步移除界面上的残留条目
+                tasks.remove(taskId)
+                speedMap.remove(taskId)
+            } else {
+                tasks[taskId] = reconcileTaskFileState(dbTask)
+            }
         }
     }
 
@@ -586,7 +597,10 @@ class DownloadManagerActivity : AppCompatActivity() {
             apkDir.listFiles { file -> file.isFile && file.name.endsWith(".apk", ignoreCase = true) }
                 ?.forEach { file ->
                     freedBytes += file.length()
-                    file.delete()
+                    if (file.delete()) {
+                        // 同步删除数据库记录，避免列表残留“已就绪”的幽灵任务
+                        dbHelper.deleteTaskBySavePath(file.absolutePath)
+                    }
                 }
             freedBytes
         } catch (_: Exception) {
@@ -700,7 +714,15 @@ class DownloadManagerActivity : AppCompatActivity() {
             if (showSourceSettings) {
                 SourceSettingsDialogHost(
                     onDismiss = { showSourceSettings = false },
-                    onSourceChanged = { doRefreshUpdates() }
+                    onSourceChanged = {
+                        // 更新源变更后不自动发起检测更新：检测更新只允许由手动「刷新」按钮
+                        // 或应用启动时的 checkUpdateOnStartup 触发，其余场景一律不发起网络请求
+                        Toast.makeText(
+                            applicationContext,
+                            "更新源已变更，请点击右上角「刷新」重新检测",
+                            Toast.LENGTH_SHORT
+                        ).show()
+                    }
                 )
             }
         }
@@ -1063,10 +1085,10 @@ class DownloadManagerActivity : AppCompatActivity() {
                         deleteDownload(taskId)
                     }
                     SecondaryActionButton("打开", container = colors.outline, content = colors.onSurface) {
-                        val task = tasks[taskId]
-                        val targetDir = task?.let { File(it.savePath).parentFile }
-                            ?: UpdatePathManager.getUpdateDir(this@DownloadManagerActivity)
-                        UpdatePathManager.openUpdateDirectory(this@DownloadManagerActivity, targetDir)
+                        val apkFile = tasks[taskId]?.let { File(it.savePath) }?.takeIf { it.exists() }
+                        if (apkFile != null) {
+                            UpdatePathManager.openApkWithOtherApp(this@DownloadManagerActivity, apkFile)
+                        }
                     }
                     PrimaryActionButton("安装") {
                         tasks[taskId]?.let { ApkInstaller.installApk(this@DownloadManagerActivity, File(it.savePath)) }

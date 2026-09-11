@@ -371,7 +371,8 @@ fun SourceSettingsDialogHost(
                 val oldProxy = configManager.githubProxyHost
                 val newProxy = proxyHost.trim()
                 configManager.githubProxyHost = newProxy
-                if (oldProxy != newProxy) {
+                // 归一化后比较，避免存储值带空格/结尾斜杠时被误判为“已变更”
+                if (oldProxy.trim().trimEnd('/') != newProxy.trimEnd('/')) {
                     onSourceChanged?.invoke()
                 }
                 onDismiss()

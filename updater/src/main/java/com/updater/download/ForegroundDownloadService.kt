@@ -13,10 +13,13 @@ import com.updater.utils.ApkInstaller
 import com.updater.utils.UpdaterLog
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import okhttp3.Response
 import java.io.File
+import java.io.IOException
 import java.io.RandomAccessFile
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 
 class ForegroundDownloadService : Service() {
 
@@ -34,6 +37,15 @@ class ForegroundDownloadService : Service() {
 
         private const val CHANNEL_ID = "updater_download_channel"
         private const val NOTIFICATION_ID = 1024
+
+        /** 失败详情弹窗中展示的响应体最大字符数，避免超长响应撑爆弹窗 */
+        private const val MAX_ERROR_BODY_CHARS = 2000
+
+        /** 网络异常（超时 / 连接中断等）时的最大自动续传重试次数 */
+        private const val MAX_RETRY_COUNT = 3
+
+        /** 重试基础退避间隔（毫秒）：第 n 次重试等待 n 倍 */
+        private const val RETRY_DELAY_BASE_MS = 1000L
     }
 
     // 保证单线程单任务顺序执行，避免并发下载
@@ -41,7 +53,19 @@ class ForegroundDownloadService : Service() {
     private val activeCalls = ConcurrentHashMap<String, okhttp3.Call>()
     private val activeTasks = ConcurrentHashMap<String, DownloadTask>()
     private lateinit var dbHelper: DownloadDatabaseHelper
-    private val client = OkHttpClient()
+
+    /**
+     * 下载专用客户端。
+     * readTimeout 指的是“两次收到数据之间的最大间隔”（默认仅 10 秒），
+     * 慢速 CDN/移动网络稍有抖动就会被误判为超时，因此放宽到 60 秒；
+     * 同时不设置 callTimeout（保持 0），避免大文件被整体时长上限中断。
+     */
+    private val client = OkHttpClient.Builder()
+        .connectTimeout(20, TimeUnit.SECONDS)
+        .readTimeout(60, TimeUnit.SECONDS)
+        .writeTimeout(30, TimeUnit.SECONDS)
+        .retryOnConnectionFailure(true)
+        .build()
 
     override fun onCreate() {
         super.onCreate()
@@ -76,6 +100,19 @@ class ForegroundDownloadService : Service() {
         }
 
         return START_NOT_STICKY
+    }
+
+    /**
+     * 提取服务端真实响应内容用于失败弹窗展示。
+     * 只取响应体本身（失败原因都在这里），响应体为空时回退为状态行，保证原因不为空。
+     */
+    private fun buildHttpErrorMessage(response: Response): String {
+        val body = try {
+            response.body?.string()?.trim()?.take(MAX_ERROR_BODY_CHARS).orEmpty()
+        } catch (_: Exception) {
+            ""
+        }
+        return body.ifBlank { "HTTP ${response.code} ${response.message}".trim() }
     }
 
     private fun isApkFullyReady(task: DownloadTask, file: File): Boolean {
@@ -137,25 +174,79 @@ class ForegroundDownloadService : Service() {
         checkStopService()
     }
 
+    /**
+     * 下载任务入口：负责重试调度与任务收尾。
+     *
+     * 网络类异常（超时 / 连接中断等）最多自动续传重试 [MAX_RETRY_COUNT] 次，
+     * 每次基于已下载字节重新发起 Range 请求，避免一次抖动就整包失败；
+     * HTTP 业务错误、用户暂停、重试耗尽都会立即结束。
+     */
     private fun runDownload(task: DownloadTask) {
-        task.status = DownloadTask.STATUS_DOWNLOADING
-        dbHelper.updateTaskProgress(task.id, task.downloadedBytes, DownloadTask.STATUS_DOWNLOADING)
-        sendProgressBroadcast(task)
-
         val tempFile = File(task.savePath)
         val parentDir = tempFile.parentFile
         if (parentDir != null && !parentDir.exists()) {
             parentDir.mkdirs()
         }
 
+        task.status = DownloadTask.STATUS_DOWNLOADING
+        dbHelper.updateTaskProgress(task.id, task.downloadedBytes, DownloadTask.STATUS_DOWNLOADING)
+        sendProgressBroadcast(task)
+
+        try {
+            var attempt = 0
+            while (true) {
+                // 已被用户暂停 / 任务已移除：立即结束，不重试也不标记失败
+                if (isCancelledOrPaused(task)) return
+
+                try {
+                    downloadOnce(task, tempFile)
+                    return
+                } catch (e: Exception) {
+                    if (isCancelledOrPaused(task) || activeCalls[task.id]?.isCanceled() == true) return
+
+                    attempt++
+                    // 非网络类异常（如 HTTP 错误文案）不重试；网络异常最多重试 MAX_RETRY_COUNT 次
+                    if (e !is IOException || attempt > MAX_RETRY_COUNT) {
+                        markDownloadFailed(task, e)
+                        return
+                    }
+
+                    UpdaterLog.i("下载异常，第 $attempt/$MAX_RETRY_COUNT 次续传重试: ${e.javaClass.simpleName} ${e.message}")
+                    task.status = DownloadTask.STATUS_DOWNLOADING
+                    dbHelper.updateTaskProgress(task.id, task.downloadedBytes, DownloadTask.STATUS_DOWNLOADING)
+                    sendProgressBroadcast(task)
+                    try {
+                        // 递增退避，给网络恢复留出时间
+                        Thread.sleep(RETRY_DELAY_BASE_MS * attempt)
+                    } catch (_: InterruptedException) {
+                        Thread.currentThread().interrupt()
+                        return
+                    }
+                }
+            }
+        } finally {
+            activeCalls.remove(task.id)
+            activeTasks.remove(task.id)
+            checkStopService()
+        }
+    }
+
+    private fun isCancelledOrPaused(task: DownloadTask): Boolean =
+        task.status == DownloadTask.STATUS_PAUSED || !activeTasks.containsKey(task.id)
+
+    /**
+     * 单次下载尝试：按当前已下载字节发起 Range 续传请求并写入文件。
+     * 网络类异常向上抛出交由重试调度处理；HTTP 错误、MD5 校验、唤起安装在此收尾。
+     */
+    private fun downloadOnce(task: DownloadTask, tempFile: File) {
         val downloaded = tempFile.length()
         task.downloadedBytes = downloaded
 
-        UpdaterLog.i("开始单线程下载: ${tempFile.name}, 当前偏移量: $downloaded 字节")
+        UpdaterLog.i("开始下载: ${tempFile.name}, 当前偏移量: $downloaded 字节")
 
         val requestBuilder = Request.Builder()
             .url(task.url)
-        
+
         if (downloaded > 0) {
             requestBuilder.addHeader("Range", "bytes=$downloaded-")
         }
@@ -173,103 +264,92 @@ class ForegroundDownloadService : Service() {
         val call = client.newCall(requestBuilder.build())
         activeCalls[task.id] = call
 
+        val response = call.execute()
+        if (!response.isSuccessful && response.code != 206) {
+            // 直接把服务端真实响应交给失败弹窗展示，不再使用可能失真的固定文案
+            throw Exception(buildHttpErrorMessage(response))
+        }
+
+        val responseBody = response.body ?: throw Exception("响应体为空，无法读取数据")
+
+        val raf = RandomAccessFile(tempFile, "rw")
+        if (response.code == 206) {
+            raf.seek(downloaded)
+        } else {
+            // 服务端不支持断点续传或返回全量，自动截断避免乱码追加
+            raf.setLength(0)
+            task.downloadedBytes = 0
+        }
+
+        val inputStream = responseBody.byteStream()
+        val buffer = ByteArray(8192)
+        var bytesRead: Int
+        var lastUpdate = System.currentTimeMillis()
+        var lastSpeedBytes = task.downloadedBytes
+        var lastSpeedTime = System.currentTimeMillis()
+
         try {
-            val response = call.execute()
-            if (!response.isSuccessful && response.code != 206) {
-                val code = response.code
-                val err = when (code) {
-                    401 -> "HTTP 401 (未授权: 需要登录或鉴权已失效)"
-                    403 -> "HTTP 403 (禁止访问: 无下载权限)"
-                    404 -> "HTTP 404 (下载链接不存在或文件已下架)"
-                    500, 502, 503, 504 -> "HTTP $code (云端服务器故障)"
-                    else -> "HTTP $code (${response.message.ifEmpty { "请求失败" }})"
+            while (inputStream.read(buffer).also { bytesRead = it } != -1) {
+                raf.write(buffer, 0, bytesRead)
+                task.downloadedBytes += bytesRead
+
+                val now = System.currentTimeMillis()
+                if (now - lastUpdate > 500) {
+                    lastUpdate = now
+                    val speedBps = if (now > lastSpeedTime) {
+                        (task.downloadedBytes - lastSpeedBytes) * 1000 / (now - lastSpeedTime)
+                    } else 0L
+                    lastSpeedBytes = task.downloadedBytes
+                    lastSpeedTime = now
+                    dbHelper.updateTaskProgress(task.id, task.downloadedBytes, DownloadTask.STATUS_DOWNLOADING)
+                    sendProgressBroadcast(task, null, speedBps)
+                    updateNotification(task, speedBps)
                 }
-                throw Exception(err)
-            }
-
-            val responseBody = response.body ?: throw Exception("响应体为空，无法读取数据")
-
-            val raf = RandomAccessFile(tempFile, "rw")
-            if (response.code == 206) {
-                raf.seek(downloaded)
-            } else {
-                // 服务端不支持断点续传或返回全量，自动截断避免乱码追加
-                raf.setLength(0)
-                task.downloadedBytes = 0
-            }
-
-            val inputStream = responseBody.byteStream()
-            val buffer = ByteArray(8192)
-            var bytesRead: Int
-            var lastUpdate = System.currentTimeMillis()
-            var lastSpeedBytes = task.downloadedBytes
-            var lastSpeedTime = System.currentTimeMillis()
-
-            try {
-                while (inputStream.read(buffer).also { bytesRead = it } != -1) {
-                    raf.write(buffer, 0, bytesRead)
-                    task.downloadedBytes += bytesRead
-
-                    val now = System.currentTimeMillis()
-                    if (now - lastUpdate > 500) {
-                        lastUpdate = now
-                        val speedBps = if (now > lastSpeedTime) {
-                            (task.downloadedBytes - lastSpeedBytes) * 1000 / (now - lastSpeedTime)
-                        } else 0L
-                        lastSpeedBytes = task.downloadedBytes
-                        lastSpeedTime = now
-                        dbHelper.updateTaskProgress(task.id, task.downloadedBytes, DownloadTask.STATUS_DOWNLOADING)
-                        sendProgressBroadcast(task, null, speedBps)
-                        updateNotification(task, speedBps)
-                    }
-                }
-            } finally {
-                raf.close()
-                inputStream.close()
-            }
-
-            if (ApkInstaller.verifyApkMd5(tempFile, task.fileMd5)) {
-                task.status = DownloadTask.STATUS_COMPLETED
-                task.errorMsg = null
-                dbHelper.updateTaskProgress(task.id, task.downloadedBytes, DownloadTask.STATUS_COMPLETED, null)
-                sendProgressBroadcast(task)
-                UpdaterLog.i("下载完成且校验通过: ${tempFile.name}")
-                // 尝试直接调起系统安装 (隔离异常，坚决不污染已完成的下载状态)
-                try {
-                    ApkInstaller.installApk(this, tempFile)
-                } catch (installEx: Throwable) {
-                    UpdaterLog.e("下载完成后调起安装提示异常: ${installEx.message}", installEx)
-                }
-            } else {
-                val actualMd5 = ApkInstaller.calculateFileMd5(tempFile)
-                val md5Err = "MD5 校验不匹配 (期望: ${task.fileMd5.take(8)}..., 实际: ${actualMd5.take(8)}...)"
-                task.status = DownloadTask.STATUS_FAILED
-                task.errorMsg = md5Err
-                dbHelper.updateTaskProgress(task.id, task.downloadedBytes, DownloadTask.STATUS_FAILED, md5Err)
-                sendProgressBroadcast(task, md5Err)
-                UpdaterLog.e("MD5 校验失败: ${tempFile.name}, $md5Err")
-            }
-
-        } catch (e: Exception) {
-            if (!call.isCanceled()) {
-                val detailError = when {
-                    e is java.net.UnknownHostException -> "无法解析域名，请检查网络连接"
-                    e is java.net.SocketTimeoutException -> "网络连接或读取超时"
-                    e is java.net.ConnectException -> "连接服务器失败: ${e.message ?: "连接被拒绝"}"
-                    !e.message.isNullOrBlank() -> e.message!!
-                    else -> e.javaClass.simpleName
-                }
-                task.status = DownloadTask.STATUS_FAILED
-                task.errorMsg = detailError
-                dbHelper.updateTaskProgress(task.id, task.downloadedBytes, DownloadTask.STATUS_FAILED, detailError)
-                sendProgressBroadcast(task, detailError)
-                UpdaterLog.e("下载异常: $detailError", e)
             }
         } finally {
-            activeCalls.remove(task.id)
-            activeTasks.remove(task.id)
-            checkStopService()
+            raf.close()
+            inputStream.close()
         }
+
+        if (ApkInstaller.verifyApkMd5(tempFile, task.fileMd5)) {
+            task.status = DownloadTask.STATUS_COMPLETED
+            task.errorMsg = null
+            dbHelper.updateTaskProgress(task.id, task.downloadedBytes, DownloadTask.STATUS_COMPLETED, null)
+            sendProgressBroadcast(task)
+            UpdaterLog.i("下载完成且校验通过: ${tempFile.name}")
+            // 尝试直接调起系统安装 (隔离异常，坚决不污染已完成的下载状态)
+            try {
+                ApkInstaller.installApk(this, tempFile)
+            } catch (installEx: Throwable) {
+                UpdaterLog.e("下载完成后调起安装提示异常: ${installEx.message}", installEx)
+            }
+        } else {
+            val actualMd5 = ApkInstaller.calculateFileMd5(tempFile)
+            val md5Err = "MD5 校验不匹配 (期望: ${task.fileMd5.take(8)}..., 实际: ${actualMd5.take(8)}...)"
+            task.status = DownloadTask.STATUS_FAILED
+            task.errorMsg = md5Err
+            dbHelper.updateTaskProgress(task.id, task.downloadedBytes, DownloadTask.STATUS_FAILED, md5Err)
+            sendProgressBroadcast(task, md5Err)
+            UpdaterLog.e("MD5 校验失败: ${tempFile.name}, $md5Err")
+        }
+    }
+
+    /**
+     * 记录失败原因并广播给界面（弹窗会原样展示该内容）。
+     */
+    private fun markDownloadFailed(task: DownloadTask, e: Exception) {
+        val detailError = when {
+            e is java.net.UnknownHostException -> "无法解析域名，请检查网络连接"
+            e is java.net.SocketTimeoutException -> "网络连接或读取超时（已自动续传重试 $MAX_RETRY_COUNT 次）"
+            e is java.net.ConnectException -> "连接服务器失败: ${e.message ?: "连接被拒绝"}"
+            !e.message.isNullOrBlank() -> e.message!!
+            else -> e.javaClass.simpleName
+        }
+        task.status = DownloadTask.STATUS_FAILED
+        task.errorMsg = detailError
+        dbHelper.updateTaskProgress(task.id, task.downloadedBytes, DownloadTask.STATUS_FAILED, detailError)
+        sendProgressBroadcast(task, detailError)
+        UpdaterLog.e("下载异常: $detailError", e)
     }
 
     private fun sendProgressBroadcast(task: DownloadTask, errorMsg: String? = null, speedBps: Long = 0) {

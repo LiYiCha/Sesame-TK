@@ -3,6 +3,7 @@ package fansirsqi.xposed.sesame.util
 import android.content.Context
 import com.updater.Updater
 import com.updater.ui.UpdaterThemeConfig
+import com.updater.utils.ApkCleanupManager
 import com.updater.utils.IUpdaterLogger
 import com.updater.utils.UpdaterLog
 import fansirsqi.xposed.sesame.data.General
@@ -76,13 +77,20 @@ object AppUpdaterManager {
 
     /**
      * 应用启动时调用：
-     * 若用户在更新设置中开启了「启动时自动检查更新」，则执行后台静默检测。
-     * 安装包清理不在此处进行——已改为完全由系统安装生效广播（PackageInstalledReceiver）驱动，
-     * 避免启动/恢复页面时误删尚未安装的安装包。
+     * 1. 后台对账清理已安装生效的安装包（应用被强停时收不到安装广播，此处兜底）；
+     * 2. 若用户在更新设置中开启了「启动时自动检查更新」，则执行后台静默检测。
+     *
+     * 清理采用“版本号预筛 + APK 内容 MD5 精确比对”，只删除与系统当前生效版本
+     * 完全一致的构建，不会误删尚未安装的新包。
      */
     fun initAndCheckOnStartup(context: Context) {
         val appContext = context.applicationContext
         Thread {
+            try {
+                ApkCleanupManager.cleanInstalledApks(appContext)
+            } catch (e: Throwable) {
+                Log.runtime(TAG, "启动安装包对账异常: ${e.message}")
+            }
             try {
                 val updater = getUpdater(appContext)
                 updater.checkUpdateOnStartup(context)
