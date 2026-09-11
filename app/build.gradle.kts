@@ -178,7 +178,6 @@ android {
         getByName("debug") {
             isDebuggable = true
             versionNameSuffix = "-debug"
-            isShrinkResources = false
             isMinifyEnabled = false
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
             signingConfig = signingConfigs.getByName("debug")
@@ -212,7 +211,10 @@ android {
         val variant = this
         variant.outputs.all {
             val flavorName = variant.flavorName.replaceFirstChar { it.uppercase() }
-            val fileName = "Sesame-TK-$flavorName-${variant.versionName}.apk"
+            // 未配置 release 签名时，release 产物实际回退使用 debug 签名，在文件名上注明以便区分
+            val signSuffix =
+                if (variant.buildType.name == "release" && signingConfigs.findByName("release") == null) "-debugSigned" else ""
+            val fileName = "Sesame-TK-$flavorName-${variant.versionName}$signSuffix.apk"
             (this as com.android.build.gradle.internal.api.BaseVariantOutputImpl).outputFileName = fileName
         }
     }
