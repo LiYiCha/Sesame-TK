@@ -173,9 +173,11 @@ class AntOrchard : ModelTask() {
             }
 
             // 农场抽抽乐
-            if (orchardChouChouLe.value) {
+            if (orchardChouChouLe.value && !Status.hasFlagToday(StatusFlags.FLAG_ANTORCHARD_CHOUCHOULE_DONE)) {
                 CoroutineUtils.sleepCompat(200)
-                OrchardChouChouLe(executeIntervalInt).run(userId!!)
+                userId?.takeIf { it.isNotBlank() }?.let {
+                    OrchardChouChouLe(executeIntervalInt).run(it)
+                }
             }
 
             // 摇钱树余额奖励 (每天7点后)

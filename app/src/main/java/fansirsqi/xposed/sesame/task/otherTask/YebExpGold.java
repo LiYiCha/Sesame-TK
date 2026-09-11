@@ -77,10 +77,8 @@ public class YebExpGold extends BaseCommTask {
             return;
         }
         try {
-            boolean handled = false;
-
             // 1. 券凭证：查询 → 转换 → 兑换 → 激活
-            handled = handleCertVoucherFlow() || handled;
+            handleCertVoucherFlow();
 
             // 2. 主查询
             JSONObject mainResponse = queryMain(false, null);
@@ -96,21 +94,21 @@ public class YebExpGold extends BaseCommTask {
             }
 
             // 3. 签到
-            handled = trySignIn(resultData) || handled;
+            trySignIn(resultData);
 
             // 4. 双源任务归并执行
-            handled = handleTasksDualSource(resultData) || handled;
+            handleTasksDualSource(resultData);
 
             // 5. 余额兑换（固定活动参数 + subThreshold 门槛）
-            handled = handleExchange(resultData) || handled;
+            handleExchange(resultData);
 
             // 6. 激活体验金
             yebTrialAsset();
 
-            if (handled) {
-                Status.setFlagToday(CompletedKeyEnum.YebExpGold.name());
-            }
+            // 流程正常走完后标记今日完成，避免白天轮询重复空跑与刷屏
+            Status.setFlagToday(CompletedKeyEnum.YebExpGold.name());
         } catch (Throwable th) {
+            Log.printStackTrace(TAG, "余额宝体验金运行异常:", th);
             TimeUtil.sleep((long) this.executeIntervalInt);
         }
     }
@@ -263,6 +261,7 @@ public class YebExpGold extends BaseCommTask {
                     handled = true;
                 } else {
                     manualTitles.add(action.title);
+                    markGroupHandled(group);
                 }
                 TimeUtil.sleep((long) this.executeIntervalInt);
             }

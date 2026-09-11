@@ -1,8 +1,11 @@
 package fansirsqi.xposed.sesame.task.antOrchard
 
+import fansirsqi.xposed.sesame.data.Status
+import fansirsqi.xposed.sesame.data.StatusFlags
 import fansirsqi.xposed.sesame.util.CoroutineUtils
 import fansirsqi.xposed.sesame.util.Log
 import fansirsqi.xposed.sesame.util.ResChecker
+import fansirsqi.xposed.sesame.util.TaskBlacklist
 import org.json.JSONObject
 
 /**
@@ -22,6 +25,7 @@ class OrchardChouChouLe(private val executeIntervalInt: Int) {
     companion object {
         private const val TAG = "OrchardChouChouLe"
         private const val MAX_TASK_ROUNDS = 10
+        private const val MAX_DRAW_ROUNDS = 20
     }
 
     /** 农场抽抽乐主入口 */
@@ -58,9 +62,14 @@ class OrchardChouChouLe(private val executeIntervalInt: Int) {
                 Log.error(TAG, "农场抽抽乐同步余额无效 raw=$synced")
                 return
             }
+            if (balance == 0) {
+                Log.farm("农场抽抽乐: 当前暂无可抽奖次数")
+            }
 
-            // 4. 循环抽光
-            while (balance > 0) {
+            // 4. 循环抽光（带轮次熔断保护）
+            var drawRounds = 0
+            while (balance > 0 && drawRounds < MAX_DRAW_ROUNDS) {
+                drawRounds++
                 val response = JSONObject(AntOrchardRpcCall.batchDraw(activityId, balance, userId))
                 if (!ResChecker.checkRes(TAG, response)) {
                     Log.error(TAG, "农场抽抽乐抽奖失败 activityId=$activityId times=$balance raw=$response")
@@ -81,6 +90,15 @@ class OrchardChouChouLe(private val executeIntervalInt: Int) {
                 Log.farm("农场抽抽乐剩余次数: $balance")
                 if (balance > 0) CoroutineUtils.sleepCompat(executeIntervalInt.toLong())
             }
+
+            if (drawRounds >= MAX_DRAW_ROUNDS && balance > 0) {
+                Log.error(TAG, "农场抽抽乐抽奖达到最大轮次熔断上限($MAX_DRAW_ROUNDS)，已安全退出")
+            }
+
+            // 抽奖流程顺利走完后标记今日完成，避免农场轮询频繁空跑
+            if (balance <= 0) {
+                Status.setFlagToday(StatusFlags.FLAG_ANTORCHARD_CHOUCHOULE_DONE)
+            }
         } catch (t: Throwable) {
             Log.printStackTrace(TAG, "农场抽抽乐处理异常:", t)
         }
@@ -92,6 +110,7 @@ class OrchardChouChouLe(private val executeIntervalInt: Int) {
      */
     private fun runTaskFlow() {
         var round = 0
+        val failedTasks = mutableSetOf<String>()
         while (round < MAX_TASK_ROUNDS) {
             round++
             val response = JSONObject(AntOrchardRpcCall.listDrawTasks())
@@ -112,8 +131,21 @@ class OrchardChouChouLe(private val executeIntervalInt: Int) {
                     .takeIf { it.isNotBlank() }
                     ?.let { runCatching { JSONObject(it) }.getOrNull() }
                 val title = bizInfo?.optString("title")?.takeIf { it.isNotBlank() } ?: taskType
+
+                // 黑名单任务直接跳过
+                if (TaskBlacklist.isTaskInBlacklist(title)) {
+                    Log.farm("农场抽抽乐: 任务在黑名单中，跳过[$title]")
+                    skipped++
+                    continue
+                }
+
                 when (base.optString("taskStatus")) {
                     "TODO" -> {
+                        // 之前已失败的任务，当次流程不再重复尝试
+                        if (failedTasks.contains(taskType)) {
+                            skipped++
+                            continue
+                        }
                         // 浏览类任务需要按 prodPlayParam.timeCount 真实等待
                         if (base.optString("taskProdPlayType") == "VISIT_FLOAT_BALL") {
                             val playParam = runCatching { JSONObject(base.optString("prodPlayParam")) }.getOrNull()
@@ -126,6 +158,7 @@ class OrchardChouChouLe(private val executeIntervalInt: Int) {
                             progressed = true
                         } else {
                             Log.error(TAG, "农场抽抽乐任务完成失败[$title] raw=$finishRes")
+                            failedTasks.add(taskType)
                         }
                         CoroutineUtils.sleepCompat(executeIntervalInt.toLong())
                     }
@@ -138,6 +171,7 @@ class OrchardChouChouLe(private val executeIntervalInt: Int) {
                             progressed = true
                         } else {
                             Log.error(TAG, "农场抽抽乐任务领奖失败[$title] raw=$awardRes")
+                            failedTasks.add(taskType)
                         }
                         CoroutineUtils.sleepCompat(executeIntervalInt.toLong())
                     }
