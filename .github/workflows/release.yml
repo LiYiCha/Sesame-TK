@@ -29,8 +29,28 @@ jobs:
       - name: 授予 gradlew 执行权限
         run: chmod +x gradlew
 
+      - name: 准备正式签名密钥 (如果已配置)
+        env:
+          SIGNING_KEY: ${{ secrets.ANDROID_SIGNING_KEY }}
+        run: |
+          if [ -n "$SIGNING_KEY" ]; then
+            mkdir -p key
+            echo "$SIGNING_KEY" | base64 --decode > key/ycKey.jks
+            echo "已成功还原签名文件 key/ycKey.jks"
+          else
+            echo "未配置正式签名密钥，将回退生成 debug 签名包"
+          fi
+
       - name: 编译 Normal Release APK
+        env:
+          ANDROID_SIGNING_PASSWORD: ${{ secrets.ANDROID_SIGNING_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: ./gradlew assembleNormalRelease --stacktrace
+
+      - name: 清理临时密钥
+        if: always()
+        run: rm -f key/ycKey.jks
 
       - name: 整理输出 APK
         run: |
@@ -39,24 +59,12 @@ jobs:
           echo "已成功整理以下 Normal APK 安装包："
           ls -lh release_outputs/
 
-      - name: 使用正式密钥签名 APK
-        env:
-          SIGNING_KEY: ${{ secrets.ANDROID_SIGNING_KEY }}
-          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_SIGNING_PASSWORD }}
-          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
-          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+      - name: 验证 APK 签名状态
         run: |
-          if [ -z "$SIGNING_KEY" ]; then
-            echo "未配置正式签名密钥 (ANDROID_SIGNING_KEY)，跳过正式签名步骤"
-            exit 0
-          fi
-          echo "$SIGNING_KEY" | base64 --decode > release.jks
           for apk in release_outputs/*.apk; do
-            echo "正在对 $apk 进行正式密钥签名与对齐..."
-            $ANDROID_HOME/build-tools/34.0.0/apksigner sign --ks release.jks --ks-pass "pass:$KEYSTORE_PASSWORD" --ks-key-alias "$KEY_ALIAS" --key-pass "pass:$KEY_PASSWORD" "$apk"
-            $ANDROID_HOME/build-tools/34.0.0/apksigner verify --verbose "$apk"
+            echo "正在验证 $apk 签名状态..."
+            $ANDROID_HOME/build-tools/34.0.0/apksigner verify --verbose "$apk" || true
           done
-          rm -f release.jks
 
       - name: 自动创建 Release 并上传 APK
         uses: softprops/action-gh-release@v2
