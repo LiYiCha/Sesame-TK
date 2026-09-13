@@ -95,7 +95,6 @@ public class OtherTask2 extends ModelTask {
         //modelFields.addField(UgShooping);
         modelFields.addField(rceduService);
         modelFields.addField(sesameAlchemyMy);
-        modelFields.addField(alchemyGoldenBeanExchange);
         modelFields.addField(playConsultFacade);
         modelFields.addField(playConsultFacadeNum);
         modelFields.addField(topUpGoldTask);

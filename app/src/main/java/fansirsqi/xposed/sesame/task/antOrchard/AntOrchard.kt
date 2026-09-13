@@ -22,12 +22,17 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.util.Calendar
 import androidx.core.net.toUri
+import fansirsqi.xposed.sesame.task.common.GameCenterPlayRpcCall
 
 class AntOrchard : ModelTask() {
     companion object {
         private val TAG = AntOrchard::class.java.simpleName
         private const val STATUS_YEB_WATER_COUNT = "ANTORCHARD_SPREAD_MANURE_COUNT_YEB"
         private const val STATUS_MONEY_TREE_COLLECTED = "ANTORCHARD_MONEY_TREE_COLLECTED"
+        private const val RECEIVE_SPREAD_MANURE_ACTIVITY_AWARD_ACTION = "RECEIVE_SPREAD_MANURE_ACTIVITY_AWARD"
+        private const val ACTION_SOURCE = "gonggexiguan"
+        private const val TASK_JINDOU_TREASURE = "ORCHARD_NORMAL_JINDOUDUOBAO"
+        private const val TASK_FORTUNE_TREE = "ORCHARD_NORMAL_FACAISHU_NEW"
     }
 
     private var userId: String? = UserMap.currentUid
@@ -142,6 +147,9 @@ class AntOrchard : ModelTask() {
 
             // 每日肥料 (Entry入口)
             extraInfoGet("entry")
+
+            // 检查施肥阶段丰收奖励
+            tryReceiveSpreadManureActivityAward(indexJson)
 
             // 砸金蛋
             val goldenEggInfo = indexJson.optJSONObject("goldenEggInfo")
@@ -357,6 +365,10 @@ class AntOrchard : ModelTask() {
         } while (totalWatered < targetLimit)
 
         Log.runtime(TAG, "$sceneName 施肥结束，最终累计: $totalWatered")
+        try {
+            val finalIndex = JSONObject(AntOrchardRpcCall.orchardIndex())
+            tryReceiveSpreadManureActivityAward(finalIndex)
+        } catch (_: Throwable) {}
     }
 
     private fun receiveMoneyTreeReward() {
@@ -404,6 +416,46 @@ class AntOrchard : ModelTask() {
     // 辅助方法：施肥后检测肥料礼盒
     private fun checkFertilizerBox(currentPlantScene: String) {
         extraInfoGet(from = "water")
+    }
+
+    /**
+     * 自动领取施肥达标阶段丰收奖励
+     */
+    private fun tryReceiveSpreadManureActivityAward(indexJson: JSONObject) {
+        try {
+            val alreadyReceived =
+                indexJson.has("manureTaskAwardReceive") && indexJson.optBoolean("manureTaskAwardReceive", false)
+            val stage =
+                indexJson
+                    .optJSONObject("spreadManureActivity")
+                    ?.optJSONObject("spreadManureStage")
+                    ?: return
+            val status = stage.optString("status")
+            if (alreadyReceived || status != "FINISHED") {
+                return
+            }
+            val sceneCode = stage.optString("sceneCode")
+            val taskType = stage.optString("taskType")
+            if (sceneCode.isBlank() || taskType.isBlank()) {
+                Log.runtime(TAG, "丰收奖励🎁字段缺失: sceneCode=$sceneCode taskType=$taskType")
+                return
+            }
+            val awardCount = stage.optInt("awardCount", 0)
+            val awardResp =
+                JSONObject(
+                    AntOrchardRpcCall.receiveTaskAward(sceneCode, taskType, ACTION_SOURCE),
+                )
+            if (ResChecker.checkRes(TAG, awardResp)) {
+                Log.farm("丰收奖励🎁[领取成功]#${awardCount}g肥料")
+                try {
+                    AntOrchardRpcCall.refinedOperation(RECEIVE_SPREAD_MANURE_ACTIVITY_AWARD_ACTION)
+                } catch (_: Throwable) {}
+            } else {
+                Log.error(TAG, "丰收奖励🎁领取失败: $awardResp")
+            }
+        } catch (t: Throwable) {
+            Log.printStackTrace(TAG, "tryReceiveSpreadManureActivityAward err:", t)
+        }
     }
 
     /**
@@ -562,8 +614,9 @@ class AntOrchard : ModelTask() {
                         1
                     }
 
+                    val taskSource = if (taskId in setOf(TASK_JINDOU_TREASURE, TASK_FORTUNE_TREE)) "ch_appcenter__chsub_9patch" else "ch_appcenter__chsub_commonapp"
                     for (cnt in 0 until timesToDo) {
-                        val finishResponse = JSONObject(AntOrchardRpcCall.finishTask(userId, sceneCode, taskId))
+                        val finishResponse = JSONObject(AntOrchardRpcCall.finishTask(userId, sceneCode, taskId, taskSource))
                         if (ResChecker.checkRes("$TAG[finishAdTask][$title]", finishResponse)) {
                             Log.farm("农场广告任务📺[$title] 第${rightsTimes + cnt + 1}次")
                         } else {
@@ -581,7 +634,8 @@ class AntOrchard : ModelTask() {
                 }
 
                 if (actionType == "TRIGGER" || actionType == "ADD_HOME" || actionType == "PUSH_SUBSCRIBE") {
-                    val finishResponse = JSONObject(AntOrchardRpcCall.finishTask(userId, sceneCode, taskId))
+                    val taskSource = if (taskId in setOf(TASK_JINDOU_TREASURE, TASK_FORTUNE_TREE)) "ch_appcenter__chsub_9patch" else "ch_appcenter__chsub_commonapp"
+                    val finishResponse = JSONObject(AntOrchardRpcCall.finishTask(userId, sceneCode, taskId, taskSource))
                     if (ResChecker.checkRes("$TAG[finishTask]", finishResponse)) {
                         Log.farm("农场任务🧾[$title]")
                     } else {
@@ -593,6 +647,44 @@ class AntOrchard : ModelTask() {
                         }
                         Log.error(TAG, "农场任务🧾[$title]${finishResponse.optString("desc")}")
                     }
+                    continue
+                }
+
+                // 农场乐园及小游戏时长类任务
+                val gameContract = orchardGamePlayContract(task)
+                if (gameContract != null) {
+                    if (taskStatus == "FINISHED") {
+                        val taskPlantType = task.optString("taskPlantType", "ANTIEP")
+                        runCatching {
+                            val joClaim = JSONObject(AntOrchardRpcCall.triggerTbTask(taskId, taskPlantType))
+                            if (ResChecker.checkRes("$TAG[triggerTbTask][$title]", joClaim)) {
+                                val incAward = joClaim.optInt("incAwardCount", 0)
+                                Log.farm("农场乐园任务🎮[$title] 领取 +${incAward}g肥料")
+                            }
+                        }.onFailure { Log.error(TAG, "农场乐园任务🎮[$title] 领奖异常: $it") }
+                        continue
+                    }
+                    Log.farm("检测到农场乐园任务🎮[$title]，开始上报时长(${gameContract.playTime}s)...")
+                    val ack = GameCenterPlayRpcCall.submitForAck(gameContract)
+                    if (ack.accepted) {
+                        Log.farm("农场乐园任务🎮[$title] 时长上报已接受")
+                    } else {
+                        Log.runtime(TAG, "农场乐园任务🎮[$title] 时长响应: ${ack.raw}")
+                    }
+                    CoroutineUtils.sleepCompat(1500)
+                    val taskSource = if (taskId in setOf(TASK_JINDOU_TREASURE, TASK_FORTUNE_TREE)) "ch_appcenter__chsub_9patch" else "ch_appcenter__chsub_commonapp"
+                    runCatching {
+                        val finishResponse = JSONObject(AntOrchardRpcCall.finishTask(userId, sceneCode, taskId, taskSource))
+                        if (ResChecker.checkRes("$TAG[finishGameTask][$title]", finishResponse)) {
+                            CoroutineUtils.sleepCompat(1000)
+                            val taskPlantType = task.optString("taskPlantType", "ANTIEP")
+                            val joClaim = JSONObject(AntOrchardRpcCall.triggerTbTask(taskId, taskPlantType))
+                            val incAward = joClaim.optInt("incAwardCount", 0)
+                            Log.farm("农场乐园任务🎮[$title] 完成并领取 +${incAward}g肥料")
+                        } else {
+                            Log.error(TAG, "农场乐园任务🎮[$title] 完成失败: ${finishResponse.optString("desc")}")
+                        }
+                    }.onFailure { Log.error(TAG, "农场乐园任务🎮[$title] 完成或领奖异常: $it") }
                     continue
                 }
 
@@ -718,6 +810,17 @@ class AntOrchard : ModelTask() {
         } catch (t: Throwable) {
             Log.printStackTrace(TAG, "doOrchardDailyTask err:", t)
         }
+    }
+
+    private fun orchardGamePlayContract(task: JSONObject): GameCenterPlayRpcCall.Contract? {
+        val display = task.optJSONObject("taskDisplayConfig")
+        val isOrchardGame = display?.optString("type")?.trim() == "nongchangleyuan" ||
+                task.optString("actionType") == "GAME_PLAY"
+        val contract = GameCenterPlayRpcCall.resolveContract(task, display) ?: return null
+        if (!isOrchardGame && contract.playTime <= 0) return null
+        val duration = display?.optJSONObject("floatBallConfig")?.optInt("floatBallDuration", 0) ?: contract.playTime
+        val finalPlayTime = if (duration > 0) duration.coerceAtMost(Int.MAX_VALUE - 1) + 1 else contract.playTime
+        return contract.copy(playTime = finalPlayTime)
     }
 
     private fun orchardSign(signTaskInfo: JSONObject) {

@@ -87,12 +87,21 @@ object AntOrchardRpcCall {
         )
     }
 
-    fun receiveTaskAward(sceneCode: String, taskType: String): String {
+    fun receiveTaskAward(sceneCode: String, taskType: String, source: String = "ch_alipaysearch__chsub_normal"): String {
         return RequestManager.requestString(
             "com.alipay.antiep.receiveTaskAward",
-            "[{\"ignoreLimit\":true,\"requestType\":\"NORMAL\",\"sceneCode\":\"$sceneCode\",\"source\":\"ch_alipaysearch__chsub_normal\",\"taskType\":\"$taskType\",\"version\":\"$VERSION\"}]"
+            "[{\"ignoreLimit\":true,\"requestType\":\"NORMAL\",\"sceneCode\":\"$sceneCode\",\"source\":\"$source\",\"taskType\":\"$taskType\",\"version\":\"$VERSION\"}]"
         )
     }
+
+    fun refinedOperation(
+        actionId: String,
+        source: String = "gonggexiguan",
+    ): String =
+        RequestManager.requestString(
+            "com.alipay.antorchard.refinedOperation",
+            "[{\"actionId\":\"$actionId\",\"appMode\":\"normal\",\"requestType\":\"NORMAL\",\"sceneCode\":\"ORCHARD\",\"source\":\"$source\",\"version\":\"$VERSION\"}]",
+        )
 
     fun orchardListTask(): String {
         return RequestManager.requestString(
@@ -118,10 +127,10 @@ object AntOrchardRpcCall {
         )
     }
 
-    fun finishTask(userId: String, sceneCode: String, taskType: String): String {
+    fun finishTask(userId: String, sceneCode: String, taskType: String, source: String = "ch_appcenter__chsub_commonapp"): String {
         return RequestManager.requestString(
             "com.alipay.antiep.finishTask",
-            "[{\"outBizNo\":\"${userId}${System.currentTimeMillis()}\",\"requestType\":\"NORMAL\",\"sceneCode\":\"$sceneCode\",\"source\":\"ch_appcenter__chsub_commonapp\",\"taskType\":\"$taskType\",\"userId\":\"$userId\",\"version\":\"$VERSION\"}]"
+            "[{\"outBizNo\":\"${userId}${System.currentTimeMillis()}\",\"requestType\":\"NORMAL\",\"sceneCode\":\"$sceneCode\",\"source\":\"$source\",\"taskType\":\"$taskType\",\"userId\":\"$userId\",\"version\":\"$VERSION\"}]"
         )
     }
 

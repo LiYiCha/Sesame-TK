@@ -12,6 +12,7 @@ import fansirsqi.xposed.sesame.model.ModelFields;
 import fansirsqi.xposed.sesame.model.ModelGroup;
 import fansirsqi.xposed.sesame.model.modelFieldExt.BooleanModelField;
 import fansirsqi.xposed.sesame.model.modelFieldExt.IntegerModelField;
+import fansirsqi.xposed.sesame.model.modelFieldExt.SelectModelField;
 import fansirsqi.xposed.sesame.task.ModelTask;
 import fansirsqi.xposed.sesame.task.TaskCommon;
 import fansirsqi.xposed.sesame.task.otherTask.CompletedKeyEnum;
@@ -36,6 +37,8 @@ public class WelfareCenter extends ModelTask {
     private final BooleanModelField welfareCenterWSTask;
     private final BooleanModelField welfarefinedu;
     private final BooleanModelField wenLiBao;
+    private final BooleanModelField myBankWelfareExchange;
+    private final SelectModelField myBankWelfareExchangeList;
 
     public WelfareCenter() {
         this.welfareCenterProfit = new BooleanModelField("welfareCenterProfit", "福利金领奖", false);
@@ -45,6 +48,8 @@ public class WelfareCenter extends ModelTask {
         this.assignDateExpirePoint = new BooleanModelField("assignDateExpirePoint", "快过期抽奖", false);
         this.welfarefinedu = new BooleanModelField("welfarefinedu", "金融教育基地 | 学分", false);
         this.wenLiBao = new BooleanModelField("wenLiBao", "稳利宝", false);
+        this.myBankWelfareExchange = new BooleanModelField("myBankWelfareExchange", "福利金兑换权益", false, "按“福利金兑换列表”处理已勾选项；纯福利金点付红包权益自动兑换。");
+        this.myBankWelfareExchangeList = new SelectModelField("myBankWelfareExchangeList", "福利金兑换列表", new java.util.LinkedHashSet<>(), MyBankWelfareService::refreshExchangeOptionsForSettings, "勾选需要自动兑换的网商银行福利金权益，需开启“福利金兑换权益”。");
     }
     @Override
     public ModelFields getFields() {
@@ -57,6 +62,8 @@ public class WelfareCenter extends ModelTask {
         modelFields.addField(this.assignDateExpirePoint);
         modelFields.addField(this.wenLiBao);
         modelFields.addField(this.welfarefinedu);
+        modelFields.addField(this.myBankWelfareExchange);
+        modelFields.addField(this.myBankWelfareExchangeList);
         return modelFields;
     }
 
@@ -299,9 +306,13 @@ public class WelfareCenter extends ModelTask {
                 executeIntervalInt.get());
         executeIntervalInt.set(intervalValue);
 
+        // 福利金可用余额与虚拟奖励明细输出
+        MyBankWelfareService.logPointBalance();
+        MyBankWelfareService.logVirtualProfits();
+
         // 顺序执行各任务模块
         if (this.welfareCenterTask.getValue()) {
-            WelfareCenterRpcCall.doTask("AP1269301", TAG, "网商银行🏦福利金");
+            MyBankWelfareService.doTaskCenter();
         }
 
 //        if (this.welfareCenterWSTask.getValue()) {
@@ -323,6 +334,11 @@ public class WelfareCenter extends ModelTask {
             new WenLiBao().handle();
         }
         assignDateExpirePoint();
+
+        // 网商银行福利金权益兑换
+        if (this.myBankWelfareExchange.getValue()) {
+            MyBankWelfareService.doWelfareExchange(this.myBankWelfareExchangeList.getValue());
+        }
         //Status.setFlagToday(CompletedKeyEnum.WelfareCenterTask.name());
     }
 

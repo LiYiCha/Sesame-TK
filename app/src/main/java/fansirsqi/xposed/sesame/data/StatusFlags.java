@@ -39,6 +39,22 @@ public final class StatusFlags {
     public static final String FLAG_ANTMEMBER_STICKER =
             "Flag_AntMember_Sticker";
 
+    /** 商家服务：开门打卡签到 */
+    public static final String FLAG_ANTMEMBER_MERCHANT_KMDK_SIGNIN_DONE =
+            "AntMember::merchantKmdkSignInDone";
+
+    /** 商家服务：开门打卡报名 */
+    public static final String FLAG_ANTMEMBER_MERCHANT_KMDK_SIGNUP_DONE =
+            "AntMember::merchantKmdkSignUpDone";
+
+    /** 商家服务：每日签到 */
+    public static final String FLAG_ANTMEMBER_MERCHANT_SIGN_DONE =
+            "AntMember::merchantSignDone";
+
+    /** 商家服务：积分任务 */
+    public static final String FLAG_ANTMEMBER_MERCHANT_MORE_TASK_DONE =
+            "AntMember::merchantMoreTaskDone";
+
 
     // ============================================================
     // 芝麻信用 / 芝麻粒

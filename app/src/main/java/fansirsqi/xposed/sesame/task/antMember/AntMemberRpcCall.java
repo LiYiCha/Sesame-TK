@@ -9,10 +9,13 @@ import java.util.UUID;
 
 import fansirsqi.xposed.sesame.hook.ApplicationHook;
 import fansirsqi.xposed.sesame.hook.RequestManager;
+import fansirsqi.xposed.sesame.util.Log;
 import fansirsqi.xposed.sesame.util.RandomUtil;
 import fansirsqi.xposed.sesame.util.TimeUtil;
 
 public class AntMemberRpcCall {
+    private static final String TAG = AntMemberRpcCall.class.getSimpleName();
+
     private static String getUniqueId() {
         return String.valueOf(System.currentTimeMillis()) + RandomUtil.nextLong();
     }
@@ -52,12 +55,65 @@ public class AntMemberRpcCall {
 
     public static String merchantSign() {
         return RequestManager.requestString("alipay.mrchservbase.mrchpoint.sqyj.homepage.signin.v1",
-                "[{}]");
+                "[{\"signScene\":\"TASK_LIST_SIGN\"}]");
+    }
+
+    public static String merchantHomePage() {
+        return RequestManager.requestString("alipay.mrchservbase.mrchpoint.sqyj.homepage.v5",
+                "[{\"context\":{\"dispenseTaskItemCode\":\"ZDH_CONTINUE_QY_ZJ\",\"isGuide\":\"true\",\"miniAppVersion\":20260601,\"underTakeTrace\":\"NULL\"}}]");
+    }
+
+    public static String zcjSignInQuery() {
+        return RequestManager.requestString("alipay.mrchservbase.zcj.view.invoke",
+                "[{\"compId\":\"ZCJ_SIGN_IN_QUERY\"}]");
+    }
+
+    public static String zcjSignInExecute() {
+        return RequestManager.requestString("alipay.mrchservbase.zcj.view.invoke",
+                "[{\"compId\":\"ZCJ_SIGN_IN_EXECUTE\"}]");
     }
 
     public static String taskListQuery() {
-        return RequestManager.requestString("alipay.mrchservbase.task.more.query",
-                "[{\"paramMap\":{\"platform\":\"Android\"},\"taskItemCode\":\"\"}]");
+        return taskMoreQuery("");
+    }
+
+    public static String taskMoreQuery(String orderTaskCode) {
+        try {
+            JSONObject args = new JSONObject();
+            JSONObject paramMap = new JSONObject();
+            paramMap.put("orderTaskCode", orderTaskCode == null ? "" : orderTaskCode);
+            paramMap.put("platform", "Android");
+            paramMap.put("version", "2.0");
+            args.put("paramMap", paramMap);
+            args.put("taskItemCode", "");
+            return RequestManager.requestString("alipay.mrchservbase.task.more.query",
+                    new JSONArray().put(args).toString());
+        } catch (Throwable t) {
+            Log.printStackTrace(TAG, "taskMoreQuery err:", t);
+            return "";
+        }
+    }
+
+    public static String taskServiceQuery() {
+        return taskServiceQuery("");
+    }
+
+    public static String taskServiceQuery(String orderTaskCode) {
+        try {
+            JSONObject args = new JSONObject();
+            JSONObject paramMap = new JSONObject();
+            paramMap.put("orderTaskCode", orderTaskCode == null ? "" : orderTaskCode);
+            paramMap.put("platform", "Android");
+            paramMap.put("showFinishStageTask", "true");
+            paramMap.put("version", "2.0");
+            args.put("paramMap", paramMap);
+            args.put("taskItemCode", "");
+            return RequestManager.requestString("alipay.mrchservbase.task.service.query",
+                    new JSONArray().put(args).toString());
+        } catch (Throwable t) {
+            Log.printStackTrace(TAG, "taskServiceQuery err:", t);
+            return "";
+        }
     }
 
     public static String queryActivity() {
@@ -82,8 +138,55 @@ public class AntMemberRpcCall {
     }
 
     public static String produce(String actionCode) {
-        return RequestManager.requestString("alipay.mrchservbase.biz.task.action.produce",
-                "[{\"actionCode\":\"" + actionCode + "\"}]");
+        return produce(actionCode, null);
+    }
+
+    public static String produce(String actionCode, String channel) {
+        try {
+            JSONObject args = new JSONObject();
+            args.put("actionCode", actionCode);
+            if (channel != null && !channel.isEmpty()) {
+                args.put("channel", channel);
+            }
+            return RequestManager.requestString("alipay.mrchservbase.biz.task.action.produce",
+                    new JSONArray().put(args).toString());
+        } catch (Throwable t) {
+            Log.printStackTrace(TAG, "produce err:", t);
+            return "";
+        }
+    }
+
+    public static String merchantExamPage(String taskCode) {
+        try {
+            JSONObject args = new JSONObject();
+            args.put("taskCode", taskCode);
+            return RequestManager.requestString("alipay.mrchservbase.business.exam.page",
+                    new JSONArray().put(args).toString());
+        } catch (Throwable t) {
+            Log.printStackTrace(TAG, "merchantExamPage err:", t);
+            return "";
+        }
+    }
+
+    public static String merchantBallQuery() {
+        return merchantBallQuery("undertakeVisit");
+    }
+
+    public static String merchantBallQuery(String userPath) {
+        try {
+            JSONObject args = new JSONObject();
+            JSONObject context = new JSONObject();
+            context.put("dispenseTaskItemCode", "ZDH_CONTINUE_QY_ZJ");
+            context.put("isGuide", "true");
+            context.put("underTakeTrace", "NULL");
+            context.put("userPath", (userPath == null || userPath.isEmpty()) ? "undertakeVisit" : userPath);
+            args.put("context", context);
+            return RequestManager.requestString("alipay.mrchservbase.mrchpoint.ball.query.v1",
+                    new JSONArray().put(args).toString());
+        } catch (Throwable t) {
+            Log.printStackTrace(TAG, "merchantBallQuery err:", t);
+            return "";
+        }
     }
 
     public static String ballReceive(String ballIds) {
@@ -1325,6 +1428,15 @@ public class AntMemberRpcCall {
                         "com.antgroup.zmxy.zmmemberop.biz.rpc.ItemRpcManager.useItem",
                         "[{\"itemId\":\"" + itemId + "\",\"itemType\":\"" + itemType + "\"}]");
             }
+
+            /**
+             * 芝麻炼金-满级红包提现
+             */
+            public static String withdraw() {
+                return RequestManager.requestString(
+                        "com.antgroup.zmxy.zmmemberop.biz.rpc.creditaccumulate.CreditAccumulateStrategyRpcManager.withdraw",
+                        "[{}]");
+            }
         }
 
         public static class Pigeon {
@@ -1348,13 +1460,5 @@ public class AntMemberRpcCall {
                 );
             }
         }
-
-
-
-
-
-
-
-
     }
 }

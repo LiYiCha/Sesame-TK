@@ -17,6 +17,9 @@ public class BooleanModelField extends ModelField<Boolean> {
   public BooleanModelField(String code, String name, Boolean value) {
     super(code, name, value); // 调用父类构造函数
   }
+  public BooleanModelField(String code, String name, Boolean value, String desc) {
+    super(code, name, value, desc);
+  }
   /**
    * 获取字段类型
    *

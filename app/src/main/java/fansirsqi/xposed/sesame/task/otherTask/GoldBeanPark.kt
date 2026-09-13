@@ -4,6 +4,7 @@ import fansirsqi.xposed.sesame.data.Status
 import fansirsqi.xposed.sesame.hook.ApplicationHook
 import fansirsqi.xposed.sesame.hook.RequestManager
 import fansirsqi.xposed.sesame.task.antOrchard.GameTask
+import fansirsqi.xposed.sesame.task.common.GameCenterPlayRpcCall
 import fansirsqi.xposed.sesame.util.GlobalThreadPools
 import fansirsqi.xposed.sesame.util.Log
 import fansirsqi.xposed.sesame.util.TimeUtil
@@ -99,17 +100,18 @@ class GoldBeanPark @JvmOverloads constructor(
                 Log.error(TAG, "handleGoldBeanPark error: $e")
             }
         }
-        Status.setFlagToday("${scene.flagPrefix}::allTask")
     }
 
     private suspend fun handleGoldBeanPark() {
         try {
             // 1. 首页初始化与数据同步
-            goldenBeanIndex()
+            val indexRes = goldenBeanIndex()
+            handleMarketingPopup(indexRes)
             if (scene == BeanScene.FARM) {
                 listTopItemsByScene()
             }
             val syncRes = goldenBeanSync(fullSyncTypes)
+            handleMarketingPopup(syncRes)
             if (!syncRes.optBoolean("success", true) && syncRes.has("resultDesc")) {
                 Log.error(TAG, "金豆同步异常: ${syncRes.optString("resultDesc")}")
             }
@@ -121,7 +123,10 @@ class GoldBeanPark @JvmOverloads constructor(
             doTaskLoop()
 
             // 以下为农场版专属（炼金版金豆页无对应接口语义）
-            if (scene != BeanScene.FARM) return
+            if (scene != BeanScene.FARM) {
+                Status.setFlagToday("${scene.flagPrefix}::allTask")
+                return
+            }
 
             // 4. 金豆对对碰游戏自动上报与开金蛋/开宝箱 (charitygamecenter)
             if (!Status.hasFlagToday("${scene.flagPrefix}::gameFinished")) {
@@ -173,14 +178,53 @@ class GoldBeanPark @JvmOverloads constructor(
                 }
             }
 
+            // 4.1 小游戏完成后二次回查任务，自动领取因对对碰小游戏完成而达标的任务奖励
+            doTaskLoop()
+
             // 5. 肥料换豆（农场版）
             handleExchange()
 
             // 6. 金猫矿工
             handleMiner()
 
+            // 标记农场版任务顺利完成
+            Status.setFlagToday("${scene.flagPrefix}::allTask")
+
+            // 7. 炼金版金豆夺宝（签到、抽签、换量任务及芝麻粒换金豆）
+            if (sesameExchangeAmount != 0 || !Status.hasFlagToday("${BeanScene.ZHIMA.flagPrefix}::allTask")) {
+                runCatching {
+                    forAlchemy(sesameExchangeAmount).runAlchemyBeanTasks()
+                }.onFailure {
+                    Log.error(TAG, "炼金版金豆夺宝执行异常: $it")
+                }
+            }
         } catch (e: Exception) {
             Log.error(TAG, "handleGoldBeanPark error: $e")
+        }
+    }
+
+    /**
+     * 营销弹窗任务自动触发与领奖
+     */
+    private suspend fun handleMarketingPopup(response: JSONObject) {
+        val marketingTask = response.optJSONObject("marketingPopupTask") ?: return
+        val taskId = marketingTask.optString("taskId").trim()
+        val triggerType = marketingTask.optString("triggerType").trim().ifBlank { "MARKETING_POPUP_CLICKED" }
+        if (taskId.isBlank()) return
+        try {
+            val triggerRes = goldenBeanTrigger(taskId, triggerType)
+            if (triggerRes.optBoolean("success", true) || triggerRes.optString("resultCode") in setOf("100", "SUCCESS")) {
+                val beanCount = extractAwardBeanCount(triggerRes)
+                if (beanCount > 0) {
+                    Log.other(TAG, "金豆营销弹窗领奖成功: +$beanCount 金豆 (taskId=$taskId)")
+                } else {
+                    Log.other(TAG, "金豆营销弹窗触发完成: taskId=$taskId")
+                }
+                delay(500)
+                goldenBeanSync(listOf("MARKETING_POPUP"))
+            }
+        } catch (e: Exception) {
+            Log.error(TAG, "handleMarketingPopup error: $e")
         }
     }
 
@@ -193,14 +237,17 @@ class GoldBeanPark @JvmOverloads constructor(
             return
         }
         try {
-            goldenBeanIndex()
+            val indexRes = goldenBeanIndex()
+            handleMarketingPopup(indexRes)
+            val syncRes = goldenBeanSync(fullSyncTypes)
+            handleMarketingPopup(syncRes)
             doSign()
             doTaskLoop()
             handleExchange()
+            Status.setFlagToday("${scene.flagPrefix}::allTask")
         } catch (e: Exception) {
             Log.error(TAG, "runAlchemyBeanTasks error: $e")
         }
-        Status.setFlagToday("${scene.flagPrefix}::allTask")
     }
 
     private suspend fun doSign() {
@@ -313,6 +360,18 @@ class GoldBeanPark @JvmOverloads constructor(
                     if (taskStatus == "TODO") {
                         if (isBlacklistedTask(taskId, taskType, actionType, type, title)) continue
 
+                        val gameContract = GameCenterPlayRpcCall.resolveContract(task, displayConfig)
+                        if (gameContract != null) {
+                            Log.other(TAG, "检测到小游戏任务[$title]，开始上报时长(${gameContract.playTime}s)...")
+                            val ack = GameCenterPlayRpcCall.submitForAck(gameContract)
+                            if (ack.accepted) {
+                                Log.other(TAG, "小游戏时长上报成功[$title]，准备完成任务")
+                            } else {
+                                Log.other(TAG, "小游戏时长上报响应[$title]: ${ack.raw}，尝试继续完成")
+                            }
+                            delay(1500 + (0..500).random().toLong())
+                        }
+
                         val userId = UserMap.currentUid ?: ""
                         val finishRes = finishTaskAntOrchard(taskType, userId, taskSceneCode)
 
@@ -329,7 +388,12 @@ class GoldBeanPark @JvmOverloads constructor(
                                 break
                             } else {
                                 val errorMsg = awardRes.optString("errorMsg", awardRes.optString("desc", awardRes.optString("resultDesc", awardRes.toString())))
-                                Log.error(TAG, "任务失败[$title]: $errorMsg")
+                                Log.error(TAG, "任务领奖失败[$title]: $errorMsg")
+                            }
+                        } else {
+                            val desc = finishRes.optString("desc", finishRes.optString("resultDesc", ""))
+                            if (desc.isNotEmpty()) {
+                                Log.error(TAG, "完成任务[$title]响应: $desc")
                             }
                         }
                         delay(2000 + (0..1000).random().toLong())
@@ -577,7 +641,7 @@ class GoldBeanPark @JvmOverloads constructor(
         }
 
         // 3. 标题关键字黑名单 (已知非 RPC 任务: 肥料兑换, 首页添加, 消息提醒, 支付, 攒钱, 余额宝)
-        val blackListKeywords = setOf("肥料", "首页", "提醒", "支付", "攒钱", "余额宝", "小游戏")
+        val blackListKeywords = setOf("肥料", "首页", "提醒", "支付", "攒钱", "余额宝")
         return blackListKeywords.any { title.contains(it) }
     }
 

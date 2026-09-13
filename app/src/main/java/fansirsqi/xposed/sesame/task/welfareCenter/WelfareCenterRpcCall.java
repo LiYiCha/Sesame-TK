@@ -39,4 +39,115 @@ public class WelfareCenterRpcCall extends BaseTaskRpcCall {
     public static String trigger() {
         return RequestManager.requestString("com.alipay.loanpromoweb.promo.camp.trigger", "[{\"campId\": \"CP15205657\",\"extParams\": {\"bkPointUseMemo\": \"抽奖消耗\",\"pcbfcCertMemo\": \"FULICenterUSE\"}}]");
     }
+
+    public static String taskQuery(String appletId) {
+        return RequestManager.requestString("com.alipay.loanpromoweb.promo.task.taskQuery", "[{\"appletId\":\"" + appletId + "\"}]");
+    }
+
+    public static String taskTrigger(String appletId, String stageCode, String taskCenId) {
+        return RequestManager.requestString("com.alipay.loanpromoweb.promo.task.taskTrigger", "[{\"appletId\":\"" + appletId + "\",\"stageCode\":\"" + stageCode + "\",\"taskCenId\":\"" + taskCenId + "\"}]");
+    }
+
+    public static String queryPointBalance() {
+        return RequestManager.requestString("com.alipay.loanpromoweb.promo.group.point.pointBanlanceV2", "[{\"sceneCode\":\"SUPER930\"}]");
+    }
+
+    public static String queryItemsInMemberV2(int pageNum, int perPageSize) {
+        return RequestManager.requestString("com.alipay.loanpromoweb.member.benefits.queryItemsInMemberV2",
+                "[{\"campId\":\"BSCP202209161036790608000055160000G\",\"homeQuery\":false,\"pageNum\":" + pageNum + ",\"perPageSize\":\"" + perPageSize + "\",\"sceneCode\":\"MYBK_SUPER_930\",\"tabId\":\"BSLB202209161036790633000055640000G\"}]");
+    }
+
+    private static org.json.JSONObject buildMemberSourcePassMap() {
+        try {
+            org.json.JSONObject obj = new org.json.JSONObject();
+            obj.put("innerSource", "");
+            obj.put("source", "mytab");
+            obj.put("unid", "");
+            return obj;
+        } catch (Exception e) {
+            return new org.json.JSONObject();
+        }
+    }
+
+    private static org.json.JSONObject copyMemberSourcePassMap(org.json.JSONObject sourcePassMap) {
+        if (sourcePassMap == null) {
+            return buildMemberSourcePassMap();
+        }
+        try {
+            return new org.json.JSONObject(sourcePassMap.toString());
+        } catch (Exception e) {
+            return buildMemberSourcePassMap();
+        }
+    }
+
+    public static String querySingleBenefitDetail(String benefitId, String requestSourceInfo, org.json.JSONObject sourcePassMap) {
+        try {
+            org.json.JSONObject args = new org.json.JSONObject();
+            args.put("benefitId", benefitId);
+            args.put("cityCode", "440100");
+            args.put("miniAppId", "");
+            if (requestSourceInfo != null && !requestSourceInfo.trim().isEmpty()) {
+                args.put("requestSourceInfo", requestSourceInfo);
+            }
+            args.put("sourcePassMap", copyMemberSourcePassMap(sourcePassMap));
+            return RequestManager.requestString("com.alipay.alipaymember.biz.rpc.config.h5.querySingleBenefitDetail", new JSONArray().put(args).toString());
+        } catch (Exception e) {
+            return "";
+        }
+    }
+
+    public static String queryPromoBenefitOrderConfirmInfo(String benefitId, String requestSourceInfo, org.json.JSONObject sourcePassMap) {
+        try {
+            org.json.JSONObject args = new org.json.JSONObject();
+            args.put("benefitId", benefitId);
+            if (requestSourceInfo != null && !requestSourceInfo.trim().isEmpty()) {
+                args.put("requestSourceInfo", requestSourceInfo);
+            }
+            args.put("sourcePassMap", copyMemberSourcePassMap(sourcePassMap));
+            return RequestManager.requestString("com.alipay.alipaymember.biz.rpc.config.h5.queryPromoBenefitOrderConfirmInfo", new JSONArray().put(args).toString());
+        } catch (Exception e) {
+            return "";
+        }
+    }
+
+    public static String exchangeMemberBenefit(String benefitId, String itemId, String requestSourceInfo, org.json.JSONObject sourcePassMap) {
+        try {
+            org.json.JSONObject exchangeSourcePassMap = copyMemberSourcePassMap(sourcePassMap);
+            exchangeSourcePassMap.put("alipayClientVersion", "10.8.20.8000");
+            exchangeSourcePassMap.put("mobileOsType", "Android");
+
+            org.json.JSONObject args = new org.json.JSONObject();
+            args.put("benefitId", benefitId);
+            args.put("cityCode", "440100");
+            args.put("exchangeType", "POINT_PAY");
+            if (itemId != null && !itemId.trim().isEmpty()) {
+                args.put("itemId", itemId);
+            }
+            args.put("miniAppId", "");
+            args.put("orderSource", "");
+            args.put("requestId", "requestId" + System.currentTimeMillis());
+            if (requestSourceInfo != null && !requestSourceInfo.trim().isEmpty()) {
+                args.put("requestSourceInfo", requestSourceInfo);
+            }
+            args.put("sourcePassMap", exchangeSourcePassMap);
+            args.put("userOutAccount", "");
+            return RequestManager.requestString("com.alipay.alipaymember.biz.rpc.exchange.h5.exchangeBenefit", new JSONArray().put(args).toString());
+        } catch (Exception e) {
+            return "";
+        }
+    }
+
+    public static String querySingleExchangeOrderDetail(String benefitId, String bizType, String outBizNo, org.json.JSONObject sourcePassMap) {
+        try {
+            org.json.JSONObject args = new org.json.JSONObject();
+            args.put("benefitId", benefitId);
+            args.put("bizType", bizType);
+            args.put("miniAppId", "");
+            args.put("outBizNo", outBizNo);
+            args.put("sourcePassMap", copyMemberSourcePassMap(sourcePassMap));
+            return RequestManager.requestString("com.alipay.alipaymember.biz.rpc.exchange.h5.querySingleExchangeOrderDetail", new JSONArray().put(args).toString());
+        } catch (Exception e) {
+            return "";
+        }
+    }
 }
