@@ -10,6 +10,7 @@ data class ThemeInfo(
     val name: String,
     val description: String,
     val previewImagePath: String? = null,
+    val storagePath: String = "",
     val isSelected: Boolean = false
 )
 

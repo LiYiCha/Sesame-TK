@@ -17,7 +17,6 @@ import java.util.regex.Pattern;
 
 import fansirsqi.xposed.sesame.data.Config;
 import fansirsqi.xposed.sesame.data.Status;
-import fansirsqi.xposed.sesame.hook.ApplicationHook;
 import fansirsqi.xposed.sesame.hook.RequestManager;
 import fansirsqi.xposed.sesame.task.antOrchard.AntOrchardRpcCall;
 import fansirsqi.xposed.sesame.util.GlobalThreadPools;
@@ -27,7 +26,6 @@ import fansirsqi.xposed.sesame.util.Notify;
 import fansirsqi.xposed.sesame.util.RandomUtil;
 import fansirsqi.xposed.sesame.util.TimeUtil;
 import fansirsqi.xposed.sesame.util.maps.UserMap;
-import kotlinx.serialization.json.Json;
 
 /** @noinspection unchecked*/
 public class AntFishpond extends BaseCommTask {

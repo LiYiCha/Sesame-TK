@@ -130,6 +130,7 @@ class ThemeRepository(private val context: Context) {
                         name = themeName,
                         description = themeSubtitle,
                         previewImagePath = previewPath,
+                        storagePath = themeDir.absolutePath,
                         isSelected = themeId == selectedThemeId
                     )
                 )

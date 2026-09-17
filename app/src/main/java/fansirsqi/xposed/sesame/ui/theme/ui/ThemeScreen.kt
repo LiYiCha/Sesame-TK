@@ -1,41 +1,44 @@
 package fansirsqi.xposed.sesame.ui.theme.ui
 
 import android.widget.Toast
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.animateDpAsState
-import androidx.compose.animation.core.spring
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.rememberAsyncImagePainter
 import fansirsqi.xposed.sesame.ui.theme.ThemeInfo
+import fansirsqi.xposed.sesame.ui.theme.ThemeOperation
 import fansirsqi.xposed.sesame.ui.theme.ThemeViewModel
 
 /**
  * 主题中心主界面
+ *
+ * 设计：当前主题 Hero 卡 → 快速操作行 → 2 列主题网格 / 空态
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -46,24 +49,16 @@ fun ThemeScreen(
     val context = LocalContext.current
     val state by viewModel.state.collectAsState()
 
-    // 导航状态：当前查看的主题详情
+    // 当前查看的主题详情
     var selectedThemeForDetail by remember { mutableStateOf<ThemeInfo?>(null) }
 
-    // 主题列表展开状态
-    var isThemeListExpanded by remember { mutableStateOf(false) }
-    val maxCollapsedThemes = 5
+    // 待确认删除的主题
+    var themeToDelete by remember { mutableStateOf<ThemeInfo?>(null) }
 
-    // 如果选中了主题，显示详情页面
-    selectedThemeForDetail?.let { theme ->
-        ThemeDetailScreen(
-            themeInfo = theme,
-            viewModel = viewModel,
-            onBack = { selectedThemeForDetail = null }
-        )
-        return
-    }
+    // 更多操作菜单
+    var showMoreMenu by remember { mutableStateOf(false) }
 
-    // ZIP 文件选择器
+    // 导入 ZIP 文件
     val zipPickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
     ) { uri ->
@@ -74,7 +69,7 @@ fun ThemeScreen(
         }
     }
 
-    // 目录选择器
+    // 导入目录
     val directoryPickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocumentTree()
     ) { uri ->
@@ -83,6 +78,26 @@ fun ThemeScreen(
                 Toast.makeText(context, message, Toast.LENGTH_LONG).show()
             }
         }
+    }
+
+    // 当前选中的主题（用于 Hero 卡）
+    val selectedTheme = state.availableThemes.find { it.isSelected }
+
+    BackHandler {
+        when {
+            selectedThemeForDetail != null -> selectedThemeForDetail = null
+            else -> onBack()
+        }
+    }
+
+    // 详情页覆盖
+    selectedThemeForDetail?.let { theme ->
+        ThemeDetailScreen(
+            themeInfo = theme,
+            viewModel = viewModel,
+            onBack = { selectedThemeForDetail = null }
+        )
+        return
     }
 
     Scaffold(
@@ -97,6 +112,59 @@ fun ThemeScreen(
                         )
                     }
                 },
+                actions = {
+                    if (state.availableThemes.isNotEmpty()) {
+                        Box {
+                            IconButton(onClick = { showMoreMenu = !showMoreMenu }) {
+                                Text(
+                                    "⋮",
+                                    style = MaterialTheme.typography.titleLarge,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                            }
+                            if (showMoreMenu) {
+                                DropdownMenu(
+                                    expanded = showMoreMenu,
+                                    onDismissRequest = { showMoreMenu = false }
+                                ) {
+                                    DropdownMenuItem(
+                                        text = { Text("导出主题") },
+                                        onClick = {
+                                            showMoreMenu = false
+                                            viewModel.executeThemeAction(
+                                                ThemeOperation.EXPORT
+                                            ) { _, msg ->
+                                                Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
+                                            }
+                                        }
+                                    )
+                                    DropdownMenuItem(
+                                        text = { Text("更新主题缓存") },
+                                        onClick = {
+                                            showMoreMenu = false
+                                            viewModel.executeThemeAction(
+                                                ThemeOperation.UPDATE
+                                            ) { _, msg ->
+                                                Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
+                                            }
+                                        }
+                                    )
+                                    DropdownMenuItem(
+                                        text = { Text("删除主题缓存") },
+                                        onClick = {
+                                            showMoreMenu = false
+                                            viewModel.executeThemeAction(
+                                                ThemeOperation.DELETE
+                                            ) { _, msg ->
+                                                Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
+                                            }
+                                        }
+                                    )
+                                }
+                            }
+                        }
+                    }
+                },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = Color.Transparent
                 )
@@ -104,318 +172,574 @@ fun ThemeScreen(
         },
         containerColor = Color.Transparent
     ) { paddingValues ->
+        // 关闭菜单的外层点击
         Box(
             modifier = Modifier
                 .fillMaxSize()
                 .background(MaterialTheme.colorScheme.background)
+                .let {
+                    if (showMoreMenu) {
+                        it.pointerDown {
+                            showMoreMenu = false
+                            true
+                        }
+                    } else {
+                        it
+                    }
+                }
         ) {
             LazyColumn(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(paddingValues)
-                    .padding(horizontal = 20.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp),
-                contentPadding = PaddingValues(vertical = 20.dp)
+                    .padding(paddingValues),
+                contentPadding = PaddingValues(
+                        start = 16.dp, end = 16.dp, top = 8.dp, bottom = 24.dp
+                    ),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-            // 操作卡片
-            item {
-                OperationsCard(
-                    onExecute = { operation ->
-                        viewModel.executeThemeAction(operation) { success, message ->
-                            Toast.makeText(context, message, Toast.LENGTH_LONG).show()
-                        }
+                // 1. 当前主题 Hero 卡
+                if (selectedTheme != null) {
+                    item {
+                        CurrentThemeHeroCard(theme = selectedTheme)
                     }
-                )
-            }
+                }
 
-            // 主题列表标题
-            item {
-                Text(
-                    text = "可用主题",
-                    style = MaterialTheme.typography.titleMedium,
-                    modifier = Modifier.padding(vertical = 8.dp)
-                )
-            }
-
-            // 主题列表
-            if (state.availableThemes.isEmpty()) {
+                // 2. 快速操作行
                 item {
-                    Card(
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text(
-                            text = "暂无可用主题\n请导入主题包或从支付宝导出现有主题",
-                            modifier = Modifier.padding(16.dp),
-                            style = MaterialTheme.typography.bodyMedium
-                        )
-                    }
-                }
-            } else {
-                // 根据展开状态决定显示的主题数量
-                val displayThemes = if (isThemeListExpanded) {
-                    state.availableThemes
-                } else {
-                    state.availableThemes.take(maxCollapsedThemes)
-                }
-
-                items(displayThemes) { theme ->
-                    ThemeItem(
-                        theme = theme,
-                        onSelect = { selectedThemeForDetail = theme },
-                        onDelete = {
-                            viewModel.deleteTheme(theme.themeId) { success, message ->
-                                Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+                    QuickActionRow(
+                        onExport = {
+                            viewModel.executeThemeAction(
+                                ThemeOperation.EXPORT
+                            ) { _, msg ->
+                                Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
                             }
-                        }
+                        },
+                        onImportZip = { zipPickerLauncher.launch("application/zip") },
+                        onImportDir = { directoryPickerLauncher.launch(null) }
                     )
                 }
 
-                // 如果主题数量超过限制，显示展开/收起按钮
-                if (state.availableThemes.size > maxCollapsedThemes) {
-                    item {
-                        TextButton(
-                            onClick = { isThemeListExpanded = !isThemeListExpanded },
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
+                // 3. 列表标题
+                item {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 4.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "可用主题",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        if (state.availableThemes.isNotEmpty()) {
                             Text(
-                                text = if (isThemeListExpanded) {
-                                    "收起 ▲"
-                                } else {
-                                    "查看全部 ${state.availableThemes.size} 个主题 ▼"
-                                },
-                                color = MaterialTheme.colorScheme.primary
+                                text = "${state.availableThemes.size} 个",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
                     }
                 }
-            }
 
-            // 导入主题按钮
-            item {
-                Button(
-                    onClick = { zipPickerLauncher.launch("application/zip") },
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.primary
-                    )
-                ) {
-                    Text("导入主题包 (ZIP)")
-                }
-            }
-
-            // 导入主题目录按钮
-            item {
-                Button(
-                    onClick = { directoryPickerLauncher.launch(null) },
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.primary
-                    )
-                ) {
-                    Text("导入主题目录")
-                }
-            }
-
-            // 使用说明
-            item {
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceVariant
-                    )
-                ) {
-                    Column(
-                        modifier = Modifier.padding(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Text(
-                            text = "使用说明",
-                            style = MaterialTheme.typography.titleSmall
+                // 4. 空态 or 网格
+                if (state.availableThemes.isEmpty()) {
+                    item {
+                        EmptyThemeCard(
+                            onExport = {
+                                viewModel.executeThemeAction(
+                                    ThemeOperation.EXPORT
+                                ) { _, msg ->
+                                    Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                                }
+                            },
+                            onImportZip = { zipPickerLauncher.launch("application/zip") },
+                            onImportDir = { directoryPickerLauncher.launch(null) }
                         )
-                        Text(
-                            text = "1. 导出：从支付宝导出现有主题到SD卡\n" +
-                                    "2. 导入：从ZIP文件或目录导入新主题\n" +
-                                    "3. 选择：点击主题卡片选择要应用的主题\n" +
-                                    "4. 更新：将选中的主题推送到支付宝\n" +
-                                    "5. 重启支付宝查看效果",
-                            style = MaterialTheme.typography.bodySmall
+                    }
+                } else {
+                    item {
+                        ThemeGrid(
+                            themes = state.availableThemes,
+                            onSelect = { selectedThemeForDetail = it },
+                            onDelete = { theme ->
+                                themeToDelete = theme
+                            }
                         )
                     }
                 }
             }
 
-            // 主题存储位置提示
-            item {
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceVariant
-                    )
+            // 加载指示器
+            if (state.isLoading) {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
                 ) {
-                    Column(
-                        modifier = Modifier.padding(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
-                        Text(
-                            text = "主题存储位置",
-                            style = MaterialTheme.typography.titleSmall
-                        )
-                        Text(
-                            text = "/storage/emulated/0/Android/media/\ncom.eg.android.AlipayGphone/\n000_HOHO_THEME_CENTER/themes",
-                            style = MaterialTheme.typography.bodySmall,
-                            fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace
-                        )
-                    }
+                    CircularProgressIndicator()
+                }
+            }
+
+            // 错误提示
+            state.errorMessage?.let { error ->
+                LaunchedEffect(error) {
+                    Toast.makeText(context, error, Toast.LENGTH_LONG).show()
+                    viewModel.clearError()
                 }
             }
         }
+    }
 
-        // 加载指示器
-        if (state.isLoading) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(paddingValues),
-                contentAlignment = Alignment.Center
+    // 删除二次确认对话框
+    themeToDelete?.let { theme ->
+        AlertDialog(
+            onDismissRequest = { themeToDelete = null },
+            title = { Text("确认删除") },
+            text = {
+                Text("确定要删除主题「${theme.name}」吗？将删除主题文件夹内的全部文件，此操作不可撤销。")
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        themeToDelete = null
+                        viewModel.deleteTheme(theme.themeId) { success, message ->
+                            Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                ) {
+                    Text("删除", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { themeToDelete = null }) {
+                    Text("取消")
+                }
+            }
+        )
+    }
+}
+
+/**
+ * 当前主题 Hero 卡
+ *
+ * 突出显示正在使用的主题，带 "使用中" 角标和主题色描边
+ */
+@Composable
+private fun CurrentThemeHeroCard(theme: ThemeInfo) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.primaryContainer
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+        border = BorderStroke(
+            width = 1.dp,
+            color = MaterialTheme.colorScheme.primary
+        )
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                CircularProgressIndicator()
+                Text(
+                    text = "当前主题",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                    letterSpacing = 1.sp
+                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Check,
+                        contentDescription = null,
+                        modifier = Modifier.size(14.dp),
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                    Text(
+                        text = "使用中",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.primary,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
             }
-        }
 
-        // 错误提示
-        state.errorMessage?.let { error ->
-            LaunchedEffect(error) {
-                Toast.makeText(context, error, Toast.LENGTH_LONG).show()
-                viewModel.clearError()
-            }
-        }
+            Text(
+                text = theme.name,
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onPrimaryContainer,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
+
+            Text(
+                text = theme.description,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onPrimaryContainer
+                    .copy(alpha = 0.7f),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
         }
     }
 }
 
 /**
- * 现代化主题卡片
- *
- * 采用扩展功能页面的样式设计
- * 支持预览图片显示和选中状态动画
+ * 快速操作行：导出 / 导入ZIP / 导入目录
  */
 @Composable
-private fun ThemeItem(
+private fun QuickActionRow(
+    onExport: () -> Unit,
+    onImportZip: () -> Unit,
+    onImportDir: () -> Unit
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        ActionChip(
+            text = "导出",
+            onClick = onExport,
+            modifier = Modifier.weight(1f)
+        )
+        ActionChip(
+            text = "导入 ZIP",
+            onClick = onImportZip,
+            modifier = Modifier.weight(1f)
+        )
+        ActionChip(
+            text = "导入目录",
+            onClick = onImportDir,
+            modifier = Modifier.weight(1f)
+        )
+    }
+}
+
+/**
+ * 单个操作 Chip
+ */
+@Composable
+private fun ActionChip(
+    text: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    ElevatedCard(
+        modifier = modifier
+            .height(48.dp),
+        shape = RoundedCornerShape(24.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .clickable(onClick = onClick)
+                .padding(horizontal = 12.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = text,
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.Medium,
+                color = MaterialTheme.colorScheme.primary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+    }
+}
+
+/**
+ * 空态卡片：引导导入
+ */
+@Composable
+private fun EmptyThemeCard(
+    onExport: () -> Unit,
+    onImportZip: () -> Unit,
+    onImportDir: () -> Unit
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant
+        )
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            // 引导图标
+            Box(
+                modifier = Modifier
+                    .size(56.dp)
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(
+                        brush = Brush.verticalGradient(
+                            colors = listOf(
+                                MaterialTheme.colorScheme.primaryContainer,
+                                MaterialTheme.colorScheme.surfaceVariant
+                            )
+                        )
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = "+",
+                    style = MaterialTheme.typography.headlineMedium,
+                    color = MaterialTheme.colorScheme.primary,
+                    fontWeight = FontWeight.Light
+                )
+            }
+
+            Text(
+                text = "暂无主题",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold
+            )
+
+            Text(
+                text = "从支付宝导出已有主题，或导入 ZIP 皮肤包",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center
+            )
+
+            Spacer(modifier = Modifier.height(4.dp))
+
+            Button(
+                onClick = onExport,
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Text("一键导出")
+            }
+
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedButton(
+                    onClick = onImportZip,
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Text("导入 ZIP")
+                }
+                OutlinedButton(
+                    onClick = onImportDir,
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Text("导入目录")
+                }
+            }
+        }
+    }
+}
+
+/**
+ * 主题 2 列网格
+ *
+ * 双列网格布局让卡片按内容自适应高度
+ */
+@Composable
+private fun ThemeGrid(
+    themes: List<ThemeInfo>,
+    onSelect: (ThemeInfo) -> Unit,
+    onDelete: (ThemeInfo) -> Unit
+) {
+    // 非懒加载双列布局：外层 LazyColumn 已负责滚动，
+    // 嵌套 LazyVerticalStaggeredGrid 会因无界高度约束崩溃
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 4.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        val columns = themes.chunked((themes.size + 1) / 2)
+        columns.forEach { columnThemes ->
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                columnThemes.forEach { theme ->
+                    ThemeGridCard(
+                        theme = theme,
+                        onSelect = { onSelect(theme) },
+                        onDelete = { onDelete(theme) }
+                    )
+                }
+            }
+        }
+    }
+}
+
+/**
+ * 单个主题网格卡片
+ */
+@Composable
+private fun ThemeGridCard(
     theme: ThemeInfo,
     onSelect: () -> Unit,
     onDelete: () -> Unit
 ) {
-    // 动画状态
-    val animatedElevation by animateDpAsState(
-        targetValue = if (theme.isSelected) 8.dp else 4.dp,
-        animationSpec = spring(
-            dampingRatio = Spring.DampingRatioMediumBouncy,
-            stiffness = Spring.StiffnessLow
-        ),
-        label = "elevation"
-    )
-
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .shadow(
-                elevation = animatedElevation,
-                shape = RoundedCornerShape(20.dp),
-                spotColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.25f)
-            )
-            .clickable(onClick = onSelect),
-        shape = RoundedCornerShape(20.dp),
+            .clip(RoundedCornerShape(16.dp))
+            .then(
+                if (theme.isSelected) {
+                    Modifier.border(
+                        width = 2.dp,
+                        color = MaterialTheme.colorScheme.primary,
+                        shape = RoundedCornerShape(16.dp)
+                    )
+                } else {
+                    Modifier
+                }
+            ),
+        shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surface
+        ),
+        elevation = CardDefaults.cardElevation(
+            defaultElevation = if (theme.isSelected) 4.dp else 2.dp
         )
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            // 预览图片
-            if (theme.previewImagePath != null) {
-                Image(
-                    painter = rememberAsyncImagePainter(theme.previewImagePath),
-                    contentDescription = "主题预览",
-                    modifier = Modifier
-                        .size(80.dp, 60.dp)
-                        .clip(RoundedCornerShape(12.dp)),
-                    contentScale = ContentScale.Crop
-                )
-            } else {
-                // 占位符
-                Box(
-                    modifier = Modifier
-                        .size(80.dp, 60.dp)
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(
-                            brush = Brush.verticalGradient(
-                                colors = listOf(
-                                    MaterialTheme.colorScheme.surface,
-                                    MaterialTheme.colorScheme.primaryContainer
-                                )
-                            )
-                        ),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = "主题",
-                        fontSize = 12.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+        Column {
+            // 封面图
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(120.dp)
+                    .background(MaterialTheme.colorScheme.surfaceVariant),
+                contentAlignment = Alignment.Center
+            ) {
+                if (theme.previewImagePath != null) {
+                    Image(
+                        painter = rememberAsyncImagePainter(theme.previewImagePath),
+                        contentDescription = "主题封面",
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = ContentScale.Crop
                     )
+                } else {
+                    // 占位：渐变 + 图标
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(
+                                brush = Brush.linearGradient(
+                                    colors = listOf(
+                                        MaterialTheme.colorScheme.primaryContainer,
+                                        MaterialTheme.colorScheme.surfaceVariant
+                                    )
+                                )
+                            ),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "🎨",
+                            fontSize = 32.sp
+                        )
+                    }
+                }
+
+                // 选中角标
+                if (theme.isSelected) {
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .padding(8.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(MaterialTheme.colorScheme.primary),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Check,
+                            contentDescription = "使用中",
+                            modifier = Modifier
+                                .size(12.dp)
+                                .padding(4.dp),
+                            tint = MaterialTheme.colorScheme.onPrimary
+                        )
+                    }
                 }
             }
 
-            // 主题信息
+            // 信息区
             Column(
                 modifier = Modifier
-                    .weight(1f)
-                    .align(Alignment.CenterVertically)
+                    .fillMaxWidth()
+                    .padding(12.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
                 Text(
                     text = theme.name,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
                 )
 
-                if (theme.description.isNotEmpty()) {
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        text = theme.description,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 2
-                    )
+                Text(
+                    text = theme.description,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+
+                Spacer(modifier = Modifier.height(4.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    // 详情按钮
+                    TextButton(
+                        onClick = onSelect,
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
+                    ) {
+                        Text(
+                            text = "查看详情",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.primary,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+
+                    // 删除图标
+                    IconButton(
+                        onClick = onDelete,
+                        modifier = Modifier.size(28.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Delete,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 }
-            }
-
-            // 删除按钮
-            IconButton(
-                onClick = onDelete,
-                modifier = Modifier.align(Alignment.CenterVertically)
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Delete,
-                    contentDescription = "删除主题",
-                    tint = MaterialTheme.colorScheme.error
-                )
-            }
-
-            // 选中指示器
-            if (theme.isSelected) {
-                Icon(
-                    imageVector = Icons.Default.CheckCircle,
-                    contentDescription = "已选中",
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier
-                        .size(24.dp)
-                        .align(Alignment.CenterVertically)
-                )
             }
         }
     }
+}
+
+// 辅助：点击任意位置关闭菜单
+private fun Modifier.pointerDown(
+    onDown: () -> Boolean
+): Modifier = clickable {
+    onDown()
 }

@@ -3,52 +3,23 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import java.util.TimeZone
-import java.util.Random
 
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
 }
-var isCIBuild: Boolean = System.getenv("CI").toBoolean()
-// 随机字符串和数字
-fun generateRandomString(length: Int): String {
-    val chars = "abcdefghijklmnopqrstuvwxyz0123456789"
-    val random = Random()
-    return (1..length).map { chars[random.nextInt(chars.length)] }.joinToString("")
-}
-
-//isCIBuild = true // 没有c++源码时开启CI构建, push前关闭
 
 android {
     namespace = "fansirsqi.xposed.sesame"
     compileSdk = 36
-    packaging {
-        jniLibs {
-            useLegacyPackaging = true
-        }
-    }
-//    val gitCommitCount: Int = runCatching {
-//        val process = ProcessBuilder("git", "rev-list", "--count", "HEAD")
-//                .redirectErrorStream(true)
-//                .start()
-//        val output = process.inputStream.bufferedReader().use { it.readText().trim() }
-//        output.toInt()
-//    }.getOrElse {
-//        println("获取 git 提交数失败: ${it.message}")
-//        1
-//    }
+
     defaultConfig {
         vectorDrawables.useSupportLibrary = true
         applicationId = "fansirsqi.xposed.sesame"
         minSdk = 24
         targetSdk = 36
 
-        if (!isCIBuild) {
-            ndk {
-                abiFilters.addAll(listOf("arm64-v8a", "x86_64"))
-            }
-        }
 
 
         val buildDate = SimpleDateFormat("yyyy-MM-dd", Locale.CHINA).apply {
@@ -102,17 +73,11 @@ android {
         compose = true
     }
 
-
-
     flavorDimensions += "default"
     productFlavors {
         create("normal") {
             dimension = "default"
             extra.set("applicationType", "Normal")
-        }
-        create("compatible") {
-            dimension = "default"
-            extra.set("applicationType", "Compatible")
         }
     }
     compileOptions {
@@ -137,18 +102,6 @@ android {
                 kotlin {
                     compilerOptions {
                         jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17
-                    }
-                }
-            }
-
-            "compatible" -> {
-                compileOptions {
-                    sourceCompatibility = JavaVersion.VERSION_11
-                    targetCompatibility = JavaVersion.VERSION_11
-                }
-                kotlin {
-                    compilerOptions {
-                        jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_11
                     }
                 }
             }
@@ -191,22 +144,6 @@ android {
         }
     }
 
-    sourceSets {
-        getByName("main") {
-            jniLibs.srcDirs("src/main/jniLibs")
-        }
-    }
-    val cmakeFile = file("src/main/cpp/CMakeLists.txt")
-    if (!isCIBuild && cmakeFile.exists()) {
-        externalNativeBuild {
-            cmake {
-                path = cmakeFile
-                version = "3.31.6"
-                ndkVersion = "29.0.13113456"
-            }
-        }
-    }
-
     applicationVariants.all {
         val variant = this
         variant.outputs.all {
@@ -246,9 +183,6 @@ dependencies {
     implementation(libs.coil.compose)
     implementation(libs.coil.svg)
 
-    // Serialization
-    implementation(libs.kotlinx.serialization.json)
-
     implementation(libs.nanohttpd)
 
     implementation(libs.androidx.constraintlayout)
@@ -267,8 +201,8 @@ dependencies {
 
     compileOnly(files("libs/api-82.jar"))
 
-    compileOnly(files("libs/api-100.aar"))
-    implementation(files("libs/service-100-1.0.0.aar"))
+//    compileOnly(files("libs/api-100.aar"))
+//    implementation(files("libs/service-100-1.0.0.aar"))
 
     compileOnly(libs.lombok)
     annotationProcessor(libs.lombok)
@@ -281,13 +215,4 @@ dependencies {
     implementation(libs.documentfile)
 
     coreLibraryDesugaring(libs.desugar)
-
-    add("normalImplementation", libs.jackson.core)
-    add("normalImplementation", libs.jackson.databind)
-    add("normalImplementation", libs.jackson.annotations)
-
-    add("compatibleImplementation", libs.jackson.core.compatible)
-    add("compatibleImplementation", libs.jackson.databind.compatible)
-    add("compatibleImplementation", libs.jackson.annotations.compatible)
-
 }
