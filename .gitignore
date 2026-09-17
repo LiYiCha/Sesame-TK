@@ -72,3 +72,5 @@ demo/*
 *.txt
 .kotlin
 build_release.bat
+temp/
+.agents/
