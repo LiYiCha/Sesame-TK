@@ -72,6 +72,7 @@ jobs:
           files: release_outputs/*.apk
           draft: false
           prerelease: false
+          body_path: RELEASE_NOTES.md
           generate_release_notes: true
         env:
           # 此 Token 为 GitHub 系统全自动提供，完全无需在后台手动添加或配置密钥
