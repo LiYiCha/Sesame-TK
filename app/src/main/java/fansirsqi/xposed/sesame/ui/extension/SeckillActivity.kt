@@ -20,6 +20,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Refresh
@@ -29,7 +30,6 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
@@ -40,6 +40,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import fansirsqi.xposed.sesame.task.otherTask2.SeckillScheduler
 import fansirsqi.xposed.sesame.util.Files
+import fansirsqi.xposed.sesame.util.GlobalThreadPools
 import org.json.JSONArray
 import org.json.JSONObject
 import java.text.SimpleDateFormat
@@ -57,12 +58,33 @@ data class MemberGood(
     val skuIds: List<String> = emptyList() // Multi-specs support (formatted as "skuId|price|points")
 )
 
+// 会员商品分类 Tab（deliveryId 对齐 temp/会员商品.log）
+private val MEMBER_CATEGORIES = listOf(
+    "日常抢兑" to "94000SR2025120515775004",
+    "万分好物" to "94000SR2025120515776001",
+    "联名周边" to "94000SR2025120515776002",
+    "全部商品" to "94000SR2023102305988003"
+)
+
+// "全部商品"的 deliveryId（与 ExtendHandle 的 ALL_GOODS_DELIVERY_ID 保持一致）
+private const val ALL_GOODS_DELIVERY_ID = "94000SR2023102305988003"
+
+// "全部商品"的积分区间子 Tab（对齐 queryDeliveryZoneDetail 的 lowerPoint/upperPoint）
+private val MEMBER_ZONE_NAMES = listOf("0-501分", "501-3000分", "3001-10000分", "10000分+")
+
 class SeckillActivity : ComponentActivity() {
 
     private val goodsList = mutableStateListOf<MemberGood>()
     private val isRefreshing = mutableStateOf(false)
     private val currentCategory = mutableStateOf("94000SR2025120515775004")
-    private val currentPage = mutableStateOf(1)
+    private val currentPage = mutableIntStateOf(1)
+    private val currentZone = mutableIntStateOf(0) // "全部商品"的积分区间子 Tab 索引
+    private val isSearchMode = mutableStateOf(false) // 是否展示服务端搜索结果
+    private val allCachedGoods = mutableStateOf<List<MemberGood>>(emptyList()) // 本地全局搜索用（全部分类缓存）
+
+    // 列表加载序号：后台解析完成后回主线程前校验，防止旧请求覆盖新请求（列表闪变）
+    @Volatile
+    private var loadSeq = 0
 
     // Unified State at Activity Level
     private val itemId = mutableStateOf("")
@@ -87,8 +109,13 @@ class SeckillActivity : ComponentActivity() {
             when (intent?.action) {
                 "fansirsqi.xposed.sesame.fetchMemberGoodsList.success" -> {
                     val deliveryId = intent.getStringExtra("deliveryId") ?: "94000SR2025120515775004"
+                    val zoneIndex = intent.getIntExtra("zoneIndex", -1)
                     Toast.makeText(this@SeckillActivity, "同步商品列表成功！", Toast.LENGTH_SHORT).show()
-                    loadLocalGoods(deliveryId)
+                    if (zoneIndex >= 0) {
+                        loadLocalGoods(deliveryId, zoneIndex)
+                    } else {
+                        loadLocalGoods(deliveryId)
+                    }
                 }
                 "fansirsqi.xposed.sesame.fetchMemberGoodsList.failed" -> {
                     val reason = intent.getStringExtra("reason")
@@ -100,6 +127,15 @@ class SeckillActivity : ComponentActivity() {
                     } else {
                         Toast.makeText(this@SeckillActivity, "同步商品列表失败，请确保支付宝在运行中", Toast.LENGTH_LONG).show()
                     }
+                }
+                "fansirsqi.xposed.sesame.searchMemberGoods.success" -> {
+                    val query = intent.getStringExtra("query")
+                    isSearchMode.value = true
+                    loadSearchGoods()
+                    Toast.makeText(this@SeckillActivity, "服务端搜索完成${query?.let { "：$it" } ?: ""}", Toast.LENGTH_SHORT).show()
+                }
+                "fansirsqi.xposed.sesame.searchMemberGoods.failed" -> {
+                    Toast.makeText(this@SeckillActivity, "服务端搜索失败，请确保支付宝在运行中", Toast.LENGTH_LONG).show()
                 }
                 "fansirsqi.xposed.sesame.queryBenefitDetail.success" -> {
                     val benefitId = intent.getStringExtra("benefitId")
@@ -131,7 +167,11 @@ class SeckillActivity : ComponentActivity() {
                             }
                         }
                         if (updated) {
-                            saveLocalGoodsWithUpdatedSku(currentCategory.value)
+                            if (currentCategory.value == ALL_GOODS_DELIVERY_ID) {
+                                saveLocalGoodsWithUpdatedSku(currentCategory.value, currentZone.value)
+                            } else {
+                                saveLocalGoodsWithUpdatedSku(currentCategory.value)
+                            }
                         }
                     }
                 }
@@ -145,6 +185,8 @@ class SeckillActivity : ComponentActivity() {
         val filter = IntentFilter().apply {
             addAction("fansirsqi.xposed.sesame.fetchMemberGoodsList.success")
             addAction("fansirsqi.xposed.sesame.fetchMemberGoodsList.failed")
+            addAction("fansirsqi.xposed.sesame.searchMemberGoods.success")
+            addAction("fansirsqi.xposed.sesame.searchMemberGoods.failed")
             addAction("fansirsqi.xposed.sesame.queryBenefitDetail.success")
         }
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
@@ -154,9 +196,17 @@ class SeckillActivity : ComponentActivity() {
         }
 
         loadLocalGoods(currentCategory.value)
+        // 全局搜索缓存较大，后台解析后回主线程赋值，避免阻塞首帧
+        GlobalThreadPools.execute {
+            val parsed = loadAllCachedGoods()
+            runOnUiThread {
+                allCachedGoods.value = parsed
+            }
+        }
 
         setContent {
-            MaterialTheme {
+            // 使用全局统一的 SesameTheme
+            fansirsqi.xposed.sesame.ui.theme.app.SesameTheme {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
@@ -194,23 +244,67 @@ class SeckillActivity : ComponentActivity() {
                         onScheduleTypeChange = { scheduleType.value = it },
                         onRefresh = { deliveryId, page ->
                             isRefreshing.value = true
+                            isSearchMode.value = false
                             currentCategory.value = deliveryId
                             val intent = Intent("com.eg.android.AlipayGphone.sesame.memberOperation").apply {
                                 putExtra("operation", "FETCH_GOODS_LIST")
                                 putExtra("deliveryId", deliveryId)
                                 putExtra("pageNum", page)
+                                if (deliveryId == ALL_GOODS_DELIVERY_ID) {
+                                    putExtra("zoneIndex", currentZone.value)
+                                }
                             }
                             sendBroadcast(intent)
                             Toast.makeText(this@SeckillActivity, "正在请求同步商品列表...", Toast.LENGTH_SHORT).show()
                         },
                         onTabSelected = { deliveryId ->
                             currentCategory.value = deliveryId
-                            loadLocalGoods(deliveryId)
+                            isSearchMode.value = false
+                            if (deliveryId == ALL_GOODS_DELIVERY_ID) {
+                                loadLocalGoods(deliveryId, currentZone.value)
+                            } else {
+                                loadLocalGoods(deliveryId)
+                            }
                             // Reset selected spec list when switching tabs
                             itemId.value = ""
                             verifyPoint.value = ""
                             skuId.value = "-1"
                             selectedSkuIds.value = emptyList()
+                        },
+                        onZoneSelected = { zone ->
+                            currentZone.value = zone
+                            currentPage.value = 1
+                            isSearchMode.value = false
+                            loadLocalGoods(currentCategory.value, zone)
+                        },
+                        currentZone = currentZone.value,
+                        allCachedGoods = allCachedGoods.value,
+                        isSearchMode = isSearchMode.value,
+                        onSearchQueryChange = { newQuery ->
+                            if (newQuery.isEmpty() && isSearchMode.value) {
+                                // 清空搜索词后退出搜索模式，恢复当前分类列表
+                                isSearchMode.value = false
+                                if (currentCategory.value == ALL_GOODS_DELIVERY_ID) {
+                                    loadLocalGoods(currentCategory.value, currentZone.value)
+                                } else {
+                                    loadLocalGoods(currentCategory.value)
+                                }
+                            }
+                        },
+                        onServerSearch = { q ->
+                            val query = q.trim()
+                            if (query.isEmpty()) {
+                                Toast.makeText(this@SeckillActivity, "请输入搜索关键词", Toast.LENGTH_SHORT).show()
+                            } else {
+                                isRefreshing.value = true
+                                val intent = Intent("com.eg.android.AlipayGphone.sesame.memberOperation").apply {
+                                    putExtra("operation", "SEARCH_GOODS")
+                                    putExtra("query", query)
+                                    putExtra("pageNum", 1)
+                                }
+                                sendBroadcast(intent)
+                                Toast.makeText(this@SeckillActivity, "正在服务端搜索：$query", Toast.LENGTH_SHORT).show()
+                            }
                         },
                         onBack = { finish() }
                     )
@@ -226,68 +320,134 @@ class SeckillActivity : ComponentActivity() {
         } catch (e: Exception) {}
     }
 
-    private fun loadLocalGoods(deliveryId: String) {
-        val file = Files.getMemberGoodsListFile(deliveryId)
-        if (file.exists()) {
-            val content = Files.readFromFile(file)
-            if (!content.isNullOrEmpty()) {
-                val parsed = parseGoods(content)
+    private fun readMemberGoodsPool(): JSONObject {
+        val file = Files.getMemberGoodsPoolFile()
+        if (!file.exists()) return JSONObject()
+        val content = Files.readFromFile(file)
+        if (content.isNullOrEmpty()) return JSONObject()
+        return try {
+            JSONObject(content)
+        } catch (e: Exception) {
+            JSONObject()
+        }
+    }
+
+    private fun readMemberGoodsLists(): JSONObject {
+        val file = Files.getMemberGoodsListFile()
+        if (!file.exists()) return JSONObject()
+        val content = Files.readFromFile(file)
+        if (content.isNullOrEmpty()) return JSONObject()
+        return try {
+            JSONObject(content)
+        } catch (e: Exception) {
+            JSONObject()
+        }
+    }
+
+    /** 按列表 key 读取商品：listKey 形如 cat_<deliveryId> / zone_<deliveryId>_<zone> / search */
+    private fun loadGoodsByListKey(listKey: String): List<MemberGood> {
+        val goods = readMemberGoodsPool()
+        val lists = readMemberGoodsLists()
+        val listJo = lists.optJSONObject(listKey) ?: return emptyList()
+        val ids = listJo.optJSONArray("ids") ?: return emptyList()
+        // 一次性包装为数组再解析，避免逐商品 toString+JSONObject 反复序列化
+        val wrapper = JSONArray()
+        for (i in 0 until ids.length()) {
+            val bid = ids.optString(i)
+            val obj = goods.optJSONObject(bid) ?: continue
+            wrapper.put(obj)
+        }
+        return parseGoods(wrapper)
+    }
+
+    private fun loadLocalGoods(deliveryId: String, zone: Int = -1) {
+        val listKey = if (zone >= 0) "zone_${deliveryId}_$zone" else "cat_$deliveryId"
+        loadGoodsInBackground(listKey)
+    }
+
+    private fun loadSearchGoods() {
+        loadGoodsInBackground("search")
+    }
+
+    /** 后台解析列表并回主线程更新；用递增序号防止旧请求完成后覆盖新请求 */
+    private fun loadGoodsInBackground(listKey: String) {
+        val seq = ++loadSeq
+        GlobalThreadPools.execute {
+            val parsed = loadGoodsByListKey(listKey)
+            runOnUiThread {
+                if (seq != loadSeq) return@runOnUiThread
                 goodsList.clear()
                 goodsList.addAll(parsed)
-                return
             }
         }
-        goodsList.clear()
     }
 
-    private fun saveLocalGoodsWithUpdatedSku(deliveryId: String) {
-        try {
-            val file = Files.getMemberGoodsListFile(deliveryId)
-            val root = JSONObject()
-            val ja = JSONArray()
-            goodsList.forEach { good ->
-                val jo = JSONObject().apply {
-                    put("benefitId", good.benefitId)
-                    put("name", good.name)
-                    put("itemId", good.itemId)
-                    put("pointPrice", good.points)
-                    put("priceYuan", good.price)
-                    put("actionUrl", good.actionUrl)
-                    
-                    val skus = JSONArray().apply {
-                        if (good.skuIds.isNotEmpty()) {
-                            good.skuIds.forEach { specStr ->
-                                val parts = specStr.split("|")
-                                if (parts.size >= 3) {
-                                    put(JSONObject().apply {
-                                        put("skuId", parts[0])
-                                        put("price", parts[1])
-                                        put("points", parts[2])
-                                    })
+    /** 合并缓存中所有列表（含全部商品 4 个分区）的商品，供搜索框全局过滤 */
+    private fun loadAllCachedGoods(): List<MemberGood> {
+        val goods = readMemberGoodsPool()
+        val lists = readMemberGoodsLists()
+        val wrapper = JSONArray()
+        val seen = mutableSetOf<String>()
+        lists.keys().forEach { key ->
+            val listJo = lists.optJSONObject(key) ?: return@forEach
+            val ids = listJo.optJSONArray("ids") ?: return@forEach
+            for (i in 0 until ids.length()) {
+                val bid = ids.optString(i)
+                if (!seen.add(bid)) continue
+                val obj = goods.optJSONObject(bid) ?: continue
+                wrapper.put(obj)
+            }
+        }
+        return parseGoods(wrapper)
+    }
+
+    private fun saveLocalGoodsWithUpdatedSku(deliveryId: String, zone: Int = -1) {
+        // 主线程先快照，避免后台线程遍历可变列表；文件 IO 与解析全部放后台
+        val goodsSnapshot = goodsList.toList()
+        GlobalThreadPools.execute {
+            // 共享锁：与后台抓取保存互斥，避免并发"读-改-写"互相覆盖
+            synchronized(Files.memberGoodsLock()) {
+                try {
+                    // 规格详情只更新商品池，不动列表索引
+                    val file = Files.getMemberGoodsPoolFile()
+                    val goods = readMemberGoodsPool()
+                    goodsSnapshot.forEach { good ->
+                        val obj = goods.optJSONObject(good.benefitId) ?: return@forEach
+                        val skus = JSONArray().apply {
+                            if (good.skuIds.isNotEmpty()) {
+                                good.skuIds.forEach { specStr ->
+                                    val parts = specStr.split("|")
+                                    if (parts.size >= 3) {
+                                        put(JSONObject().apply {
+                                            put("skuId", parts[0])
+                                            put("price", parts[1])
+                                            put("points", parts[2])
+                                        })
+                                    }
                                 }
+                            } else {
+                                put(JSONObject().apply {
+                                    put("skuId", good.skuId)
+                                })
                             }
-                        } else {
-                            put(JSONObject().apply {
-                                put("skuId", good.skuId)
-                            })
                         }
+                        obj.put("skuInfoList", skus)
+                        goods.put(good.benefitId, obj)
                     }
-                    put("skuInfoList", skus)
+                    // 原子写，避免读端读到半截 JSON
+                    Files.write2FileAtomic(goods.toString(), file)
+                } catch (e: Exception) {
+                    e.printStackTrace()
                 }
-                ja.put(jo)
             }
-            root.put("benefits", ja)
-            Files.write2File(root.toString(), file)
-        } catch (e: Exception) {
-            e.printStackTrace()
         }
     }
 
-    private fun parseGoods(jsonStr: String): List<MemberGood> {
+    /** 从任意 JSON 节点（商品对象或商品数组）递归提取商品，直接解析对象避免反复序列化 */
+    private fun parseGoods(any: Any?): List<MemberGood> {
         val list = mutableListOf<MemberGood>()
         val seen = mutableSetOf<String>()
         try {
-            val root = JSONObject(jsonStr)
             fun extract(obj: Any?) {
                 when (obj) {
                     is JSONObject -> {
@@ -424,7 +584,7 @@ class SeckillActivity : ComponentActivity() {
                     }
                 }
             }
-            extract(root)
+            extract(any)
         } catch (e: Exception) {
             e.printStackTrace()
         }
@@ -467,14 +627,15 @@ fun SeckillScreen(
     onScheduleTypeChange: (String) -> Unit,
     onRefresh: (deliveryId: String, page: Int) -> Unit,
     onTabSelected: (deliveryId: String) -> Unit,
+    currentZone: Int,
+    onZoneSelected: (zone: Int) -> Unit,
+    allCachedGoods: List<MemberGood>,
+    isSearchMode: Boolean,
+    onSearchQueryChange: (String) -> Unit,
+    onServerSearch: (query: String) -> Unit,
     onBack: () -> Unit
 ) {
-    val categories = listOf(
-        "日常抢兑" to "94000SR2025120515775004",
-        "万分好物" to "94000SR2025120515776001",
-        "联名周边" to "94000SR2025120515776002",
-        "全部商品" to "94000SR2023102305988003"
-    )
+    val categories = MEMBER_CATEGORIES
 
     var selectedTabIndex by remember { mutableStateOf(0) }
     var generatedUrl by remember { mutableStateOf("") }
@@ -544,21 +705,23 @@ fun SeckillScreen(
     }
 
     // Filtered list
-    val filteredGoods = remember(goodsList, searchQuery) {
+    val filteredGoods = remember(goodsList, allCachedGoods, searchQuery, isSearchMode) {
         if (searchQuery.isEmpty()) {
             goodsList
         } else {
-            goodsList.filter { it.name.contains(searchQuery, ignoreCase = true) || it.itemId.contains(searchQuery) }
+            // 服务端搜索模式：在搜索结果内过滤；本地搜索：跨全部分类缓存过滤
+            val scope = if (isSearchMode) goodsList else allCachedGoods
+            scope.filter { it.name.contains(searchQuery, ignoreCase = true) || it.itemId.contains(searchQuery) }
         }
     }
 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("会员抢兑直链与秒杀", fontWeight = FontWeight.Bold) },
+                title = { Text("会员商品", fontWeight = FontWeight.Bold) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "返回")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
                     }
                 },
                 actions = {
@@ -735,23 +898,58 @@ fun SeckillScreen(
                 }
 
                 // Search Box
-                OutlinedTextField(
-                    value = searchQuery,
-                    onValueChange = { searchQuery = it },
-                    placeholder = { Text("搜索本地缓存的商品...") },
-                    leadingIcon = { Icon(Icons.Default.Search, contentDescription = "搜索") },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 4.dp),
-                    shape = RoundedCornerShape(8.dp)
-                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    OutlinedTextField(
+                        value = searchQuery,
+                        onValueChange = {
+                            searchQuery = it
+                            onSearchQueryChange(it)
+                        },
+                        placeholder = { Text("搜索本地缓存的商品...") },
+                        leadingIcon = { Icon(Icons.Default.Search, contentDescription = "搜索") },
+                        modifier = Modifier
+                            .weight(1f)
+                            .padding(vertical = 4.dp),
+                        shape = RoundedCornerShape(8.dp)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Button(
+                        onClick = { onServerSearch(searchQuery) },
+                        enabled = !isRefreshing,
+                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 8.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary)
+                    ) {
+                        Text("服务端搜索", fontSize = 12.sp)
+                    }
+                }
+
+                // "全部商品"积分区间子 Tab（各分区独立翻页）
+                if (categories[selectedTabIndex].second == ALL_GOODS_DELIVERY_ID) {
+                    ScrollableTabRow(
+                        selectedTabIndex = currentZone,
+                        edgePadding = 8.dp,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        MEMBER_ZONE_NAMES.forEachIndexed { index, name ->
+                            Tab(
+                                selected = currentZone == index,
+                                onClick = { onZoneSelected(index) },
+                                text = { Text(name, fontSize = 11.sp) }
+                            )
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(4.dp))
+                }
 
                 // Goods List Container
                 Box(modifier = Modifier.weight(1f)) {
                     if (filteredGoods.isEmpty()) {
                         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Text(if (isRefreshing) "正在同步支付宝商品列表..." else "没有找到商品", color = Color.Gray, fontSize = 14.sp)
+                                Text(if (isRefreshing) "正在同步支付宝商品列表..." else "没有找到商品", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 14.sp)
                                 Spacer(modifier = Modifier.height(10.dp))
                                 Button(
                                     onClick = { onRefresh(categories[selectedTabIndex].second, currentPage) },
@@ -797,12 +995,12 @@ fun SeckillScreen(
                                         Text(good.name, fontWeight = FontWeight.SemiBold, fontSize = 13.sp, maxLines = 1)
                                         Spacer(modifier = Modifier.height(2.dp))
                                         Row {
-                                            Text("ID: ${good.itemId}", fontSize = 10.sp, color = Color.Gray)
+                                            Text("ID: ${good.itemId}", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                             Spacer(modifier = Modifier.width(6.dp))
-                                            Text("积分: ${good.points} + ${good.price}元", fontSize = 10.sp, color = Color.Gray)
+                                            Text("积分: ${good.points} + ${good.price}元", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                             if (good.skuId != "-1") {
                                                 Spacer(modifier = Modifier.width(6.dp))
-                                                Text("SKU: ${good.skuId}", fontSize = 10.sp, color = Color.Gray)
+                                                Text("SKU: ${good.skuId}", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                             }
                                         }
                                     }
@@ -883,7 +1081,7 @@ fun SeckillScreen(
                 }
 
                 // Pagination (For master list "全部商品")
-                if (selectedTabIndex == 3) {
+                if (categories[selectedTabIndex].second == ALL_GOODS_DELIVERY_ID) {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -947,7 +1145,7 @@ fun SeckillScreen(
                                     ) {
                                         Column(modifier = Modifier.weight(1f)) {
                                             Text(task.optString("name", "未命名"), fontSize = 12.sp, maxLines = 1, fontWeight = FontWeight.SemiBold)
-                                            Text("时间: ${task.optString("seckillTime")} | 模式: ${task.optString("type")} | 数量: ${task.optInt("number", 1)} | ID: ${task.optString("itemId")}", fontSize = 10.sp, color = Color.Gray)
+                                            Text("时间: ${task.optString("seckillTime")} | 模式: ${task.optString("type")} | 数量: ${task.optInt("number", 1)} | ID: ${task.optString("itemId")}", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                         }
                                         IconButton(
                                             onClick = {
@@ -957,7 +1155,7 @@ fun SeckillScreen(
                                             },
                                             modifier = Modifier.size(24.dp)
                                         ) {
-                                            Icon(Icons.Default.Delete, contentDescription = "取消任务", tint = Color.Red, modifier = Modifier.size(16.dp))
+                                            Icon(Icons.Default.Delete, contentDescription = "取消任务", tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(16.dp))
                                         }
                                     }
                                 }
@@ -987,7 +1185,7 @@ fun SeckillScreen(
                     Text("设定秒杀定时任务", fontWeight = FontWeight.Bold, fontSize = 16.sp)
                     Spacer(modifier = Modifier.height(8.dp))
                     Text("商品: $scheduleName", fontSize = 13.sp, maxLines = 1)
-                    Text("ID: $scheduleItemId | SKU: $scheduleSkuId", fontSize = 11.sp, color = Color.Gray)
+                    Text("ID: $scheduleItemId | SKU: $scheduleSkuId", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Spacer(modifier = Modifier.height(12.dp))
 
                     // Mode Selector Row

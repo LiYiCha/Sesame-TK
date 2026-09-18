@@ -41,6 +41,7 @@ import androidx.compose.material3.HorizontalDivider
 import kotlinx.coroutines.launch
 import fansirsqi.xposed.sesame.hook.network.model.CaptureRecord
 import fansirsqi.xposed.sesame.ui.theme.app.SesameColors
+import fansirsqi.xposed.sesame.util.CaptureFilter
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -595,7 +596,7 @@ private fun BlacklistSheet(
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState, dragHandle = { BottomSheetDefaults.DragHandle() }) {
         Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp).padding(bottom = 32.dp)) {
             Text("过滤配置", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-            Text("包含以下关键词的域名将被排除", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.outline, modifier = Modifier.padding(bottom = 16.dp))
+            Text("包含以下关键词的域名/接口将被排除", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.outline, modifier = Modifier.padding(bottom = 16.dp))
 
             OutlinedTextField(
                 value = newDomain,
@@ -643,10 +644,23 @@ private fun BlacklistSheet(
 
             Spacer(Modifier.height(16.dp))
             Text("推荐过滤", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
-            val presets = listOf("log.alipay.com", "mdap.alipay.com", "diagnose.alipay.com")
+            val presets = listOf("log.alipay.com", "mdap.alipay.com", "alipay.client.getUnionResource")
             FlowRow(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 presets.filter { !blacklist.contains(it) }.forEach { preset ->
                     AssistChip(onClick = { onAdd(preset) }, label = { Text(preset) }, leadingIcon = { Icon(Icons.Rounded.Add, null, modifier = Modifier.size(16.dp)) })
+                }
+            }
+
+            Spacer(Modifier.height(16.dp))
+            Text("内置噪音（始终过滤，无需配置）", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.outline)
+            FlowRow(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                CaptureFilter.BUILTIN_NOISE.forEach { noise ->
+                    AssistChip(
+                        onClick = {},
+                        enabled = false,
+                        label = { Text(noise) },
+                        leadingIcon = { Icon(Icons.Rounded.Block, null, modifier = Modifier.size(16.dp)) }
+                    )
                 }
             }
         }

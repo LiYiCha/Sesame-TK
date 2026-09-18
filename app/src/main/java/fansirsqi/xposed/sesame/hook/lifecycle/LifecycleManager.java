@@ -18,6 +18,9 @@ import fansirsqi.xposed.sesame.data.General;
 import fansirsqi.xposed.sesame.data.Status;
 import fansirsqi.xposed.sesame.hook.RpcResponseHandler;
 import fansirsqi.xposed.sesame.hook.context.AppContext;
+import fansirsqi.xposed.sesame.hook.core.modules.MiscHookModule;
+import fansirsqi.xposed.sesame.hook.network.HttpCaptureHook;
+import fansirsqi.xposed.sesame.hook.network.NetworkHook;
 import fansirsqi.xposed.sesame.hook.resource.WakeLockManager;
 import fansirsqi.xposed.sesame.hook.rpc.bridge.NewRpcBridge;
 import fansirsqi.xposed.sesame.hook.rpc.bridge.RpcBridge;
@@ -28,6 +31,7 @@ import fansirsqi.xposed.sesame.hook.scheduler.TaskScheduler;
 import fansirsqi.xposed.sesame.hook.Toast;
 import fansirsqi.xposed.sesame.model.BaseModel;
 import fansirsqi.xposed.sesame.model.Model;
+import fansirsqi.xposed.sesame.util.CaptureFilter;
 import fansirsqi.xposed.sesame.util.DataStore;
 import fansirsqi.xposed.sesame.task.BaseTask;
 import fansirsqi.xposed.sesame.task.ModelTask;
@@ -200,19 +204,20 @@ public class LifecycleManager {
                 rpcBridge = new NewRpcBridge();
                 rpcBridge.load();
                 rpcVersion = rpcBridge.getVersion();
-                //抓包调试模式
+                //抓包调试模式（需在 DataStore 初始化后开启，保证过滤配置可读取）
+                DataStore.INSTANCE.init(Files.CONFIG_DIR);
                 if (BaseModel.getDebugMode().getValue()) {
                     setupRpcDebugHooks();
                 }
                 
                 // 全面网络捕获与拦截 (HttpCaptureHook & NetworkHook)
                 if (BaseModel.enableHttpCapture.getValue()) {
-                    fansirsqi.xposed.sesame.hook.network.HttpCaptureHook.setup(AppContext.getClassLoader());
-                    fansirsqi.xposed.sesame.hook.network.NetworkHook.setupHooks(AppContext.getClassLoader());
+                    HttpCaptureHook.setup(AppContext.getClassLoader());
+                    NetworkHook.setupHooks(AppContext.getClassLoader());
                 }
                 // 延迟注册动态 bundle 及登录界面 Hook
                 try {
-                    fansirsqi.xposed.sesame.hook.core.modules.MiscHookModule.delayRegisterBundleHooks(AppContext.getClassLoader());
+                    MiscHookModule.delayRegisterBundleHooks(AppContext.getClassLoader());
                 } catch (Throwable t) {
                     Log.runtime(TAG, "delayRegisterBundleHooks 失败: " + t.getMessage());
                 }
@@ -220,7 +225,6 @@ public class LifecycleManager {
                 Model.bootAllModel(AppContext.getClassLoader());
                 Status.load(userId);
                 DataCache.INSTANCE.load();
-                DataStore.INSTANCE.init(Files.CONFIG_DIR);
                 updateDay(userId);
 
                 String successMsg = "芝麻粒-TK 加载成功✨";
@@ -229,8 +233,14 @@ public class LifecycleManager {
 
             }
             offline = false;
-            TaskScheduler.setStopped(false);
-            execHandler();
+            if (TaskScheduler.isStopped()) {
+                // 用户已通过停止广播显式停止任务：保持停止粘性，只完成初始化不启动任务，
+                // 防止 restart 广播/服务重建等 force=true 路径绕过停止态复活任务；
+                // 只有 rerun 广播（先 setStopped(false)）才能恢复任务执行
+                Log.runtime(TAG, "⏸ 任务已被用户停止，初始化完成但保持停止状态，跳过任务启动");
+            } else {
+                execHandler();
+            }
             init = true;
             return true;
         } catch (Throwable th) {
@@ -812,43 +822,8 @@ public class LifecycleManager {
         }
     }
 
-    private static boolean isUselessRpc(String opType, String paramsJson) {
-        return isUselessRpc(resolveRpcOperation(opType, paramsJson));
-    }
-
     private static boolean isUselessRpc(String opType) {
-        if (opType == null || opType.isEmpty()) return false;
-        String lower = opType.toLowerCase();
-
-        try {
-            String filterKeywords = DataStore.INSTANCE.get("httpCaptureFilter", String.class);
-            if (filterKeywords == null) {
-                filterKeywords = "log.alipay.com,mdap.alipay.com,diagnose.alipay.com,alipay.client.executerpc,alipay.client.interfere.config.get,alipay.client.getDynamicBundle,alipay.client.getUnionResource";
-            }
-            if (filterKeywords != null && !filterKeywords.trim().isEmpty()) {
-                String[] keywords = filterKeywords.split(",");
-                for (String kw : keywords) {
-                    String trimmed = kw.trim();
-                    if (!trimmed.isEmpty() && lower.contains(trimmed.toLowerCase())) {
-                        return true;
-                    }
-                }
-            }
-        } catch (Throwable t) {
-            // Ignore
-        }
-
-        return lower.contains("wireless.audit")
-                || lower.contains("locate.service")
-                || lower.contains("uploadlog")
-                || lower.contains("log.upload")
-                || lower.contains("behavior.logs")
-                || lower.contains("behaviorlog")
-                || lower.contains("diagnose")
-                || lower.contains("reportactive")
-                || lower.contains("monitor")
-                || lower.contains("alipay.client")
-                || lower.contains("telemetry");
+        return CaptureFilter.INSTANCE.isFiltered(opType);
     }
 
     private static String reflectDump(Object obj) {

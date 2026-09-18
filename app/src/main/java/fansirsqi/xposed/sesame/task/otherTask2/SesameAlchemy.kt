@@ -131,7 +131,7 @@ class SesameAlchemy {
                     attemptCount++
 
                     // 每10轮查一次体力状态，耗尽（EXHAUSTED）就用药水/做任务恢复
-                    if (attemptCount % 10 == 0) {
+                    if (attemptCount % 5 == 0) {
                         try {
                             val checkJo = JSONObject(AntMemberRpcCall.Zmxy.Alchemy.alchemyQueryHome())
                             val checkData = checkJo.optJSONObject("data")

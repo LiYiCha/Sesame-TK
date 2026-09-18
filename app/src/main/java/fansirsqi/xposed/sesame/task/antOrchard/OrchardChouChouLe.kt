@@ -11,7 +11,6 @@ import org.json.JSONObject
 /**
  * 农场抽抽乐（芭芭农场抽奖）
  *
- * 移植自 Sesame-AG d2cf4c89：
  * enterDrawActivity → 任务流（完成 TODO / 领取 FINISHED 奖励）→ syncDrawBalance → batchDraw 循环抽光
  *
  * 响应关键字段（注意服务端余额字段拼写为 blance）：

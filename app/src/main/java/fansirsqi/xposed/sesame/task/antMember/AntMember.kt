@@ -314,8 +314,16 @@ class AntMember : ModelTask() {
                 }
 
                 if (beanSignIn!!.value) {
-                    deferredTasks.add(async(Dispatchers.IO) { beanSignIn() })
+                    deferredTasks.add(async(Dispatchers.IO) {
+                        beanSignIn()
+                        // V2: 安心豆浏览任务 (signup → send → 发奖回查)
+                        processAllBeanBrowseTasks()
+                    })
                 }
+
+                // V2: 签到浮窗 + 游戏中心入口 (自动开启)
+                deferredTasks.add(async(Dispatchers.IO) { doSignFloatingBall() })
+                deferredTasks.add(async(Dispatchers.IO) { doQueryGameEntrance() })
 
                 /* if (annualReview!!.value) {   //年度回顾已下线
                      deferredTasks.add(async(Dispatchers.IO) { doAnnualReview() })
@@ -1037,6 +1045,18 @@ class AntMember : ModelTask() {
                     Log.runtime(s)
                 }
             }
+            // V2: 先尝试一键领取所有积分证书
+            try {
+                delay(500)
+                val batchResp = AntMemberRpcCall.receiveAllPointByUser()
+                val batchJo = JSONObject(batchResp)
+                if (ResChecker.checkRes(TAG, batchJo)) {
+                    val count = batchJo.optJSONArray("sendResultList")?.length() ?: 0
+                    if (count > 0) {
+                        Log.runtime(TAG, "会员积分🎖️V2一键领取[$count]张证书")
+                    }
+                }
+            } catch (_: Exception) {}
             queryPointCert(1, 8)
         } catch (t: Throwable) {
             Log.printStackTrace(TAG, "doMemberSign err:", t)
@@ -1065,6 +1085,35 @@ class AntMember : ModelTask() {
             for (j in 0 until taskList.length()) {
                 val task = taskList.getJSONObject(j)
                 processTask(task)
+            }
+            // V2: 任务执行完后，批量查询未领奖任务并领奖
+            try {
+                delay(800)
+                val processResp = AntMemberRpcCall.queryMemberTaskProcessList()
+                val processJo = JSONObject(processResp)
+                if (ResChecker.checkRes(TAG, processJo) && processJo.has("taskProcessList")) {
+                    val processList = processJo.getJSONArray("taskProcessList")
+                    for (k in 0 until processList.length()) {
+                        val proc = processList.getJSONObject(k)
+                        val awardStatus = proc.optInt("awardStatus", 0)
+                        // awardStatus: 1=待领奖, 2=已领奖
+                        if (awardStatus == 1) {
+                            val processId = proc.optString("taskProcessId", "")
+                            val outBizNo = proc.optString("awardRelatedOutBizNo", "")
+                            val taskName = proc.optJSONObject("taskConfigInfo")?.optString("taskName", "未知") ?: "未知"
+                            if (processId.isNotEmpty() && outBizNo.isNotEmpty()) {
+                                delay(500)
+                                val awardResp = AntMemberRpcCall.awardMemberTaskProcess(outBizNo, processId)
+                                val awardJo = JSONObject(awardResp)
+                                if (ResChecker.checkRes(TAG, awardJo)) {
+                                    Log.other(TAG, "会员任务V2领奖[$taskName]成功")
+                                }
+                            }
+                        }
+                    }
+                }
+            } catch (t: Throwable) {
+                Log.printStackTrace(TAG, "批量领奖 err:", t)
             }
         } catch (t: Throwable) {
             Log.printStackTrace(TAG, "doAllMemberAvailableTask err:", t)
@@ -1360,6 +1409,14 @@ class AntMember : ModelTask() {
         }
 
         delay(16000)
+        // V2 流程: 先报名再执行
+        try {
+            val applyResp = AntMemberRpcCall.applyMemberTask(id.toString())
+            val applyJo = JSONObject(applyResp)
+            if (ResChecker.checkRes(TAG, applyJo)) {
+                Log.other(TAG, "会员任务V2报名[$name]成功")
+            }
+        } catch (_: Exception) {}
         val str = AntMemberRpcCall.executeTask(bizParam, bizSubType, bizType, id)
         val jo = JSONObject(str)
         if (!ResChecker.checkRes(TAG + "执行会员任务失败:", jo)) {
@@ -1856,13 +1913,174 @@ class AntMember : ModelTask() {
         } catch (t: Throwable) {
             Log.printStackTrace(TAG, "beanSignIn err:", t)
         }
+        // V2: 过滤有效权益
+        try {
+            val filterResp = AntMemberRpcCall.filterValidBizProperty()
+            val filterJo = JSONObject(filterResp)
+            if (ResChecker.checkRes(TAG, filterJo)) {
+                val validCount = filterJo.optJSONArray("validBizPropertyList")?.length() ?: 0
+                Log.runtime(TAG, "安心豆🫘V2有效权益[$validCount]个")
+            }
+        } catch (_: Exception) {}
+    }
+
+    // 安心豆浏览任务订单缓存（进程内 store，对齐 AG 的 store.getOrCreate）
+    private val beanBrowseOrders = mutableMapOf<String, String>()
+
+    /**
+     * 安心豆浏览任务 V2: 报名(signup) → 发奖(send) → 回查(sendPrizeSendOrderList)
+     * 对齐   processBeanBrowseTask 三阶段流程
+     */
+    private fun processBeanBrowseTask(task: JSONObject) {
+        try {
+            val taskProcessStatus = task.optString("taskProcessStatus", "")
+            val taskMainType = task.optString("taskMainType", "")
+            val taskType = task.optString("taskType", "")
+            val appletId = task.optString("appletId", "")
+            val center = task.optString("taskCenterId", "")
+            val orderKey = "$appletId|$center"
+            var orderId = beanBrowseOrders[orderKey].orEmpty()
+
+            // 阶段 1: 未报名 → signup
+            if (taskProcessStatus == "NONE_SIGNUP" && orderId.isEmpty()) {
+                val signupStr = AntMemberRpcCall.beanTaskTrigger(appletId, "AXD_TAK_LIST", center, "signup")
+                val signupJo = JSONObject(signupStr)
+                if (!ResChecker.checkRes(TAG, signupJo)) return
+                orderId = signupJo.optJSONObject("result")?.optString("taskOrderId", "").orEmpty()
+                if (orderId.isEmpty()) {
+                    Log.error(TAG, "安心豆🫘浏览报名未返回订单:$signupStr")
+                    return
+                }
+                beanBrowseOrders[orderKey] = orderId
+                Log.runtime(TAG, "安心豆🫘浏览报名[$orderKey]成功")
+            }
+
+            // 阶段 2: send 发奖
+            val sentStr = AntMemberRpcCall.beanTaskTrigger(appletId, "AXD_TAK_LIST", center, "send")
+            val sentJo = JSONObject(sentStr)
+            val accepted = ResChecker.checkRes(TAG, sentJo)
+            if (!accepted) return
+            val returnedOrder = sentJo.optJSONObject("result")?.optString("taskOrderId", "").orEmpty()
+            if (returnedOrder.isNotEmpty()) {
+                orderId = returnedOrder
+                beanBrowseOrders[orderKey] = orderId
+            }
+
+            // 阶段 3: 回查 — 用 beanTaskCenterConsult 查 sendPrizeSendOrderList
+            val consultStr = AntMemberRpcCall.beanTaskCenterConsult(center, "AXD_TAK_LIST")
+            val consultJo = JSONObject(consultStr)
+            if (ResChecker.checkRes(TAG, consultJo)) {
+                val data = consultJo.optJSONObject("result")?.optJSONObject("data") ?: JSONObject()
+                val awards = data.optJSONArray("sendPrizeSendOrderList") ?: JSONArray()
+                for (i in 0 until awards.length()) {
+                    val award = awards.optJSONObject(i) ?: continue
+                    val extInfo = award.optJSONObject("extInfo") ?: continue
+                    val extOrderId = extInfo.optString("TASK_ORDER_ID", "")
+                    val sendStatus = award.optString("sendStatus", "")
+                    if (extOrderId == orderId && sendStatus == "SUCCESS") {
+                        // 发奖已确认 → 从缓存移除
+                        beanBrowseOrders.remove(orderKey)
+                        Log.runtime(TAG, "安心豆🫘浏览发奖已确认[$orderId]")
+                        return
+                    }
+                }
+                // 未查到发奖，保留在缓存等下次重试
+                Log.runtime(TAG, "安心豆🫘浏览发奖待确认[$orderId]")
+            }
+        } catch (t: Throwable) {
+            Log.printStackTrace(TAG, "安心豆浏览任务推进失败:", t)
+        }
+    }
+
+    /**
+     * 遍历安心豆任务中心，对浏览类型任务执行 processBeanBrowseTask
+     */
+    private fun processAllBeanBrowseTasks() {
+        try {
+            // 先查任务中心（简化版，不传 taskCenterId 让服务端返回默认）
+            val consultStr = AntMemberRpcCall.beanTaskCenterConsult("", "AXD_TAK_LIST")
+            val consultJo = JSONObject(consultStr)
+            if (!ResChecker.checkRes(TAG, consultJo)) return
+            val data = consultJo.optJSONObject("result")?.optJSONObject("data") ?: JSONObject()
+            val pendingList = data.optJSONArray("taskDetailList") ?: JSONArray()
+            for (i in 0 until pendingList.length()) {
+                val task = pendingList.optJSONObject(i) ?: continue
+                val taskType = task.optString("taskType", "")
+                val taskMainType = task.optString("taskMainType", "")
+                // 浏览类任务特征: taskMainType=BROWSE 或 taskType 含 browse
+                if (taskMainType == "BROWSE" || taskType.lowercase().contains("browse")) {
+                    processBeanBrowseTask(task)
+                }
+            }
+            // 遍历已发奖但可能还没确认的缓存订单
+            beanBrowseOrders.entries.toList().forEach { (orderKey, _) ->
+                val (appletId, center) = orderKey.split("|", limit = 2)
+                if (appletId.isNotEmpty() && center.isNotEmpty()) {
+                    // 用 send 触发一次，让服务端走确认流程
+                    val sentStr = AntMemberRpcCall.beanTaskTrigger(appletId, "AXD_TAK_LIST", center, "send")
+                    val sentJo = JSONObject(sentStr)
+                    if (ResChecker.checkRes(TAG, sentJo)) {
+                        Log.runtime(TAG, "安心豆🫘浏览重试发奖[$orderKey]")
+                    }
+                }
+            }
+        } catch (t: Throwable) {
+            Log.printStackTrace(TAG, "processAllBeanBrowseTasks err:", t)
+        }
+    }
+
+    /**
+     * 签到浮窗 V2: 查询并触发签到浮窗
+     */
+    private suspend fun doSignFloatingBall() = CoroutineUtils.run {
+        try {
+            val resp = AntMemberRpcCall.querySignFloatingBall()
+            val jo = JSONObject(resp)
+            if (!ResChecker.checkRes(TAG, jo)) return@run
+            val templateId = jo.optJSONObject("data")?.optString("templateId", "") ?: ""
+            if (templateId.isNotEmpty()) {
+                delay(500)
+                val triggerResp = AntMemberRpcCall.triggerSignFloatingBall("signInBall", templateId)
+                val triggerJo = JSONObject(triggerResp)
+                if (ResChecker.checkRes(TAG, triggerJo)) {
+                    Log.runtime(TAG, "会员签到🎖️V2浮窗触发成功")
+                    // 浮窗广告任务
+                    delay(500)
+                    val adResp = AntMemberRpcCall.querySignFloatingBallAdTask(templateId)
+                    val adJo = JSONObject(adResp)
+                    if (ResChecker.checkRes(TAG, adJo)) {
+                        Log.runtime(TAG, "会员签到🎖️V2浮窗广告任务已查询")
+                    }
+                }
+            }
+        } catch (t: Throwable) {
+            Log.printStackTrace(TAG, "doSignFloatingBall err:", t)
+        }
+    }
+
+    /**
+     * 查询游戏中心入口
+     */
+    private fun doQueryGameEntrance() {
+        try {
+            val resp = AntMemberRpcCall.queryGameEntranceInfo()
+            val jo = JSONObject(resp)
+            if (ResChecker.checkRes(TAG, jo)) {
+                val hasGame = jo.optJSONObject("data")?.optBoolean("hasGameEntrance", false) ?: false
+                if (hasGame) {
+                    //Log.runtime(TAG, "会员🎮V2游戏中心入口可用")
+                }
+            }
+        } catch (t: Throwable) {
+            Log.printStackTrace(TAG, "doQueryGameEntrance err:", t)
+        }
     }
 
     private fun beanExchangeBubbleBoost() {
         try {
             // 检查RPC调用是否可用
             try {
-                val accountInfo = AntMemberRpcCall.queryUserAccountInfo("INS_BLUE_BEAN")
+                val accountInfo = AntMemberRpcCall.queryUserAccountInfo()
 
                 var jo = JSONObject(accountInfo)
                 if (!ResChecker.checkRes(TAG, jo)) {
@@ -2200,8 +2418,8 @@ class AntMember : ModelTask() {
                         val alchemyJo = JSONObject(alchemyRes)
                         attemptCount++
 
-                        // 每10轮查一次体力状态，耗尽（EXHAUSTED）就用药水/做任务恢复
-                        if (attemptCount % 10 == 0) {
+                        // 每5轮查一次体力状态，耗尽（EXHAUSTED）就用药水/做任务恢复
+                        if (attemptCount % 5 == 0) {
                             try {
                                 val checkJo = JSONObject(AntMemberRpcCall.Zmxy.Alchemy.alchemyQueryHome())
                                 val checkData = checkJo.optJSONObject("data")

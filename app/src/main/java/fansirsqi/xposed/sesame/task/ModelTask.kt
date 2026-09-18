@@ -2,6 +2,7 @@ package fansirsqi.xposed.sesame.task
 
 import android.annotation.SuppressLint
 import fansirsqi.xposed.sesame.hook.keepalive.SmartSchedulerManager
+import fansirsqi.xposed.sesame.hook.scheduler.TaskScheduler
 import fansirsqi.xposed.sesame.model.BaseModel
 import fansirsqi.xposed.sesame.model.Model
 import fansirsqi.xposed.sesame.model.ModelFields
@@ -17,6 +18,7 @@ import kotlinx.coroutines.sync.withLock
 import lombok.Setter
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.AtomicReference
 
 /**
  * 基于协程的抽象任务模型类
@@ -217,9 +219,14 @@ abstract class ModelTask : Model() {
      * }, System.currentTimeMillis() + 3000))
      * ```
      *
-     * @return 始终返回true
+     * @return 任务已被用户停止时返回 false，否则返回 true
      */
     fun addChildTask(childTask: ChildModelTask): Boolean {
+        // 停止状态下拒绝新增子任务，防止已停止/取消的任务通过子任务复活
+        if (TaskScheduler.isStopped()) {
+            Log.runtime(TAG, "⏸ 任务已被用户停止，拒绝添加子任务: ${childTask.id}")
+            return false
+        }
         ensureTaskScope()
         taskScope!!.launch(start = CoroutineStart.UNDISPATCHED) {
             addChildTaskSuspend(childTask)
@@ -236,6 +243,12 @@ abstract class ModelTask : Model() {
         force: Boolean = false,
         rounds: Int = 1
     ): Job {
+        // 统一停止闸门：停止状态下拒绝任何任务启动（堵住 stopAllTask 与主任务线程
+        // 并发执行时 startAllTask 晚到重建 taskScope 的竞态窗口）
+        if (TaskScheduler.isStopped()) {
+            Log.runtime(TAG, "⏸ 任务已被用户停止，拒绝启动: ${getName()}")
+            return Job() // 返回已完成的 Job，表示不会执行
+        }
         ensureTaskScope()
 
         return taskScope!!.launch {
@@ -306,24 +319,74 @@ abstract class ModelTask : Model() {
 
     /**
      * 顺序执行
-     * 使用 runInterruptible + runBlocking 桥接，确保阻塞的 run() 在协程取消时能被线程中断终止。
-     * run() 是 suspend 函数，runInterruptible 只接收非 suspend lambda，必须用 runBlocking 桥接。
-     * 取消时 runInterruptible 会中断执行线程，runBlocking 内的阻塞 IO 收到 InterruptedException 立即终止。
+     *
+     * run() 在独立协程（独立 SupervisorJob，不阻塞本协程的取消响应）中于 IO 线程执行：
+     * - Kotlin 协程型任务：取消信号通过 job.cancel() 原生传播，delay 等挂起点立即生效；
+     * - 阻塞型 Java 任务：取消时持续反复中断其执行线程——任务代码普遍会吞掉
+     *   InterruptedException 并清除中断标志，单次中断无法保证任务停止。
      */
     private suspend fun executeSequential(round: Int, stats: TaskExecutionStats) {
         stats.recordTaskStart("${getName()}-Round$round")
+
+        val workerThread = AtomicReference<Thread?>(null)
+        val outcome = CompletableDeferred<Throwable?>()
+        // 独立 SupervisorJob：不挂在当前协程下，避免当前协程完成时被未退出的子任务卡住；
+        // 取消时由本方法显式 cancel() 并配合持续中断强制终止
+        val childJob = SupervisorJob()
+
         try {
-            runInterruptible(Dispatchers.IO) {
-                runBlocking { run() }
+            CoroutineScope(Dispatchers.IO + childJob).launch {
+                workerThread.set(Thread.currentThread())
+                try {
+                    run()
+                    outcome.complete(null)
+                } catch (e: CancellationException) {
+                    outcome.complete(e)
+                } catch (t: Throwable) {
+                    outcome.complete(t)
+                }
             }
-            stats.recordTaskEnd("${getName()}-Round$round", true)
-        } catch (_: CancellationException) {
-            // 本轮被取消（协程取消或线程中断），记录为跳过而非失败
+
+            when (val error = outcome.await()) {
+                null -> stats.recordTaskEnd("${getName()}-Round$round", true)
+                is CancellationException -> throw error
+                else -> {
+                    stats.recordTaskEnd("${getName()}-Round$round", false)
+                    throw error
+                }
+            }
+        } catch (e: CancellationException) {
+            // 本轮被取消（用户停止或协程取消），记录为跳过而非失败
             stats.recordSkipped("${getName()}-Round$round")
             Log.runtime(TAG, "任务本轮被取消: ${getName()}-Round$round")
-        } catch (e: Exception) {
+            // 先向 run() 子协程发取消信号（产生第一次中断），再持续中断直至线程退出
+            childJob.cancel()
+            withContext(NonCancellable) {
+                forceStopWorker(workerThread.get())
+            }
+            throw CancellationException("任务已停止: ${getName()}")
+        } catch (e: Throwable) {
             stats.recordTaskEnd("${getName()}-Round$round", false)
             throw e
+        } finally {
+            childJob.cancel()
+        }
+    }
+
+    /**
+     * 强制停止任务执行线程：反复中断直到线程退出。
+     * 每次中断都会让任务体内后续的 Thread.sleep/阻塞调用抛出 InterruptedException，
+     * 即使任务吞掉某次中断，也无法跨过下一次中断继续推进。
+     */
+    private suspend fun forceStopWorker(worker: Thread?) {
+        if (worker == null || !worker.isAlive) return
+        val deadline = System.currentTimeMillis() + FORCE_STOP_TIMEOUT_MS
+        while (worker.isAlive && System.currentTimeMillis() < deadline) {
+            worker.interrupt()
+            delay(CANCEL_CHECK_INTERVAL_MS)
+        }
+        if (worker.isAlive) {
+            Log.runtime(TAG, "⚠ 任务线程持续未响应中断，剩余部分将随该线程自行结束: ${getName()}")
         }
     }
 
@@ -597,6 +660,12 @@ abstract class ModelTask : Model() {
         /** 日志标签 */
         private const val TAG = "ModelTask"
 
+        /** 取消检查/中断重试间隔（毫秒） */
+        private const val CANCEL_CHECK_INTERVAL_MS = 200L
+
+        /** 强制停止工作线程的最长等待时间（毫秒） */
+        private const val FORCE_STOP_TIMEOUT_MS = 10_000L
+
         /** 全局任务管理器协程作用域 */
         private val globalTaskScope = CoroutineScope(
             Dispatchers.Default + SupervisorJob() + CoroutineName("GlobalTaskManager")
@@ -636,6 +705,12 @@ abstract class ModelTask : Model() {
 
                     for (model in modelArray) {
                         currentCoroutineContext().ensureActive()
+
+                        // 停止闸门：批量启动过程中收到停止信号则立即终止，不再启动后续模块
+                        if (TaskScheduler.isStopped()) {
+                            Log.runtime(TAG, "⏸ 任务已被用户停止，终止批量启动")
+                            return@launch
+                        }
 
                         if (model !is ModelTask) {
                             continue

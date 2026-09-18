@@ -84,9 +84,6 @@ public class BaseModel extends Model {
 
     @Getter
     public static final IntegerModelField setMaxErrorCount = new IntegerModelField("setMaxErrorCount", "异常次数阈值", 8);
-    // 新接口已固定为默认，不再需要开关
-    //@Getter
-    //public static final BooleanModelField newRpc = new BooleanModelField("newRpc", "使用新接口(最低支持v10.3.96.8100)", true);
     /**
      * 是否开启抓包调试模式
      */
@@ -98,13 +95,6 @@ public class BaseModel extends Model {
      */
     @Getter
     public static final BooleanModelField enableHttpCapture = new BooleanModelField("enableHttpCapture", "开启网络抓包(HTTP/HTTPS)", false);
-
-    /**
-     * 抓包黑名单 (关键词排除)
-     */
-    @Getter
-    public static final StringModelField httpCaptureFilter = new StringModelField("httpCaptureFilter", "抓包黑名单(关键词逗号分隔)", "log.alipay.com,mdap.alipay.com,diagnose.alipay.com,alipay.client.executerpc,alipay.client.interfere.config.get,alipay.client.getDynamicBundle,alipay.client.getUnionResource");
-
 
     /**
      * 是否自动获取token
@@ -231,12 +221,10 @@ public class BaseModel extends Model {
         modelFields.addField(waitWhenException);//异常发生时的等待时间
         modelFields.addField(errNotify);//异常通知开关
 //        modelFields.addField(setMaxErrorCount);//异常次数阈值
-//        modelFields.addField(newRpc);//是否启用新接口(已固定)
         modelFields.addField(debugMode);//是否开启抓包调试模式
         modelFields.addField(autoTokenEnabled);//是否自动获取token
         modelFields.addField(enableSkinModule);//是否启用皮肤模块
         modelFields.addField(enableHttpCapture);//是否启用http网络请求抓包
-        modelFields.addField(httpCaptureFilter); //抓包黑名单
         modelFields.addField(sendHookData);//启用Hook数据转发
         modelFields.addField(sendHookDataUrl);//Hook数据转发地址
         modelFields.addField(batteryPerm);//是否申请支付宝的后台运行权限

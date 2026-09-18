@@ -1,11 +1,8 @@
 package fansirsqi.xposed.sesame.hook.network
 
 import de.robv.android.xposed.XC_MethodHook
-import de.robv.android.xposed.XposedBridge
 import de.robv.android.xposed.XposedHelpers
-import fansirsqi.xposed.sesame.model.BaseModel
-import fansirsqi.xposed.sesame.util.DataStore
-import fansirsqi.xposed.sesame.util.Log
+import fansirsqi.xposed.sesame.util.CaptureFilter
 import java.lang.reflect.Method
 import java.net.HttpURLConnection
 import java.net.URL
@@ -33,15 +30,6 @@ object NetworkHook {
         hookAlipayRpc(classLoader)
     }
 
-    private fun getFilterKeywords(): String {
-        return try {
-            val filter = DataStore.get("httpCaptureFilter", String::class.java)
-            if (!filter.isNullOrBlank()) filter else BaseModel.httpCaptureFilter.value
-        } catch (_: Throwable) {
-            BaseModel.httpCaptureFilter.value
-        }
-    }
-
     private fun hookHttpURLConnection() {
         try {
             XposedHelpers.findAndHookMethod(URL::class.java, "openConnection", object : XC_MethodHook() {
@@ -50,15 +38,10 @@ object NetworkHook {
                     val url = conn.url.toString()
                     val host = try { java.net.URI(url).host ?: "" } catch (e: Exception) { "" }
 
-                    // --- 动态域名过滤 ---
-                    val filterKeywords = getFilterKeywords()
-                    if (!filterKeywords.isNullOrBlank()) {
-                        val keywords = filterKeywords.split(",").map { it.trim() }.filter { it.isNotEmpty() }
-                        val match = keywords.find { host.contains(it, ignoreCase = true) || url.contains(it, ignoreCase = true) }
-                        if (match != null) {
-                            //命中黑名单
-                            return
-                        }
+                    // --- 动态域名过滤（内置噪音 + 用户关键词） ---
+                    if (CaptureFilter.isFiltered(url) || CaptureFilter.isFiltered(host)) {
+                        // 命中黑名单
+                        return
                     }
 
                     // 在连接对象上动态添加 Hook
@@ -105,14 +88,10 @@ object NetworkHook {
                     if (opType.isNotEmpty()) {
                         XposedHelpers.setAdditionalInstanceField(param, "opType", opType)
                         
-                        // --- 动态过滤 (RPC 链路) ---
-                        val filterKeywords = getFilterKeywords()
-                        if (!filterKeywords.isNullOrBlank()) {
-                            val keywords = filterKeywords.split(",").map { it.trim() }.filter { it.isNotEmpty() }
-                            if (keywords.any { opType.contains(it, ignoreCase = true) }) {
-                                XposedHelpers.setAdditionalInstanceField(param, "rpc_skip", true)
-                                return
-                            }
+                        // --- 动态过滤（RPC 链路，内置噪音 + 用户关键词） ---
+                        if (CaptureFilter.isFiltered(opType)) {
+                            XposedHelpers.setAdditionalInstanceField(param, "rpc_skip", true)
+                            return
                         }
                     }
                 }

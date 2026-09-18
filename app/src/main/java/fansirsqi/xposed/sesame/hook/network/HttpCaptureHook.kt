@@ -6,7 +6,7 @@ import de.robv.android.xposed.XposedBridge
 import de.robv.android.xposed.XposedHelpers
 import fansirsqi.xposed.sesame.hook.network.model.CaptureRecord
 import fansirsqi.xposed.sesame.model.BaseModel
-import fansirsqi.xposed.sesame.util.DataStore
+import fansirsqi.xposed.sesame.util.CaptureFilter
 import fansirsqi.xposed.sesame.util.Files
 import fansirsqi.xposed.sesame.util.Log
 import fansirsqi.xposed.sesame.util.NetworkUtils
@@ -413,18 +413,9 @@ object HttpCaptureHook {
             val host = try { java.net.URI(url).host ?: "" } catch (_: Throwable) { "" }
             val opType = reqHeadersMap["Operation-Type"] ?: reqHeadersMap["operation-type"] ?: ""
             
-            val filterKeywords = getFilterKeywords()
-            if (!filterKeywords.isNullOrBlank()) {
-                val keywords = filterKeywords.split(",").map { it.trim() }.filter { it.isNotEmpty() }
-                val urlLower = url.lowercase()
-                val hostLower = host.lowercase()
-                val opTypeLower = opType.lowercase()
-                if (keywords.any { kw ->
-                    val kwLower = kw.lowercase()
-                    urlLower.contains(kwLower) || hostLower.contains(kwLower) || opTypeLower.contains(kwLower)
-                }) {
-                    return
-                }
+            // --- 过滤（内置噪音 + 用户关键词） ---
+            if (CaptureFilter.isFiltered(url) || CaptureFilter.isFiltered(host) || CaptureFilter.isFiltered(opType)) {
+                return
             }
 
             val method = XposedHelpers.callMethod(request, "method").toString()
@@ -490,18 +481,9 @@ object HttpCaptureHook {
             val headers = try { connection.requestProperties.mapValues { it.value.joinToString(", ") } } catch (_: Exception) { emptyMap() }
             val opType = headers["Operation-Type"] ?: headers["operation-type"] ?: ""
             
-            val filterKeywords = getFilterKeywords()
-            if (!filterKeywords.isNullOrBlank()) {
-                val keywords = filterKeywords.split(",").map { it.trim() }.filter { it.isNotEmpty() }
-                val urlLower = url.lowercase()
-                val hostLower = host.lowercase()
-                val opTypeLower = opType.lowercase()
-                if (keywords.any { kw ->
-                    val kwLower = kw.lowercase()
-                    urlLower.contains(kwLower) || hostLower.contains(kwLower) || opTypeLower.contains(kwLower)
-                }) {
-                    return
-                }
+            // --- 过滤（内置噪音 + 用户关键词） ---
+            if (CaptureFilter.isFiltered(url) || CaptureFilter.isFiltered(host) || CaptureFilter.isFiltered(opType)) {
+                return
             }
 
             val id = XposedHelpers.getAdditionalInstanceField(connection, "capture_id") as? String ?: UUID.randomUUID().toString().also { XposedHelpers.setAdditionalInstanceField(connection, "capture_id", it) }
@@ -544,18 +526,9 @@ object HttpCaptureHook {
             val host = try { java.net.URI(url).host ?: "" } catch (_: Throwable) { "" }
             val opType = reqHeaders["Operation-Type"] ?: reqHeaders["operation-type"] ?: ""
             
-            val filterKeywords = getFilterKeywords()
-            if (!filterKeywords.isNullOrBlank()) {
-                val keywords = filterKeywords.split(",").map { it.trim() }.filter { it.isNotEmpty() }
-                val urlLower = url.lowercase()
-                val hostLower = host.lowercase()
-                val opTypeLower = opType.lowercase()
-                if (keywords.any { kw ->
-                    val kwLower = kw.lowercase()
-                    urlLower.contains(kwLower) || hostLower.contains(kwLower) || opTypeLower.contains(kwLower)
-                }) {
-                    return
-                }
+            // --- 过滤（内置噪音 + 用户关键词） ---
+            if (CaptureFilter.isFiltered(url) || CaptureFilter.isFiltered(host) || CaptureFilter.isFiltered(opType)) {
+                return
             }
 
             val methodAttr = methodCache["req_method"] ?: listOf("getRequestMethod", "getMethod").firstOrNull { name -> try { XposedHelpers.callMethod(request, name); true } catch (_: Throwable) { false } }?.also { methodCache["req_method"] = it }
@@ -719,32 +692,17 @@ object HttpCaptureHook {
         }
     }
 
-    private fun getFilterKeywords(): String {
-        return try {
-            val filter = DataStore.get("httpCaptureFilter", String::class.java)
-            if (!filter.isNullOrBlank()) filter else BaseModel.httpCaptureFilter.value
-        } catch (_: Throwable) {
-            BaseModel.httpCaptureFilter.value
-        }
-    }
-
     private fun isBlacklisted(record: CaptureRecord): Boolean {
-        try {
-            val filterKeywords = getFilterKeywords()
-            if (!filterKeywords.isNullOrBlank()) {
-                val keywords = filterKeywords.split(",").map { it.trim() }.filter { it.isNotEmpty() }
-                val urlLower = record.url.lowercase()
-                val hostLower = record.host.lowercase()
-                val opTypeLower = (record.requestHeaders["Operation-Type"] 
-                    ?: record.requestHeaders["operation-type"] 
-                    ?: "").lowercase()
-                return keywords.any { kw ->
-                    val kwLower = kw.lowercase()
-                    urlLower.contains(kwLower) || hostLower.contains(kwLower) || opTypeLower.contains(kwLower)
-                }
-            }
-        } catch (_: Throwable) {}
-        return false
+        return try {
+            val opType = record.requestHeaders["Operation-Type"]
+                ?: record.requestHeaders["operation-type"]
+                ?: ""
+            CaptureFilter.isFiltered(record.url)
+                || CaptureFilter.isFiltered(record.host)
+                || CaptureFilter.isFiltered(opType)
+        } catch (_: Throwable) {
+            false
+        }
     }
 
     private fun dispatchRecordDirect(record: CaptureRecord, skipSave: Boolean) {

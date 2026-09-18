@@ -3,15 +3,12 @@ package fansirsqi.xposed.sesame.task.otherTask2;
 import android.annotation.SuppressLint;
 
 import org.json.JSONArray;
-import org.json.JSONException;
 import org.json.JSONObject;
-
 import java.text.SimpleDateFormat;
 import java.util.Locale;
 import java.util.function.Supplier;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.locks.ReentrantLock;
-
 import fansirsqi.xposed.sesame.data.Status;
 import fansirsqi.xposed.sesame.hook.RequestManager;
 import fansirsqi.xposed.sesame.task.otherTask.BaseCommTask;
@@ -19,7 +16,6 @@ import fansirsqi.xposed.sesame.task.otherTask.CompletedKeyEnum;
 import fansirsqi.xposed.sesame.util.GlobalThreadPools;
 import fansirsqi.xposed.sesame.util.JsonUtil;
 import fansirsqi.xposed.sesame.util.Log;
-import fansirsqi.xposed.sesame.util.Notify;
 import fansirsqi.xposed.sesame.util.RandomUtil;
 import fansirsqi.xposed.sesame.util.TimeUtil;
 
@@ -29,8 +25,8 @@ public class MemberNew extends BaseCommTask {
     private static final String SUCCESS = "success";
     private static final int MAX_RETRY_TIMES = 3;
     private static final int MAX_EXECUTE_ATTEMPTS = 3;
-    private static final long COOLDOWN_ERROR_MS = 1 * 60 * 60 * 1000; // 1小时冷却（任务为空或1009错误）
-    private static final long COOLDOWN_SUCCESS_MS = 30 * 60 * 1000; // 30分钟冷却（有任务完成）
+    private static final long COOLDOWN_ERROR_MS = 3 * 60 * 60 * 1000; // 3小时冷却（任务为空或1009错误）
+    private static final long COOLDOWN_SUCCESS_MS =  2 * 60 * 60 * 1000; // 2小时冷却（有任务完成）
     private static final String MEMBER_EXECUTION_COOLDOWN_FLAG = "MemberNew_LastExecution";
     
     // 任务执行状态标记
@@ -70,8 +66,8 @@ public class MemberNew extends BaseCommTask {
             resultDesc.contains("人气太旺") || resultDesc.contains("请稍后再试") ||
             response.optInt("error", 0) == 1009 || "1009".equals(errorTip)) {
             hasError1009 = true;
-            Log.error(TAG, "服务器限流，设置会员冷却2小时");
-            Status.setTemporaryStatusWithExpiry("MemberNew_1009", 2 * 60 * 60 * 1000);
+            Log.error(TAG, "服务器限流，设置会员冷却3小时");
+            Status.setTemporaryStatusWithExpiry("MemberNew_1009", 3 * 60 * 60 * 1000);
             return true;
         }
         return false;
@@ -85,8 +81,8 @@ public class MemberNew extends BaseCommTask {
         if (errorMessage.contains("人气太旺") || errorMessage.contains("请稍后再试") ||
             resultDesc.contains("人气太旺") || resultDesc.contains("请稍后再试") ||
             response.optInt("error", 0) == 1009 || "1009".equals(errorTip)) {
-            Log.error(TAG, "宝箱服务器限流，设置宝箱冷却2小时");
-            Status.setTemporaryStatusWithExpiry("MemberNew_Box_1009", 2 * 60 * 60 * 1000);
+            Log.error(TAG, "宝箱服务器限流，设置宝箱冷却3小时");
+            Status.setTemporaryStatusWithExpiry("MemberNew_Box_1009", 3 * 60 * 60 * 1000);
             return true;
         }
         return false;
@@ -163,7 +159,7 @@ public class MemberNew extends BaseCommTask {
             }
 
         } catch (Throwable th) {
-            if (th instanceof java.util.concurrent.CancellationException || th instanceof InterruptedException || (th.getCause() instanceof InterruptedException)) {
+            if (th instanceof java.util.concurrent.CancellationException || th.getCause() instanceof InterruptedException) {
                 Log.runtime(TAG, "会员积分任务已停止运行");
             } else {
                 Log.error(TAG, "任务执行异常: " + th.getMessage());
@@ -189,6 +185,7 @@ public class MemberNew extends BaseCommTask {
             @SuppressWarnings("unchecked")
             Supplier<String>[] initTasks = new Supplier[] {
                 () -> AntMemberRpcCall.PlayConsultFacadeConsult(), // 1. 签到页初始化
+                () -> AntMemberRpcCall.queryMemberInfo(),         // 1.1 查询会员信息
                 () -> AntMemberRpcCall.queryVajraPositionCarouselMessage(), // 2. 轮播消息
                 () -> AntMemberRpcCall.queryVajraPositionCarouselMessageNew(), // 3. 金刚位信息
                 () -> AntMemberRpcCall.commonTransFatigue(), // 4. 疲劳度查询
@@ -263,7 +260,7 @@ public class MemberNew extends BaseCommTask {
     private void handleTaskListsSafe() {
         try {
             // 签到页任务列表
-            signPageTaskListSafe();
+            //signPageTaskListSafe();
             
             if (hasError1009) return;
             
@@ -277,9 +274,9 @@ public class MemberNew extends BaseCommTask {
             TimeUtil.sleep(RandomUtil.nextInt(4000, 7000));
             
             // 会员任务列表
-//            if (!Status.hasFlagToday("memTaskListQueryFacade")) {
-//                memTaskListQueryFacadeSafe();
-//            }
+            if (!Status.hasFlagToday("memTaskListQueryFacade")) {
+                memTaskListQueryFacadeSafe();
+            }
         } catch (Exception e) {
             Log.error(TAG, "任务列表处理异常: " + e.getMessage());
         }
@@ -399,9 +396,7 @@ public class MemberNew extends BaseCommTask {
             
             // 完成广告任务
             if (!bizId.isEmpty()) {
-                JSONObject response = new JSONObject(RequestManager.requestString(
-                    "com.alipay.adtask.biz.mobilegw.service.task.finish",
-                    "[{\"bizId\":\"" + bizId + "\",\"extendInfo\":{}}]"));
+                JSONObject response = new JSONObject(AntMemberRpcCall.adTaskFinish(bizId));
                 
                 sleepRandomTime();
                 
@@ -843,8 +838,7 @@ public class MemberNew extends BaseCommTask {
                 return;
             }
             long time = System.currentTimeMillis();
-            String params = "[{\"source\":\"antmember\",\"sourcePassMap\":{\"innerSource\":\"\",\"source\":\"myTab\",\"unid\":\"\"},\"spaceCode\":\"ant_member_xlight_task\",\"switchNormal\":true,\"taskTopConfigId\":\"\"}]";
-            JSONObject requestString = new JSONObject(RequestManager.requestString("com.alipay.amic.memtask.h5.MemTaskListQueryFacade.signPageTaskList", params));
+            JSONObject requestString = new JSONObject(AntMemberRpcCall.signPageTaskList());
             if (!requestString.optBoolean("success")) {
                 Status.setFlagToday("memTaskListQueryFacade");
                 Log.error(TAG,"signPageTaskList任务列表出错❌:"+requestString);
@@ -864,8 +858,7 @@ public class MemberNew extends BaseCommTask {
                 }
                 //完成广告任务
                 if (!bizId.isEmpty()) {
-                    JSONObject requestString2 = new JSONObject(RequestManager.requestString("com.alipay.adtask.biz.mobilegw.service.task.finish",
-                            "[{\"bizId\":\"" + bizId + "\",\"extendInfo\":{}}]"));
+                    JSONObject requestString2 = new JSONObject(AntMemberRpcCall.adTaskFinish(bizId));
                     //随机休眠一段时间
                     sleepRandomTime();
                     if(requestString2.optString("errorScene").equals("3601")){
@@ -947,8 +940,7 @@ public class MemberNew extends BaseCommTask {
                 return;
             }
             
-            String params = "[{\"source\":\"antmember\",\"sourcePassMap\":{\"innerSource\":\"\",\"source\":\"myTab\",\"unid\":\"\"},\"spaceCode\":\"ant_member_xlight_task\",\"switchNormal\":true,\"taskTopConfigId\":\"\"}]";
-            JSONObject response = new JSONObject(RequestManager.requestString("com.alipay.amic.memtask.h5.MemTaskListQueryFacade.signPageTaskList", params));
+            JSONObject response = new JSONObject(AntMemberRpcCall.signPageTaskList());
             
             if (!response.optBoolean("success")) {
                 Log.error(TAG, "会员任务列表请求失败: " + response);
@@ -985,9 +977,7 @@ public class MemberNew extends BaseCommTask {
                     
                     // 完成广告任务
                     if (!bizId.isEmpty()) {
-                        JSONObject taskResult = new JSONObject(RequestManager.requestString(
-                            "com.alipay.adtask.biz.mobilegw.service.task.finish",
-                            "[{\"bizId\":\"" + bizId + "\",\"extendInfo\":{}}]"));
+                        JSONObject taskResult = new JSONObject(AntMemberRpcCall.adTaskFinish(bizId));
                         
                         sleepRandomTime();
                         

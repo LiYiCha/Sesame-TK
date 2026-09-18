@@ -19,11 +19,6 @@ import fansirsqi.xposed.sesame.util.TimeUtil;
 
 /**
  * 余额宝体验金任务
- *
- * 双任务源归并执行（移植自 Sesame-AG dev AntMemberYebExpGoldWorkflow）：
- * - PROMO_TASK_LIST：com.alipay.yebpromobff.promosdk2024.task.query / task.complete / task.queryTaskByTaskId
- * - MAIN_QUERY：com.alipay.yebscenebff.needle.yebExpGold.queryMain / promosdk.index.forward（固定 appletId）
- * 同一任务按标题指纹归并成组，执行动作时 PROMO 源优先；执行后按源回查任务状态确认领取。
  */
 public class YebExpGold extends BaseCommTask {
     private static final String TAG = "余额宝体验金🌭";
@@ -37,7 +32,7 @@ public class YebExpGold extends BaseCommTask {
     private static final String CH_INFO = "ch_url-https://render.alipay.com/p/yuyan/180020010001282160/index.html";
     /** queryMain 任务策略 */
     private static final String TASK_STRATEGY_CODE = "YEB_TRIAL_ASSET_TASK_BLOCK_REC";
-    /** 兑换活动参数（对齐 Sesame-AG dev 成功兑换抓包，活动参数固定） */
+    /** 兑换活动参数 */
     private static final String EXCHANGE_CAMP_ID = "CP152735172";
     private static final String EXCHANGE_PRIZE_ID = "PZ1144215101";
 
@@ -46,6 +41,7 @@ public class YebExpGold extends BaseCommTask {
 
     private static final String FLAG_SIGN = "yebExpGold::sign";
     private static final String FLAG_EXCHANGE = "yebExpGold::exchange";
+    private static final String FLAG_VOUCHER = "yebExpGold::voucherConvertDone";
     private static final String FLAG_TASK_PREFIX = "yebExpGold::task:";
 
     private int executeIntervalInt;
@@ -56,12 +52,14 @@ public class YebExpGold extends BaseCommTask {
         final String title;
         final String source;
         final JSONObject task;
+        final String fingerprint; // title|link|prizeIds 指纹
 
-        TaskEntry(String taskId, String title, String source, JSONObject task) {
+        TaskEntry(String taskId, String title, String source, JSONObject task, String fingerprint) {
             this.taskId = taskId;
             this.title = title;
             this.source = source;
             this.task = task;
+            this.fingerprint = fingerprint;
         }
     }
 
@@ -77,33 +75,57 @@ public class YebExpGold extends BaseCommTask {
             return;
         }
         try {
-            // 1. 券凭证：查询 → 转换 → 兑换 → 激活
-            handleCertVoucherFlow();
+            boolean handledTask = false;
+            List<String> manualTaskTitles = new ArrayList<>();
 
-            // 2. 主查询
+            // ===== 第1轮：主查询 → 签到 → 任务处理 =====
             JSONObject mainResponse = queryMain(false, null);
-            if (mainResponse == null) {
-                yebTrialAsset();
+            if (!isSuccess(mainResponse)) {
+                Log.system(TAG, "余额宝体验金任务查询失败: " + getErrorDesc(mainResponse));
+                // 主查询也失败时尝试凭证处理（可能只有券可用）
+                handleYebExpGoldCertVouchers();
                 return;
             }
+
             JSONObject resultData = mainResponse.optJSONObject("resultData");
             if (resultData == null) {
-                Log.system(TAG, "余额宝体验金任务查询失败: " + getErrorDesc(mainResponse));
-                yebTrialAsset();
+                Log.system(TAG, "余额宝体验金任务查询失败: resultData 缺失");
                 return;
             }
 
-            // 3. 签到
-            trySignIn(resultData);
+            // 签到（成功后刷新 queryMain 获取最新状态）
+            boolean signHandled = trySignIn(resultData, manualTaskTitles);
+            if (signHandled) {
+                handledTask = true;
+                JSONObject refreshed = queryMain(false, null);
+                if (isSuccess(refreshed)) {
+                    resultData = refreshed.optJSONObject("resultData");
+                }
+            }
 
-            // 4. 双源任务归并执行
-            handleTasksDualSource(resultData);
+            // 双源任务归并执行
+            handledTask = handleTasksDualSource(resultData, manualTaskTitles) || handledTask;
 
-            // 5. 余额兑换（固定活动参数 + subThreshold 门槛）
-            handleExchange(resultData);
+            // ===== 第2轮：刷新 → claimPending → 兑换 → 凭证使用 =====
+            mainResponse = queryMain(false, null);
+            if (isSuccess(mainResponse)) {
+                resultData = mainResponse.optJSONObject("resultData");
+                handledTask = claimCompleteList(resultData) || handledTask;
+                handledTask = handleExchange(resultData) || handledTask;
+                handledTask = handleYebExpGoldCertVouchers() || handledTask;
+            } else {
+                Log.system(TAG, "余额宝体验金任务刷新失败: " + getErrorDesc(mainResponse));
+            }
 
-            // 6. 激活体验金
+            // ===== 兜底：激活未激活的体验金 =====
             yebTrialAsset();
+
+            if (!handledTask && manualTaskTitles.isEmpty()) {
+                Log.other(TAG, "余额宝体验金任务: 本轮未确认任务或兑换进展");
+            }
+            if (!manualTaskTitles.isEmpty()) {
+                Log.other("余额宝体验金任务待手动完成: " + String.join("、", manualTaskTitles));
+            }
 
             // 流程正常走完后标记今日完成，避免白天轮询重复空跑与刷屏
             Status.setFlagToday(CompletedKeyEnum.YebExpGold.name());
@@ -115,7 +137,7 @@ public class YebExpGold extends BaseCommTask {
 
     // ==================== 签到 ====================
 
-    private boolean trySignIn(JSONObject resultData) {
+    private boolean trySignIn(JSONObject resultData, List<String> manualTaskTitles) {
         try {
             if (Status.hasFlagToday(FLAG_SIGN)) {
                 return false;
@@ -144,8 +166,9 @@ public class YebExpGold extends BaseCommTask {
             JSONObject signResponse = requestString(
                     "com.alipay.yebscenebff.needle.yebExpGold.signIn",
                     "\"signInPlayId\":\"" + SIGN_IN_PLAY_ID + "\"");
-            if (signResponse == null) {
-                Log.system(TAG, "余额宝体验金签到失败，请手动完成");
+            if (signResponse == null || !isSuccess(signResponse)) {
+                Log.system(TAG, "余额宝体验金签到失败: " + getErrorDesc(signResponse));
+                manualTaskTitles.add(title);
                 return false;
             }
             logSignInRewards(amount, signResponse);
@@ -185,9 +208,7 @@ public class YebExpGold extends BaseCommTask {
             if (prizeOrderList != null && prizeOrderList.length() > 0) {
                 for (int i = 0; i < prizeOrderList.length(); i++) {
                     JSONObject order = prizeOrderList.optJSONObject(i);
-                    if (order == null) {
-                        continue;
-                    }
+                    if (order == null) continue;
                     JSONObject memo = order.optJSONObject("customMemo");
                     String amount = memo == null ? "" : memo.optString("PRIZE_AMOUNT");
                     String unit = memo == null ? "" : memo.optString("PRIZE_UNIT");
@@ -213,16 +234,19 @@ public class YebExpGold extends BaseCommTask {
 
     // ==================== 双源任务 ====================
 
-    private boolean handleTasksDualSource(JSONObject resultData) {
+    private boolean handleTasksDualSource(JSONObject resultData, List<String> manualTaskTitles) {
         try {
+            // 收集手动完成任务标题（供日志输出）
+            collectManualTasks(resultData, manualTaskTitles);
+
             Map<String, List<TaskEntry>> groups = new LinkedHashMap<>();
 
             // PROMO 源：promosdk2024.task.query
             JSONObject promoResponse = requestString(
                     "com.alipay.yebpromobff.promosdk2024.task.query",
                     "\"needTriggerPrize\":false,\"playActionCode\":\"TASK_LIST_CONSULT\",\"playEntrance\":\"HYQ_TASK_LIST_ENTRANCE_2\"");
-            if (promoResponse == null) {
-                Log.system(TAG, "余额宝体验金任务列表查询失败");
+            if (promoResponse == null || !isSuccess(promoResponse)) {
+                Log.system(TAG, "余额宝体验金任务列表查询失败: " + getErrorDesc(promoResponse));
             } else {
                 JSONObject promoResult = promoResponse.optJSONObject("result");
                 JSONArray taskDetailList = promoResult == null ? null : promoResult.optJSONArray("taskDetailList");
@@ -240,17 +264,13 @@ public class YebExpGold extends BaseCommTask {
             collectTasks(resultData, groups, SOURCE_MAIN);
 
             boolean handled = false;
-            List<String> manualTitles = new ArrayList<>();
             for (List<TaskEntry> group : groups.values()) {
                 TaskEntry action = pickAction(group);
-                if (action == null || action.title.isEmpty()) {
-                    continue;
-                }
-                if (isGroupHandledToday(group)) {
-                    continue;
-                }
+                if (action == null || action.title.isEmpty()) continue;
+                if (isGroupHandledToday(group)) continue;
                 if (TaskBlacklist.isTaskInBlacklist(action.title)) {
                     Log.system(TAG, "任务在自动跳过列表(黑名单)中，跳过[" + action.title + "]");
+                    markGroupHandled(group);
                     continue;
                 }
                 String status = runStatus(action.task);
@@ -260,29 +280,50 @@ public class YebExpGold extends BaseCommTask {
                 if (tryExecuteTask(action, group, status, action.title)) {
                     handled = true;
                 } else {
-                    manualTitles.add(action.title);
+                    manualTaskTitles.add(action.title);
                     markGroupHandled(group);
                 }
-                TimeUtil.sleep((long) this.executeIntervalInt);
+                TimeUtil.sleep(500L);
             }
 
             // 领奖闭环：taskData.completeList
             handled = claimCompleteList(resultData, groups) || handled;
 
-            if (!manualTitles.isEmpty()) {
-                StringBuilder titles = new StringBuilder();
-                for (String t : manualTitles) {
-                    if (titles.length() > 0) {
-                        titles.append("、");
-                    }
-                    titles.append(t);
-                }
-                Log.other("余额宝体验金任务待手动完成: " + titles);
-            }
             return handled;
         } catch (Throwable th) {
             TimeUtil.sleep((long) this.executeIntervalInt);
             return false;
+        }
+    }
+
+    /** 收集主查询中标记为手动完成的任务标题 */
+    private static void collectManualTasks(JSONObject resultData, List<String> manualTaskTitles) {
+        if (resultData == null) return;
+        collectManualTasksRecursive(resultData, manualTaskTitles);
+    }
+
+    private static void collectManualTasksRecursive(Object node, List<String> manualTaskTitles) {
+        if (node instanceof JSONObject) {
+            JSONObject obj = (JSONObject) node;
+            String taskId = obj.optString("taskId").trim();
+            if (!taskId.isEmpty() && hasTrackableStatus(obj)) {
+                String status = runStatus(obj);
+                if (!"complete".equals(status) && !"".equals(status)) {
+                    String title = getTaskTitle(obj, taskId);
+                    if (!title.isEmpty() && !manualTaskTitles.contains(title)) {
+                        manualTaskTitles.add(title);
+                    }
+                }
+            }
+            Iterator<String> keys = obj.keys();
+            while (keys.hasNext()) {
+                collectManualTasksRecursive(obj.opt(keys.next()), manualTaskTitles);
+            }
+        } else if (node instanceof JSONArray) {
+            JSONArray arr = (JSONArray) node;
+            for (int i = 0; i < arr.length(); i++) {
+                collectManualTasksRecursive(arr.opt(i), manualTaskTitles);
+            }
         }
     }
 
@@ -301,6 +342,7 @@ public class YebExpGold extends BaseCommTask {
                 markGroupHandled(group);
                 return true;
             }
+            Log.system(TAG, "余额宝体验金任务领取失败[" + title + "]: " + getErrorDesc(response));
             return false;
         } catch (Throwable th) {
             return false;
@@ -345,14 +387,10 @@ public class YebExpGold extends BaseCommTask {
                         "com.alipay.yebpromobff.promosdk2024.task.queryTaskByTaskId",
                         "\"appName\":\"yebpromobff\",\"playActionCode\":\"TASK_STATUS_QUERY\",\"playEntrance\":\"HYQ_TASK_LIST_ENTRANCE_2\",\"taskId\":\""
                                 + entry.taskId + "\"");
-                if (response == null) {
-                    return null;
-                }
+                if (response == null || !isSuccess(response)) return null;
                 JSONObject result = response.optJSONObject("result");
                 JSONArray taskDetailList = result == null ? null : result.optJSONArray("taskDetailList");
-                if (taskDetailList == null) {
-                    return null;
-                }
+                if (taskDetailList == null) return null;
                 for (int i = 0; i < taskDetailList.length(); i++) {
                     JSONObject task = taskDetailList.optJSONObject(i);
                     if (task != null && entry.taskId.equals(task.optString("taskId").trim())) {
@@ -361,39 +399,42 @@ public class YebExpGold extends BaseCommTask {
                 }
                 return null;
             }
+            // MAIN 源
             JSONObject response = queryMain(true, entry.taskId);
-            if (response == null) {
-                return null;
-            }
+            if (response == null) return null;
             return findTaskByIdInNode(response.optJSONObject("resultData"), entry.taskId);
         } catch (Throwable th) {
             return null;
         }
     }
 
+    /** 领奖闭环：处理 queryMain 响应中已完成待领取的任务（第2轮刷新后调用） */
+    private boolean claimCompleteList(JSONObject resultData) {
+        if (resultData == null) return false;
+        Map<String, List<TaskEntry>> groups = new LinkedHashMap<>();
+        // 重新收集一次 MAIN 源任务以便归并匹配
+        collectTasks(resultData, groups, SOURCE_MAIN);
+        return claimCompleteList(resultData, groups);
+    }
+
     /** 领奖闭环：处理 queryMain 响应中已完成待领取的任务 */
     private boolean claimCompleteList(JSONObject resultData, Map<String, List<TaskEntry>> groups) {
+        if (resultData == null) return false;
         try {
             JSONObject taskData = resultData.optJSONObject("taskData");
             JSONArray completeList = taskData == null ? null : taskData.optJSONArray("completeList");
-            if (completeList == null) {
-                return false;
-            }
+            if (completeList == null) return false;
             boolean claimed = false;
             for (int i = 0; i < completeList.length(); i++) {
                 JSONObject rewardItem = completeList.optJSONObject(i);
-                if (rewardItem == null) {
-                    continue;
-                }
+                if (rewardItem == null) continue;
                 String rawTaskId = rewardItem.optString("taskId").trim();
-                if (rawTaskId.isEmpty()) {
-                    continue;
-                }
+                if (rawTaskId.isEmpty()) continue;
+
+                String title = getCompletedTitle(rewardItem, null, rawTaskId);
                 List<TaskEntry> group = findGroupForRewardItem(rawTaskId, rewardItem, groups);
-                if (group != null && isGroupHandledToday(group)) {
-                    continue;
-                }
-                String title = getCompletedTitle(rewardItem, group, rawTaskId);
+
+                if (group != null && isGroupHandledToday(group)) continue;
                 if (TaskBlacklist.isTaskInBlacklist(title)) {
                     Log.system(TAG, "任务在自动跳过列表(黑名单)中，跳过[" + title + "]");
                     continue;
@@ -424,7 +465,7 @@ public class YebExpGold extends BaseCommTask {
                     claimed = true;
                 } else {
                     JSONObject verified = queryTaskByEntry(new TaskEntry(actionTaskId, title,
-                            action != null ? action.source : SOURCE_MAIN, null));
+                            action != null ? action.source : SOURCE_MAIN, null, ""));
                     if (verified != null && isTaskReceived(verified)) {
                         Log.other("余额宝体验金🍿[" + title + "]已完成");
                         if (group != null) {
@@ -450,9 +491,9 @@ public class YebExpGold extends BaseCommTask {
     /** 余额兑换 + 激活（固定活动参数，subThreshold 门槛判断） */
     private boolean handleExchange(JSONObject resultData) {
         try {
-            if (Status.hasFlagToday(FLAG_EXCHANGE)) {
-                return false;
-            }
+            if (Status.hasFlagToday(FLAG_EXCHANGE)) return false;
+            if (resultData == null) return false;
+
             String balanceText = resultData.optString("balance");
             double balance;
             try {
@@ -501,12 +542,8 @@ public class YebExpGold extends BaseCommTask {
             String confirmDate = activeResponse.optString("confirmDate");
             String profitDate = activeResponse.optString("profitDate");
             StringBuilder extra = new StringBuilder();
-            if (!confirmDate.isEmpty()) {
-                extra.append("[确认:").append(confirmDate).append("]");
-            }
-            if (!profitDate.isEmpty()) {
-                extra.append("[收益:").append(profitDate).append("]");
-            }
+            if (!confirmDate.isEmpty()) extra.append("[确认:").append(confirmDate).append("]");
+            if (!profitDate.isEmpty()) extra.append("[收益:").append(profitDate).append("]");
             Log.other("余额宝体验金💰[兑换激活]#" + amountText + "元" + extra);
             Status.setFlagToday(FLAG_EXCHANGE);
             return true;
@@ -516,96 +553,148 @@ public class YebExpGold extends BaseCommTask {
         }
     }
 
-    // ==================== 券凭证（保留原有链路，兑换参数对齐新活动） ====================
-
-    private boolean handleCertVoucherFlow() {
+    /**
+     * 余额宝体验金凭证自动使用，while 循环持续转换所有待使用凭证，
+     * 每次转换后回查验证库存真的减少，防止服务端假成功导致白跑。
+     */
+    private boolean handleYebExpGoldCertVouchers() {
         try {
-            // 1. 查询可用体验金凭证
-            JSONObject queryRes = requestString("alipay.yebprod.query.queryYebTrialCertVoucher",
+            if (Status.hasFlagToday(FLAG_VOUCHER)) return false;
+
+            // 1. 查询当前可用凭证数量
+            JSONObject queryResponse = requestString(
+                    "alipay.yebprod.query.queryYebTrialCertVoucher",
                     "\"component\":\"PROMO_ACTIVITY\",\"sortType\":\"drawTime\",\"source\":\"QIANAPP\"," +
                             "\"voucherTemplateIdList\":[\"202312260007300180780087H5IR\",\"2026011300073001807800H1558H\"]");
-            if (queryRes == null) return false;
-
-            JSONObject queryResult = queryRes.optJSONObject("result");
-            JSONArray equityList = queryResult == null ? null : queryResult.optJSONArray("equityList");
-            if (equityList == null || equityList.length() == 0) return false;
-
-            boolean hasCanUse = false;
-            for (int i = 0; i < equityList.length(); i++) {
-                if ("CAN_USE".equalsIgnoreCase(equityList.getJSONObject(i).optString("equityStatus"))) {
-                    hasCanUse = true;
-                    break;
-                }
+            if (queryResponse == null || !isSuccess(queryResponse)) {
+                Log.system(TAG, "余额宝体验金券查询失败: " + getErrorDesc(queryResponse));
+                return false;
             }
-            if (!hasCanUse) return false;
 
-            // 2. 转换凭证
-            JSONObject convertRes = requestString("com.alipay.yebscenebff.needle.yebExpGoldVoucherConvert",
-                    "\"convertType\":\"all\",\"isShowExchangeModal\":true");
-            TimeUtil.sleep((long) this.executeIntervalInt);
-
-            // 3. 对转换结果执行兑换+激活
-            JSONArray convertResults = convertRes == null ? null : convertRes.optJSONArray("convertResults");
-            if (convertResults == null) return false;
+            Integer pendingCount = getVoucherCount(queryResponse);
+            if (pendingCount == null) {
+                Log.system(TAG, "余额宝体验金券查询缺少totalCount/certVoucherInfoList，停止当前链路");
+                return false;
+            }
+            if (pendingCount == 0) {
+                Status.setFlagToday(FLAG_VOUCHER);
+                return false;
+            }
 
             boolean handled = false;
-            for (int i = 0; i < convertResults.length(); i++) {
-                JSONObject item = convertResults.getJSONObject(i).optJSONObject("value");
-                if (item != null && item.optBoolean("success")) {
-                    double amount = item.optDouble("amount", 0);
-                    if (amount > 0) {
-                        exchange(amount);
-                        TimeUtil.sleep((long) this.executeIntervalInt);
-                        handled = true;
-                    }
+            // 2. while 循环：不断转换直到没有待使用券
+            while (pendingCount > 0) {
+                JSONObject convertResponse = requestString(
+                        "com.alipay.yebscenebff.needle.yebExpGoldVoucherConvert",
+                        "\"convertType\":\"all\",\"isShowExchangeModal\":true");
+
+                if (convertResponse == null) {
+                    Log.system(TAG, "余额宝体验金券使用请求失败");
+                    return handled;
                 }
+
+                // 判断 convertResults 中是否有 fulfilled + value.success 的结果
+                if (!isVoucherConvertSuccess(convertResponse)) {
+                    Log.system(TAG, "余额宝体验金券使用失败: " + getErrorDesc(convertResponse));
+                    return handled;
+                }
+
+                handled = true;
+                String rewardText = getVoucherConvertText(convertResponse);
+                Log.other("余额宝体验金💰[券自动使用]#" + (rewardText.isEmpty() ? "成功" : rewardText));
+
+                // 3. 支持服务端返回的 delayRefreshTime 延迟
+                long delayRefreshTime = convertResponse.optLong("delayRefreshTime", 0L);
+                if (delayRefreshTime > 0L) {
+                    TimeUtil.sleep(delayRefreshTime);
+                }
+
+                // 4. 回查验证：再次查询确认库存真的减少
+                queryResponse = requestString(
+                        "alipay.yebprod.query.queryYebTrialCertVoucher",
+                        "\"component\":\"PROMO_ACTIVITY\",\"sortType\":\"drawTime\",\"source\":\"QIANAPP\"," +
+                                "\"voucherTemplateIdList\":[\"202312260007300180780087H5IR\",\"2026011300073001807800H1558H\"]");
+                if (queryResponse == null || !isSuccess(queryResponse)) {
+                    Log.system(TAG, "余额宝体验金券使用后回查失败: " + getErrorDesc(queryResponse));
+                    return handled;
+                }
+                Integer remainingCount = getVoucherCount(queryResponse);
+                if (remainingCount == null) {
+                    Log.system(TAG, "余额宝体验金券使用后回查缺少totalCount/certVoucherInfoList");
+                    return handled;
+                }
+                if (remainingCount == 0) {
+                    Status.setFlagToday(FLAG_VOUCHER);
+                    return handled;
+                }
+                if (remainingCount >= pendingCount) {
+                    Log.system(TAG, "余额宝体验金券使用后库存未减少: " + pendingCount + "→" + remainingCount + "，停止当前链路");
+                    Status.setFlagToday(FLAG_VOUCHER);
+                    return handled;
+                }
+                Log.other("余额宝体验金券使用后仍有待使用券: " + remainingCount);
+                pendingCount = remainingCount;
             }
             return handled;
         } catch (Throwable th) {
-            TimeUtil.sleep((long) this.executeIntervalInt);
             return false;
         }
     }
 
-    private void exchange(double d) {
-        try {
-            String bizOrderNo = UserMap.getCurrentUid() + System.currentTimeMillis();
-            JSONObject requestString = requestString(
-                    "com.alipay.yebscenebff.expgold.index.exchange",
-                    "\"bizOrderNo\":\"" + bizOrderNo + "\",\"campId\":\"" + EXCHANGE_CAMP_ID
-                            + "\",\"exchangeAmount\":\"" + d + "\",\"prizeId\":\"" + EXCHANGE_PRIZE_ID + "\"");
-            if (requestString == null) {
-                TimeUtil.sleep((long) this.executeIntervalInt);
-                return;
+    /** 从查询响应中提取券数量：优先 totalCount，否则 certVoucherInfoList.length */
+    private static Integer getVoucherCount(JSONObject response) {
+        if (response == null) return null;
+        if (response.has("totalCount") && !response.isNull("totalCount")) {
+            try {
+                return Math.max(0, response.optInt("totalCount"));
+            } catch (Throwable ignored) {
             }
-            JSONObject result = requestString.optJSONObject("result");
-            active(result == null ? "" : result.optString("equityNo"), true);
-            TimeUtil.sleep((long) this.executeIntervalInt);
-        } catch (Throwable th) {
-            TimeUtil.sleep((long) this.executeIntervalInt);
         }
+        JSONArray list = response.optJSONArray("certVoucherInfoList");
+        return list == null ? null : list.length();
     }
 
-    private void active(String str, boolean z) throws JSONException {
-        StringBuilder stringBuilder = new StringBuilder("\"couponId\":\"");
-        stringBuilder.append(str);
-        stringBuilder.append("\",\"type\":\"YEB_TRIAL\"");
-        if (z) {
-            stringBuilder.append(",\"equityType\":\"voucher\"");
+    /** 判断券转换是否成功：convertResults 中存在 fulfilled + value.success=true 的项 */
+    private static boolean isVoucherConvertSuccess(JSONObject response) {
+        if (response == null) return false;
+        if (!isSuccess(response)) return false;
+        JSONArray convertResults = response.optJSONArray("convertResults");
+        if (convertResults == null) return false;
+        for (int i = 0; i < convertResults.length(); i++) {
+            JSONObject result = convertResults.optJSONObject(i);
+            if (result == null) continue;
+            JSONObject value = result.optJSONObject("value");
+            if ("fulfilled".equalsIgnoreCase(result.optString("status"))
+                    && value != null && value.optBoolean("success")) {
+                return true;
+            }
         }
-        JSONObject requestString = requestString("alipay.yebprod.promo.yebTrial.active", stringBuilder.toString());
-        if (requestString != null) {
-            StringBuilder logText = new StringBuilder("余额宝体验金🌭成功使用[");
-            logText.append(requestString.optJSONObject("amount") == null
-                    ? "" : requestString.optJSONObject("amount").optString("amount"));
-            logText.append("元]开始计算收益[");
-            logText.append(requestString.optString("confirmDate"));
-            logText.append("]第一笔收益到账[");
-            logText.append(requestString.optString("profitDate"));
-            logText.append("]");
-            Log.other(logText.toString());
-        }
+        return false;
     }
+
+    /** 从转换响应中提取奖励文本 */
+    private static String getVoucherConvertText(JSONObject response) {
+        if (response == null) return "";
+        JSONArray convertResults = response.optJSONArray("convertResults");
+        if (convertResults != null && convertResults.length() > 0) {
+            List<String> texts = new ArrayList<>();
+            for (int i = 0; i < convertResults.length(); i++) {
+                JSONObject result = convertResults.optJSONObject(i);
+                if (result == null) continue;
+                JSONObject value = result.optJSONObject("value");
+                if (value == null) continue;
+                String amount = value.opt("amount") == null ? "" : value.opt("amount").toString();
+                String toastView = value.optString("toastView");
+                if (!amount.isEmpty()) texts.add(amount + "元");
+                else if (!toastView.isEmpty()) texts.add(toastView);
+            }
+            if (!texts.isEmpty()) return String.join("、", texts);
+        }
+        JSONObject firstVoucher = response.optJSONObject("firstVoucher");
+        return firstVoucher == null ? "" : firstVoucher.optString("amount");
+    }
+
+    // ==================== 激活未激活体验金（兜底） ====================
 
     private void yebTrialAsset() {
         try {
@@ -629,6 +718,22 @@ public class YebExpGold extends BaseCommTask {
             TimeUtil.sleep((long) this.executeIntervalInt);
         } catch (Throwable th) {
             TimeUtil.sleep((long) this.executeIntervalInt);
+        }
+    }
+
+    private void active(String couponId, boolean withVoucherType) {
+        try {
+            StringBuilder sb = new StringBuilder();
+            sb.append("\"couponId\":\"").append(couponId).append("\",\"type\":\"YEB_TRIAL\"");
+            if (withVoucherType) sb.append(",\"equityType\":\"voucher\"");
+            JSONObject response = requestString("alipay.yebprod.promo.yebTrial.active", sb.toString());
+            if (response != null) {
+                StringBuilder logText = new StringBuilder("余额宝体验金🌭成功使用[");
+                JSONObject amountObj = response.optJSONObject("amount");
+                logText.append(amountObj == null ? "" : amountObj.optString("amount")).append("元]");
+                Log.other(logText.toString());
+            }
+        } catch (Throwable ignored) {
         }
     }
 
@@ -663,11 +768,7 @@ public class YebExpGold extends BaseCommTask {
                 return null;
             }
             JSONObject jo = new JSONObject(response);
-            if (isSuccess(jo)) {
-                return jo;
-            }
-            Log.system(TAG, "requestString err " + params);
-            return null;
+            return isSuccess(jo) ? jo : jo;
         } catch (Throwable th) {
             return null;
         }
@@ -675,9 +776,9 @@ public class YebExpGold extends BaseCommTask {
 
     // ==================== 归并辅助 ====================
 
+    /** 递归收集 MAIN 源所有带状态的任务节点 */
     private static void collectTasks(Object node, Map<String, List<TaskEntry>> groups, String source) {
-        if (node instanceof JSONObject) {
-            JSONObject obj = (JSONObject) node;
+        if (node instanceof JSONObject obj) {
             String taskId = obj.optString("taskId").trim();
             if (!taskId.isEmpty() && hasTrackableStatus(obj)) {
                 mergeTask(groups, obj, source);
@@ -686,49 +787,93 @@ public class YebExpGold extends BaseCommTask {
             while (keys.hasNext()) {
                 collectTasks(obj.opt(keys.next()), groups, source);
             }
-        } else if (node instanceof JSONArray) {
-            JSONArray arr = (JSONArray) node;
+        } else if (node instanceof JSONArray arr) {
             for (int i = 0; i < arr.length(); i++) {
                 collectTasks(arr.opt(i), groups, source);
             }
         }
     }
 
+    /**
+     * 合并任务到分组，使用 title|link|prizeIds 指纹替代纯 title
+     * 同任务多源时优先保留信息更完整的数据（评分机制）
+     */
     private static void mergeTask(Map<String, List<TaskEntry>> groups, JSONObject task, String source) {
         String taskId = task.optString("taskId").trim();
-        if (taskId.isEmpty()) {
-            return;
-        }
+        if (taskId.isEmpty()) return;
+
         String title = getTaskTitle(task, taskId);
-        String fingerprint = title.trim().replaceAll("\\s+", " ");
-        List<TaskEntry> group = groups.get(fingerprint);
-        if (group == null) {
-            group = new ArrayList<>();
-            groups.put(fingerprint, group);
-        }
-        for (TaskEntry entry : group) {
-            if (entry.taskId.equals(taskId)) {
-                return;
+        String link = getTaskLink(task);
+        String prizeKey = getPrizeIds(task);
+        String fingerprint = buildFingerprint(title, link, prizeKey);
+
+        List<TaskEntry> group = groups.computeIfAbsent(fingerprint, k -> new ArrayList<>());
+
+        // 同 taskId 已存在则替换（取评分更高的数据）
+        boolean replaced = false;
+        for (int i = 0; i < group.size(); i++) {
+            TaskEntry existing = group.get(i);
+            if (existing.taskId.equals(taskId)) {
+                if (getTaskScore(task) >= getTaskScore(existing.task)) {
+                    group.set(i, new TaskEntry(taskId, title, source, task, fingerprint));
+                }
+                replaced = true;
+                break;
             }
         }
-        group.add(new TaskEntry(taskId, title, source, task));
+        if (!replaced) {
+            group.add(new TaskEntry(taskId, title, source, task, fingerprint));
+        }
     }
 
-    /** 执行动作优先 PROMO 源，否则取组内第一个 */
+    /** 构建任务指纹：title|link|prizeId1,prizeId2 或 title|appletId */
+    private static String buildFingerprint(String title, String link, String prizeKey) {
+        String titleKey = title.trim().replaceAll("\\s+", " ");
+        if (!link.isEmpty() || !prizeKey.isEmpty()) {
+            return titleKey + "|" + link + "|" + prizeKey;
+        }
+        return titleKey;
+    }
+
+    /** 任务数据完整性评分，分越高越优 */
+    private static int getTaskScore(JSONObject task) {
+        int score = 0;
+        if (!getTaskTitle(task, "").isEmpty()) score += 4;
+        if (!getTaskLink(task).isEmpty()) score += 3;
+        if (!getButtonText(task).isEmpty()) score += 2;
+        if (!runStatus(task).isEmpty()) score += 2;
+        if (!getPrizeIds(task).isEmpty()) score += 2;
+        if (task.optJSONObject("taskExtProps") != null || task.optJSONObject("prizeData") != null) score += 1;
+        return score;
+    }
+
+    /** 执行动作优先 PROMO 源，否则取评分最高的 */
     private static TaskEntry pickAction(List<TaskEntry> group) {
+        // 优先 PROMO 源
+        TaskEntry promoEntry = null;
         for (TaskEntry entry : group) {
             if (SOURCE_PROMO.equals(entry.source)) {
-                return entry;
+                promoEntry = entry;
+                break;
             }
         }
-        return group.isEmpty() ? null : group.get(0);
+        if (promoEntry != null) return promoEntry;
+        // 否则取评分最高的
+        TaskEntry best = null;
+        int bestScore = -1;
+        for (TaskEntry entry : group) {
+            int score = getTaskScore(entry.task);
+            if (score > bestScore) {
+                bestScore = score;
+                best = entry;
+            }
+        }
+        return best;
     }
 
     private static boolean isGroupHandledToday(List<TaskEntry> group) {
         for (TaskEntry entry : group) {
-            if (Status.hasFlagToday(FLAG_TASK_PREFIX + entry.taskId)) {
-                return true;
-            }
+            if (Status.hasFlagToday(FLAG_TASK_PREFIX + entry.taskId)) return true;
         }
         return false;
     }
@@ -741,17 +886,15 @@ public class YebExpGold extends BaseCommTask {
 
     private static List<TaskEntry> findGroupForRewardItem(
             String taskId, JSONObject rewardItem, Map<String, List<TaskEntry>> groups) {
+        // 1. 按 taskId 精确匹配
         for (List<TaskEntry> group : groups.values()) {
             for (TaskEntry entry : group) {
-                if (taskId.equals(entry.taskId)) {
-                    return group;
-                }
+                if (taskId.equals(entry.taskId)) return group;
             }
         }
+        // 2. 按标题模糊匹配
         String title = getCompletedTitle(rewardItem, null, taskId);
-        if (title.isEmpty()) {
-            return null;
-        }
+        if (title.isEmpty()) return null;
         String normalized = title.trim().replaceAll("\\s+", " ");
         for (List<TaskEntry> group : groups.values()) {
             if (!group.isEmpty()
@@ -771,17 +914,13 @@ public class YebExpGold extends BaseCommTask {
             Iterator<String> keys = obj.keys();
             while (keys.hasNext()) {
                 JSONObject matched = findTaskByIdInNode(obj.opt(keys.next()), taskId);
-                if (matched != null) {
-                    return matched;
-                }
+                if (matched != null) return matched;
             }
         } else if (node instanceof JSONArray) {
             JSONArray arr = (JSONArray) node;
             for (int i = 0; i < arr.length(); i++) {
                 JSONObject matched = findTaskByIdInNode(arr.opt(i), taskId);
-                if (matched != null) {
-                    return matched;
-                }
+                if (matched != null) return matched;
             }
         }
         return null;
@@ -796,9 +935,7 @@ public class YebExpGold extends BaseCommTask {
     /** 归一化任务运行状态：complete / not_done / not_sign / sign / "" */
     private static String runStatus(JSONObject task) {
         String simplified = task.optString("simplifiedStatus").trim().toLowerCase();
-        if (!simplified.isEmpty()) {
-            return simplified;
-        }
+        if (!simplified.isEmpty()) return simplified;
         switch (task.optString("taskProcessStatus").trim().toUpperCase()) {
             case "RECEIVE_SUCCESS":
             case "HAS_RECEIVED":
@@ -829,18 +966,16 @@ public class YebExpGold extends BaseCommTask {
     }
 
     private static boolean isSuccess(JSONObject jo) {
+        if (jo == null) return false;
         return jo.optBoolean("success")
                 || "100".equals(jo.optString("resultCode"))
                 || "100000000".equals(jo.optString("code"));
     }
 
     private static boolean isActionSuccess(JSONObject response) {
-        if (isSuccess(response)) {
-            return true;
-        }
-        if (response.optInt("resultStatus", Integer.MIN_VALUE) == 1) {
-            return true;
-        }
+        if (response == null) return false;
+        if (isSuccess(response)) return true;
+        if (response.optInt("resultStatus", Integer.MIN_VALUE) == 1) return true;
         return hasSendSuccess(response);
     }
 
@@ -849,13 +984,9 @@ public class YebExpGold extends BaseCommTask {
         if (resultObjList != null) {
             for (int i = 0; i < resultObjList.length(); i++) {
                 JSONObject resultItem = resultObjList.optJSONObject(i);
-                if (resultItem == null) {
-                    continue;
-                }
+                if (resultItem == null) continue;
                 JSONArray prizeSendDetails = resultItem.optJSONArray("prizeSendDetails");
-                if (prizeSendDetails == null) {
-                    continue;
-                }
+                if (prizeSendDetails == null) continue;
                 for (int j = 0; j < prizeSendDetails.length(); j++) {
                     JSONObject detail = prizeSendDetails.optJSONObject(j);
                     if (detail != null && "SUCCESS".equalsIgnoreCase(detail.optString("sendStatus"))) {
@@ -877,7 +1008,10 @@ public class YebExpGold extends BaseCommTask {
         return false;
     }
 
+    // ==================== 任务属性提取 ====================
+
     private static String getErrorDesc(JSONObject response) {
+        if (response == null) return "null";
         String desc = response.optString("resultDesc");
         if (desc.isEmpty()) desc = response.optString("resultView");
         if (desc.isEmpty()) desc = response.optString("errorMessage");
@@ -889,93 +1023,125 @@ public class YebExpGold extends BaseCommTask {
     }
 
     private static String getTaskTitle(JSONObject task, String defaultTitle) {
+        if (task == null) return defaultTitle;
         String title = task.optString("title");
-        if (title.isEmpty()) {
-            title = task.optString("taskMainTitle");
-        }
+        if (title.isEmpty()) title = task.optString("taskMainTitle");
         if (title.isEmpty()) {
             JSONObject extProps = task.optJSONObject("taskExtProps");
-            if (extProps != null) {
-                title = extProps.optString("title");
+            if (extProps != null) title = extProps.optString("title");
+        }
+        return title.isEmpty() ? defaultTitle : title;
+    }
+
+    private static String getButtonText(JSONObject task) {
+        if (task == null) return "";
+        String text = task.optString("buttonText");
+        if (text.isEmpty()) {
+            JSONObject extProps = task.optJSONObject("taskExtProps");
+            if (extProps != null) text = extProps.optString("buttonText");
+        }
+        return text;
+    }
+
+    private static String getTaskLink(JSONObject task) {
+        if (task == null) return "";
+        String link = task.optString("link");
+        if (link.isEmpty()) link = task.optString("taskGotoUrl");
+        if (link.isEmpty()) {
+            JSONObject extProps = task.optJSONObject("taskExtProps");
+            if (extProps != null) link = extProps.optString("link");
+        }
+        return link.trim();
+    }
+
+    /** 收集任务相关的所有 prizeId，逗号分隔排序 */
+    private static String getPrizeIds(JSONObject task) {
+        if (task == null) return "";
+        List<String> ids = new ArrayList<>();
+        // prizeData.prizeBaseInfoDTO.prizeId
+        JSONObject prizeData = task.optJSONObject("prizeData");
+        if (prizeData != null) {
+            JSONObject baseInfo = prizeData.optJSONObject("prizeBaseInfoDTO");
+            if (baseInfo != null) {
+                String id = baseInfo.optString("prizeId").trim();
+                if (!id.isEmpty()) ids.add(id);
             }
         }
-        if (title.isEmpty()) {
-            title = defaultTitle;
+        // validPrizeIdList
+        JSONArray validList = task.optJSONArray("validPrizeIdList");
+        if (validList != null) {
+            for (int i = 0; i < validList.length(); i++) {
+                String id = validList.optString(i).trim();
+                if (!id.isEmpty() && !ids.contains(id)) ids.add(id);
+            }
         }
-        return title;
+        // prizeList[].prizeId
+        JSONArray prizeList = task.optJSONArray("prizeList");
+        if (prizeList != null) {
+            for (int i = 0; i < prizeList.length(); i++) {
+                JSONObject p = prizeList.optJSONObject(i);
+                if (p != null) {
+                    String id = p.optString("prizeId").trim();
+                    if (!id.isEmpty() && !ids.contains(id)) ids.add(id);
+                }
+            }
+        }
+        java.util.Collections.sort(ids);
+        return String.join(",", ids);
     }
 
     private static String getCompletedTitle(JSONObject rewardItem, List<TaskEntry> group, String defaultTitle) {
-        JSONObject ext = rewardItem.optJSONObject("ext");
-        JSONObject morpho = ext == null ? null : ext.optJSONObject("TASK_MORPHO_DETAIL");
-        if (morpho != null) {
-            String title = morpho.optString("title");
-            if (title.isEmpty()) {
-                title = morpho.optString("taskMainTitle");
-            }
-            if (!title.isEmpty()) {
-                return title;
+        if (rewardItem != null) {
+            JSONObject ext = rewardItem.optJSONObject("ext");
+            JSONObject morpho = ext == null ? null : ext.optJSONObject("TASK_MORPHO_DETAIL");
+            if (morpho != null) {
+                String title = morpho.optString("title");
+                if (title.isEmpty()) title = morpho.optString("taskMainTitle");
+                if (!title.isEmpty()) return title;
             }
         }
-        if (group != null && !group.isEmpty()) {
-            return group.get(0).title;
-        }
+        if (group != null && !group.isEmpty()) return group.get(0).title;
         return defaultTitle;
     }
 
     private static double optDouble(JSONObject jo, String key) {
-        Object v = jo == null ? null : jo.opt(key);
-        if (v instanceof Number) {
-            return ((Number) v).doubleValue();
-        }
+        if (jo == null) return 0.0d;
+        Object v = jo.opt(key);
+        if (v instanceof Number) return ((Number) v).doubleValue();
         if (v instanceof String) {
-            try {
-                return Double.parseDouble((String) v);
-            } catch (NumberFormatException ignored) {
-            }
+            try { return Double.parseDouble((String) v); } catch (NumberFormatException ignored) {}
         }
         return 0.0d;
     }
 
     private void logRewards(String title, JSONObject response) {
         try {
+            if (response == null) {
+                Log.other("余额宝体验金💰[" + title + "]");
+                return;
+            }
             JSONArray resultObjList = response.optJSONArray("resultObj");
             if (resultObjList != null && resultObjList.length() > 0) {
                 List<String> rewardNames = new ArrayList<>();
                 for (int i = 0; i < resultObjList.length(); i++) {
                     JSONObject resultItem = resultObjList.optJSONObject(i);
-                    if (resultItem == null) {
-                        continue;
-                    }
+                    if (resultItem == null) continue;
                     JSONArray prizeSendDetails = resultItem.optJSONArray("prizeSendDetails");
-                    if (prizeSendDetails == null) {
-                        continue;
-                    }
+                    if (prizeSendDetails == null) continue;
                     for (int j = 0; j < prizeSendDetails.length(); j++) {
                         JSONObject detail = prizeSendDetails.optJSONObject(j);
-                        if (detail == null) {
-                            continue;
-                        }
+                        if (detail == null) continue;
                         String prizeName = "";
                         JSONObject prizeBaseInfo = detail.optJSONObject("prizeBaseInfo");
-                        if (prizeBaseInfo != null) {
-                            prizeName = prizeBaseInfo.optString("prizeName");
-                        }
+                        if (prizeBaseInfo != null) prizeName = prizeBaseInfo.optString("prizeName");
                         if (prizeName.isEmpty()) {
                             JSONObject extInfo = detail.optJSONObject("extInfo");
                             if (extInfo != null) {
                                 prizeName = extInfo.optString("promoPrizeName");
+                                if (prizeName.isEmpty()) prizeName = extInfo.optString("title");
                             }
                         }
-                        if (prizeName.isEmpty()) {
-                            JSONObject extInfo = detail.optJSONObject("extInfo");
-                            if (extInfo != null) {
-                                prizeName = extInfo.optString("title");
-                            }
-                        }
-                        if (!prizeName.isEmpty()) {
-                            rewardNames.add(prizeName);
-                        }
+                        if (!prizeName.isEmpty()) rewardNames.add(prizeName);
                     }
                 }
                 if (!rewardNames.isEmpty()) {
@@ -990,9 +1156,7 @@ public class YebExpGold extends BaseCommTask {
             if (prizeSendOrderList != null && prizeSendOrderList.length() > 0) {
                 for (int i = 0; i < prizeSendOrderList.length(); i++) {
                     JSONObject prizeOrder = prizeSendOrderList.optJSONObject(i);
-                    if (prizeOrder == null) {
-                        continue;
-                    }
+                    if (prizeOrder == null) continue;
                     String prizeName = prizeOrder.optString("prizeName");
                     if (!prizeName.isEmpty()) {
                         Log.other("余额宝体验金💰[" + title + "]#" + prizeName);

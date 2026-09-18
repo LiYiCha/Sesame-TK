@@ -6,7 +6,7 @@ import fansirsqi.xposed.sesame.hook.network.CaptureClassifier
 import fansirsqi.xposed.sesame.hook.network.CaptureSearchEngine
 import fansirsqi.xposed.sesame.hook.network.CaptureStorage
 import fansirsqi.xposed.sesame.hook.network.model.CaptureRecord
-import fansirsqi.xposed.sesame.model.BaseModel
+import fansirsqi.xposed.sesame.util.CaptureFilter
 import fansirsqi.xposed.sesame.util.JsonUtil
 import fansirsqi.xposed.sesame.util.Log
 import kotlinx.coroutines.Dispatchers
@@ -86,7 +86,10 @@ class CaptureListViewModel : ViewModel() {
     val globalSearchResults: StateFlow<List<CaptureRecord>> = _globalSearchResults
 
     init {
-        refreshBlacklist()
+        // 首次读取可能触发旧 key 迁移（含磁盘 IO），放到 IO 线程
+        viewModelScope.launch(Dispatchers.IO) {
+            refreshBlacklist()
+        }
     }
 
     /** 展示用的过滤后列表 */
@@ -173,20 +176,14 @@ class CaptureListViewModel : ViewModel() {
     // ── 黑名单管理 ──────────────────────────
 
     private fun refreshBlacklist() {
-        val filter = BaseModel.httpCaptureFilter.value ?: ""
-        _blacklist.value = filter.split(",").map { it.trim() }.filter { it.isNotEmpty() }
+        _blacklist.value = CaptureFilter.getKeywords()
     }
 
     fun toggleBlacklist(domain: String) {
-        val current = _blacklist.value.toMutableList()
-        if (current.contains(domain)) current.remove(domain) else current.add(domain)
-        
-        val str = current.distinct().joinToString(",")
-        BaseModel.httpCaptureFilter.value = str
-        _blacklist.value = current
-        
         viewModelScope.launch(Dispatchers.IO) {
-            fansirsqi.xposed.sesame.util.DataStore.put(BaseModel.httpCaptureFilter.code, str)
+            val exists = CaptureFilter.getKeywords().any { it.equals(domain.trim(), ignoreCase = true) }
+            if (exists) CaptureFilter.remove(domain) else CaptureFilter.add(domain)
+            _blacklist.value = CaptureFilter.getKeywords()
         }
     }
 

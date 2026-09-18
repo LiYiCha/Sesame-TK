@@ -396,7 +396,7 @@ object AntOrchardRpcCall {
         }
     }
 
-    // ==================== 农场抽抽乐（移植自 Sesame-AG d2cf4c89） ====================
+    // ==================== 农场抽抽乐 ====================
 
     /** 农场抽抽乐-进入活动（返回 drawActivity.activityId / drawAsset.blance） */
     fun enterDrawActivity(activityId: String = ""): String {
@@ -486,4 +486,26 @@ object AntOrchardRpcCall {
             JSONArray().put(data).toString()
         )
     }
+
+    /** 查询动物展示信息（获取 manurePotList 用于收粪桶） */
+    fun queryAnimalShowInfo(userId: String): String =
+        RequestManager.requestString(
+            "com.alipay.antfarm.queryAnimalShowInfo",
+            "[{\"requestType\":\"NORMAL\",\"sceneCode\":\"ORCHARD\",\"source\":\"ANTORCHARD\",\"userId\":\"$userId\",\"version\":\"$VERSION\"}]"
+        )
+
+    /** 收取「庄园鸡屎/肥料」(芭芭农场肥料池) */
+    fun collectManurePot(manurePotNOs: String, source: String = "gonggexiguan"): String =
+        RequestManager.requestString(
+            "com.alipay.antfarm.collectManurePot",
+            "[{\"manurePotNOs\":\"$manurePotNOs\",\"requestType\":\"NORMAL\",\"sceneCode\":\"ORCHARD\",\"source\":\"$source\",\"version\":\"$VERSION\"}]"
+        )
+
+    /** 懒加载索引（用于查询限时福利气球 balloonCooper） */
+    fun orchardLazyIndex(currentPlantScene: String = "main", source: String = "ch_appcenter__chsub_9patch"): String =
+        RequestManager.requestString(
+            "com.alipay.antorchard.orchardLazyIndex",
+            "[{\"appMode\":\"normal\",\"currentPlantScene\":\"$currentPlantScene\",\"hasWaitExchange\":false,\"requestType\":\"NORMAL\",\"sceneCode\":\"ORCHARD\",\"source\":\"$source\",\"version\":\"$VERSION\"}]"
+        )
+
 }

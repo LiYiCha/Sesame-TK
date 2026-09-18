@@ -32,8 +32,18 @@ public class AntMemberRpcCall {
     }
 
     public static String queryMemberSigninCalendar() {
-        return RequestManager.requestString("com.alipay.amic.biz.rpc.signin.h5.queryMemberSigninCalendar",
-                "[{\"autoSignIn\":true,\"invitorUserId\":\"\",\"sceneCode\":\"QUERY\"}]");
+        try {
+            JSONObject args = new JSONObject();
+            args.put("autoSignIn", true);
+            args.put("chInfo", "memberHomePage_ch_mytab");
+            args.put("invitorUserId", "");
+            args.put("sceneCode", "QUERY");
+            args.put("sourcePassMap", buildMemberSourcePassMap());
+            return RequestManager.requestString("com.alipay.amic.biz.rpc.signin.h5.queryMemberSigninCalendar",
+                    "[" + args.toString() + "]");
+        } catch (Exception e) {
+            return "";
+        }
     }
 
     /* 商家开门打卡任务 */
@@ -196,16 +206,27 @@ public class AntMemberRpcCall {
     }
 
     public static String executeTask(String bizParam, String bizSubType, String bizType, Long taskConfigId) {
-        return RequestManager.requestString("alipay.antmember.biz.rpc.membertask.h5.executeTask",
-                "[{\"bizOutNo\":\"" + TimeUtil.getFormatDate().replaceAll("-", "") +
-                        "\",\"bizParam\":\"" + bizParam + "\",\"bizSubType\":\"" + bizSubType + "\",\"bizType\":\"" + bizType +
-                        "\",\"sourcePassMap\":{\"innerSource\":\"\",\"source\":\"myTab\",\"unid\":\"\"}" +
-                        ",\"syncProcess\":true,\"taskConfigId\":\"" + taskConfigId + "\"}]");
+        try {
+            JSONObject args = new JSONObject();
+            args.put("configId", taskConfigId);
+            args.put("sourcePassMap", buildMemberSourcePassMap());
+            args.put("taskProcessId", "");
+            return RequestManager.requestString("com.alipay.amic.memtask.h5.MemTaskManagerFacade.executeTask",
+                    "[" + args.toString() + "]");
+        } catch (Exception e) {
+            return "";
+        }
     }
 
     public static String queryAllStatusTaskList() {
-        return RequestManager.requestString("alipay.antmember.biz.rpc.membertask.h5.queryAllStatusTaskList",
-                "[{\"sourceBusiness\":\"signInAd\",\"sourcePassMap\":{\"innerSource\":\"\",\"source\":\"myTab\",\"unid\":\"\"}}]");
+        try {
+            JSONObject args = new JSONObject();
+            args.put("source", "signInAd");
+            return RequestManager.requestString("com.alipay.amic.memtask.h5.MemTaskListQueryFacade.queryAllStatusTaskList",
+                    "[" + args.toString() + "]");
+        } catch (Exception e) {
+            return "";
+        }
     }
 
     /**
@@ -420,9 +441,21 @@ public class AntMemberRpcCall {
                         + "\"planCode\":\"bluebean_onestop\",\"planOperateCode\":\"exchange\"}]");
     }
 
-    public static String queryUserAccountInfo(String pointProdCode) {
-        return RequestManager.requestString("com.alipay.insmarketingbff.point.queryUserAccountInfo",
-                "[{\"channel\":\"HiChat\",\"pointProdCode\":\"" + pointProdCode + "\",\"pointUnitType\":\"COUNT\"}]");
+    /**
+     * 查询安心豆/积分账户信息
+     * 对应: com.alipay.insmarketingbff.bean.queryAccountSummaryPoint
+     * AG 版硬编码 bizScene=POSITION, entrance=insplatform_mine_anxindou
+     */
+    public static String queryUserAccountInfo() {
+        try {
+            JSONObject args = new JSONObject();
+            args.put("bizScene", "POSITION");
+            args.put("entrance", "insplatform_mine_anxindou");
+            return RequestManager.requestString("com.alipay.insmarketingbff.bean.queryAccountSummaryPoint",
+                    "[" + args.toString() + "]");
+        } catch (Exception e) {
+            return "";
+        }
     }
 
     /**
@@ -1459,6 +1492,410 @@ public class AntMemberRpcCall {
                         "[{}]"
                 );
             }
+        }
+    }
+
+    // ========== 会员任务 V2 新增方法==========
+
+    /**
+     * 查询会员任务列表
+     * 对应: com.alipay.amic.memtask.h5.MemTaskListQueryFacade.queryAllStatusTaskList
+     */
+    public static String queryMemberTaskList() {
+        try {
+            JSONObject args = new JSONObject();
+            args.put("source", "signInAd");
+            return RequestManager.requestString(
+                    "com.alipay.amic.memtask.h5.MemTaskListQueryFacade.queryAllStatusTaskList",
+                    "[" + args.toString() + "]");
+        } catch (Exception e) {
+            return "";
+        }
+    }
+
+    /**
+     * 签到页任务列表
+     * 对应: com.alipay.amic.memtask.h5.MemTaskListQueryFacade.signPageTaskList
+     */
+    public static String signPageTaskList(int pageNo) {
+        try {
+            JSONObject args = new JSONObject();
+            args.put("pageNo", pageNo);
+            args.put("pageSize", 8);
+            args.put("previewTime", "");
+            args.put("source", "antmember");
+            args.put("sourcePassMap", buildMemberSourcePassMap());
+            args.put("spaceCode", "ant_member_xlight_task");
+            args.put("taskTopConfigId", "");
+            return RequestManager.requestString(
+                    "com.alipay.amic.memtask.h5.MemTaskListQueryFacade.signPageTaskList",
+                    "[" + args.toString() + "]");
+        } catch (Exception e) {
+            return "";
+        }
+    }
+
+    /**
+     * 报名任务
+     * 对应: com.alipay.amic.memtask.h5.MemTaskManagerFacade.applyTask
+     */
+    public static String applyMemberTask(String taskConfigId) {
+        try {
+            JSONObject args = new JSONObject();
+            args.put("configId", taskConfigId);
+            args.put("sourcePassMap", buildMemberSourcePassMap());
+            return RequestManager.requestString(
+                    "com.alipay.amic.memtask.h5.MemTaskManagerFacade.applyTask",
+                    "[" + args.toString() + "]");
+        } catch (Exception e) {
+            return "";
+        }
+    }
+
+    /**
+     * 查询任务进度列表
+     * 对应: com.alipay.amic.memtask.h5.MemTaskListQueryFacade.queryMemberTaskProcessList
+     */
+    public static String queryMemberTaskProcessList() {
+        try {
+            JSONObject args = new JSONObject();
+            args.put("source", "signInAd");
+            args.put("sourcePassMap", buildMemberSourcePassMap());
+            return RequestManager.requestString(
+                    "com.alipay.amic.memtask.h5.MemTaskListQueryFacade.queryMemberTaskProcessList",
+                    "[" + args.toString() + "]");
+        } catch (Exception e) {
+            return "";
+        }
+    }
+
+    /**
+     * 查询单个任务进度详情
+     * 对应: com.alipay.amic.memtask.h5.MemTaskListQueryFacade.querySingleTaskProcessDetail
+     */
+    public static String querySingleTaskProcessDetail(String taskProcessId) {
+        try {
+            JSONObject args = new JSONObject();
+            args.put("sourcePassMap", buildMemberSourcePassMap());
+            args.put("taskProcessId", taskProcessId);
+            return RequestManager.requestString(
+                    "com.alipay.amic.memtask.h5.MemTaskListQueryFacade.querySingleTaskProcessDetail",
+                    "[" + args.toString() + "]");
+        } catch (Exception e) {
+            return "";
+        }
+    }
+
+    /**
+     * 会员任务领奖
+     * 对应: com.alipay.alipaymember.biz.rpc.membertask.h5.award
+     */
+    public static String awardMemberTaskProcess(String awardRelatedOutBizNo, String taskProcessId) {
+        try {
+            JSONObject args = new JSONObject();
+            args.put("awardRelatedOutBizNo", awardRelatedOutBizNo);
+            args.put("taskProcessId", taskProcessId);
+            args.put("sourcePassMap", buildMemberSourcePassMap());
+            return RequestManager.requestString(
+                    "com.alipay.alipaymember.biz.rpc.membertask.h5.award",
+                    "[" + args.toString() + "]");
+        } catch (Exception e) {
+            return "";
+        }
+    }
+
+    /**
+     * 查询签到浮窗
+     * 对应: com.alipay.amic.biz.rpc.signin.h5.querySignFloatingBall
+     */
+    public static String querySignFloatingBall() {
+        try {
+            JSONObject args = new JSONObject();
+            args.put("sourcePassMap", buildMemberSourcePassMap());
+            return RequestManager.requestString(
+                    "com.alipay.amic.biz.rpc.signin.h5.querySignFloatingBall",
+                    "[" + args.toString() + "]");
+        } catch (Exception e) {
+            return "";
+        }
+    }
+
+    /**
+     * 触发签到浮窗
+     * 对应: com.alipay.amic.biz.rpc.signin.h5.triggerSignFloatingBall
+     */
+    public static String triggerSignFloatingBall(String scene, String templateId) {
+        try {
+            JSONObject args = new JSONObject();
+            args.put("scene", scene);
+            args.put("templateId", templateId);
+            args.put("sourcePassMap", buildMemberSourcePassMap());
+            return RequestManager.requestString(
+                    "com.alipay.amic.biz.rpc.signin.h5.triggerSignFloatingBall",
+                    "[" + args.toString() + "]");
+        } catch (Exception e) {
+            return "";
+        }
+    }
+
+    /**
+     * 查询签到浮窗广告任务
+     * 对应: com.alipay.amic.biz.rpc.signin.h5.querySignFloatingBallAdTask
+     */
+    public static String querySignFloatingBallAdTask(String templateId) {
+        try {
+            JSONObject args = new JSONObject();
+            args.put("templateId", templateId);
+            args.put("sourcePassMap", buildMemberSourcePassMap());
+            return RequestManager.requestString(
+                    "com.alipay.amic.biz.rpc.signin.h5.querySignFloatingBallAdTask",
+                    "[" + args.toString() + "]");
+        } catch (Exception e) {
+            return "";
+        }
+    }
+
+    /**
+     * 查询游戏中心入口
+     * 对应: com.alipay.amic.biz.rpc.game.h5.GameCenterQueryFacade.queryGameEntranceInfo
+     */
+    public static String queryGameEntranceInfo() {
+        try {
+            JSONObject args = new JSONObject();
+            args.put("sourcePassMap", buildMemberSourcePassMap());
+            return RequestManager.requestString(
+                    "com.alipay.amic.biz.rpc.game.h5.GameCenterQueryFacade.queryGameEntranceInfo",
+                    "[" + args.toString() + "]");
+        } catch (Exception e) {
+            return "";
+        }
+    }
+
+    // ========== MemberPoint 新增方法 ==========
+
+    /**
+     * 查询积分证书 V2
+     * 对应: com.alipay.alipaymember.biz.rpc.pointcert.h5.queryPointCertV2
+     */
+    public static String queryPointCertV2(int page, int pageSize) {
+        try {
+            JSONObject args = new JSONObject();
+            args.put("abTestInfo", new org.json.JSONArray());
+            args.put("dbExpireDt", 0);
+            args.put("dbId", 0);
+            args.put("pageNum", page);
+            args.put("pageSize", pageSize);
+            args.put("sourcePassMap", buildMemberSourcePassMap());
+            return RequestManager.requestString(
+                    "com.alipay.alipaymember.biz.rpc.pointcert.h5.queryPointCertV2",
+                    "[" + args.toString() + "]");
+        } catch (Exception e) {
+            return "";
+        }
+    }
+
+    /**
+     * 一键领取所有积分
+     * 对应: com.alipay.alipaymember.biz.rpc.pointcert.h5.receiveAllPointByUser
+     */
+    public static String receiveAllPointByUser() {
+        try {
+            JSONObject args = new JSONObject();
+            args.put("bizSource", "mytab");
+            args.put("sourcePassMap", buildMemberSourcePassMap());
+            return RequestManager.requestString(
+                    "com.alipay.alipaymember.biz.rpc.pointcert.h5.receiveAllPointByUser",
+                    "[" + args + "]");
+        } catch (Exception e) {
+            return "";
+        }
+    }
+
+    // ========== Bean/安心豆 新增方法 ==========
+
+    /**
+     * 过滤有效权益
+     * 对应: com.alipay.insmarketingbff.bean.filterValidBizProperty
+     */
+    public static String filterValidBizProperty() {
+        try {
+            JSONObject args = new JSONObject();
+            args.put("userAccountFilter", false);
+            return RequestManager.requestString(
+                    "com.alipay.insmarketingbff.bean.filterValidBizProperty",
+                    "[" + args+ "]");
+        } catch (Exception e) {
+            return "";
+        }
+    }
+
+    // ========== GoldTicket/黄金票 V2 新增方法 ==========
+
+    /**
+     * 黄金票收取 V2 (带自定义参数拼接)
+     * 对应: com.alipay.wealthgoldtwa.goldbill.v2.index.collect
+     */
+    public static String goldBillCollectV2(String str) {
+        return RequestManager.requestString(
+                "com.alipay.wealthgoldtwa.goldbill.v2.index.collect",
+                "[{" + str + "\"trigger\":\"Y\"}]");
+    }
+
+    /**
+     * 黄金票收取 V2 (完整 args)
+     * 对应: com.alipay.wealthgoldtwa.goldbill.v2.index.collect
+     */
+    public static String goldBillCollectV2(JSONObject args) {
+        try {
+            if (args != null) {
+                args.put("trigger", "Y");
+            } else {
+                args = new JSONObject();
+                args.put("trigger", "Y");
+            }
+            return RequestManager.requestString(
+                    "com.alipay.wealthgoldtwa.goldbill.v2.index.collect",
+                    "[" + args.toString() + "]");
+        } catch (Exception e) {
+            return "";
+        }
+    }
+
+    // ========== 私有辅助方法 ==========
+
+    /**
+     * 构建会员 sourcePassMap
+     */
+    private static JSONObject buildMemberSourcePassMap() {
+        JSONObject map = new JSONObject();
+        try {
+            map.put("innerSource", "");
+            map.put("source", "mytab");
+            map.put("unid", "");
+        } catch (Exception ignored) {
+        }
+        return map;
+    }
+
+    // ========== Bean 安心豆浏览任务 RPC ( ) ==========
+
+    /**
+     * 安心豆浏览任务触发: signup(报名) / send(发奖)
+     * RPC: com.alipay.insmarketingbff.bean.taskTrigger
+     * 参数: {"appletId","sceneCode","taskCenId","stageCode"}
+     */
+    public static String beanTaskTrigger(String appletId, String sceneCode, String taskCenterId, String stageCode) {
+        try {
+            JSONObject args = new JSONObject();
+            args.put("appletId", appletId);
+            args.put("sceneCode", sceneCode);
+            args.put("taskCenId", taskCenterId);
+            args.put("stageCode", stageCode);
+            return RequestManager.requestString("com.alipay.insmarketingbff.bean.taskTrigger",
+                    "[" + args.toString() + "]");
+        } catch (Exception e) {
+            return "";
+        }
+    }
+
+    /**
+     * 安心豆任务中心查询 (用于发奖回查)
+     * RPC: com.alipay.insmarketingbff.bean.taskCenterConsult
+     */
+    public static String beanTaskCenterConsult(String taskCenterId, String sceneCode) {
+        try {
+            JSONObject args = new JSONObject();
+            args.put("bizData", new JSONObject());
+            args.put("bizTaskSortParams", new JSONObject());
+            args.put("displayTaskCount", 30);
+            args.put("entrance", "insplatform_mine_anxindou");
+            args.put("sceneCode", sceneCode);
+            args.put("taskCenterId", taskCenterId);
+            return RequestManager.requestString("com.alipay.insmarketingbff.bean.taskCenterConsult",
+                    "[" + args.toString() + "]");
+        } catch (Exception e) {
+            return "";
+        }
+    }
+
+    // ========== MemberNew.java 兼容方法（旧签名适配 V2 路径） ==========
+
+    public static String applyTask(String taskName, String taskId) {
+        return applyMemberTask(taskId);
+    }
+
+    /**
+     * applyTask2 空实现（调用方需先确认是否仍被引用）
+     */
+    public static String applyTask2(String taskId) {
+        return "";
+    }
+
+    public static String executeTask(String bizId, String bizType) {
+        try {
+            JSONObject args = new JSONObject();
+            args.put("configId", bizId);
+            args.put("adTaskFlag", true);
+            args.put("sourcePassMap", buildMemberSourcePassMap());
+            return RequestManager.requestString(
+                    "com.alipay.amic.memtask.h5.MemTaskManagerFacade.executeTask",
+                    "[" + args.toString() + "]");
+        } catch (Exception e) {
+            return "";
+        }
+    }
+
+    /**
+     * MemberNew 用的 queryAllStatusTaskListNew — 别名
+     */
+    public static String queryAllStatusTaskListNew() {
+        return queryAllStatusTaskList();
+    }
+
+    /**
+     * MemberNew 用的 receivePointAward — 对应 AG awardMemberTaskProcess
+     * 参数顺序: (taskProcessId, awardRelatedOutBizNo) → AG 是 (awardRelatedOutBizNo, taskProcessId)
+     */
+    public static String receivePointAward(String taskProcessId, String awardRelatedOutBizNo) {
+        return awardMemberTaskProcess(awardRelatedOutBizNo, taskProcessId);
+    }
+
+    /**
+     * MemberNew 用的 ngfeUpdate — AG 版已废弃，返回空
+     */
+    public static String ngfeUpdate(String ngfeKey) {
+        return "";
+    }
+
+    /**
+     * MemberNew 硬编码的 com.alipay.adtask.biz.mobilegw.service.task.finish
+     * AG 版已废弃，对齐游戏中心 V3: doTaskSend
+     */
+    public static String adTaskFinish(String bizId) {
+        try {
+            JSONObject args = new JSONObject();
+            args.put("taskId", bizId);
+            return RequestManager.requestString(
+                    "com.alipay.gamecenteruprod.biz.rpc.v3.doTaskSend",
+                    "[" + args.toString() + "]");
+        } catch (Exception e) {
+            return "";
+        }
+    }
+
+    /**
+     * 广告任务触发 (MemberNew.triggerAdTask)
+     */
+    public static String triggerAdTask(String taskBizNo) {
+        try {
+            JSONObject args = new JSONObject();
+            args.put("taskBizNo", taskBizNo);
+            args.put("sourcePassMap", buildMemberSourcePassMap());
+            return RequestManager.requestString(
+                    "com.alipay.amic.memtask.h5.MemTaskManagerFacade.executeTask",
+                    "[" + args.toString() + "]");
+        } catch (Exception e) {
+            return "";
         }
     }
 }

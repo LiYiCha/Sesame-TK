@@ -185,23 +185,69 @@ object Files {
         return getTargetFileofUser(userId, "self.json")
     }
 
+    /** 会员商品缓存的读-改-写锁：串行化跨模块（抓取/规格更新）的整文件读写，避免丢失更新 */
+    private val memberGoodsLock = Any()
+
     @JvmStatic
-    fun getMemberGoodsListFile(deliveryId: String): File {
-        val fileName = if (deliveryId.isEmpty()) "member_goods_list.json" else "member_goods_list_$deliveryId.json"
-        val file = File(CONFIG_DIR, fileName)
-        if (!file.exists()) {
-            try {
-                file.createNewFile()
-            } catch (e: Exception) {
-                Log.printStackTrace(TAG, "Failed to create member goods file: $fileName", e)
-            }
-        }
-        return file
+    fun memberGoodsLock(): Any = memberGoodsLock
+
+    /**
+     * 会员商品缓存目录（商品池 + 列表索引分文件）。
+     *
+     * 结构：
+     *   member_goods/
+     *     goods.json  — 商品池 { "<benefitId>": {...商品对象...} }
+     *     lists.json  — 列表索引 { "<listKey>": { "ids": [...], "nextPageNum": n } }
+     *
+     * 商品只存一份（按 benefitId 去重），各列表只保留引用，实现跨分类共用；
+     * 分文件后翻页只写列表索引，只有新增商品时才写商品池，写放大最小。
+     */
+    @JvmStatic
+    fun getMemberGoodsDir(): File {
+        val dir = File(CONFIG_DIR, "member_goods")
+        ensureDir(dir)
+        migrateMemberGoodsSingleFile(dir)
+        return dir
+    }
+
+    @JvmStatic
+    fun getMemberGoodsPoolFile(): File {
+        return File(getMemberGoodsDir(), "goods.json")
     }
 
     @JvmStatic
     fun getMemberGoodsListFile(): File {
-        return getMemberGoodsListFile("")
+        return File(getMemberGoodsDir(), "lists.json")
+    }
+
+    /** 一次性迁移：旧单文件 member_goods.json（{goods, lists}）拆分为 goods.json + lists.json */
+    private fun migrateMemberGoodsSingleFile(dir: File) {
+        val old = File(CONFIG_DIR, "member_goods.json")
+        if (!old.exists()) return
+        val pool = File(dir, "goods.json")
+        val lists = File(dir, "lists.json")
+        if (pool.exists() && lists.exists()) {
+            // 两个新文件都已就绪，丢弃旧文件避免重复迁移
+            old.delete()
+            return
+        }
+        try {
+            val root = org.json.JSONObject(readFromFile(old))
+            val goods = root.optJSONObject("goods") ?: org.json.JSONObject()
+            val listsJo = root.optJSONObject("lists") ?: org.json.JSONObject()
+            // 上次迁移若中断只生成了一个文件，这里补齐缺失的那个，不重复写已存在的
+            if (!pool.exists()) {
+                write2FileAtomic(goods.toString(), pool)
+            }
+            if (!lists.exists()) {
+                write2FileAtomic(listsJo.toString(), lists)
+            }
+            if (pool.exists() && lists.exists()) {
+                old.delete()
+            }
+        } catch (e: Exception) {
+            Log.printStackTrace(TAG, "迁移会员商品单文件失败", e)
+        }
     }
 
     @JvmStatic
@@ -394,6 +440,36 @@ object Files {
                 } catch (e: IOException) {
                     Log.printStackTrace(TAG, "文件关闭异常（数据已写入）", e)
                 }
+            }
+        }
+    }
+
+    /**
+     * 原子写：先写临时文件再重命名，避免读端读到半截 JSON。
+     * 同步方法保证同一文件的并发写不交错；重命名失败时回退直接覆盖写。
+     */
+    @JvmStatic
+    @Synchronized
+    fun write2FileAtomic(s: String, f: File?): Boolean {
+        if (f == null) return false
+        if (beforWrite(f)) return false
+        val tmp = File(f.parentFile, f.name + ".tmp")
+        try {
+            if (!write2File(s, tmp)) {
+                return false
+            }
+            if (f.exists() && !f.delete()) {
+                // 目标删除失败：回退直接覆盖写
+                return write2File(s, f)
+            }
+            if (!tmp.renameTo(f)) {
+                // 重命名失败：回退直接覆盖写
+                return write2File(s, f)
+            }
+            return true
+        } finally {
+            if (tmp.exists()) {
+                tmp.delete()
             }
         }
     }

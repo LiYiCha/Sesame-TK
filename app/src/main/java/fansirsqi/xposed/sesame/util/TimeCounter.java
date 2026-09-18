@@ -1,10 +1,7 @@
 package fansirsqi.xposed.sesame.util;
 
-import fansirsqi.xposed.sesame.util.Log;
-
 import java.time.Instant;
 import java.time.Duration;
-import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 
 public class TimeCounter {

@@ -3,12 +3,12 @@ package fansirsqi.xposed.sesame.task.otherTask2
 import android.annotation.SuppressLint
 import fansirsqi.xposed.sesame.hook.RequestManager
 import fansirsqi.xposed.sesame.hook.RequestManager.requestString
-import fansirsqi.xposed.sesame.util.Log
-import fansirsqi.xposed.sesame.util.StringUtil
+import fansirsqi.xposed.sesame.hook.internal.LocationHelper
 import org.json.JSONArray
-import org.json.JSONException
 import org.json.JSONObject
 import java.text.SimpleDateFormat
+import java.time.LocalDate
+import java.time.ZoneId
 import java.util.Date
 
 class CommonRequest {
@@ -248,95 +248,103 @@ class CommonRequest {
         return JSONObject(RequestManager.requestString(method, params))
     }
 
-    //=========================青村特权任务=====================
-    /**
-     * 青春特权--查询任务模型
-     *
-     * @param chInfo 渠道信息
-     * @param skipTaskList 是否跳过任务列表
-     * @return 响应结果
-     * @throws JSONException JSON 解析异常
-     */
-    @Throws(JSONException::class)
-    fun queryTaskModel(chInfo: String?, skipTaskList: Boolean): String {
-        val jo = JSONObject()
-        jo.put("chInfo", chInfo)
-        jo.put("skipTaskList", skipTaskList)
-        return requestString(
-            "com.alipay.mobileopl.youthprivilege.rpc.mgw.queryTaskModel",
-            JSONArray().put(jo).toString()
+    //=========================青春特权任务=====================
+    companion object YouthPrivilegeConst {
+        const val YOUTH_CH_INFO = "searchxsth"
+        private const val RPC_PREFIX = "com.alipay.mobileopl.youthprivilege.rpc.mgw."
+    }
+
+    private fun youthRequest(method: String, payload: JSONObject): String =
+        requestString(RPC_PREFIX + method, JSONArray().put(payload).toString())
+
+    /** 青春特权--查询签到模型 */
+    fun queryCheckInModel(): String = youthRequest("queryCheckInModel", JSONObject().apply {
+        put("chInfo", YOUTH_CH_INFO)
+        put("queryAd", true)
+        put("skipTaskModule", false)
+    })
+
+    /** 青春特权--执行签到 */
+    fun checkIn(): String = youthRequest("checkIn", JSONObject().apply {
+        put("source", YOUTH_CH_INFO)
+    })
+
+    /** 青春特权--查询任务模型 */
+    fun queryTaskModel(chInfo: String = YOUTH_CH_INFO, skipTaskList: Boolean = false): String =
+        youthRequest("queryTaskModel", JSONObject().apply {
+            put("chInfo", chInfo)
+            put("skipTaskList", skipTaskList)
+        })
+
+    /** 青春特权--任务报名（AG 版本无 taskBizId 参数） */
+    fun taskSignUp(taskCode: String, taskSource: String, taskType: String): String =
+        youthRequest("taskSignUp", JSONObject().apply {
+            put("taskCode", taskCode)
+            put("taskSource", taskSource)
+            put("taskType", taskType)
+        })
+
+    /** 青春特权--提交任务（AG 版本无 taskBizId 参数） */
+    fun taskComplete(taskCode: String, taskSource: String, taskType: String): String =
+        youthRequest("taskComplete", JSONObject().apply {
+            put("taskCode", taskCode)
+            put("taskSource", taskSource)
+            put("taskType", taskType)
+        })
+
+    /** 青春特权--15s浏览豆子( feeds 积分触发 ) */
+    fun triggerPointPrize(): String = RequestManager.requestString(
+        "alipay.membertangram.biz.rpc.student.triggerPointPrize",
+        JSONArray().put(JSONObject().apply {
+            put("bizId", "DO_FEEDS_TASK")
+            put("sceneCode", "STUDENT_MONEY_CHECK_IN")
+        }).toString()
+    )
+
+    /** 青春100--查询月权益首页 */
+    fun queryYouth100(adCode: String = ""): String {
+        val payload = JSONObject().apply {
+            put("sceneCode", "YOUTH100")
+            put("chInfo", YOUTH_CH_INFO)
+            put("adCode", adCode)
+        }
+        LocationHelper.getLocation()?.let { loc ->
+            if (loc.has("latitude")) payload.put("latitude", loc.getDouble("latitude"))
+            if (loc.has("longitude")) payload.put("longitude", loc.getDouble("longitude"))
+        }
+        return youthRequest("youth100.homepage.query", payload)
+    }
+
+    /** 青春100--领取月权益 */
+    fun receiveMonthlyPrivilege(itemId: String, moduleCode: String): String =
+        youthRequest("youth100.privilege.receive", JSONObject().apply {
+            put("itemId", itemId)
+            put("moduleCode", moduleCode)
+        })
+
+    /** 青春体验金--查询奖品列表（日/月） */
+    fun queryTrialPrizes(month: Boolean): String {
+        val day = LocalDate.now(ZoneId.of("Asia/Shanghai"))
+        val start = if (month) day.withDayOfMonth(1) else day
+        val end = if (month) day.withDayOfMonth(day.lengthOfMonth()) else day
+        return RequestManager.requestString(
+            "com.alipay.yebpromobff.promosdk2024.prize.query",
+            JSONArray().put(JSONObject().apply {
+                put("playEntrance", "YEB_YONG_TYJ_PROMO")
+                put("playActionCode", if (month) "CAMP_MONTH_QUERY" else "CAMP_DAY_QUERY")
+                put("startTime", "$start 00:00:00")
+                put("endTime", "$end 23:59:59")
+            }).toString()
         )
     }
 
-    /**
-     * 青春特权--任务报名
-     *
-     * @param taskCode 任务编码
-     * @param taskSource 任务来源
-     * @param taskType 任务类型
-     * @return 响应结果
-     * @throws JSONException JSON 解析异常
-     */
-    @Throws(JSONException::class)
-    fun taskSignUp(
-        taskBizId: String?,
-        taskCode: String?,
-        taskSource: String?,
-        taskType: String?
-    ): String {
-        val jo = JSONObject()
-        if (!StringUtil.isEmpty(taskBizId)) {
-            jo.put("taskBizId", taskBizId)
-        }
-        jo.put("taskCode", taskCode)
-        jo.put("taskSource", taskSource)
-        jo.put("taskType", taskType)
-        return requestString(
-            "com.alipay.mobileopl.youthprivilege.rpc.mgw.taskSignUp",
-            JSONArray().put(jo).toString()
-        )
-    }
-
-    /**
-     * 提交青春特权任务
-     * @param taskCode
-     * @param taskSource
-     * @param taskType
-     * @return
-     */
-    fun taskComplete(
-        taskBizId: String?,
-        taskCode: String?,
-        taskSource: String?,
-        taskType: String?
-    ): String {
-        val params = JSONObject()
-        try {
-            if (!StringUtil.isEmpty(taskBizId)) {
-                params.put("taskBizId", taskBizId)
-            }
-            params.put("taskCode", taskCode)
-            params.put("taskSource", taskSource)
-            params.put("taskType", taskType)
-            return requestString(
-                "com.alipay.mobileopl.youthprivilege.rpc.mgw.taskComplete",
-                JSONArray().put(params).toString()
-            )
-        } catch (e: JSONException) {
-            Log.printStackTrace("AntForestRpcCall", e)
-            return ""
-        }
-    }
-
-    /**
-     * 青春特权--15s浏览
-     * @return
-     */
-    fun triggerPointPrize(): String {
-        val param = "[{\"bizId\":\"DO_FEEDS_TASK\",\"sceneCode\":\"STUDENT_MONEY_CHECK_IN\"}]"
-        val method = "alipay.membertangram.biz.rpc.student.triggerPointPrize"
-        return requestString(method, param)
-    }
-
+    /** 青春体验金--触发领取 */
+    fun triggerTrialPrize(): String = RequestManager.requestString(
+        "com.alipay.yebpromobff.promosdk2024.prize.trigger",
+        JSONArray().put(JSONObject().apply {
+            put("playEntrance", "YEB_YONG_TYJ_PROMO")
+            put("playActionCode", "CAMP_TRIGGER")
+        }).toString()
+    )
 
 }

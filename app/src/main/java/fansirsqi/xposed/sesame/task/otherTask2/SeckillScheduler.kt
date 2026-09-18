@@ -6,6 +6,7 @@ import android.net.Uri
 import fansirsqi.xposed.sesame.hook.RequestManager
 import fansirsqi.xposed.sesame.hook.resource.WakeLockManager
 import fansirsqi.xposed.sesame.hook.scheduler.AlarmScheduler
+import fansirsqi.xposed.sesame.hook.scheduler.TaskScheduler
 import fansirsqi.xposed.sesame.util.Files
 import fansirsqi.xposed.sesame.util.GlobalThreadPools
 import fansirsqi.xposed.sesame.util.Log
@@ -83,6 +84,11 @@ object SeckillScheduler {
 
     @JvmStatic
     fun executeSeckillById(context: Context, taskId: String) {
+        // 停止闸门：用户已停止任务时，闹钟在途广播不应再执行秒杀
+        if (TaskScheduler.isStopped()) {
+            Log.runtime(TAG, "⏸ 任务已被用户停止，跳过秒杀任务: $taskId")
+            return
+        }
         try {
             val file = getSeckillTasksFile()
             if (!file.exists()) return

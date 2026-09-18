@@ -11,18 +11,28 @@ import java.util.UUID;
 
 public class AntMemberRpcCall {
     public static String executeTask(String str, String str2) {
-        return ApplicationHook.requestString("alipay.antmember.biz.rpc.membertask.h5.executeTask",
-                "[{\"bizOutNo\":\"" + (System.currentTimeMillis() - 16000) + "\",\"bizParam\":\"" + str + "\",\"bizSubType\":\"" + str2 + "\",\"bizType\":\"BROWSE\"}]");
+        try {
+            JSONObject args = new JSONObject();
+            args.put("configId", str);
+            args.put("adTaskFlag", true);
+            args.put("sourcePassMap", buildSourcePassMap());
+            return ApplicationHook.requestString(
+                    "com.alipay.amic.memtask.h5.MemTaskManagerFacade.executeTask",
+                    "[" + args + "]");
+        } catch (Exception e) {
+            return "";
+        }
     }
 
-//    public static Boolean check() {
-//        boolean z = true;
-//        RpcEntity requestObject = RequestManager.requestObject("alipay.antmember.biz.rpc.member.h5.queryPointCert", "[{\"page\":1,\"pageSize\":8}]", 1, 0);
-//        if (requestObject == null || requestObject.getHasError().booleanValue()) {
-//            z = false;
-//        }
-//        return Boolean.valueOf(z);
-//    }
+    private static JSONObject buildSourcePassMap() {
+        JSONObject map = new JSONObject();
+        try {
+            map.put("innerSource", "");
+            map.put("source", "myTab");
+            map.put("unid", "");
+        } catch (Exception ignored) {}
+        return map;
+    }
 
     public static String queryPointCert(int i, int i2) {
         return ApplicationHook.requestString("alipay.antmember.biz.rpc.member.h5.queryPointCert", "[{\"page\":" + i + ",\"pageSize\":" + i2 + "}]");
@@ -37,12 +47,13 @@ public class AntMemberRpcCall {
     }
 
     public static String applyTask(String str, Long l) {
-        return ApplicationHook.requestString("alipay.antmember.biz.rpc.membertask.h5.applyTask", "[{\"darwinExpParams\":{\"darwinName\":\"" + str + "\"},\"sourcePassMap\":{\"innerSource\":\"\",\"source\":\"myTab\",\"unid\":\"\"},\"taskConfigId\":" + l + "}]");
+        return ApplicationHook.requestString("com.alipay.amic.memtask.h5.MemTaskManagerFacade.applyTask",
+                "[{\"alipayGrowthTask\":false,\"sourcePassMap\":" + buildSourcePassMap() + ",\"taskConfigId\":" + l + "}]");
     }
 
-    //新方法？
     public static String applyTask2(Long l) {
-        return ApplicationHook.requestString("alipay.antmember.biz.rpc.membertask.h5.applyTask", "[{\"sourcePassMap\":{\"innerSource\":\"\",\"source\":\"myTab\",\"unid\":\"\"},\"taskConfigId\":\"" + l + "\"}]");
+        return ApplicationHook.requestString("com.alipay.amic.memtask.h5.MemTaskManagerFacade.applyTask",
+                "[{\"alipayGrowthTask\":false,\"sourcePassMap\":" + buildSourcePassMap() + ",\"taskConfigId\":" + l + "}]");
     }
 
     private static String getUniqueId() {
@@ -53,24 +64,10 @@ public class AntMemberRpcCall {
         return ApplicationHook.requestString("com.alipay.csprod.prom.camp.ngfe.update", "[{\"tagCode\":\"" + str + "\"}]");
     }
 
-    public static String queryAllStatusTaskList() {
-        return ApplicationHook.requestString("alipay.antmember.biz.rpc.membertask.h5.queryAllStatusTaskList",
-                "[{\"sourceBusiness\":\"signInAd\"}]");
-    }
-
-    //新会员任务列表方法
     public static String queryAllStatusTaskListNew() {
         return ApplicationHook.requestString("com.alipay.amic.memtask.h5.MemTaskListQueryFacade.queryAllStatusTaskList",
                 "[{\"source\":\"signInAd\"}]");
     }
-//    public static String queryAllStatusTaskListNew() {
-//        long time = System.currentTimeMillis();
-//        return RequestManager.requestString("com.alipay.amic.memtask.h5.MemTaskListQueryFacade.queryAllStatusTaskList",
-//                "{\"__apiCallStartTime\":"+time+",\"__apiNativeCallId\":\"native_1484\"," +
-//                        "\"operationType\":\"com.alipay.amic.memtask.h5.MemTaskListQueryFacade.queryAllStatusTaskList\"," +
-//                        "\"requestData\":[{\"source\":\"signInAd\"}]}");
-//    }
-
 
     public static String queryMemberSigninCalendar() {
         return ApplicationHook.requestString("com.alipay.amic.biz.rpc.signin.h5.queryMemberSigninCalendar", 
@@ -78,9 +75,26 @@ public class AntMemberRpcCall {
     }
 
     public static String signPageTaskList() {
-        String session = UUID.randomUUID().toString();
-        return ApplicationHook.requestString("com.alipay.amic.memtask.h5.MemTaskListQueryFacade.signPageTaskList",
-                "[{\"pageNo\":1,\"pageSize\":8,\"session\":\"" + session + "\",\"source\":\"antmember\",\"sourcePassMap\":{\"innerSource\":\"\",\"source\":\"myTab\",\"unid\":\"\"},\"spaceCode\":\"ant_member_xlight_task\",\"switchNormal\":true,\"taskTopConfigId\":\"\"}]");
+        return signPageTaskList(1);
+    }
+
+    public static String signPageTaskList(int pageNo) {
+        try {
+            JSONObject args = new JSONObject();
+            args.put("pageNo", pageNo);
+            args.put("pageSize", 8);
+            args.put("session", UUID.randomUUID().toString());
+            args.put("source", "antmember");
+            args.put("sourcePassMap", buildSourcePassMap());
+            args.put("spaceCode", "ant_member_xlight_task");
+            args.put("switchNormal", true);
+            args.put("taskTopConfigId", "");
+            return ApplicationHook.requestString(
+                    "com.alipay.amic.memtask.h5.MemTaskListQueryFacade.signPageTaskList",
+                    "[" + args + "]");
+        } catch (Exception e) {
+            return "";
+        }
     }
 
     public static String transcodeCheck() {
@@ -125,6 +139,10 @@ public class AntMemberRpcCall {
     public static String commonTransFatigue() {
         return ApplicationHook.requestString("com.alipay.alipaymember.biz.rpc.component.h5.commonTrans.fatigue",
                 "[{\"sceneCode\":\"FAMY0I925T\",\"sourcePassMap\":{\"innerSource\":\"\",\"source\":\"myTab\",\"unid\":\"\"}}]");
+    }
+    public static String queryMemberInfo(){
+        return RequestManager.requestString("com.alipay.alipaymember.biz.rpc.member.h5.queryMemberInfo",
+                "[{\"needExpirePoint\":true,\"needGrade\":true,\"needPoint\":true,\"queryScene\":\"POINT_EXCHANGE_SCENE\",\"source\":\"POINT_EXCHANGE_SCENE\",\"sourcePassMap\":{\"innerSource\":\"\",\"source\":\"\",\"unid\":\"\"}}]");
     }
 
     public static String queryReSignInCardInfo() {
@@ -198,7 +216,7 @@ public class AntMemberRpcCall {
                         "\"taskProcessId\":\"" + taskProcessId + "\"}]");
     }
 
-    //
+    // 广告任务完成
     public static String adTaskFinish(String bizId) {
         return ApplicationHook.requestString("com.alipay.adtask.biz.mobilegw.service.task.finish",
                 "[{\"bizId\":\"" + bizId + "\",\"extendInfo\":{}}]");
@@ -210,17 +228,6 @@ public class AntMemberRpcCall {
                 "[{\"extMap\":{},\"sourcePassMap\":{\"innerSource\":\"\",\"source\":\"myTab\",\"unid\":\"\"}}]");
     }
 
-//    public static String getBallBoxAD() {
-//        return RequestManager.requestString("com.alipay.adexchange.ad.facade.xlightPlugin",
-//                "[{\"positionRequest\":{\"extMap\":{\"xlightPlayInstanceId\":\"\"},\"referInfo\":{},\"searchInfo\":{}," +
-//                        "\"spaceCode\":\"HY_QIANDAO_FEEDS\"},\"sdkPageInfo\":{\"adComponentType\":\"FEEDS\"," +
-//                        "\"adComponentVersion\":\"4.29.9\",\"enableFusion\":true,\"networkType\":\"WIFI\"," +
-//                        "\"pageFrom\":\"ch_url-https://render.alipay.com/p/yuyan/180020380000000023/home-page.html\"," +
-//                        "\"pageNo\":1,\"pageUrl\":\"https://render.alipay.com/p/yuyan/180020010001254515/point-sign-in.html?caprMode=sync&chInfo=memberHomePage_myTab&innerSource=&pageFrom=HOME_PAGE&source=myTab&sourcePassMap=%7B%7D&unid=&useCache=YES\"," +
-//                        "\"session\":\"u_3b420_b6898\",\"unionAppId\":\"68687805\",\"xlightRuntimeSDKversion\":\"4.29.9\",\"xlightSDKType\":\"h5\",\"xlightSDKVersion\":\"4.29.9\"}}]");
-//    }
-
-    // 完成开宝箱
     public static String triggerSignFloatingBall(String bizNo) {
         return RequestManager.requestString("com.alipay.amic.biz.rpc.signin.h5.triggerSignFloatingBall",
                 "[{\"bizNo\":\""+bizNo+"\",\"extMap\":{},\"sourcePassMap\":{\"innerSource\":\"\",\"source\":\"myTab\",\"unid\":\"\"},\"taskType\":\"MULTIPLE_TIMER_TASK\"}]");
