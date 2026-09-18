@@ -168,6 +168,8 @@ public class WebSettingsActivity extends BaseActivity {
         settings.setLoadsImagesAutomatically(true);
         settings.setDefaultTextEncodingName(StandardCharsets.UTF_8.name());
         
+        // 因 targetSdkVersion>=33(Android13)，setForceDark() 在此 App 中实为空操作(no-op)，
+        // 深色主题实际由页面自身的 html.dark 类（applyDarkMode/isDark）承担，此段仅作保留参考。
         if (androidx.webkit.WebViewFeature.isFeatureSupported(androidx.webkit.WebViewFeature.FORCE_DARK)) {
             boolean isDark = fansirsqi.xposed.sesame.ui.theme.app.HolidayTheme.INSTANCE.shouldUseDarkTheme();
             int forceDarkMode = isDark ?
@@ -176,6 +178,13 @@ public class WebSettingsActivity extends BaseActivity {
             androidx.webkit.WebSettingsCompat.setForceDark(settings, forceDarkMode);
         }
         webView.setWebViewClient(new WebViewClient() {
+            @Override
+            public void onPageFinished(WebView view, String url) {
+                super.onPageFinished(view, url);
+                // 页面加载完成后，向页面下发一次 APP 深色状态
+                applyDarkModeToWebView();
+            }
+
             @Override
             public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
                 // 强制在当前 WebView 中加载 url
@@ -231,7 +240,6 @@ public class WebSettingsActivity extends BaseActivity {
         //设置水印文案
         //watermarkView.setWatermarkText(tag);
     }
-
 
     public class WebAppInterface {
         @JavascriptInterface
@@ -405,6 +413,11 @@ public class WebSettingsActivity extends BaseActivity {
         @JavascriptInterface
         public void Log(String log) {
             Log.runtime(TAG, "设置：" + log);
+        }
+
+        @JavascriptInterface
+        public boolean isDark() {
+            return fansirsqi.xposed.sesame.ui.theme.app.HolidayTheme.INSTANCE.shouldUseDarkTheme();
         }
 
         @JavascriptInterface
@@ -594,6 +607,28 @@ public class WebSettingsActivity extends BaseActivity {
                 break;
         }
         return super.onOptionsItemSelected(item);
+    }
+
+    private void applyDarkModeToWebView() {
+        if (webView == null) {
+            return;
+        }
+        boolean isDark = fansirsqi.xposed.sesame.ui.theme.app.HolidayTheme.INSTANCE.shouldUseDarkTheme();
+        try {
+            webView.evaluateJavascript("applyDarkMode(" + isDark + ");", null);
+        } catch (Throwable th) {
+            // evaluateJavascript 需 API>=19；极端情况失败忽略，不阻塞其余逻辑
+            Log.printStackTrace(th);
+        }
+    }
+
+    @Override
+    public void onWindowFocusChanged(boolean hasFocus) {
+        super.onWindowFocusChanged(hasFocus);
+        // 从别处切换深色后回到本页时，重新同步一次深色状态
+        if (hasFocus) {
+            applyDarkModeToWebView();
+        }
     }
 
     private void save() {

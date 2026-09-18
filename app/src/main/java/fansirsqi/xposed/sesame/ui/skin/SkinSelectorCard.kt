@@ -1,15 +1,12 @@
 package fansirsqi.xposed.sesame.ui.skin
 
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
@@ -20,298 +17,212 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 
 /**
- * 皮肤选择卡片
+ * 皮肤选择（2 列网格）
  *
- * 显示可用皮肤列表，支持预览和选择
+ * 以卡片网格形式展示已安装的皮肤，突出预览图。空列表时展示空态。
  *
  * @param availableSkins 可用皮肤列表
  * @param selectedSkinName 当前选中的皮肤名称
+ * @param isEnabled 自定义皮肤系统是否启用
  * @param onSkinSelected 皮肤选择回调
- * @param onRefresh 刷新皮肤列表回调
- * @param onImport 导入皮肤ZIP回调
- * @param onImportDirectory 导入皮肤目录回调
  * @param onViewDetail 查看皮肤详情回调
  */
 @Composable
 fun SkinSelectorCard(
     availableSkins: List<SkinInfo>,
     selectedSkinName: String?,
+    isEnabled: Boolean,
     onSkinSelected: (String) -> Unit,
-    onRefresh: () -> Unit,
-    onImport: () -> Unit,
-    onImportDirectory: () -> Unit,
     onViewDetail: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    if (availableSkins.isEmpty()) {
+        EmptySkinState(modifier = modifier)
+        return
+    }
+
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = 4.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        val columns = availableSkins.chunked((availableSkins.size + 1) / 2)
+        columns.forEach { columnSkins ->
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                columnSkins.forEach { skin ->
+                    SkinGridCard(
+                        skin = skin,
+                        isSelected = skin.name == selectedSkinName && isEnabled,
+                        onClick = { onSkinSelected(skin.name) },
+                        onViewDetail = { onViewDetail(skin.name) }
+                    )
+                }
+            }
+        }
+    }
+}
+
+/**
+ * 单个皮肤网格卡片
+ */
+@Composable
+private fun SkinGridCard(
+    skin: SkinInfo,
+    isSelected: Boolean,
+    onClick: () -> Unit,
+    onViewDetail: () -> Unit
+) {
     Card(
-        modifier = modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
+            .then(
+                if (isSelected) {
+                    Modifier.border(
+                        width = 2.dp,
+                        color = MaterialTheme.colorScheme.primary,
+                        shape = RoundedCornerShape(16.dp)
+                    )
+                } else {
+                    Modifier
+                }
+            ),
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surface
         ),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+        elevation = CardDefaults.cardElevation(
+            defaultElevation = if (isSelected) 4.dp else 2.dp
+        )
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp)
-        ) {
-            // 标题栏
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = "选择皮肤",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface // 深蓝色，清晰可见
-                )
-
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    // 导入ZIP按钮
-                    FilledTonalButton(
-                        onClick = onImport,
-                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
-                        colors = ButtonDefaults.filledTonalButtonColors(
-                            containerColor = MaterialTheme.colorScheme.primary, // 鲜明的青色
-                            contentColor = MaterialTheme.colorScheme.onPrimary // 白色文字
-                        )
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Add,
-                            contentDescription = null,
-                            modifier = Modifier.size(18.dp)
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text("导入ZIP", fontWeight = FontWeight.Medium)
-                    }
-
-                    // 导入目录按钮
-                    FilledTonalButton(
-                        onClick = onImportDirectory,
-                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
-                        colors = ButtonDefaults.filledTonalButtonColors(
-                            containerColor = MaterialTheme.colorScheme.primary, // 鲜明的青色
-                            contentColor = MaterialTheme.colorScheme.onPrimary // 白色文字
-                        )
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Add,
-                            contentDescription = null,
-                            modifier = Modifier.size(18.dp)
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text("导入目录", fontWeight = FontWeight.Medium)
-                    }
-
-                    TextButton(
-                        onClick = onRefresh,
-                        colors = ButtonDefaults.textButtonColors(
-                            contentColor = MaterialTheme.colorScheme.primary // 鲜明的青色
-                        )
-                    ) {
-                        Text("刷新", fontWeight = FontWeight.Medium)
-                    }
-                }
-            }
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            // 皮肤列表容器
+        Column {
+            // 预览区
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(MaterialTheme.colorScheme.surfaceVariant) // 浅灰色背景，区分容器
-                    .padding(12.dp)
+                    .height(120.dp)
+                    .background(MaterialTheme.colorScheme.surfaceVariant),
+                contentAlignment = Alignment.Center
             ) {
-                if (availableSkins.isEmpty()) {
-                    // 空状态
-                    EmptySkinState(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 32.dp)
+                if (skin.previewImagePath != null) {
+                    AsyncImage(
+                        model = skin.previewImagePath,
+                        contentDescription = "皮肤预览",
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = ContentScale.Crop
                     )
                 } else {
-                    LazyColumn(
+                    Box(
                         modifier = Modifier
-                            .fillMaxWidth()
-                            .heightIn(max = 400.dp),
-                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                            .fillMaxSize()
+                            .background(
+                                brush = Brush.verticalGradient(
+                                    colors = listOf(
+                                        MaterialTheme.colorScheme.primaryContainer,
+                                        MaterialTheme.colorScheme.surfaceVariant
+                                    )
+                                )
+                            ),
+                        contentAlignment = Alignment.Center
                     ) {
-                        items(availableSkins) { skin ->
-                            SkinItem(
-                                skin = skin,
-                                isSelected = skin.name == selectedSkinName,
-                                onClick = { onSkinSelected(skin.name) },
-                                onViewDetail = { onViewDetail(skin.name) }
-                            )
-                        }
+                        Icon(
+                            imageVector = Icons.Default.Image,
+                            contentDescription = null,
+                            modifier = Modifier.size(36.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
+                        )
+                    }
+                }
+
+                // 选中角标
+                if (isSelected) {
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.BottomStart)
+                            .padding(8.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(MaterialTheme.colorScheme.primary),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Check,
+                            contentDescription = "使用中",
+                            modifier = Modifier
+                                .size(12.dp)
+                                .padding(4.dp),
+                            tint = MaterialTheme.colorScheme.onPrimary
+                        )
                     }
                 }
             }
-        }
-    }
-}
 
-/**
- * 单个皮肤项
- */
-@Composable
-private fun SkinItem(
-    skin: SkinInfo,
-    isSelected: Boolean,
-    onClick: () -> Unit,
-    onViewDetail: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    // 选中状态使用鲜明的青色，未选中使用浅灰色
-    val borderColor = if (isSelected) {
-        MaterialTheme.colorScheme.primary // 鲜明的青色
-    } else {
-        MaterialTheme.colorScheme.outline // 浅灰色
-    }
-
-    val backgroundColor = if (isSelected) {
-        MaterialTheme.colorScheme.primaryContainer // 浅青色背景
-    } else {
-        MaterialTheme.colorScheme.surface
-    }
-
-    Card(
-        modifier = modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(12.dp),
-        border = BorderStroke(
-            width = if (isSelected) 3.dp else 1.dp, // 选中时更粗的边框
-            color = borderColor
-        ),
-        colors = CardDefaults.cardColors(
-            containerColor = backgroundColor
-        ),
-        elevation = CardDefaults.cardElevation(
-            defaultElevation = if (isSelected) 4.dp else 1.dp // 选中时有阴影
-        )
-    ) {
-        Column(modifier = Modifier.fillMaxWidth()) {
-            Row(
+            // 信息区
+            Column(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clickable(onClick = onClick)
                     .padding(12.dp),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
-                // 预览图
-                SkinPreviewImage(
-                    previewPath = skin.previewImagePath,
-                    modifier = Modifier
-                        .size(80.dp, 50.dp)
-                        .clip(RoundedCornerShape(8.dp))
+                Text(
+                    text = skin.name,
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
 
-                // 皮肤信息
-                Column(
-                    modifier = Modifier
-                        .weight(1f)
-                        .align(Alignment.CenterVertically)
-                ) {
+                if (skin.description.isNotEmpty()) {
                     Text(
-                        text = skin.name,
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.Medium
+                        text = skin.description,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
+                }
 
-                    if (skin.description.isNotEmpty()) {
-                        Spacer(modifier = Modifier.height(4.dp))
+                if (skin.themeColor.isNotEmpty()) {
+                    ThemeColorIndicator(themeColor = skin.themeColor)
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    TextButton(
+                        onClick = onViewDetail,
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
+                    ) {
                         Text(
-                            text = skin.description,
+                            text = "查看详情",
                             style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                            color = MaterialTheme.colorScheme.primary,
+                            fontWeight = FontWeight.Medium
                         )
                     }
 
-                    // 主题色指示器
-                    if (skin.themeColor.isNotEmpty()) {
-                        Spacer(modifier = Modifier.height(4.dp))
-                        ThemeColorIndicator(themeColor = skin.themeColor)
+                    if (isSelected) {
+                        Text(
+                            text = "使用中",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.primary,
+                            fontWeight = FontWeight.SemiBold
+                        )
                     }
                 }
-
-                // 选中指示器
-                if (isSelected) {
-                    Icon(
-                        imageVector = Icons.Default.CheckCircle,
-                        contentDescription = "已选中",
-                        tint = MaterialTheme.colorScheme.primary, // 鲜明的青色
-                        modifier = Modifier
-                            .size(24.dp)
-                            .align(Alignment.CenterVertically)
-                    )
-                }
             }
-
-            // 查看详情按钮
-            TextButton(
-                onClick = onViewDetail,
-                modifier = Modifier
-                    .align(Alignment.End)
-                    .padding(horizontal = 12.dp, vertical = 4.dp),
-                colors = ButtonDefaults.textButtonColors(
-                    contentColor = MaterialTheme.colorScheme.primary // 鲜明的青色
-                )
-            ) {
-                Text(
-                    text = "查看详情",
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Medium
-                )
-            }
-
-        }
-    }
-}
-
-/**
- * 皮肤预览图
- */
-@Composable
-private fun SkinPreviewImage(
-    previewPath: String?,
-    modifier: Modifier = Modifier
-) {
-    Box(
-        modifier = modifier.background(
-            brush = Brush.verticalGradient(
-                colors = listOf(
-                    Color(0xFF1A1A1A),
-                    Color(0xFF2A2A2A)
-                )
-            )
-        ),
-        contentAlignment = Alignment.Center
-    ) {
-        if (previewPath != null) {
-            AsyncImage(
-                model = previewPath,
-                contentDescription = "皮肤预览",
-                modifier = Modifier.fillMaxSize(),
-                contentScale = ContentScale.Crop
-            )
-        } else {
-            Icon(
-                imageVector = Icons.Default.Image,
-                contentDescription = "无预览图",
-                tint = Color.White.copy(alpha = 0.5f),
-                modifier = Modifier.size(32.dp)
-            )
         }
     }
 }
@@ -351,7 +262,11 @@ private fun EmptySkinState(
     modifier: Modifier = Modifier
 ) {
     Column(
-        modifier = modifier,
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
+            .background(MaterialTheme.colorScheme.surfaceVariant)
+            .padding(vertical = 32.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
@@ -359,19 +274,20 @@ private fun EmptySkinState(
             imageVector = Icons.Default.Image,
             contentDescription = null,
             modifier = Modifier.size(48.dp),
-            tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f)
+            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f)
         )
-        Spacer(modifier = Modifier.height(8.dp))
+        Spacer(modifier = Modifier.height(12.dp))
         Text(
             text = "暂无可用皮肤",
             style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
         )
         Spacer(modifier = Modifier.height(4.dp))
         Text(
-            text = "请先下载资源包或更新皮肤缓存",
+            text = "点击上方「导入 ZIP」或「导入目录」添加皮肤，\n或先下载资源包",
             style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+            textAlign = TextAlign.Center
         )
     }
 }

@@ -1,5 +1,6 @@
 package fansirsqi.xposed.sesame.ui.extension
 
+import android.annotation.SuppressLint
 import android.content.Intent
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
@@ -9,6 +10,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.outlined.Palette
 import androidx.compose.material3.*
@@ -19,6 +21,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.activity.compose.LocalActivity
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -37,12 +40,6 @@ fun ExtensionListScreen(viewModel: ExtensionViewModel) {
     // 收集模块状态
     val moduleStates by viewModel.moduleStates.collectAsState()
     val context = LocalContext.current
-
-    // 渐变背景色
-    val gradientColors = listOf(
-        Color(0xFFF5F7FA),
-        Color(0xFFE8EAF6)
-    )
 
     Box(
         modifier = Modifier
@@ -87,6 +84,7 @@ fun ExtensionListScreen(viewModel: ExtensionViewModel) {
  */
 @Composable
 private fun ModernTopBar() {
+    val activity = LocalActivity.current
     Box(
         modifier = Modifier
             .fillMaxWidth()
@@ -101,6 +99,18 @@ private fun ModernTopBar() {
             .padding(horizontal = 24.dp, vertical = 32.dp)
     ) {
         Column {
+            // 返回按钮
+            IconButton(
+                onClick = { activity?.finish() },
+                modifier = Modifier.align(Alignment.Start)
+            ) {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                    contentDescription = "返回",
+                    tint = MaterialTheme.colorScheme.onSurface
+                )
+            }
+            Spacer(modifier = Modifier.height(8.dp))
             Text(
                 text = "扩展功能",
                 fontSize = 32.sp,

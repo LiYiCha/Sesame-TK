@@ -46,9 +46,9 @@ fun SkinDetailScreen(
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = Color(0xFFE1D9D2), // RGB 225/217/210
-                    titleContentColor = Color(0xFF131313), // 深蓝色文字
-                    navigationIconContentColor = Color(0xFF131313) // 深蓝色图标
+                    containerColor = MaterialTheme.colorScheme.surface,
+                    titleContentColor = MaterialTheme.colorScheme.onSurface,
+                    navigationIconContentColor = MaterialTheme.colorScheme.onSurface
                 )
             )
         }
@@ -60,8 +60,8 @@ fun SkinDetailScreen(
                 .background(
                     brush = Brush.verticalGradient(
                         colors = listOf(
-                            Color(0xFFF5F7FA),
-                            Color(0xFFE8EAF6)
+                            MaterialTheme.colorScheme.background,
+                            MaterialTheme.colorScheme.primaryContainer
                         )
                     )
                 )

@@ -1,219 +1,457 @@
 package fansirsqi.xposed.sesame.ui.skin
 
+import android.app.Activity
 import android.content.Intent
 import android.net.Uri
-import androidx.compose.animation.*
-import androidx.compose.animation.core.*
-import androidx.compose.foundation.background
+import android.widget.Toast
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Palette
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import fansirsqi.xposed.sesame.BuildConfig
-import java.io.File
+import androidx.core.net.toUri
 
 /**
- * 皮肤设置主屏幕
+ * 皮肤设置主屏幕（精简版）
  *
- * 使用 Jetpack Compose 构建的现代化声明式 UI
- * 采用 Material Design 3 设计规范
+ * 网格为主体，底层操作折叠到右上角「⋮」菜单，会员等级与总开关合并为一张设置卡。
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SkinScreen(viewModel: SkinViewModel) {
+fun SkinScreen(
+    viewModel: SkinViewModel,
+    onImport: () -> Unit,
+    onImportDirectory: () -> Unit
+) {
     val state by viewModel.state.collectAsState()
     val context = LocalContext.current
 
-    // 首次运行隐私说明对话框
-    if (state.isFirstRun) {
-        PrivacyDialog(onDismiss = { viewModel.markNotFirstRun() })
+    var confirmDelete by remember { mutableStateOf(false) }
+    var showMoreMenu by remember { mutableStateOf(false) }
+
+    // 皮肤系统开关
+    val skinEnabled = state.operationStates[SkinOperation.ACTIVATE] ?: false
+
+    // 通用操作执行（删除需二次确认）
+    val runOperation: (SkinOperation) -> Unit = { operation ->
+        if (operation == SkinOperation.DELETE) {
+            confirmDelete = true
+        } else {
+            viewModel.executeOperation(operation) { _, msg ->
+                Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
+            }
+        }
+    }
+    // 确认后的删除
+    fun confirmDeleteSkin() {
+        confirmDelete = false
+        viewModel.executeOperation(SkinOperation.DELETE) { _, msg ->
+            Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
+        }
     }
 
-    // 渐变背景
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
-    ) {
+    // 打开资源文件夹
+    fun openFolder() {
+        val file = java.io.File(viewModel.getResourceFolderPath())
+        if (file.exists()) {
+            val intent = Intent(Intent.ACTION_VIEW).apply {
+                setDataAndType(file.absolutePath.toUri(), "*/*")
+            }
+            try {
+                context.startActivity(Intent.createChooser(intent, "选择文件浏览器"))
+            } catch (e: Exception) {
+                // 忽略
+            }
+        } else {
+            Toast.makeText(context, "资源文件夹不存在，请先下载资源包", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("皮肤管理", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold) },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.background
+                ),
+                navigationIcon = {
+                    IconButton(onClick = { (context as? Activity)?.finish() }) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "返回"
+                        )
+                    }
+                },
+                actions = {
+                    IconButton(onClick = { viewModel.loadAvailableSkins() }) {
+                        Icon(Icons.Default.Refresh, contentDescription = "刷新")
+                    }
+                    Box {
+                        IconButton(onClick = { showMoreMenu = true }) {
+                            Icon(Icons.Default.MoreVert, contentDescription = "更多操作")
+                        }
+                        DropdownMenu(
+                            expanded = showMoreMenu,
+                            onDismissRequest = { showMoreMenu = false }
+                        ) {
+                            DropdownMenuItem(
+                                text = { Text("导出现有皮肤") },
+                                onClick = { showMoreMenu = false; runOperation(SkinOperation.EXPORT) }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("更新皮肤缓存") },
+                                onClick = { showMoreMenu = false; runOperation(SkinOperation.UPDATE) }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("删除皮肤缓存") },
+                                onClick = { showMoreMenu = false; confirmDelete = true }
+                            )
+                            HorizontalDivider()
+                            DropdownMenuItem(
+                                text = { Text("打开资源文件夹") },
+                                onClick = { showMoreMenu = false; openFolder() }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("查看 GitHub 项目") },
+                                onClick = {
+                                    showMoreMenu = false
+                                    context.startActivity(
+                                        Intent(Intent.ACTION_VIEW, Uri.parse(SkinConstants.GITHUB_REPO_URL))
+                                    )
+                                }
+                            )
+                        }
+                    }
+                }
+            )
+        },
+        containerColor = MaterialTheme.colorScheme.background
+    ) { paddingValues ->
         LazyColumn(
-            modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(vertical = 20.dp, horizontal = 20.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(paddingValues),
+            contentPadding = PaddingValues(
+                start = 16.dp, end = 16.dp, top = 8.dp, bottom = 24.dp
+            ),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            // 顶部标题
+            // 1. 快捷导入行
             item {
-                TopHeader()
+                QuickImportRow(
+                    onImport = onImport,
+                    onImportDirectory = onImportDirectory
+                )
             }
 
-            // 版本信息
+            // 2. 已安装皮肤
             item {
-                VersionCard()
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 4.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "已安装皮肤",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    if (state.availableSkins.isNotEmpty()) {
+                        Text(
+                            text = "${state.availableSkins.size} 个",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
             }
 
-            // 会员等级选择
+            // 3. 皮肤网格 or 空态
             item {
-                MemberGradeCard(
+                SkinSelectorCard(
+                    availableSkins = state.availableSkins,
+                    selectedSkinName = state.selectedSkinName,
+                    isEnabled = skinEnabled,
+                    onSkinSelected = { name ->
+                        viewModel.selectSkin(name)
+                        Toast.makeText(
+                            context,
+                            if (skinEnabled) "已选择皮肤：$name\n重新打开付款码生效" else "皮肤已选择，但自定义皮肤未启用",
+                            Toast.LENGTH_SHORT
+                        ).show()
+                    },
+                    onViewDetail = { skinName ->
+                        context.startActivity(
+                            Intent(context, SkinDetailActivity::class.java).apply {
+                                putExtra("skinName", skinName)
+                            }
+                        )
+                    }
+                )
+            }
+
+            // 4. 设置卡（总开关 + 会员等级）
+            item {
+                SettingsCard(
+                    isEnabled = skinEnabled,
+                    onToggleActivate = {
+                        viewModel.toggleOperation(SkinOperation.ACTIVATE)
+                        Toast.makeText(
+                            context,
+                            if (skinEnabled) "自定义皮肤系统已禁用" else "已启用自定义皮肤系统",
+                            Toast.LENGTH_SHORT
+                        ).show()
+                    },
                     selectedGrade = state.selectedGrade,
                     onGradeSelected = { viewModel.updateMemberGrade(it) }
                 )
             }
 
-            // 操作按钮组
+            // 5. 资源包
             item {
-                OperationsCard(
-                    operationStates = state.operationStates,
-                    onToggle = { operation ->
-                        // 仅用于 ACTIVATE 操作的开关
-                        viewModel.toggleOperation(operation)
-                    },
-                    onExecute = { operation ->
-                        // 用于 EXPORT, DELETE, UPDATE 操作的按钮执行
-                        viewModel.executeOperation(operation) { success, message ->
-                            android.widget.Toast.makeText(context, message, android.widget.Toast.LENGTH_LONG).show()
-                        }
-                    }
-                )
-            }
-
-            // 皮肤选择
-            item {
-                SkinSelectorCard(
-                    availableSkins = state.availableSkins,
-                    selectedSkinName = state.selectedSkinName,
-                    onSkinSelected = { viewModel.selectSkin(it) },
-                    onRefresh = { viewModel.loadAvailableSkins() },
-                    onImport = {
-                        // 触发导入ZIP操作，由Activity处理
-                        (context as? SkinActivity)?.startImportSkin()
-                    },
-                    onImportDirectory = {
-                        // 触发导入目录操作，由Activity处理
-                        (context as? SkinActivity)?.startImportSkinFromDirectory()
-                    },
-                    onViewDetail = { skinName ->
-                        // 跳转到皮肤详情页
-                        val intent = Intent(context, SkinDetailActivity::class.java).apply {
-                            putExtra("skinName", skinName)
-                        }
-                        context.startActivity(intent)
-                    }
-                )
-            }
-
-            // 下载资源包
-            item {
-                DownloadCard(
+                ResourceCard(
+                    isInstalled = state.isResourceInstalled,
                     downloadState = state.downloadState,
-                    isResourceInstalled = state.isResourceInstalled,
                     onDownload = { viewModel.downloadResource() }
                 )
             }
 
-            // 底部操作
+            // 6. 提示
             item {
-                BottomActions(
-                    isResourceInstalled = state.isResourceInstalled,
-                    onOpenFolder = {
-                        val path = viewModel.getResourceFolderPath()
-                        val file = File(path)
-                        if (file.exists()) {
-                            val intent = Intent(Intent.ACTION_VIEW).apply {
-                                setDataAndType(Uri.parse(path), "*/*")
-                            }
-                            try {
-                                context.startActivity(Intent.createChooser(intent, "选择文件浏览器"))
-                            } catch (e: Exception) {
-                                // 处理错误
-                            }
-                        }
-                    },
-                    onOpenGithub = {
-                        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(SkinConstants.GITHUB_REPO_URL))
-                        context.startActivity(intent)
-                    }
+                Text(
+                    text = "重新打开付款码使更改生效",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 4.dp)
                 )
             }
         }
     }
-}
 
-/**
- * 隐私说明对话框
- */
-@Composable
-private fun PrivacyDialog(onDismiss: () -> Unit) {
-    AlertDialog(
-        onDismissRequest = { },
-        title = { Text("隐私说明") },
-        text = {
-            Text(
-                "本应用不会收集、不会上传任何用户信息或使用数据。\n\n" +
-                        "应用仅在本地运行，不会与任何服务器通信（除非您主动点击\"下载资源包\"按钮从 Github 下载资源）。\n\n" +
-                        "所有操作均在您的设备本地完成，请放心使用。"
-            )
-        },
-        confirmButton = {
-            TextButton(onClick = onDismiss) {
-                Text("我知道了")
+    // 删除皮肤缓存二次确认
+    if (confirmDelete) {
+        AlertDialog(
+            onDismissRequest = { confirmDelete = false },
+            title = { Text("确认删除") },
+            text = { Text("将删除支付宝内的皮肤缓存并强制重新加载，此操作不可撤销。确定继续吗？") },
+            confirmButton = {
+                TextButton(onClick = { confirmDeleteSkin() }) {
+                    Text("删除", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmDelete = false }) { Text("取消") }
             }
-        }
-    )
+        )
+    }
 }
 
 /**
- * 顶部标题
+ * 快捷导入行：导入 ZIP / 导入目录
  */
 @Composable
-private fun TopHeader() {
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(20.dp))
-            .background(
-                brush = Brush.horizontalGradient(
-                    colors = listOf(
-                        MaterialTheme.colorScheme.surface,
-                        MaterialTheme.colorScheme.primaryContainer
-                    )
-                )
-            )
-            .padding(24.dp)
+private fun QuickImportRow(
+    onImport: () -> Unit,
+    onImportDirectory: () -> Unit
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        Column {
+        ActionChip(
+            text = "导入 ZIP",
+            onClick = onImport,
+            modifier = Modifier.weight(1f)
+        )
+        ActionChip(
+            text = "导入目录",
+            onClick = onImportDirectory,
+            modifier = Modifier.weight(1f)
+        )
+    }
+}
+
+/**
+ * 单个操作 Chip
+ */
+@Composable
+private fun ActionChip(
+    text: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    ElevatedCard(
+        modifier = modifier.height(48.dp),
+        shape = RoundedCornerShape(24.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .clickable(onClick = onClick)
+                .padding(horizontal = 12.dp),
+            contentAlignment = Alignment.Center
+        ) {
             Text(
-                text = "皮肤管理",
-                fontSize = 28.sp,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onSurface // 深蓝色，在浅色背景上清晰可见
-            )
-            Spacer(modifier = Modifier.height(4.dp))
-            Text(
-                text = "自定义支付宝付款码皮肤",
-                fontSize = 14.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant // 深灰色
+                text = text,
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.Medium,
+                color = MaterialTheme.colorScheme.primary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
             )
         }
     }
 }
 
 /**
- * 版本信息卡片
+ * 设置卡：总开关 + 会员等级（两行合并成一张卡）
  */
 @Composable
-private fun VersionCard() {
+private fun SettingsCard(
+    isEnabled: Boolean,
+    onToggleActivate: () -> Unit,
+    selectedGrade: MemberGrade,
+    onGradeSelected: (MemberGrade) -> Unit
+) {
+    var gradeExpanded by remember { mutableStateOf(false) }
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+    ) {
+        Column(modifier = Modifier.padding(horizontal = 16.dp)) {
+            // 启用自定义皮肤
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 12.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    modifier = Modifier.weight(1f),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Palette,
+                        contentDescription = null,
+                        tint = if (isEnabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Column {
+                        Text(
+                            text = "启用自定义皮肤",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Medium
+                        )
+                        Text(
+                            text = if (isEnabled) "已启用" else "未启用",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+                Switch(
+                    checked = isEnabled,
+                    onCheckedChange = { onToggleActivate() }
+                )
+            }
+
+            HorizontalDivider()
+
+            // 会员等级
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { gradeExpanded = true }
+                    .padding(vertical = 12.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(
+                        modifier = Modifier.weight(1f),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Star,
+                            contentDescription = null,
+                            tint = Color(0xFFFFD700)
+                        )
+                        Column {
+                            Text(
+                                text = "会员等级",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Medium
+                            )
+                            Text(
+                                text = selectedGrade.displayName,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                    Icon(
+                        imageVector = Icons.Default.KeyboardArrowDown,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                }
+
+                DropdownMenu(
+                    expanded = gradeExpanded,
+                    onDismissRequest = { gradeExpanded = false }
+                ) {
+                    MemberGrade.entries.forEach { grade ->
+                        DropdownMenuItem(
+                            text = { Text(grade.displayName) },
+                            onClick = {
+                                onGradeSelected(grade)
+                                gradeExpanded = false
+                            }
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * 资源包：单行状态 + 下载
+ */
+@Composable
+private fun ResourceCard(
+    isInstalled: Boolean,
+    downloadState: DownloadState,
+    onDownload: () -> Unit
+) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
@@ -223,104 +461,51 @@ private fun VersionCard() {
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(16.dp),
-            horizontalArrangement = Arrangement.Center,
+            horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Icon(
-                imageVector = Icons.Default.Info,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(20.dp)
-            )
-            Spacer(modifier = Modifier.width(8.dp))
-            Text(
-                text = "Version: ${BuildConfig.VERSION_NAME}",
-                fontSize = 14.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
-    }
-}
-
-/**
- * 会员等级选择卡片
- */
-@Composable
-private fun MemberGradeCard(
-    selectedGrade: MemberGrade,
-    onGradeSelected: (MemberGrade) -> Unit
-) {
-    var expanded by remember { mutableStateOf(false) }
-
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(20.dp)
-        ) {
             Row(
-                verticalAlignment = Alignment.CenterVertically
+                modifier = Modifier.weight(1f),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 Icon(
-                    imageVector = Icons.Default.Star,
+                    imageVector = Icons.Default.Download,
                     contentDescription = null,
-                    tint = Color(0xFFFFD700),
-                    modifier = Modifier.size(24.dp)
+                    tint = MaterialTheme.colorScheme.primary
                 )
-                Spacer(modifier = Modifier.width(12.dp))
-                Text(
-                    text = "会员等级",
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-            }
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // 下拉选择器
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(MaterialTheme.colorScheme.surfaceVariant)
-                    .clickable { expanded = true }
-                    .padding(16.dp)
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
+                Column {
                     Text(
-                        text = selectedGrade.displayName,
-                        fontSize = 16.sp,
-                        color = MaterialTheme.colorScheme.onSurface
+                        text = "资源包",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Medium
                     )
-                    Icon(
-                        imageVector = if (expanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary
+                    val subtitle = when (downloadState) {
+                        is DownloadState.Downloading -> "下载中 ${downloadState.progress}%"
+                        is DownloadState.Success -> "已安装"
+                        is DownloadState.Error -> "下载失败"
+                        else -> if (isInstalled) "已安装" else "未安装，下载供导入使用"
+                    }
+                    Text(
+                        text = subtitle,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
+            }
 
-                DropdownMenu(
-                    expanded = expanded,
-                    onDismissRequest = { expanded = false }
+            if (downloadState is DownloadState.Downloading) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(24.dp),
+                    strokeWidth = 3.dp
+                )
+            } else {
+                Button(
+                    onClick = onDownload,
+                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+                    shape = RoundedCornerShape(12.dp)
                 ) {
-                    MemberGrade.values().forEach { grade ->
-                        DropdownMenuItem(
-                            text = { Text(grade.displayName) },
-                            onClick = {
-                                onGradeSelected(grade)
-                                expanded = false
-                            }
-                        )
-                    }
+                    Text(if (isInstalled) "重新下载" else "下载")
                 }
             }
         }

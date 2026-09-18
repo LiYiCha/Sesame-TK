@@ -11,9 +11,7 @@ import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.lightColorScheme
-import androidx.compose.ui.graphics.Color
+import fansirsqi.xposed.sesame.ui.theme.app.SesameTheme
 
 /**
  * 皮肤设置 Activity
@@ -100,27 +98,15 @@ class SkinActivity : ComponentActivity() {
         // 检查并请求权限
         checkAndRequestPermissions()
 
-        // 设置 Compose UI
+        // 设置 Compose UI，使用与主题模块统一的全局主题
         setContent {
-            // 应用主题
-            MaterialTheme(
-                colorScheme = lightColorScheme(
-                    primary = Color(0xFFE1D9D2), // RGB 225/217/210
-                    onPrimary = Color.White,
-                    primaryContainer = Color(0xFFE8EAF6),
-                    onPrimaryContainer = Color(0xFF131313),
-                    secondary = Color(0xFFD2FFFB), // RGB 210/255/251
-                    onSecondary = Color.White,
-                    background = Color(0xFFF5F7FA),
-                    onBackground = Color.Black,
-                    surface = Color.White,
-                    onSurface = Color.Black,
-                    surfaceVariant = Color(0xFFE0E0E0),
-                    onSurfaceVariant = Color(0xFF616161)
+            SesameTheme {
+                // 渲染主屏幕，导入动作由 Activity 处理
+                SkinScreen(
+                    viewModel = viewModel,
+                    onImport = { startImportSkin() },
+                    onImportDirectory = { startImportSkinFromDirectory() }
                 )
-            ) {
-                // 渲染主屏幕
-                SkinScreen(viewModel = viewModel)
             }
         }
     }
