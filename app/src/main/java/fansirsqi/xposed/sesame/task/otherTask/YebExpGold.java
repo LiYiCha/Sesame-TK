@@ -12,6 +12,7 @@ import java.util.Map;
 
 import fansirsqi.xposed.sesame.data.Status;
 import fansirsqi.xposed.sesame.hook.ApplicationHook;
+import fansirsqi.xposed.sesame.hook.RequestManager;
 import fansirsqi.xposed.sesame.util.Log;
 import fansirsqi.xposed.sesame.util.TaskBlacklist;
 import fansirsqi.xposed.sesame.util.maps.UserMap;
@@ -370,10 +371,8 @@ public class YebExpGold extends BaseCommTask {
             params.put("appletId", MAIN_QUERY_APPLET_ID);
             params.put("taskId", taskId);
             params.put("version", MAIN_QUERY_TASK_VERSION);
-            JSONObject args = new JSONObject();
-            args.put("params", params);
-            args.put("path", path);
-            return requestString("com.alipay.yebscenebff.promosdk.index.forward", args.toString());
+            return requestString("com.alipay.yebscenebff.promosdk.index.forward",
+                    "\"params\":" + params + ",\"path\":\"" + path + "\"");
         } catch (JSONException e) {
             return null;
         }
@@ -763,7 +762,7 @@ public class YebExpGold extends BaseCommTask {
 
     public JSONObject requestString(String method, String params) {
         try {
-            String response = ApplicationHook.requestString(method, "[{" + params + "}]");
+            String response = RequestManager.requestString(method, "[{" + params + "}]");
             if (response == null) {
                 return null;
             }

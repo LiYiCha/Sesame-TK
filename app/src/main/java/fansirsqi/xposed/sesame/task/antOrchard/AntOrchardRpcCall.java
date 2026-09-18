@@ -250,7 +250,7 @@
 //    }
 //    /* 助力好友 */
 ////  public static String shareP2P() {
-////        return ApplicationHook.requestString("com.alipay.antiep.shareP2P",
+////        return RequestManager.requestString("com.alipay.antiep.shareP2P",
 ////                "[{\"requestType\":\"NORMAL\",\"sceneCode\":\"ANTFARM_ORCHARD_SHARE_P2P\",\"source\":\"ch_appcenter__chsub_9patch\",\"version\":\""
 ////                        + VERSION + "\"}]");
 ////    }

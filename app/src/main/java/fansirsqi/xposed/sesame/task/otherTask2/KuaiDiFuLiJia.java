@@ -21,7 +21,7 @@ public class KuaiDiFuLiJia extends MemberNew {
     private void listQuery(String str) {
         String str2 = "listQuery err ";
         try {
-            JSONObject stringBuilder = new JSONObject(ApplicationHook.requestString("alipay.promoprod.task.listQuery", "[{\"consultAccessFlag\":true,\"taskCenInfo\":\"" + str + "\"}]"));
+            JSONObject stringBuilder = new JSONObject(RequestManager.requestString("alipay.promoprod.task.listQuery", "[{\"consultAccessFlag\":true,\"taskCenInfo\":\"" + str + "\"}]"));
             if (stringBuilder.optBoolean("success")) {
                 JSONArray jSONArray = stringBuilder.getJSONArray("taskDetailList");
                 for (int i = 0; i < jSONArray.length(); i++) {
@@ -54,7 +54,7 @@ public class KuaiDiFuLiJia extends MemberNew {
     private void listQuery2(String str) {
         String str2 = "listQuery2 err ";
         try {
-            JSONObject stringBuilder = new JSONObject(ApplicationHook.requestString("alipay.promoprod.task.listQuery",
+            JSONObject stringBuilder = new JSONObject(RequestManager.requestString("alipay.promoprod.task.listQuery",
                     "[{\"consultAccessFlag\":true,\"extInfo\":{\"componentCode\":\"musi_test\"},\"taskCenInfo\":\""+str+"\"}]"));
             if (stringBuilder.optBoolean("success")) {
                 JSONArray jSONArray = stringBuilder.getJSONArray("taskDetailList");

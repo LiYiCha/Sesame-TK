@@ -101,11 +101,11 @@ public abstract class BaseCommTask {
     }
 
     protected JSONObject requestStringAll(String str, String str2) throws JSONException {
-        return new JSONObject(ApplicationHook.requestString(str, str2 == null ? null : "[{" + str2 + "}]"));
+        return new JSONObject(RequestManager.requestString(str, str2 == null ? null : "[{" + str2 + "}]"));
     }
 
     protected JSONObject requestStringAllNew(String str, String str2) throws JSONException {
-        return new JSONObject(ApplicationHook.requestString(str, str2));
+        return new JSONObject(RequestManager.requestString(str, str2));
     }
 
 

@@ -16,7 +16,7 @@ public class AntMemberRpcCall {
             args.put("configId", str);
             args.put("adTaskFlag", true);
             args.put("sourcePassMap", buildSourcePassMap());
-            return ApplicationHook.requestString(
+            return RequestManager.requestString(
                     "com.alipay.amic.memtask.h5.MemTaskManagerFacade.executeTask",
                     "[" + args + "]");
         } catch (Exception e) {
@@ -35,24 +35,24 @@ public class AntMemberRpcCall {
     }
 
     public static String queryPointCert(int i, int i2) {
-        return ApplicationHook.requestString("alipay.antmember.biz.rpc.member.h5.queryPointCert", "[{\"page\":" + i + ",\"pageSize\":" + i2 + "}]");
+        return RequestManager.requestString("alipay.antmember.biz.rpc.member.h5.queryPointCert", "[{\"page\":" + i + ",\"pageSize\":" + i2 + "}]");
     }
 
     public static String receivePointByUser(String str) {
-        return ApplicationHook.requestString("alipay.antmember.biz.rpc.member.h5.receivePointByUser", "[{\"certId\":" + str + "}]");
+        return RequestManager.requestString("alipay.antmember.biz.rpc.member.h5.receivePointByUser", "[{\"certId\":" + str + "}]");
     }
 
     public static String rpcCall_signIn() {
-        return ApplicationHook.requestString("alipay.kbmemberprod.action.signIn", "[{\"sceneCode\":\"KOUBEI_INTEGRAL\",\"source\":\"ALIPAY_TAB\",\"version\":\"2.0\"}]");
+        return RequestManager.requestString("alipay.kbmemberprod.action.signIn", "[{\"sceneCode\":\"KOUBEI_INTEGRAL\",\"source\":\"ALIPAY_TAB\",\"version\":\"2.0\"}]");
     }
 
     public static String applyTask(String str, Long l) {
-        return ApplicationHook.requestString("com.alipay.amic.memtask.h5.MemTaskManagerFacade.applyTask",
+        return RequestManager.requestString("com.alipay.amic.memtask.h5.MemTaskManagerFacade.applyTask",
                 "[{\"alipayGrowthTask\":false,\"sourcePassMap\":" + buildSourcePassMap() + ",\"taskConfigId\":" + l + "}]");
     }
 
     public static String applyTask2(Long l) {
-        return ApplicationHook.requestString("com.alipay.amic.memtask.h5.MemTaskManagerFacade.applyTask",
+        return RequestManager.requestString("com.alipay.amic.memtask.h5.MemTaskManagerFacade.applyTask",
                 "[{\"alipayGrowthTask\":false,\"sourcePassMap\":" + buildSourcePassMap() + ",\"taskConfigId\":" + l + "}]");
     }
 
@@ -61,16 +61,16 @@ public class AntMemberRpcCall {
     }
 
     public static String ngfeUpdate(String str) {
-        return ApplicationHook.requestString("com.alipay.csprod.prom.camp.ngfe.update", "[{\"tagCode\":\"" + str + "\"}]");
+        return RequestManager.requestString("com.alipay.csprod.prom.camp.ngfe.update", "[{\"tagCode\":\"" + str + "\"}]");
     }
 
     public static String queryAllStatusTaskListNew() {
-        return ApplicationHook.requestString("com.alipay.amic.memtask.h5.MemTaskListQueryFacade.queryAllStatusTaskList",
+        return RequestManager.requestString("com.alipay.amic.memtask.h5.MemTaskListQueryFacade.queryAllStatusTaskList",
                 "[{\"source\":\"signInAd\"}]");
     }
 
     public static String queryMemberSigninCalendar() {
-        return ApplicationHook.requestString("com.alipay.amic.biz.rpc.signin.h5.queryMemberSigninCalendar", 
+        return RequestManager.requestString("com.alipay.amic.biz.rpc.signin.h5.queryMemberSigninCalendar", 
                 "[{\"autoSignIn\":true,\"chInfo\":\"memberHomePage_myTab\",\"invitorUserId\":\"\",\"sceneCode\":\"QUERY\",\"sourcePassMap\":{\"innerSource\":\"\",\"source\":\"myTab\",\"unid\":\"\"}}]");
     }
 
@@ -89,7 +89,7 @@ public class AntMemberRpcCall {
             args.put("spaceCode", "ant_member_xlight_task");
             args.put("switchNormal", true);
             args.put("taskTopConfigId", "");
-            return ApplicationHook.requestString(
+            return RequestManager.requestString(
                     "com.alipay.amic.memtask.h5.MemTaskListQueryFacade.signPageTaskList",
                     "[" + args + "]");
         } catch (Exception e) {
@@ -98,46 +98,46 @@ public class AntMemberRpcCall {
     }
 
     public static String transcodeCheck() {
-        return ApplicationHook.requestString("alipay.mrchservbase.mrchbusiness.sign.transcode.check", "[{}]");
+        return RequestManager.requestString("alipay.mrchservbase.mrchbusiness.sign.transcode.check", "[{}]");
     }
 
     // 新增：批量查询配置
     public static String batchQueryCommonDeliveryInfo() {
-        return ApplicationHook.requestString("com.alipay.alipaymember.biz.rpc.config.h5.batchQueryCommonDeliveryInfo",
+        return RequestManager.requestString("com.alipay.alipaymember.biz.rpc.config.h5.batchQueryCommonDeliveryInfo",
                 "[{\"previewCopyDbId\":\"\",\"requestMap\":{\"MORE_POINTS_BUTTON\":{\"limit\":1,\"relatedChannel\":\"MORE_POINTS_BUTTON\",\"targetCode\":\"SIGN_GUIDE_CONFIG\"}},\"sourcePassMap\":{\"innerSource\":\"\",\"source\":\"myTab\",\"unid\":\"\"}}]");
     }
 
     // 新增：订阅信息查询
     public static String querySubscribeInfo() {
-        return ApplicationHook.requestString("com.alipay.alipaymember.biz.rpc.member.h5.CommonSubscribeFacade.querySubscribeInfo",
+        return RequestManager.requestString("com.alipay.alipaymember.biz.rpc.member.h5.CommonSubscribeFacade.querySubscribeInfo",
                 "[{\"bizSubType\":\"MEMBER_SIGN_REMIND\",\"bizType\":\"MEMBER_SIGN\",\"source\":\"SIGN_IN_COMPLETE\",\"sourcePassMap\":{\"innerSource\":\"\",\"source\":\"myTab\",\"unid\":\"\"}}]");
     }
 
     // 新增：游戏入口查询
     public static String queryGameEntranceInfo() {
-        return ApplicationHook.requestString("com.alipay.amic.biz.rpc.game.h5.GameCenterQueryFacade.queryGameEntranceInfo",
+        return RequestManager.requestString("com.alipay.amic.biz.rpc.game.h5.GameCenterQueryFacade.queryGameEntranceInfo",
                 "[{\"sourcePassMap\":{\"innerSource\":\"\",\"source\":\"myTab\",\"unid\":\"\"}}]");
     }
 
     // 初始化？
     public static String queryVajraPositionCarouselMessage() {
-        return ApplicationHook.requestString("com.alipay.alipaymember.biz.rpc.component.h5.queryVajraPositionCarouselMessage",
+        return RequestManager.requestString("com.alipay.alipaymember.biz.rpc.component.h5.queryVajraPositionCarouselMessage",
                 "[{\"relatedChannel\":\"MEMBER_POINT_ACTIVITY\",\"sceneCode\":\"\",\"sourcePassMap\":{\"innerSource\":\"\",\"source\":\"myTab\",\"unid\":\"\"}}]");
     }
 
     public static String queryVajraPositionCarouselMessageNew() {
-        return ApplicationHook.requestString("com.alipay.alipaymember.biz.rpc.config.h5.queryHomeVajraInfo",
+        return RequestManager.requestString("com.alipay.alipaymember.biz.rpc.config.h5.queryHomeVajraInfo",
                 "[{\"extInfo\":{},\"sourcePassMap\":{\"innerSource\":\"\",\"source\":\"myTab\",\"unid\":\"\"}}]");
     }
 
     // 攒积分赚现金活动投放
     public static String PlayConsultFacadeConsult() {
-        return ApplicationHook.requestString("com.alipay.amic.biz.rpc.activity.h5.PlayConsultFacade.consult",
+        return RequestManager.requestString("com.alipay.amic.biz.rpc.activity.h5.PlayConsultFacade.consult",
                 "[{\"operation\":\"consultSignInVersion\",\"playId\":\"PLAY202412061191152295\",\"source\":\"alipaymember\",\"sourcePassMap\":{\"innerSource\":\"\",\"passInfo\":\"{\\\"tc\\\":\\\"SIGN_POINT\\\"}\",\"source\":\"myTab\",\"unid\":\"\"}}]");
     }
 
     public static String commonTransFatigue() {
-        return ApplicationHook.requestString("com.alipay.alipaymember.biz.rpc.component.h5.commonTrans.fatigue",
+        return RequestManager.requestString("com.alipay.alipaymember.biz.rpc.component.h5.commonTrans.fatigue",
                 "[{\"sceneCode\":\"FAMY0I925T\",\"sourcePassMap\":{\"innerSource\":\"\",\"source\":\"myTab\",\"unid\":\"\"}}]");
     }
     public static String queryMemberInfo(){
@@ -146,71 +146,71 @@ public class AntMemberRpcCall {
     }
 
     public static String queryReSignInCardInfo() {
-        return ApplicationHook.requestString("com.alipay.amic.biz.rpc.signin.h5.queryReSignInCardInfo",
+        return RequestManager.requestString("com.alipay.amic.biz.rpc.signin.h5.queryReSignInCardInfo",
                 "[{\"sourcePassMap\":{\"innerSource\":\"\",\"source\":\"myTab\",\"unid\":\"\"}}]");
     }
 
     public static String queryCommonDeliveryInfo() {
-        return ApplicationHook.requestString("com.alipay.alipaymember.biz.rpc.config.h5.queryCommonDeliveryInfo",
+        return RequestManager.requestString("com.alipay.alipaymember.biz.rpc.config.h5.queryCommonDeliveryInfo",
                 "[{\"limit\":1,\"relatedChannel\":\"point-sign-in\",\"sourcePassMap\":{\"innerSource\":\"\",\"source\":\"myTab\",\"unid\":\"\"},\"targetCode\":\"H5_PAGE_CONFIG\"}]");
     }
 
     public static String queryTaskList() {
-        return ApplicationHook.requestString("com.alipay.amic.memtask.h5.MemTaskListQueryFacade.queryTaskList",
+        return RequestManager.requestString("com.alipay.amic.memtask.h5.MemTaskListQueryFacade.queryTaskList",
                 "[{\"source\":\"antmember_wish_pool\",\"sourcePassMap\":{\"innerSource\":\"\",\"source\":\"myTab\",\"unid\":\"\"}}]");
     }
 
     // querySimpleIndex
     public static String querySimpleIndex() {
-        return ApplicationHook.requestString("com.alipay.alipaymember.biz.rpc.member.h5.querySimpleIndex",
+        return RequestManager.requestString("com.alipay.alipaymember.biz.rpc.member.h5.querySimpleIndex",
                 "[{\"sourcePassMap\":{\"innerSource\":\"\",\"source\":\"myTab\",\"unid\":\"\"}}]");
     }
 
     // 游戏任务
     public static String queryGameTaskList() {
-        return ApplicationHook.requestString("com.alipay.amic.biz.rpc.activity.h5.PlayConsultFacade.consult",
+        return RequestManager.requestString("com.alipay.amic.biz.rpc.activity.h5.PlayConsultFacade.consult",
                 "[{\"operation\":\"consultGameCenter\",\"params\":{\"deviceLevel\":\"high\",\"unityDeviceLevel\":\"high\"},\"playId\":\"PLAY202404281383002382\",\"sourcePassMap\":{\"innerSource\":\"\",\"source\":\"myTab\",\"unid\":\"\"}}]");
     }
 
     // 新增：多活动投放咨询
     public static String queryMultiActivityDelivery() {
-        return ApplicationHook.requestString("com.alipay.amic.biz.rpc.activity.h5.MultiActivityDeliveryFacade.consult",
+        return RequestManager.requestString("com.alipay.amic.biz.rpc.activity.h5.MultiActivityDeliveryFacade.consult",
                 "[{\"deliveryScene\":\"MEMBER_HOME\",\"sourcePassMap\":{\"innerSource\":\"\",\"source\":\"myTab\",\"unid\":\"\"}}]");
     }
 
     // 新增：积分旅行咨询
     public static String queryPointsTravelActivity() {
-        return ApplicationHook.requestString("com.alipay.amic.biz.rpc.activity.h5.PointsTravelActivityFacade.consult",
+        return RequestManager.requestString("com.alipay.amic.biz.rpc.activity.h5.PointsTravelActivityFacade.consult",
                 "[{\"activityType\":\"TRAVEL_ACTIVITY\",\"sourceChannel\":\"MEMBER_HOME\",\"sourcePassMap\":{\"innerSource\":\"\",\"source\":\"myTab\",\"unid\":\"\"}}]");
     }
 
     // 新增：积分联运咨询
     public static String queryPointsJointActivity() {
-        return ApplicationHook.requestString("com.alipay.amic.biz.rpc.activity.h5.PointsJointActivityFacade.consult",
+        return RequestManager.requestString("com.alipay.amic.biz.rpc.activity.h5.PointsJointActivityFacade.consult",
                 "[{\"activityType\":\"FOOD_CARD_ACTIVITY\",\"sourceChannel\":\"MEMBER_HOME\",\"sourcePassMap\":{\"innerSource\":\"\",\"source\":\"myTab\",\"unid\":\"\"}}]");
     }
 
     // 新增：支付活动咨询 (SCHOOL_PAY_ACTIVITY)
     public static String querySchoolPayActivity() {
-        return ApplicationHook.requestString("com.alipay.amic.biz.rpc.activity.h5.PayActivityFacade.consult",
+        return RequestManager.requestString("com.alipay.amic.biz.rpc.activity.h5.PayActivityFacade.consult",
                 "[{\"activitySceneType\":\"SCHOOL_PAY_ACTIVITY\",\"scene\":\"MEMBER_HOME\",\"sourcePassMap\":{\"innerSource\":\"\",\"source\":\"myTab\",\"unid\":\"\"}}]");
     }
 
     // 新增：支付活动咨询 (PAY_ACTIVITY)
     public static String queryPayActivity() {
-        return ApplicationHook.requestString("com.alipay.amic.biz.rpc.activity.h5.PayActivityFacade.consult",
+        return RequestManager.requestString("com.alipay.amic.biz.rpc.activity.h5.PayActivityFacade.consult",
                 "[{\"activitySceneType\":\"PAY_ACTIVITY\",\"scene\":\"MEMBER_HOME\",\"sourcePassMap\":{\"innerSource\":\"\",\"source\":\"myTab\",\"unid\":\"\"}}]");
     }
 
     // 累积任务
     public static String queryAccumulateTask() {
-        return ApplicationHook.requestString("com.alipay.alipaymember.biz.rpc.membertask.h5.queryTaskList",
+        return RequestManager.requestString("com.alipay.alipaymember.biz.rpc.membertask.h5.queryTaskList",
                 "[{\"relatedChannel\":\"MEMBERPOINT\",\"sourcePassMap\":{\"innerSource\":\"\",\"source\":\"\",\"unid\":\"\"}}]");
     }
 
     //领取累积任务积分
     public static String receivePointAward(String taskProcessId, String awardRelatedOutBizNo) {
-        return ApplicationHook.requestString("com.alipay.alipaymember.biz.rpc.membertask.h5.award",
+        return RequestManager.requestString("com.alipay.alipaymember.biz.rpc.membertask.h5.award",
                 "[{\"awardRelatedOutBizNo\":\"" + awardRelatedOutBizNo + "\"," +
                         "\"sourcePassMap\":{\"innerSource\":\"\",\"source\":\"\",\"unid\":\"\"}," +
                         "\"taskProcessId\":\"" + taskProcessId + "\"}]");
@@ -218,7 +218,7 @@ public class AntMemberRpcCall {
 
     // 广告任务完成
     public static String adTaskFinish(String bizId) {
-        return ApplicationHook.requestString("com.alipay.adtask.biz.mobilegw.service.task.finish",
+        return RequestManager.requestString("com.alipay.adtask.biz.mobilegw.service.task.finish",
                 "[{\"bizId\":\"" + bizId + "\",\"extendInfo\":{}}]");
     }
 

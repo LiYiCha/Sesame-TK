@@ -145,6 +145,8 @@ public class AntFarmRpcCall {
         return RequestManager.requestString("com.alipay.antfarm.harvestProduce", args1);
     }
 
+    private static final String GAME_CENTER_VERSION = "10.8.20.8000";
+
     public static String listActivityInfo() {
         String args1 = "[{\"requestType\":\"NORMAL\",\"sceneCode\":\"ANTFARM\",\"source\":\"H5\",\"version\":\""
                 + VERSION + "\"}]";
@@ -152,10 +154,32 @@ public class AntFarmRpcCall {
     }
 
     public static String donation(String activityId, int donationAmount) {
-        String args1 = "[{\"activityId\":\"" + activityId + "\",\"donationAmount\":" + donationAmount +
-                ",\"requestType\":\"NORMAL\",\"sceneCode\":\"ANTFARM\",\"source\":\"H5\",\"version\":\""
-                + VERSION + "\"}]";
-        return RequestManager.requestString("com.alipay.antfarm.donation", args1);
+        return donation(activityId, donationAmount, null, null, null);
+    }
+
+    public static String donation(String activityId, int donationAmount, String projectId, String batchId, String targetId) {
+        try {
+            boolean hasStructuredTarget = (projectId != null && !projectId.isEmpty())
+                    && (batchId != null && !batchId.isEmpty())
+                    && (targetId != null && !targetId.isEmpty());
+            JSONObject args = new JSONObject();
+            args.put("activityId", activityId);
+            args.put("donationAmount", donationAmount);
+            args.put("requestType", "NORMAL");
+            args.put("sceneCode", "ANTFARM");
+            args.put("source", hasStructuredTarget ? "ANTFARM" : "H5");
+            args.put("version", hasStructuredTarget ? GAME_CENTER_VERSION : VERSION);
+            if (hasStructuredTarget) {
+                args.put("batchId", batchId);
+                args.put("businessCoinType", "BENE_SCORE");
+                args.put("cele", 1);
+                args.put("projectId", projectId);
+                args.put("targetId", targetId);
+            }
+            return RequestManager.requestString("com.alipay.antfarm.donation", "[" + args.toString() + "]");
+        } catch (JSONException e) {
+            return "";
+        }
     }
 
     public static String listFarmTask() {
