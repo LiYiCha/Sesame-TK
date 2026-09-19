@@ -3,22 +3,22 @@ package fansirsqi.xposed.sesame.util
 /**
  * 抓包/RPC 过滤统一入口（单一数据源）
  *
- * - 内置噪音：代码硬编码（BUILTIN_NOISE），RPC 调试 / HTTP 抓包 / 网络拦截各端始终生效，用户不可增删
- * - 用户关键词：存储于 DataStore[KEY]（逗号分隔字符串），通过抓包列表页的黑名单管理界面增删
+ * - 预设噪音：提供默认系统级噪音关键词（DEFAULT_NOISE），默认启用，支持用户在设置中自由增删
+ * - 用户关键词：统一存储于 DataStore[KEY]（逗号分隔字符串），用户可随时修改或一键恢复默认
  */
 object CaptureFilter {
     private const val TAG = "CaptureFilter"
 
-    /** DataStore 存储键（用户自定义关键词） */
+    /** DataStore 存储键（黑名单关键词） */
     const val KEY = "CaptureFilter"
 
-    /** 内置噪音关键词：始终过滤，子串匹配，忽略大小写 */
-    val BUILTIN_NOISE = listOf(
-        "alipay.pushcore",      // 推送绑定上报
-        "alipay.client",
-        "alipay.mappconfig",    // 小程序容器检查等（含 appContainerCheck）
-        "log.alipay.com",       // 日志上报（原默认黑名单项）
-        "mdap.alipay.com",      // 埋点监控（原默认黑名单项）
+    /** 默认预设噪音关键词：精确匹配系统噪音，不含宽泛的 alipay.client 避免误杀业务 */
+    val DEFAULT_NOISE = listOf(
+        "alipay.pushcore",
+        "alipay.mappconfig",
+        "log.alipay.com",
+        "mdap.alipay.com",
+        "diagnose.alipay.com",
         "wireless.audit",
         "locate.service",
         "uploadlog",
@@ -28,45 +28,46 @@ object CaptureFilter {
         "diagnose",
         "reportactive",
         "monitor",
-        "telemetry"
+        "telemetry",
+        "alipay.client.interfere.config.get",
+        "alipay.client.getDynamicBundle",
+        "alipay.client.getUnionResource"
     )
 
+    /** 兼容旧代码引用 */
+    val BUILTIN_NOISE = DEFAULT_NOISE
 
     /**
-     * 用户自定义关键词列表（仅读取 DataStore[KEY]，无迁移逻辑）
+     * 获取当前生效的过滤关键词列表（首次使用默认加载 DEFAULT_NOISE）
      */
     fun getKeywords(): List<String> {
         return try {
             val raw = DataStore.get(KEY, String::class.java)
-            if (raw.isNullOrBlank()) {
+            if (raw == null) {
+                // 首次未配置：初始化为默认推荐噪音
+                val defaultStr = DEFAULT_NOISE.joinToString(",")
+                DataStore.put(KEY, defaultStr)
+                DEFAULT_NOISE
+            } else if (raw.isBlank()) {
                 emptyList()
             } else {
                 raw.split(",").map { it.trim() }.filter { it.isNotEmpty() }
             }
         } catch (_: Throwable) {
-            emptyList()
+            DEFAULT_NOISE
         }
     }
 
     /**
-     * 判断文本是否命中过滤规则（内置噪音 + 用户关键词，子串匹配，忽略大小写）
+     * 判断文本是否命中过滤规则（子串匹配，忽略大小写）
      */
     fun isFiltered(text: String?): Boolean {
         if (text.isNullOrEmpty()) return false
         val lower = text.lowercase()
-        if (BUILTIN_NOISE.any { lower.contains(it) }) return true
-        return try {
-            val raw = DataStore.get(KEY, String::class.java)
-            if (!raw.isNullOrBlank()) {
-                raw.split(",").any { kw ->
-                    val k = kw.trim().lowercase()
-                    k.isNotEmpty() && lower.contains(k)
-                }
-            } else {
-                false
-            }
-        } catch (_: Throwable) {
-            false
+        val keywords = getKeywords()
+        return keywords.any { kw ->
+            val k = kw.trim().lowercase()
+            k.isNotEmpty() && lower.contains(k)
         }
     }
 
@@ -88,7 +89,7 @@ object CaptureFilter {
     }
 
     /**
-     * 移除关键词，返回是否存在并成功写入
+     * 移除关键词（支持删除任意预设或自定义关键词）
      */
     fun remove(keyword: String): Boolean {
         val current = getKeywords()
@@ -99,6 +100,19 @@ object CaptureFilter {
             true
         } catch (t: Throwable) {
             Log.error(TAG, "remove err: ${t.message}")
+            false
+        }
+    }
+
+    /**
+     * 恢复为默认推荐噪音
+     */
+    fun resetToDefault(): Boolean {
+        return try {
+            DataStore.put(KEY, DEFAULT_NOISE.joinToString(","))
+            true
+        } catch (t: Throwable) {
+            Log.error(TAG, "resetToDefault err: ${t.message}")
             false
         }
     }

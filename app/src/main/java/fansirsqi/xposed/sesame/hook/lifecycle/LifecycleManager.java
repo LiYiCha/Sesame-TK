@@ -71,6 +71,84 @@ public class LifecycleManager {
     private static XC_MethodHook.Unhook rpcResponseUnhook;
     private static volatile Class<?> cachedFastJsonClass = null;
     private static final java.util.Map<Object, Object[]> rpcHookMap = new java.util.concurrent.ConcurrentHashMap<>();
+    private static final java.util.Map<String, Long> h5BridgePending = new java.util.concurrent.ConcurrentHashMap<>();
+
+    private static String normalizeReqDataString(Object reqData) {
+        if (reqData == null) return "";
+        if (reqData instanceof byte[]) {
+            try {
+                return new String((byte[]) reqData, java.nio.charset.StandardCharsets.UTF_8).trim();
+            } catch (Throwable ignored) {}
+        }
+        return String.valueOf(reqData).trim();
+    }
+
+    private static String extractCoreParamsSignature(Object obj) {
+        if (obj == null) return "";
+        try {
+            if (obj instanceof org.json.JSONObject) {
+                org.json.JSONObject jo = (org.json.JSONObject) obj;
+                Object reqData = jo.opt("requestData");
+                if (reqData != null) return normalizeReqDataString(reqData);
+            }
+            if (obj instanceof java.util.Map) {
+                Object reqData = ((java.util.Map<?, ?>) obj).get("requestData");
+                if (reqData != null) return normalizeReqDataString(reqData);
+            }
+            if (obj.getClass().getName().contains("JSONObject")) {
+                try {
+                    Object reqData = XposedHelpers.callMethod(obj, "get", "requestData");
+                    if (reqData != null) return normalizeReqDataString(reqData);
+                } catch (Throwable ignored) {}
+            }
+        } catch (Throwable ignored) {}
+        return normalizeReqDataString(obj);
+    }
+
+    private static void markH5BridgePending(String method, Object requestContext) {
+        if (method == null || method.isEmpty()) return;
+        long now = System.currentTimeMillis();
+        // 1. 核心参数签名
+        String coreParams = extractCoreParamsSignature(requestContext);
+        if (!coreParams.isEmpty()) {
+            h5BridgePending.put(method + "@" + coreParams.hashCode(), now);
+        }
+        // 2. 兜底记录方法名
+        h5BridgePending.put(method, now);
+        if (h5BridgePending.size() > 60) {
+            h5BridgePending.entrySet().removeIf(entry -> now - entry.getValue() > 10000);
+        }
+    }
+
+    private static boolean isH5HandledByBridge(String method, Object reqData) {
+        if (method == null || method.isEmpty()) return false;
+        long now = System.currentTimeMillis();
+        // 1. 优先按“方法名 + 核心业务参数签名”精确匹配去重
+        if (reqData != null) {
+            String norm = normalizeReqDataString(reqData);
+            if (!norm.isEmpty()) {
+                String keyWithParam = method + "@" + norm.hashCode();
+                Long time = h5BridgePending.get(keyWithParam);
+                if (time != null && (now - time) < 10000) {
+                    return true;
+                }
+            }
+        }
+        // 2. 兜底匹配：同一方法在 5 秒内由上层 Bridge 接管
+        Long time = h5BridgePending.get(method);
+        return time != null && (now - time) < 5000;
+    }
+
+    private static void removeH5BridgePending(String method, Object requestContext) {
+        if (method == null) return;
+        h5BridgePending.remove(method);
+        if (requestContext != null) {
+            String core = extractCoreParamsSignature(requestContext);
+            if (!core.isEmpty()) {
+                h5BridgePending.remove(method + "@" + core.hashCode());
+            }
+        }
+    }
 
     private static final String modelVersion = fansirsqi.xposed.sesame.BuildConfig.VERSION_NAME;
     private static int retryCount = 0;
@@ -571,7 +649,19 @@ public class LifecycleManager {
                         return;
                     }
                     Object callback = args[args.length - 1];
-                    Object requestContext = args.length > 4 ? args[4] : null;
+                    // 智能寻找参数对象（排除方法名与最后的callback）
+                    Object requestContext = null;
+                    for (int i = 1; i < args.length - 1; i++) {
+                        if (args[i] != null) {
+                            requestContext = args[i];
+                            break;
+                        }
+                    }
+                    if (requestContext == null && args.length > 1 && args[1] != null) {
+                        requestContext = args[1];
+                    }
+                    // 标记当前 H5 请求已由上层 Bridge 接管，通知底层 Hook 3 勿重复打印 [BOTTOM]
+                    markH5BridgePending(method, requestContext);
                     
                     Object[] recordArray = new Object[3];
                     recordArray[0] = System.currentTimeMillis();
@@ -617,6 +707,8 @@ public class LifecycleManager {
                                 String method = String.valueOf(recordArray[1]);
                                 String params = String.valueOf(recordArray[2]);
                                 String rawData = param.args[0].toString();
+
+                                removeH5BridgePending(method, recordArray[2]);
 
                                 // 处理RPC响应数据并提取关键信息
                                 if (BaseModel.getAutoTokenEnabled().getValue()) {
@@ -677,28 +769,30 @@ public class LifecycleManager {
                                 } catch (Throwable ignored) {
                                 }
                             }
+
+                            // 黑名单过滤检查（H5 仅针对 realOpType 进行业务黑名单判定）
+                            boolean needFilter = isH5Rpc ? LifecycleManager.isUselessRpc(realOpType) : LifecycleManager.isUselessRpc(opType);
+                            if (needFilter) {
+                                XposedHelpers.setAdditionalInstanceField(param, "rpc_skip", true);
+                                return;
+                            }
+
+                            // 协同精准去重：若当前 H5 请求已由上层 RpcBridgeExtension (Hook 1 & 2) 完整接管，
+                            // 提取底层核心入参 rpcArgs[1]，与上层 requestData 进行核心签名比对；若一致底层直接跳过
+                            Object reqData = (rpcArgs != null && rpcArgs.length >= 2) ? rpcArgs[1] : null;
+                            if (isH5Rpc && isH5HandledByBridge(realOpType, reqData)) {
+                                XposedHelpers.setAdditionalInstanceField(param, "rpc_skip", true);
+                                return;
+                            }
+
+                            XposedHelpers.setAdditionalInstanceField(param, "isH5Rpc", isH5Rpc);
                             XposedHelpers.setAdditionalInstanceField(param, "opType", realOpType);
                             XposedHelpers.setAdditionalInstanceField(param, "startTime", System.currentTimeMillis());
                             
-                            // 注意：对于 H5/小程序通用 RPC（alipay.client.executerpc），
-                            // rpcArgs[0] 才是真正的业务 operationType（如 com.alipay.gameevent.biz.rpc.submitEvent）。
-                            // 必须先提取 realOpType，且仅对 realOpType 做黑名单过滤。
-                            // 若直接对 opType("alipay.client.executerpc") 进行过滤，会命中黑名单关键词 "alipay.client" 导致所有 H5 请求被误杀！
-                            if (isH5Rpc) {
-                                if (LifecycleManager.isUselessRpc(realOpType)) {
-                                    return;
-                                }
-                            } else {
-                                if (LifecycleManager.isUselessRpc(opType)) {
-                                    return;
-                                }
-                            }
-                            
-                            // 序列化入参：有值则尽最大努力保留（FastJSON -> reflectDump -> 原值 toString），只有真正无入参时才为 "[]"
+                            // 3. 序列化入参
                             String paramsJson = "";
                             try {
-                                if (isH5Rpc && rpcArgs != null && rpcArgs.length >= 2 && rpcArgs[1] != null) {
-                                    Object reqData = rpcArgs[1];
+                                if (isH5Rpc && reqData != null) {
                                     if (reqData instanceof String) {
                                         paramsJson = (String) reqData;
                                     } else if (reqData instanceof byte[]) {
@@ -754,7 +848,6 @@ public class LifecycleManager {
                                     paramsJson = "[]";
                                 }
                             } catch (Throwable t) {
-                                // 最终兜底：只要入参对象存在，就使用原值（String.valueOf），绝不误降级为 "[]"
                                 if (rpcArgs != null && rpcArgs.length > 0) {
                                     try {
                                         java.util.List<String> list = new java.util.ArrayList<>();
@@ -774,6 +867,11 @@ public class LifecycleManager {
 
                         @Override
                         protected void afterHookedMethod(MethodHookParam param) throws Throwable {
+                            // 检查跳过标志（去重或已过滤）
+                            if (Boolean.TRUE.equals(XposedHelpers.getAdditionalInstanceField(param, "rpc_skip"))) {
+                                return;
+                            }
+
                             String opType = (String) XposedHelpers.getAdditionalInstanceField(param, "opType");
                             if (opType == null) return;
                             if (LifecycleManager.isUselessRpc(opType)) return;
@@ -805,7 +903,16 @@ public class LifecycleManager {
                                 }
                             }
                             
-                            String logMessage = "\n[BOTTOM] ========================>\n" + 
+                            boolean isH5 = Boolean.TRUE.equals(XposedHelpers.getAdditionalInstanceField(param, "isH5Rpc"));
+                            if (isH5) {
+                                // 兜底处理未经过上层 Bridge 的底层小游戏等 RPC 请求的 Token 提取
+                                if (BaseModel.getAutoTokenEnabled().getValue()) {
+                                    RpcResponseHandler.handle(opType, responseJson);
+                                }
+                            }
+
+                            String logPrefix = isH5 ? "[H5]" : "[BOTTOM]";
+                            String logMessage = "\n" + logPrefix + " ========================>\n" + 
                                     "TimeStamp: " + startTime + "\n" + 
                                     "Method: " + opType + "\n" + 
                                     "Params: " + paramsJson + "\n" + 

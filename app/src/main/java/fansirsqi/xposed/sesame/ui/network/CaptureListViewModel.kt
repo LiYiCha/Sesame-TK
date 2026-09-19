@@ -187,6 +187,13 @@ class CaptureListViewModel : ViewModel() {
         }
     }
 
+    fun resetBlacklistToDefault() {
+        viewModelScope.launch(Dispatchers.IO) {
+            CaptureFilter.resetToDefault()
+            _blacklist.value = CaptureFilter.getKeywords()
+        }
+    }
+
     // ── 数据加载 ───────────────────────────
 
     fun loadData(dateStr: String? = null) {

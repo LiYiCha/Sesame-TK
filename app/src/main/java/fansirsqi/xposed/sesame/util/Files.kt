@@ -154,6 +154,23 @@ object Files {
         return targetFile
     }
 
+    /**
+     * 判断是否为合法的用户配置目录（排除 member_goods、cache、logs 等内部系统数据目录）
+     */
+    @JvmStatic
+    fun isUserDirectory(dir: File): Boolean {
+        if (!dir.isDirectory) return false
+        val name = dir.name
+        if (name.equals("member_goods", ignoreCase = true) ||
+            name.equals("cache", ignoreCase = true) ||
+            name.equals("logs", ignoreCase = true)
+        ) {
+            return false
+        }
+        // 需包含用户配置文件，或者目录名符合支付宝用户 ID（纯数字且长度>=10）
+        return File(dir, "config_v2.json").exists() || File(dir, "self.json").exists() || name.matches(Regex("\\d{10,}"))
+    }
+
     @JvmStatic
     @Synchronized
     fun getTargetFileofDir(dir: File, fullTargetFileName: String): File {

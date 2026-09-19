@@ -2399,6 +2399,9 @@ class AntMember : ModelTask() {
                             Log.other("芝麻炼金⚗️体力已耗尽且无法恢复，结束本次炼金")
                             return@run
                         }
+                    } else if (staminaCurrent <= 70) {
+                        // 开局体力不足70，尝试使用药水拉满爆棚
+                        ensureStamina(hasBottleQuota)
                     }
                     var zmlBalance = data.optInt("zmlBalance", 0) // 当前芝麻粒
                     val cost = data.optInt("alchemyCostZml", 5) // 单次消耗
@@ -2418,18 +2421,20 @@ class AntMember : ModelTask() {
                         val alchemyJo = JSONObject(alchemyRes)
                         attemptCount++
 
-                        // 每5轮查一次体力状态，耗尽（EXHAUSTED）就用药水/做任务恢复
+                        // 每5轮查一次体力，低于等于70就补充药水保持爆棚
                         if (attemptCount % 5 == 0) {
                             try {
                                 val checkJo = JSONObject(AntMemberRpcCall.Zmxy.Alchemy.alchemyQueryHome())
                                 val checkData = checkJo.optJSONObject("data")
-                                if (checkJo.optBoolean("success") && checkData != null
-                                    && checkData.optString("staminaStatus", "") == "EXHAUSTED"
-                                ) {
-                                    Log.other("芝麻炼金⚗️炼金过程中体力耗尽，尝试恢复体力...")
-                                    if (!ensureStamina(true)) {
-                                        Log.other("芝麻炼金⚗️体力恢复失败，退出炼金")
-                                        break
+                                if (checkJo.optBoolean("success") && checkData != null) {
+                                    val curStamina = checkData.optInt("staminaCurrent", 0)
+                                    val status = checkData.optString("staminaStatus", "")
+                                    if (curStamina <= 70 || status == "EXHAUSTED") {
+                                        Log.other("芝麻炼金⚗️当前体力[${curStamina}]，使用药水保持体力爆棚🔥")
+                                        if (!ensureStamina(true) && (status == "EXHAUSTED" || curStamina == 0)) {
+                                            Log.other("芝麻炼金⚗️体力已耗尽且无法恢复，退出炼金")
+                                            break
+                                        }
                                     }
                                 }
                             } catch (e: Throwable) {

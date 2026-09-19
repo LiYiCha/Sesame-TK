@@ -73,6 +73,7 @@ object CustomSettings {
 
     private fun getUserDisplayNameList(): Pair<List<String>, List<String>> {
         val uids = FansirsqiUtil.getFolderList(Files.CONFIG_DIR.absolutePath)
+            .filter { Files.isUserDirectory(java.io.File(Files.CONFIG_DIR, it)) }
         val displayNames = mutableListOf<String>()
         val validUids = mutableListOf<String>()
         val backupUid = UserMap.currentUid

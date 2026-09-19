@@ -5,6 +5,8 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.scrollBy
@@ -371,7 +373,8 @@ fun CaptureListScreen(
             blacklist = blacklist,
             onDismiss = { showBlacklist = false },
             onAdd = { viewModel.toggleBlacklist(it) },
-            onRemove = { viewModel.toggleBlacklist(it) }
+            onRemove = { viewModel.toggleBlacklist(it) },
+            onResetDefault = { viewModel.resetBlacklistToDefault() }
         )
     }
 
@@ -588,21 +591,37 @@ private fun BlacklistSheet(
     blacklist: List<String>,
     onDismiss: () -> Unit,
     onAdd: (String) -> Unit,
-    onRemove: (String) -> Unit
+    onRemove: (String) -> Unit,
+    onResetDefault: () -> Unit
 ) {
-    val sheetState = rememberModalBottomSheetState()
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     var newDomain by remember { mutableStateOf("") }
 
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState, dragHandle = { BottomSheetDefaults.DragHandle() }) {
-        Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp).padding(bottom = 32.dp)) {
-            Text("过滤配置", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-            Text("包含以下关键词的域名/接口将被排除", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.outline, modifier = Modifier.padding(bottom = 16.dp))
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 24.dp)
+                .padding(bottom = 32.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text("过滤配置", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                TextButton(onClick = onResetDefault) {
+                    Text("恢复默认噪音", style = MaterialTheme.typography.labelMedium)
+                }
+            }
+            Text("包含以下关键词的域名/接口将被排除（点击 × 即可删除）", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.outline, modifier = Modifier.padding(bottom = 16.dp))
 
             OutlinedTextField(
                 value = newDomain,
                 onValueChange = { newDomain = it },
                 modifier = Modifier.fillMaxWidth(),
-                placeholder = { Text("输入域名关键词") },
+                placeholder = { Text("输入域名或接口关键词") },
                 trailingIcon = {
                     IconButton(onClick = { if (newDomain.isNotBlank()) { onAdd(newDomain.trim()); newDomain = "" } }, enabled = newDomain.isNotBlank()) {
                         Icon(Icons.Rounded.Add, "添加")
@@ -616,7 +635,7 @@ private fun BlacklistSheet(
 
             if (blacklist.isEmpty()) {
                 Box(modifier = Modifier.fillMaxWidth().height(80.dp), contentAlignment = Alignment.Center) {
-                    Text("暂无黑名单", color = MaterialTheme.colorScheme.outline)
+                    Text("暂无过滤关键词（不过滤任何请求）", color = MaterialTheme.colorScheme.outline)
                 }
             } else {
                 FlowRow(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -642,25 +661,19 @@ private fun BlacklistSheet(
                 }
             }
 
-            Spacer(Modifier.height(16.dp))
-            Text("推荐过滤", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
-            val presets = listOf("log.alipay.com", "mdap.alipay.com", "alipay.client.getUnionResource")
-            FlowRow(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                presets.filter { !blacklist.contains(it) }.forEach { preset ->
-                    AssistChip(onClick = { onAdd(preset) }, label = { Text(preset) }, leadingIcon = { Icon(Icons.Rounded.Add, null, modifier = Modifier.size(16.dp)) })
-                }
-            }
-
-            Spacer(Modifier.height(16.dp))
-            Text("内置噪音（始终过滤，无需配置）", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.outline)
-            FlowRow(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                CaptureFilter.BUILTIN_NOISE.forEach { noise ->
-                    AssistChip(
-                        onClick = {},
-                        enabled = false,
-                        label = { Text(noise) },
-                        leadingIcon = { Icon(Icons.Rounded.Block, null, modifier = Modifier.size(16.dp)) }
-                    )
+            val availablePresets = CaptureFilter.DEFAULT_NOISE.filter { !blacklist.contains(it) }
+            if (availablePresets.isNotEmpty()) {
+                Spacer(Modifier.height(20.dp))
+                Text("快捷添加推荐噪音（点击添加）", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
+                Spacer(Modifier.height(8.dp))
+                FlowRow(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    availablePresets.forEach { preset ->
+                        AssistChip(
+                            onClick = { onAdd(preset) },
+                            label = { Text(preset) },
+                            leadingIcon = { Icon(Icons.Rounded.Add, null, modifier = Modifier.size(16.dp)) }
+                        )
+                    }
                 }
             }
         }

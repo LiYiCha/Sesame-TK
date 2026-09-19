@@ -217,7 +217,7 @@ class MainActivity : BaseActivity() {
                     val configFiles = Files.CONFIG_DIR.listFiles()
                     if (configFiles != null) {
                         for (configDir in configFiles) {
-                            if (configDir.isDirectory) {
+                            if (Files.isUserDirectory(configDir)) {
                                 val userId = configDir.name
                                 UserMap.loadSelf(userId)
                                 val userEntity = UserMap.get(userId)
@@ -263,6 +263,7 @@ class MainActivity : BaseActivity() {
     /**
      * 检查支付宝运行状态
      */
+    @Suppress("DEPRECATION")
     private fun checkAlipayRunningStatus() {
         try {
             // 检查支付宝服务是否在运行

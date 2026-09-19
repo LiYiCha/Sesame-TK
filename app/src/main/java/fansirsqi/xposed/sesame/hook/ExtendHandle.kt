@@ -292,64 +292,80 @@ class ExtendHandle {
          * 分类商品列表（日常抢兑/万分好物/联名周边），走 queryShandieEntityList。
          */
         private fun fetchCategoryGoodsList(context: Context, deliveryId: String, pageNum: Int) {
-            // 先动态获取真实会员积分（日志中 point=38089 为用户积分，不能用硬编码）
-            val point = queryMemberPoint()
-            if (point < 0) {
-                Log.error("获取会员商品列表失败：无法获取会员积分, deliveryId: $deliveryId")
-                val intent = Intent("fansirsqi.xposed.sesame.fetchMemberGoodsList.failed").apply {
-                    putExtra("deliveryId", deliveryId)
-                    putExtra("reason", "no_point")
+            // 动态获取真实会员积分，若接口失败优雅兜底为 99999（filterPointNoEnough 为 false 不影响商品下发）
+            val point = queryMemberPoint().let { if (it >= 0) it else 99999 }
+
+            var curPage = pageNum
+            var hasSavedAny = false
+
+            while (curPage <= 6) {
+                // uniqueId 会话内固定（同一分类翻页时不变，对齐日志真实请求）
+                val uniqueId = sessionUniqueIds.getOrPut("cat_$deliveryId") {
+                    System.currentTimeMillis().toString() + deliveryId
                 }
-                context.sendBroadcast(intent)
-                return
-            }
+                // 注意：filterExchangeTime 必须为 false（万分好物等定时秒杀商品若为 true 会被服务端直接过滤导致 9999 积分商品丢失）
+                val params = "[{\"blackIds\":[],\"deliveryIdList\":[\"$deliveryId\"],\"filterCityCode\":false,\"filterExchangeTime\":false,\"filterPointNoEnough\":false,\"filterStockNoEnough\":false,\"filterTimesLimit\":false,\"filterTimesLimitForPromo\":false,\"pageNum\":$curPage,\"pageSize\":18,\"point\":$point,\"previewCopyDbId\":\"\",\"queryType\":\"DELIVERY_ID_LIST\",\"shandieComponentId\":\"\",\"source\":\"来源\",\"sourcePassMap\":{\"innerSource\":\"\",\"source\":\"\",\"unid\":\"\"},\"topIds\":[],\"uniqueId\":\"$uniqueId\"}]"
+                val response = RequestManager.requestString(
+                    "com.alipay.alipaymember.biz.rpc.config.h5.queryShandieEntityList",
+                    params
+                )
 
-            // uniqueId 会话内固定（同一分类翻页时不变，对齐日志真实请求）
-            val uniqueId = sessionUniqueIds.getOrPut("cat_$deliveryId") {
-                System.currentTimeMillis().toString() + deliveryId
-            }
-            val params = "[{\"blackIds\":[null],\"deliveryIdList\":[\"$deliveryId\"],\"filterCityCode\":false,\"filterExchangeTime\":true,\"filterPointNoEnough\":false,\"filterStockNoEnough\":false,\"filterTimesLimit\":true,\"filterTimesLimitForPromo\":true,\"pageNum\":$pageNum,\"pageSize\":18,\"point\":$point,\"previewCopyDbId\":\"\",\"queryType\":\"DELIVERY_ID_LIST\",\"shandieComponentId\":\"\",\"source\":\"来源\",\"sourcePassMap\":{\"innerSource\":\"\",\"source\":\"\",\"unid\":\"\"},\"topIds\":[],\"uniqueId\":\"$uniqueId\"}]"
-            val response = RequestManager.requestString(
-                "com.alipay.alipaymember.biz.rpc.config.h5.queryShandieEntityList",
-                params
-            )
-
-            if (response.isNullOrEmpty()) {
-                Log.error("获取会员商品列表失败：返回为空, deliveryId: $deliveryId")
-                val intent = Intent("fansirsqi.xposed.sesame.fetchMemberGoodsList.failed").apply {
-                    putExtra("deliveryId", deliveryId)
-                }
-                context.sendBroadcast(intent)
-                return
-            }
-
-            try {
-                val jo = org.json.JSONObject(response)
-                val benefits = jo.optJSONArray("benefits")
-                if (benefits == null || benefits.length() == 0) {
-                    Log.runtime("获取的会员商品列表为空，不覆盖本地缓存, pageNum: $pageNum")
-                    val intent = Intent("fansirsqi.xposed.sesame.fetchMemberGoodsList.failed").apply {
-                        putExtra("deliveryId", deliveryId)
-                        putExtra("reason", "no_more")
+                if (response.isNullOrEmpty()) {
+                    if (!hasSavedAny) {
+                        Log.error("获取会员商品列表失败：返回为空, deliveryId: $deliveryId, page: $curPage")
+                        val intent = Intent("fansirsqi.xposed.sesame.fetchMemberGoodsList.failed").apply {
+                            putExtra("deliveryId", deliveryId)
+                        }
+                        context.sendBroadcast(intent)
+                        return
                     }
-                    context.sendBroadcast(intent)
-                    return
+                    break
                 }
-            } catch (ex: Exception) {
-                Log.error("校验商品列表空包异常: ${ex.message}")
+
+                try {
+                    val jo = org.json.JSONObject(response)
+                    val benefits = jo.optJSONArray("benefits")
+                    if (benefits == null || benefits.length() == 0) {
+                        if (!hasSavedAny) {
+                            Log.runtime("获取的会员商品列表为空，不覆盖本地缓存, pageNum: $curPage")
+                            val intent = Intent("fansirsqi.xposed.sesame.fetchMemberGoodsList.failed").apply {
+                                putExtra("deliveryId", deliveryId)
+                                putExtra("reason", "no_more")
+                            }
+                            context.sendBroadcast(intent)
+                            return
+                        }
+                        break
+                    }
+                    saveMemberGoodsResponse(response, "cat_$deliveryId", curPage)
+                    hasSavedAny = true
+
+                    val next = jo.optInt("nextPageNum", 0)
+                    // 用户从第1页发起同步时，自动拉取后续所有页面，确保整个分类全部商品完整入库
+                    if (pageNum == 1 && next > curPage) {
+                        curPage = next
+                        Thread.sleep(500)
+                    } else {
+                        break
+                    }
+                } catch (ex: Exception) {
+                    Log.error("解析会员商品列表异常: ${ex.message}")
+                    break
+                }
             }
 
-            saveMemberGoodsResponse(response, "cat_$deliveryId", pageNum)
-
-            val intent = Intent("fansirsqi.xposed.sesame.fetchMemberGoodsList.success").apply {
-                putExtra("deliveryId", deliveryId)
+            if (hasSavedAny) {
+                val intent = Intent("fansirsqi.xposed.sesame.fetchMemberGoodsList.success").apply {
+                    putExtra("deliveryId", deliveryId)
+                }
+                context.sendBroadcast(intent)
             }
-            context.sendBroadcast(intent)
         }
 
         /**
          * "全部商品"分区列表，走 queryDeliveryZoneDetail。
-         * 按广播传入的 zoneIndex 对应积分区间（0-501 / 501-3000 / 3001-10000 / 10001+），区间内 pageNum 翻页。
+         * 按广播传入的 zoneIndex 对应积分区间（0-501 / 501-3000 / 3001-10000 / 10001+）。
+         * 从第1页发起同步时自动拉取该分区全量数据。
          */
         private fun fetchZoneGoodsList(context: Context, deliveryId: String, pageNum: Int, zoneIndex: Int) {
             if (zoneIndex < 0 || zoneIndex >= ZONE_POINT_RANGES.size) {
@@ -359,47 +375,68 @@ class ExtendHandle {
             val (lowerPoint, upperPoint) = ZONE_POINT_RANGES[zoneIndex]
 
             val deliveryIdsJson = ALL_GOODS_DELIVERY_IDS.joinToString(",") { "\"$it\"" }
-            // uniqueId 会话内固定（同一分区翻页时不变，对齐日志真实请求）
-            val uniqueId = sessionUniqueIds.getOrPut("zone_${deliveryId}_$zoneIndex") {
-                System.currentTimeMillis().toString() + lowerPoint + "and" + upperPoint + "INTELLIGENT_SORT" + ALL_GOODS_DELIVERY_IDS.joinToString(",")
-            }
-            val params = "[{\"deliveryIdList\":[$deliveryIdsJson],\"lowerPoint\":$lowerPoint,\"pageNum\":$pageNum,\"pageSize\":18,\"queryNoReserve\":true,\"resourceCardChannel\":\"ZERO_EXCHANGE_CHANNEL\",\"sourcePassMap\":{\"innerSource\":\"\",\"source\":\"\",\"unid\":\"\"},\"startPageFirstQuery\":false,\"topIdList\":[\"202412231259661040\"],\"uniqueId\":\"$uniqueId\",\"upperPoint\":$upperPoint,\"withPointRange\":false}]"
-            val response = RequestManager.requestString(
-                "com.alipay.alipaymember.biz.rpc.config.h5.queryDeliveryZoneDetail",
-                params
-            )
+            var curPage = pageNum
+            var hasSavedAny = false
 
-            if (response.isNullOrEmpty()) {
-                Log.error("获取全部商品分区失败：返回为空, zone: $zoneIndex")
-                val intent = Intent("fansirsqi.xposed.sesame.fetchMemberGoodsList.failed").apply {
+            while (curPage <= 6) {
+                // uniqueId 会话内固定（同一分区翻页时不变，对齐日志真实请求）
+                val uniqueId = sessionUniqueIds.getOrPut("zone_${deliveryId}_$zoneIndex") {
+                    System.currentTimeMillis().toString() + lowerPoint + "and" + upperPoint + "INTELLIGENT_SORT" + ALL_GOODS_DELIVERY_IDS.joinToString(",")
+                }
+                val params = "[{\"deliveryIdList\":[$deliveryIdsJson],\"lowerPoint\":$lowerPoint,\"pageNum\":$curPage,\"pageSize\":18,\"queryNoReserve\":true,\"resourceCardChannel\":\"ZERO_EXCHANGE_CHANNEL\",\"sourcePassMap\":{\"innerSource\":\"\",\"source\":\"\",\"unid\":\"\"},\"startPageFirstQuery\":false,\"topIdList\":[\"202412231259661040\"],\"uniqueId\":\"$uniqueId\",\"upperPoint\":$upperPoint,\"withPointRange\":true}]"
+                val response = RequestManager.requestString(
+                    "com.alipay.alipaymember.biz.rpc.config.h5.queryDeliveryZoneDetail",
+                    params
+                )
+
+                if (response.isNullOrEmpty()) {
+                    if (!hasSavedAny) {
+                        Log.error("获取全部商品分区失败：返回为空, zone: $zoneIndex, page: $curPage")
+                        val intent = Intent("fansirsqi.xposed.sesame.fetchMemberGoodsList.failed").apply {
+                            putExtra("deliveryId", deliveryId)
+                            putExtra("zoneIndex", zoneIndex)
+                        }
+                        context.sendBroadcast(intent)
+                        return
+                    }
+                    break
+                }
+
+                // 统一响应结构为 {benefits:[...], nextPageNum}
+                val normalized = normalizeZoneResponse(response)
+                if (normalized == null || normalized.optJSONArray("benefits")?.length() == 0) {
+                    if (!hasSavedAny) {
+                        Log.runtime("获取的全部商品分区列表为空，不覆盖本地缓存, zone: $zoneIndex, page: $curPage")
+                        val intent = Intent("fansirsqi.xposed.sesame.fetchMemberGoodsList.failed").apply {
+                            putExtra("deliveryId", deliveryId)
+                            putExtra("zoneIndex", zoneIndex)
+                            putExtra("reason", "no_more")
+                        }
+                        context.sendBroadcast(intent)
+                        return
+                    }
+                    break
+                }
+
+                saveMemberGoodsResponse(normalized.toString(), "zone_${deliveryId}_$zoneIndex", curPage)
+                hasSavedAny = true
+
+                val next = normalized.optInt("nextPageNum", 0)
+                if (pageNum == 1 && next > curPage) {
+                    curPage = next
+                    Thread.sleep(500)
+                } else {
+                    break
+                }
+            }
+
+            if (hasSavedAny) {
+                val intent = Intent("fansirsqi.xposed.sesame.fetchMemberGoodsList.success").apply {
                     putExtra("deliveryId", deliveryId)
                     putExtra("zoneIndex", zoneIndex)
                 }
                 context.sendBroadcast(intent)
-                return
             }
-
-            // 统一响应结构为 {benefits:[...], nextPageNum}
-            val normalized = normalizeZoneResponse(response)
-            if (normalized == null || normalized.optJSONArray("benefits")?.length() == 0) {
-                Log.runtime("获取的全部商品分区列表为空，不覆盖本地缓存, zone: $zoneIndex, page: $pageNum")
-                val intent = Intent("fansirsqi.xposed.sesame.fetchMemberGoodsList.failed").apply {
-                    putExtra("deliveryId", deliveryId)
-                    putExtra("zoneIndex", zoneIndex)
-                    putExtra("reason", "no_more")
-                }
-                context.sendBroadcast(intent)
-                return
-            }
-
-            saveMemberGoodsResponse(normalized.toString(), "zone_${deliveryId}_$zoneIndex", pageNum)
-
-            val intent = Intent("fansirsqi.xposed.sesame.fetchMemberGoodsList.success").apply {
-                putExtra("deliveryId", deliveryId)
-                putExtra("zoneIndex", zoneIndex)
-                putExtra("hasNext", normalized.optInt("nextPageNum", 0) > 0)
-            }
-            context.sendBroadcast(intent)
         }
 
         /**

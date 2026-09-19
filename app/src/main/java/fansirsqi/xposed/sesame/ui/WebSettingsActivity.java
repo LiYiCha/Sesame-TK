@@ -615,7 +615,7 @@ public class WebSettingsActivity extends BaseActivity {
         }
         boolean isDark = fansirsqi.xposed.sesame.ui.theme.app.HolidayTheme.INSTANCE.shouldUseDarkTheme();
         try {
-            webView.evaluateJavascript("applyDarkMode(" + isDark + ");", null);
+            webView.evaluateJavascript("if (typeof applyDarkMode === 'function') { applyDarkMode(" + isDark + "); }", null);
         } catch (Throwable th) {
             // evaluateJavascript 需 API>=19；极端情况失败忽略，不阻塞其余逻辑
             Log.printStackTrace(th);

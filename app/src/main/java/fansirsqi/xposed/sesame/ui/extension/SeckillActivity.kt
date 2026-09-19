@@ -6,6 +6,8 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.net.Uri
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -103,8 +105,31 @@ class SeckillActivity : ComponentActivity() {
     private val scheduleTimeStr = mutableStateOf("")
     private val scheduleType = mutableStateOf("H5")
 
+    private val mainHandler = Handler(Looper.getMainLooper())
+    private var timeoutRunnable: Runnable? = null
+
+    private fun startTimeoutTimer(timeoutMs: Long = 15000L, message: String = "请求超时，请检查支付宝是否在后台运行") {
+        cancelTimeoutTimer()
+        val runnable = Runnable {
+            if (isRefreshing.value) {
+                isRefreshing.value = false
+                Toast.makeText(this@SeckillActivity, message, Toast.LENGTH_LONG).show()
+            }
+        }
+        timeoutRunnable = runnable
+        mainHandler.postDelayed(runnable, timeoutMs)
+    }
+
+    private fun cancelTimeoutTimer() {
+        timeoutRunnable?.let {
+            mainHandler.removeCallbacks(it)
+            timeoutRunnable = null
+        }
+    }
+
     private val receiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
+            cancelTimeoutTimer()
             isRefreshing.value = false
             when (intent?.action) {
                 "fansirsqi.xposed.sesame.fetchMemberGoodsList.success" -> {
@@ -246,6 +271,7 @@ class SeckillActivity : ComponentActivity() {
                             isRefreshing.value = true
                             isSearchMode.value = false
                             currentCategory.value = deliveryId
+                            startTimeoutTimer(15000L, "同步商品列表超时，请确保支付宝在后台运行")
                             val intent = Intent("com.eg.android.AlipayGphone.sesame.memberOperation").apply {
                                 putExtra("operation", "FETCH_GOODS_LIST")
                                 putExtra("deliveryId", deliveryId)
@@ -297,6 +323,7 @@ class SeckillActivity : ComponentActivity() {
                                 Toast.makeText(this@SeckillActivity, "请输入搜索关键词", Toast.LENGTH_SHORT).show()
                             } else {
                                 isRefreshing.value = true
+                                startTimeoutTimer(15000L, "服务端搜索超时，请确保支付宝在后台运行")
                                 val intent = Intent("com.eg.android.AlipayGphone.sesame.memberOperation").apply {
                                     putExtra("operation", "SEARCH_GOODS")
                                     putExtra("query", query)
@@ -315,6 +342,7 @@ class SeckillActivity : ComponentActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
+        cancelTimeoutTimer()
         try {
             unregisterReceiver(receiver)
         } catch (e: Exception) {}
