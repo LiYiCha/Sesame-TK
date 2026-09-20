@@ -278,30 +278,7 @@ class DownloadManagerActivity : AppCompatActivity() {
         val info = updateInfo
         if (info != null && info.packages.isNotEmpty()) {
             for (pkg in info.packages) {
-                val taskId = getTaskId(pkg.downloadUrl)
-                val expectedUrl = getAbsoluteUrl(pkg.downloadUrl)
-                var task = dbHelper.getTask(taskId)
-                if (task == null) {
-                    val cleanUrl = pkg.downloadUrl.substringBefore("?")
-                    val rawFileName = cleanUrl.substringAfterLast("/").ifEmpty { "app_${pkg.packageId}.apk" }
-                    val fileName = if (rawFileName.endsWith(".apk", ignoreCase = true)) rawFileName else "$rawFileName.apk"
-                    val saveFile = File(apkDir, fileName)
-
-                    task = DownloadTask(
-                        id = taskId,
-                        url = expectedUrl,
-                        savePath = saveFile.absolutePath,
-                        title = pkg.packageName,
-                        totalBytes = pkg.apkSize,
-                        downloadedBytes = 0,
-                        status = DownloadTask.STATUS_PENDING,
-                        fileMd5 = pkg.apkMd5
-                    )
-                } else if (task.status != DownloadTask.STATUS_DOWNLOADING && task.url != expectedUrl) {
-                    task = task.copy(url = expectedUrl)
-                    dbHelper.insertOrUpdateTask(task)
-                }
-                tasks[taskId] = reconcileTaskFileState(task)
+                tasks[getTaskId(pkg.downloadUrl)] = buildTaskForPackage(pkg, apkDir)
             }
         } else {
             val localTasks = dbHelper.getAllTasks()
@@ -309,6 +286,39 @@ class DownloadManagerActivity : AppCompatActivity() {
                 tasks[task.id] = reconcileTaskFileState(task)
             }
         }
+    }
+
+    /**
+     * 从更新包构建任务；新建任务必须立即入库：
+     * 否则 onStart 的对账会因 DB 缺行把它从 map 移除，
+     * 而界面卡片仍渲染自 updateInfo（显示“未下载/下载”），点击后因查不到任务而静默失效。
+     */
+    private fun buildTaskForPackage(pkg: UpdatePackage, apkDir: File): DownloadTask {
+        val taskId = getTaskId(pkg.downloadUrl)
+        val expectedUrl = getAbsoluteUrl(pkg.downloadUrl)
+        var task = dbHelper.getTask(taskId)
+        if (task == null) {
+            val cleanUrl = pkg.downloadUrl.substringBefore("?")
+            val rawFileName = cleanUrl.substringAfterLast("/").ifEmpty { "app_${pkg.packageId}.apk" }
+            val fileName = if (rawFileName.endsWith(".apk", ignoreCase = true)) rawFileName else "$rawFileName.apk"
+            val saveFile = File(apkDir, fileName)
+
+            task = DownloadTask(
+                id = taskId,
+                url = expectedUrl,
+                savePath = saveFile.absolutePath,
+                title = pkg.packageName,
+                totalBytes = pkg.apkSize,
+                downloadedBytes = 0,
+                status = DownloadTask.STATUS_PENDING,
+                fileMd5 = pkg.apkMd5
+            )
+            dbHelper.insertOrUpdateTask(task)
+        } else if (task.status != DownloadTask.STATUS_DOWNLOADING && task.url != expectedUrl) {
+            task = task.copy(url = expectedUrl)
+            dbHelper.insertOrUpdateTask(task)
+        }
+        return reconcileTaskFileState(task)
     }
 
     private fun reconcileTaskFileState(task: DownloadTask): DownloadTask {
@@ -323,11 +333,19 @@ class DownloadManagerActivity : AppCompatActivity() {
             } else if (task.status != DownloadTask.STATUS_DOWNLOADING) {
                 updated.downloadedBytes = file.length()
             }
+            // 服务已不在运行时的“下载中”是进程被杀残留的脏状态，降级为“已暂停”以便重新继续
+            if (updated.status == DownloadTask.STATUS_DOWNLOADING && !ForegroundDownloadService.isServiceRunning) {
+                updated.status = DownloadTask.STATUS_PAUSED
+            }
             dbHelper.insertOrUpdateTask(updated)
             updated
         } else {
             if (task.status == DownloadTask.STATUS_COMPLETED) {
                 val updated = task.copy(status = DownloadTask.STATUS_PENDING, downloadedBytes = 0)
+                dbHelper.insertOrUpdateTask(updated)
+                updated
+            } else if (task.status == DownloadTask.STATUS_DOWNLOADING && !ForegroundDownloadService.isServiceRunning) {
+                val updated = task.copy(status = DownloadTask.STATUS_PAUSED)
                 dbHelper.insertOrUpdateTask(updated)
                 updated
             } else {
@@ -337,10 +355,26 @@ class DownloadManagerActivity : AppCompatActivity() {
     }
 
     private fun syncTasksFromDb() {
+        val info = updateInfo
+        val packageTaskIds = if (info != null && info.packages.isNotEmpty()) {
+            info.packages.mapTo(HashSet()) { getTaskId(it.downloadUrl) }
+        } else {
+            emptySet()
+        }
+
         // 快照遍历，避免边遍历边移除导致并发修改异常
         for (taskId in tasks.keys.toList()) {
             val dbTask = dbHelper.getTask(taskId)
             if (dbTask == null) {
+                if (taskId in packageTaskIds) {
+                    // 更新包列表内的任务不允许缺失：DB 缺行时重建，而不是移除。
+                    // 移除会导致卡片仍在（渲染自 updateInfo）但点击“下载”静默失效
+                    val pkg = info?.packages?.firstOrNull { getTaskId(it.downloadUrl) == taskId }
+                    if (pkg != null) {
+                        tasks[taskId] = buildTaskForPackage(pkg, UpdatePathManager.getUpdateDir(this))
+                        continue
+                    }
+                }
                 // 安装生效后已被清理（或手动清理了缓存）→ 同步移除界面上的残留条目
                 tasks.remove(taskId)
                 speedMap.remove(taskId)
@@ -392,13 +426,19 @@ class DownloadManagerActivity : AppCompatActivity() {
             action = ForegroundDownloadService.ACTION_START
             putExtra("task", task)
         }
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            startForegroundService(serviceIntent)
-        } else {
-            startService(serviceIntent)
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                startForegroundService(serviceIntent)
+            } else {
+                startService(serviceIntent)
+            }
+        } catch (e: Throwable) {
+            // 前台服务启动受限等异常不能吞掉，否则界面无任何反馈
+            UpdaterLog.e("启动下载服务失败", e)
+            Toast.makeText(this, "无法启动下载服务: ${e.message}", Toast.LENGTH_LONG).show()
         }
-
-        tasks[taskId] = task.copy(status = DownloadTask.STATUS_DOWNLOADING)
+        // 不在此处乐观置为“下载中”：真实状态由 Service 启动后的广播同步回来。
+        // 若 Service 拒绝（如已有任务在下载），界面保持原状态并给出提示，避免卡在“下载中 0%”
     }
 
     private fun pauseDownload(taskId: String) {

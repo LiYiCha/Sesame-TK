@@ -63,6 +63,13 @@ android {
         }
     }
 
+    packaging {
+        // 原生库以压缩形式存入 APK，减小 CDN 分发体积
+        jniLibs {
+            useLegacyPackaging = true
+        }
+    }
+
     lint {
         checkReleaseBuilds = false
         abortOnError = false

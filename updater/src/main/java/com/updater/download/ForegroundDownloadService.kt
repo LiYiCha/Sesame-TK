@@ -6,6 +6,7 @@ import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
+import android.widget.Toast
 import androidx.core.app.NotificationCompat
 import com.updater.db.DownloadDatabaseHelper
 import com.updater.db.DownloadTask
@@ -38,6 +39,15 @@ class ForegroundDownloadService : Service() {
         private const val CHANNEL_ID = "updater_download_channel"
         private const val NOTIFICATION_ID = 1024
 
+        /**
+         * 服务是否存活。
+         * 与界面同进程，界面在对账任务状态时读取此标记：
+         * 若 DB 残留“下载中”但服务已不在运行，说明是进程被杀留下的脏状态，应降级为“已暂停”。
+         */
+        @Volatile
+        var isServiceRunning: Boolean = false
+            private set
+
         /** 失败详情弹窗中展示的响应体最大字符数，避免超长响应撑爆弹窗 */
         private const val MAX_ERROR_BODY_CHARS = 2000
 
@@ -69,6 +79,7 @@ class ForegroundDownloadService : Service() {
 
     override fun onCreate() {
         super.onCreate()
+        isServiceRunning = true
         dbHelper = DownloadDatabaseHelper(this)
         createNotificationChannel()
     }
@@ -86,16 +97,21 @@ class ForegroundDownloadService : Service() {
             intent.getSerializableExtra("task") as? DownloadTask
         }
 
-        if (task != null) {
-            when (action) {
-                ACTION_START -> {
-                    // 确保前台服务通知立即展示，避免 Android 8+ 前台服务超时异常
-                    showForegroundNotification()
-                    startDownloadTask(task)
-                }
-                ACTION_PAUSE -> {
-                    pauseDownloadTask(task.id)
-                }
+        if (task == null) {
+            // 不能静默忽略：否则界面点击“下载”后永远停留在“未下载”且无任何提示
+            UpdaterLog.e("下载服务收到空任务 intent (action=$action)，忽略本次请求")
+            Toast.makeText(this, "下载任务数据异常，请重试", Toast.LENGTH_SHORT).show()
+            return START_NOT_STICKY
+        }
+
+        when (action) {
+            ACTION_START -> {
+                // 确保前台服务通知立即展示，避免 Android 8+ 前台服务超时异常
+                showForegroundNotification()
+                startDownloadTask(task)
+            }
+            ACTION_PAUSE -> {
+                pauseDownloadTask(task.id)
             }
         }
 
@@ -131,8 +147,12 @@ class ForegroundDownloadService : Service() {
         // 1. 防重复点击：若该任务已在运行，直接忽略
         if (activeTasks.containsKey(task.id)) return
 
-        // 2. 单例下载：若已有任务在下载中，不并发下载
-        if (activeTasks.isNotEmpty()) return
+        // 2. 单例下载：若已有其他任务在下载中，不并发下载。
+        //    必须给出提示，否则点击“下载”会被静默丢弃，表现为“无反应”
+        if (activeTasks.isNotEmpty()) {
+            Toast.makeText(this, "已有任务正在下载，请等待完成或暂停", Toast.LENGTH_SHORT).show()
+            return
+        }
 
         // 3. 幂等前置检查：若本地已有完整合法安装包，直接复用唤起安装，免去网络请求
         val targetFile = File(task.savePath)
@@ -182,6 +202,11 @@ class ForegroundDownloadService : Service() {
      * HTTP 业务错误、用户暂停、重试耗尽都会立即结束。
      */
     private fun runDownload(task: DownloadTask) {
+        // 暂停请求可能先于本执行线程到达：此时任务已不在 activeTasks 中，直接结束，
+        // 不能先把状态改回“下载中”再退出，否则 DB 会残留僵尸“下载中”状态。
+        // 注意：intent 里的任务状态可能是 PAUSED（断点续传），不能仅凭状态判断取消
+        if (!activeTasks.containsKey(task.id)) return
+
         val tempFile = File(task.savePath)
         val parentDir = tempFile.parentFile
         if (parentDir != null && !parentDir.exists()) {
@@ -433,6 +458,7 @@ class ForegroundDownloadService : Service() {
     }
 
     override fun onDestroy() {
+        isServiceRunning = false
         for (call in activeCalls.values) {
             try {
                 call.cancel()

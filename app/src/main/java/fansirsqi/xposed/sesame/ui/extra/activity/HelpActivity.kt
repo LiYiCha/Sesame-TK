@@ -1,4 +1,4 @@
-package fansirsqi.xposed.sesame.ui.extra.activity
+﻿package fansirsqi.xposed.sesame.ui.extra.activity
 
 import android.annotation.SuppressLint
 import android.content.ClipData
@@ -20,7 +20,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import java.util.UUID
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.automirrored.rounded.Help
@@ -38,8 +37,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.updater.config.UpdaterConfigManager
-import com.updater.model.UpdateSource
-import com.updater.model.UpdateSourceType
 import fansirsqi.xposed.sesame.BuildConfig
 import fansirsqi.xposed.sesame.ui.BaseActivity
 import fansirsqi.xposed.sesame.ui.theme.app.SesameTheme
@@ -74,8 +71,6 @@ private fun HelpScreen(activity: android.app.Activity, onBackClick: () -> Unit) 
 
     // 状态管理
     var updateMode by remember { mutableIntStateOf(configManager.updateMode) }
-    var selectedSourceId by remember { mutableStateOf(configManager.selectedSourceId) }
-    var showSourceDialog by remember { mutableStateOf(false) }
     var showClearLogDialog by remember { mutableStateOf(false) }
 
     // 存储与日志大小状态
@@ -122,7 +117,6 @@ private fun HelpScreen(activity: android.app.Activity, onBackClick: () -> Unit) 
                 UpdateSettingsCard(
                     configManager = configManager,
                     updateMode = updateMode,
-                    selectedSourceId = selectedSourceId,
                     onUpdateModeChanged = { newMode ->
                         updateMode = newMode
                         configManager.updateMode = newMode
@@ -132,7 +126,6 @@ private fun HelpScreen(activity: android.app.Activity, onBackClick: () -> Unit) 
                             Toast.LENGTH_SHORT
                         ).show()
                     },
-                    onOpenSourceDialog = { showSourceDialog = true },
                     onOpenDownloadListClick = {
                         AppUpdaterManager.openDownloadList(context)
                     }
@@ -162,21 +155,6 @@ private fun HelpScreen(activity: android.app.Activity, onBackClick: () -> Unit) 
                 FaqCard()
             }
         }
-    }
-
-    // 更新源切换与管理对话框
-    if (showSourceDialog) {
-        UpdateSourceDialog(
-            configManager = configManager,
-            currentSourceId = selectedSourceId,
-            onDismiss = { showSourceDialog = false },
-            onSourceSelected = { newSource ->
-                selectedSourceId = newSource.id
-                configManager.selectedSourceId = newSource.id
-                showSourceDialog = false
-                Toast.makeText(context, "已切换更新源：${newSource.name}", Toast.LENGTH_SHORT).show()
-            }
-        )
     }
 
     // 清理备份日志确认对话框
@@ -217,13 +195,9 @@ private fun HelpScreen(activity: android.app.Activity, onBackClick: () -> Unit) 
 private fun UpdateSettingsCard(
     configManager: UpdaterConfigManager,
     updateMode: Int,
-    selectedSourceId: String,
     onUpdateModeChanged: (Int) -> Unit,
-    onOpenSourceDialog: () -> Unit,
     onOpenDownloadListClick: () -> Unit
 ) {
-    val activeSource = remember(selectedSourceId) { configManager.getSelectedSource() }
-
     ElevatedCard(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
@@ -310,52 +284,6 @@ private fun UpdateSettingsCard(
             )
 
             Spacer(modifier = Modifier.height(14.dp))
-
-            // 当前更新源概览与切换
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f))
-                    .clickable(onClick = onOpenSourceDialog)
-                    .padding(horizontal = 14.dp, vertical = 10.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = "当前生效更新源",
-                        fontSize = 11.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Text(
-                        text = activeSource?.name ?: "Cloudflare 官方源",
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                    Text(
-                        text = activeSource?.url ?: "https://cicha.de5.net",
-                        fontSize = 11.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
-                        maxLines = 1
-                    )
-                }
-
-                Button(
-                    onClick = onOpenSourceDialog,
-                    shape = RoundedCornerShape(12.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.primary,
-                        contentColor = MaterialTheme.colorScheme.onPrimary
-                    ),
-                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
-                ) {
-                    Text("切换源", fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                }
-            }
-
-            Spacer(modifier = Modifier.height(10.dp))
 
             // 更新包与配套应用下载管理列表入口
             Row(
@@ -696,219 +624,6 @@ private fun InfoRow(
     }
 }
 
-/**
- * 更新源管理弹窗
- */
-@Composable
-private fun UpdateSourceDialog(
-    configManager: UpdaterConfigManager,
-    currentSourceId: String,
-    onDismiss: () -> Unit,
-    onSourceSelected: (UpdateSource) -> Unit
-) {
-    val context = LocalContext.current
-    var sources by remember { mutableStateOf(configManager.getSources()) }
-    var showAddDialog by remember { mutableStateOf(false) }
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(text = "选择生效更新源", fontWeight = FontWeight.Bold) },
-        text = {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .verticalScroll(rememberScrollState())
-            ) {
-                sources.forEach { source ->
-                    val isSelected = source.id == currentSourceId
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(10.dp))
-                            .background(
-                                if (isSelected) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)
-                                else Color.Transparent
-                            )
-                            .clickable { onSourceSelected(source) }
-                            .padding(horizontal = 8.dp, vertical = 6.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        RadioButton(
-                            selected = isSelected,
-                            onClick = { onSourceSelected(source) }
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Column(modifier = Modifier.weight(1f)) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text(
-                                    text = source.name,
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 14.sp,
-                                    color = MaterialTheme.colorScheme.onSurface
-                                )
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text(
-                                    text = if (source.type == UpdateSourceType.CLOUDFLARE_R2) " CF " else " GitHub ",
-                                    fontSize = 10.sp,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = MaterialTheme.colorScheme.onPrimary,
-                                    modifier = Modifier
-                                        .clip(RoundedCornerShape(4.dp))
-                                        .background(if (source.type == UpdateSourceType.CLOUDFLARE_R2) Color(0xFFF6821F) else Color(0xFF24292E))
-                                        .padding(horizontal = 4.dp, vertical = 2.dp)
-                                )
-                            }
-                            Text(
-                                text = source.url,
-                                fontSize = 11.sp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                maxLines = 1
-                            )
-                        }
-                        if (!source.isPreset) {
-                            IconButton(
-                                onClick = {
-                                    configManager.deleteSource(source.id)
-                                    sources = configManager.getSources()
-                                    if (source.id == currentSourceId) {
-                                        configManager.getSelectedSource()?.let { onSourceSelected(it) }
-                                    }
-                                }
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Rounded.DeleteOutline,
-                                    contentDescription = "删除",
-                                    tint = MaterialTheme.colorScheme.error,
-                                    modifier = Modifier.size(20.dp)
-                                )
-                            }
-                        }
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(10.dp))
-
-                OutlinedButton(
-                    onClick = { showAddDialog = true },
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(10.dp)
-                ) {
-                    Icon(imageVector = Icons.Rounded.Add, contentDescription = null, modifier = Modifier.size(16.dp))
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text("添加自定义更新源", fontSize = 13.sp)
-                }
-            }
-        },
-        confirmButton = {
-            Button(
-                onClick = onDismiss,
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = MaterialTheme.colorScheme.primary,
-                    contentColor = MaterialTheme.colorScheme.onPrimary
-                )
-            ) {
-                Text("完成")
-            }
-        }
-    )
-
-    if (showAddDialog) {
-        var newName by remember { mutableStateOf("") }
-        var newUrl by remember { mutableStateOf("") }
-        var selectedType by remember { mutableStateOf(UpdateSourceType.CLOUDFLARE_R2) }
-
-        AlertDialog(
-            onDismissRequest = { showAddDialog = false },
-            title = { Text(text = "添加自定义更新源", fontWeight = FontWeight.Bold) },
-            text = {
-                Column(modifier = Modifier.fillMaxWidth()) {
-                    OutlinedTextField(
-                        value = newName,
-                        onValueChange = { newName = it },
-                        label = { Text("源名称") },
-                        placeholder = { Text("例如：备用镜像源") },
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = true
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    OutlinedTextField(
-                        value = newUrl,
-                        onValueChange = { newUrl = it },
-                        label = { Text("源地址 URL") },
-                        placeholder = { Text("例如：https://cicha.de5.net") },
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = true
-                    )
-                    Spacer(modifier = Modifier.height(12.dp))
-                    Text("更新源类型", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(8.dp))
-                                .clickable { selectedType = UpdateSourceType.CLOUDFLARE_R2 }
-                                .padding(end = 12.dp, top = 4.dp, bottom = 4.dp)
-                        ) {
-                            RadioButton(
-                                selected = selectedType == UpdateSourceType.CLOUDFLARE_R2,
-                                onClick = { selectedType = UpdateSourceType.CLOUDFLARE_R2 }
-                            )
-                            Text("Cloudflare", fontSize = 13.sp)
-                        }
-
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(8.dp))
-                                .clickable { selectedType = UpdateSourceType.GITHUB_RELEASES }
-                                .padding(end = 12.dp, top = 4.dp, bottom = 4.dp)
-                        ) {
-                            RadioButton(
-                                selected = selectedType == UpdateSourceType.GITHUB_RELEASES,
-                                onClick = { selectedType = UpdateSourceType.GITHUB_RELEASES }
-                            )
-                            Text("GitHub", fontSize = 13.sp)
-                        }
-                    }
-                }
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        val name = newName.trim()
-                        val url = newUrl.trim()
-                        if (name.isEmpty() || url.isEmpty()) {
-                            Toast.makeText(context, "请填写完整的名称与URL", Toast.LENGTH_SHORT).show()
-                            return@Button
-                        }
-                        val newSource = UpdateSource(
-                            id = UUID.randomUUID().toString(),
-                            name = name,
-                            url = url,
-                            type = selectedType,
-                            isPreset = false
-                        )
-                        configManager.addSource(newSource)
-                        sources = configManager.getSources()
-                        onSourceSelected(newSource)
-                        showAddDialog = false
-                        Toast.makeText(context, "更新源添加成功并已生效", Toast.LENGTH_SHORT).show()
-                    }
-                ) {
-                    Text("保存并应用")
-                }
-            },
-            dismissButton = {
-                OutlinedButton(onClick = { showAddDialog = false }) {
-                    Text("取消")
-                }
-            }
-        )
-    }
-}
 
 // 辅助数据与格式化方法
 private data class StorageInfoData(
