@@ -223,7 +223,6 @@ object Files {
     fun getMemberGoodsDir(): File {
         val dir = File(CONFIG_DIR, "member_goods")
         ensureDir(dir)
-        migrateMemberGoodsSingleFile(dir)
         return dir
     }
 
@@ -235,36 +234,6 @@ object Files {
     @JvmStatic
     fun getMemberGoodsListFile(): File {
         return File(getMemberGoodsDir(), "lists.json")
-    }
-
-    /** 一次性迁移：旧单文件 member_goods.json（{goods, lists}）拆分为 goods.json + lists.json */
-    private fun migrateMemberGoodsSingleFile(dir: File) {
-        val old = File(CONFIG_DIR, "member_goods.json")
-        if (!old.exists()) return
-        val pool = File(dir, "goods.json")
-        val lists = File(dir, "lists.json")
-        if (pool.exists() && lists.exists()) {
-            // 两个新文件都已就绪，丢弃旧文件避免重复迁移
-            old.delete()
-            return
-        }
-        try {
-            val root = org.json.JSONObject(readFromFile(old))
-            val goods = root.optJSONObject("goods") ?: org.json.JSONObject()
-            val listsJo = root.optJSONObject("lists") ?: org.json.JSONObject()
-            // 上次迁移若中断只生成了一个文件，这里补齐缺失的那个，不重复写已存在的
-            if (!pool.exists()) {
-                write2FileAtomic(goods.toString(), pool)
-            }
-            if (!lists.exists()) {
-                write2FileAtomic(listsJo.toString(), lists)
-            }
-            if (pool.exists() && lists.exists()) {
-                old.delete()
-            }
-        } catch (e: Exception) {
-            Log.printStackTrace(TAG, "迁移会员商品单文件失败", e)
-        }
     }
 
     @JvmStatic

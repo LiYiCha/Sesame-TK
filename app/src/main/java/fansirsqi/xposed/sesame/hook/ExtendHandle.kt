@@ -202,6 +202,21 @@ class ExtendHandle {
         }
 
         /**
+         * 分类请求参数按抓包逐场景对齐（queryShandieEntityList）：
+         * - filterTimesLimit / filterTimesLimitForPromo：真实请求固定 true
+         * - filterExchangeTime：日常抢兑 true（只显示当前可兑换），万分好物/联名周边 false（保留定时秒杀商品）
+         * - topIds：运营置顶商品，服务端只在请求带 topIds 时才下发置顶位（万分好物置顶了露营椅）
+         */
+        private val CATEGORY_EXTRA_PARAMS: Map<String, CategoryParams> = mapOf(
+            "94000SR2025120515775004" to CategoryParams(filterExchangeTime = true, topIds = emptyList()),
+            "94000SR2025120515776001" to CategoryParams(filterExchangeTime = false, topIds = listOf("202504010127705210")), // 置顶:【户外好物】会员定制露营椅
+            "94000SR2025120515776002" to CategoryParams(filterExchangeTime = false, topIds = emptyList())
+        )
+
+        /** 分类扩展参数：filterExchangeTime 与置顶 topIds（按抓包配置，运营换品时更新 topIds） */
+        private data class CategoryParams(val filterExchangeTime: Boolean, val topIds: List<String>)
+
+        /**
          * 分类商品列表（日常抢兑/万分好物/联名周边），走 queryShandieEntityList。
          */
         private fun fetchCategoryGoodsList(context: Context, deliveryId: String, pageNum: Int) {
@@ -216,9 +231,11 @@ class ExtendHandle {
                 val uniqueId = sessionUniqueIds.getOrPut("cat_$deliveryId") {
                     System.currentTimeMillis().toString() + deliveryId
                 }
-                // 注意：filterExchangeTime 必须为 false（万分好物等定时秒杀商品若为 true 会被服务端直接过滤导致 9999 积分商品丢失）
-                val params = "[{\"blackIds\":[],\"deliveryIdList\":[\"$deliveryId\"],\"filterCityCode\":false,\"filterExchangeTime\":false,\"filterPointNoEnough\":false,\"filterStockNoEnough\":false,\"filterTimesLimit\":false,\"filterTimesLimitForPromo\":false,\"pageNum\":$curPage,\"pageSize\":18,\"point\":$point,\"previewCopyDbId\":\"\",\"queryType\":\"DELIVERY_ID_LIST\",\"shandieComponentId\":\"\",\"source\":\"来源\",\"sourcePassMap\":{\"innerSource\":\"\",\"source\":\"\",\"unid\":\"\"},\"topIds\":[],\"uniqueId\":\"$uniqueId\"}]"
-                val response = RequestManager.requestString(
+                // 请求参数按抓包对齐：filterTimesLimit/ForPromo 固定 true；filterExchangeTime 与 topIds 分场景配置
+                val cfg = CATEGORY_EXTRA_PARAMS[deliveryId] ?: CategoryParams(filterExchangeTime = false, topIds = emptyList())
+                val topIdsJson = cfg.topIds.joinToString(",") { "\"$it\"" }
+                val params = "[{\"blackIds\":[],\"deliveryIdList\":[\"$deliveryId\"],\"filterCityCode\":false,\"filterExchangeTime\":${cfg.filterExchangeTime},\"filterPointNoEnough\":false,\"filterStockNoEnough\":false,\"filterTimesLimit\":true,\"filterTimesLimitForPromo\":true,\"pageNum\":$curPage,\"pageSize\":18,\"point\":$point,\"previewCopyDbId\":\"\",\"queryType\":\"DELIVERY_ID_LIST\",\"shandieComponentId\":\"\",\"source\":\"来源\",\"sourcePassMap\":{\"innerSource\":\"\",\"source\":\"\",\"unid\":\"\"},\"topIds\":[$topIdsJson],\"uniqueId\":\"$uniqueId\"}]"
+                val response = requestStringWithRetry(
                     "com.alipay.alipaymember.biz.rpc.config.h5.queryShandieEntityList",
                     params
                 )
@@ -232,7 +249,14 @@ class ExtendHandle {
                         context.sendBroadcast(intent)
                         return
                     }
-                    break
+                    // 翻页中途失败：如实上报，避免"同步成功"假象掩盖缺页
+                    Log.error("获取会员商品列表不完整：第 $curPage 页重试后仍为空, deliveryId: $deliveryId")
+                    val intent = Intent("fansirsqi.xposed.sesame.fetchMemberGoodsList.failed").apply {
+                        putExtra("deliveryId", deliveryId)
+                        putExtra("partial", true)
+                    }
+                    context.sendBroadcast(intent)
+                    return
                 }
 
                 try {
@@ -257,13 +281,19 @@ class ExtendHandle {
                     // 用户从第1页发起同步时，自动拉取后续所有页面，确保整个分类全部商品完整入库
                     if (pageNum == 1 && next > curPage) {
                         curPage = next
-                        Thread.sleep(500)
+                        // 翻页间隔放宽，降低触发服务端限流返回空的概率
+                        Thread.sleep(800)
                     } else {
                         break
                     }
                 } catch (ex: Exception) {
                     Log.error("解析会员商品列表异常: ${ex.message}")
-                    break
+                    val intent = Intent("fansirsqi.xposed.sesame.fetchMemberGoodsList.failed").apply {
+                        putExtra("deliveryId", deliveryId)
+                        if (hasSavedAny) putExtra("partial", true)
+                    }
+                    context.sendBroadcast(intent)
+                    return
                 }
             }
 
@@ -297,7 +327,7 @@ class ExtendHandle {
                     System.currentTimeMillis().toString() + lowerPoint + "and" + upperPoint + "INTELLIGENT_SORT" + ALL_GOODS_DELIVERY_IDS.joinToString(",")
                 }
                 val params = "[{\"deliveryIdList\":[$deliveryIdsJson],\"lowerPoint\":$lowerPoint,\"pageNum\":$curPage,\"pageSize\":18,\"queryNoReserve\":true,\"resourceCardChannel\":\"ZERO_EXCHANGE_CHANNEL\",\"sourcePassMap\":{\"innerSource\":\"\",\"source\":\"\",\"unid\":\"\"},\"startPageFirstQuery\":false,\"topIdList\":[\"202412231259661040\"],\"uniqueId\":\"$uniqueId\",\"upperPoint\":$upperPoint,\"withPointRange\":true}]"
-                val response = RequestManager.requestString(
+                val response = requestStringWithRetry(
                     "com.alipay.alipaymember.biz.rpc.config.h5.queryDeliveryZoneDetail",
                     params
                 )
@@ -312,7 +342,15 @@ class ExtendHandle {
                         context.sendBroadcast(intent)
                         return
                     }
-                    break
+                    // 翻页中途失败：如实上报，避免"同步成功"假象掩盖缺页
+                    Log.error("获取全部商品分区不完整：第 $curPage 页重试后仍为空, zone: $zoneIndex")
+                    val intent = Intent("fansirsqi.xposed.sesame.fetchMemberGoodsList.failed").apply {
+                        putExtra("deliveryId", deliveryId)
+                        putExtra("zoneIndex", zoneIndex)
+                        putExtra("partial", true)
+                    }
+                    context.sendBroadcast(intent)
+                    return
                 }
 
                 // 统一响应结构为 {benefits:[...], nextPageNum}
@@ -337,7 +375,8 @@ class ExtendHandle {
                 val next = normalized.optInt("nextPageNum", 0)
                 if (pageNum == 1 && next > curPage) {
                     curPage = next
-                    Thread.sleep(500)
+                    // 翻页间隔放宽，降低触发服务端限流返回空的概率
+                    Thread.sleep(800)
                 } else {
                     break
                 }
@@ -401,6 +440,26 @@ class ExtendHandle {
                     context.sendBroadcast(intent)
                 }
             }
+        }
+
+        /**
+         * 带重试的 RPC 请求：翻页请求偶发返回空（限流/瞬断）时重试，避免静默丢页导致本地缓存不完整。
+         */
+        private fun requestStringWithRetry(method: String, params: String, attempts: Int = 3): String {
+            var lastError: Exception? = null
+            repeat(attempts) { attempt ->
+                try {
+                    val res = RequestManager.requestString(method, params)
+                    if (res.isNotEmpty()) return res
+                } catch (e: Exception) {
+                    lastError = e
+                }
+                if (attempt < attempts - 1) {
+                    Thread.sleep(1000L * (attempt + 1))
+                }
+            }
+            Log.error("RPC 请求重试 $attempts 次后仍失败: $method, ${lastError?.message ?: "返回为空"}")
+            return ""
         }
 
         /** 查询会员积分（queryMemberInfo 响应顶层 pointBalance） */
@@ -669,14 +728,14 @@ class ExtendHandle {
                         }
                     }
                     
-                    if (fetchedSkuId != "-1") {
-                        val intent = Intent("fansirsqi.xposed.sesame.queryBenefitDetail.success").apply {
-                            putExtra("benefitId", benefitId)
-                            putExtra("skuId", fetchedSkuId)
-                            putStringArrayListExtra("skuIds", skuIdsList)
-                        }
-                        context.sendBroadcast(intent)
-                    } else {
+                    // 无规格也要回包（skuId 传 "-1"），直达按钮据此兜底详情页而不是无限等待
+                    val intent = Intent("fansirsqi.xposed.sesame.queryBenefitDetail.success").apply {
+                        putExtra("benefitId", benefitId)
+                        putExtra("skuId", fetchedSkuId)
+                        putStringArrayListExtra("skuIds", skuIdsList)
+                    }
+                    context.sendBroadcast(intent)
+                    if (fetchedSkuId == "-1") {
                         Log.error("该商品详情中未包含规格列表")
                     }
                 } catch (e: Exception) {

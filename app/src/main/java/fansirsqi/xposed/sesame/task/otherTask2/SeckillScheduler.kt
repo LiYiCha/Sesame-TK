@@ -22,14 +22,11 @@ object SeckillScheduler {
 
     @JvmStatic
     fun getSeckillTasksFile(): File {
-        val file = File(Files.CONFIG_DIR, CONFIG_FILE_NAME)
-        if (!file.exists()) {
-            try {
-                file.parentFile?.mkdirs()
-                file.createNewFile()
-            } catch (e: Exception) {}
+        val dir = File(Files.CONFIG_DIR, "seckill")
+        if (!dir.exists()) {
+            dir.mkdirs()
         }
-        return file
+        return File(dir, CONFIG_FILE_NAME)
     }
 
     @JvmStatic
@@ -55,8 +52,8 @@ object SeckillScheduler {
                 val type = jo.optString("type", "H5")
                 val name = jo.optString("name", "未知商品")
 
-                // Determine alarm lead time offset based on type
-                val offset = if (type == "RPC") 10000L else 3000L
+                // 统一提前 10 秒唤醒：H5 用于冷启动 + 页面加载，RPC 唤醒后再精确校准发包时间
+                val offset = 10000L
                 val alarmTriggerTime = timeMillis - offset
 
                 if (alarmTriggerTime > now) {

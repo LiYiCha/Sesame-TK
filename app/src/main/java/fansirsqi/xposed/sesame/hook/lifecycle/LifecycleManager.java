@@ -279,6 +279,8 @@ public class LifecycleManager {
                     WakeLockManager.acquire(service, service.getClass().getName());
                 }
                 AlarmScheduler.setWakenAtTimeAlarm();
+                // 进程重启后动态接收器与闹钟回调均已丢失，重新读取 seckill_tasks.json 排期秒杀闹钟
+                fansirsqi.xposed.sesame.task.otherTask2.SeckillScheduler.syncTasks(service);
                 rpcBridge = new NewRpcBridge();
                 rpcBridge.load();
                 rpcVersion = rpcBridge.getVersion();

@@ -57,7 +57,8 @@ data class MemberGood(
     val price: String,
     val skuId: String = "-1",
     val actionUrl: String = "",
-    val skuIds: List<String> = emptyList() // Multi-specs support (formatted as "skuId|price|points")
+    val skuIds: List<String> = emptyList(), // Multi-specs support (formatted as "skuId|price|points")
+    val exchangeStartTime: Long = 0 // 下次可兑换开始时间（nextExchangeStartTime，毫秒），0 表示未知
 )
 
 // 会员商品分类 Tab（deliveryId 对齐 temp/会员商品.log）
@@ -87,6 +88,8 @@ class SeckillActivity : ComponentActivity() {
     // 列表加载序号：后台解析完成后回主线程前校验，防止旧请求覆盖新请求（列表闪变）
     @Volatile
     private var loadSeq = 0
+
+    private var pendingDirectJumpBenefitId: String? = null
 
     // Unified State at Activity Level
     private val itemId = mutableStateOf("")
@@ -144,7 +147,14 @@ class SeckillActivity : ComponentActivity() {
                 }
                 "fansirsqi.xposed.sesame.fetchMemberGoodsList.failed" -> {
                     val reason = intent.getStringExtra("reason")
-                    if ("no_more" == reason) {
+                    val partial = intent.getBooleanExtra("partial", false)
+                    if (partial) {
+                        // 部分页同步失败：先加载已入库数据，并如实提示
+                        val deliveryId = intent.getStringExtra("deliveryId") ?: "94000SR2025120515775004"
+                        val zoneIndex = intent.getIntExtra("zoneIndex", -1)
+                        if (zoneIndex >= 0) loadLocalGoods(deliveryId, zoneIndex) else loadLocalGoods(deliveryId)
+                        Toast.makeText(this@SeckillActivity, "部分页同步失败，已加载已有数据，建议重新同步", Toast.LENGTH_LONG).show()
+                    } else if ("no_more" == reason) {
                         Toast.makeText(this@SeckillActivity, "已是最后一页 / 没有更多商品了", Toast.LENGTH_SHORT).show()
                         if (currentPage.value > 1) {
                             currentPage.value--
@@ -196,6 +206,22 @@ class SeckillActivity : ComponentActivity() {
                                 saveLocalGoodsWithUpdatedSku(currentCategory.value, currentZone.value)
                             } else {
                                 saveLocalGoodsWithUpdatedSku(currentCategory.value)
+                            }
+                        }
+
+                        // 直达按钮的自动跳转：规格回包后直接进入结算页（无规格则兜底详情页）
+                        if (pendingDirectJumpBenefitId == benefitId) {
+                            pendingDirectJumpBenefitId = null
+                            val updatedGood = goodsList.firstOrNull { it.benefitId == benefitId }
+                            if (updatedGood != null) {
+                                if (fetchedSkuId != "-1" && fetchedSkuIds.isNotEmpty()) {
+                                    openMemberGoodsTarget(updatedGood)
+                                } else if (updatedGood.actionUrl.isNotEmpty()) {
+                                    Toast.makeText(this@SeckillActivity, "该商品无规格信息，已打开详情页", Toast.LENGTH_SHORT).show()
+                                    openAlipay(updatedGood.actionUrl)
+                                } else {
+                                    Toast.makeText(this@SeckillActivity, "该商品无规格且无详情链接，无法直达", Toast.LENGTH_SHORT).show()
+                                }
                             }
                         }
                     }
@@ -333,7 +359,22 @@ class SeckillActivity : ComponentActivity() {
                                 Toast.makeText(this@SeckillActivity, "正在服务端搜索：$query", Toast.LENGTH_SHORT).show()
                             }
                         },
-                        onBack = { finish() }
+                        onBack = { finish() },
+                        onDirectJump = { good, quantity ->
+                            val isPhysical = good.itemId.isNotEmpty() && good.itemId.all { it.isDigit() }
+                            if (isPhysical && good.skuId == "-1") {
+                                // 列表数据不带 skuId：先自动查规格，回包后自动进入结算页
+                                pendingDirectJumpBenefitId = good.benefitId
+                                val intent = Intent("com.eg.android.AlipayGphone.sesame.memberOperation").apply {
+                                    putExtra("operation", "QUERY_BENEFIT_DETAIL")
+                                    putExtra("benefitId", good.benefitId)
+                                }
+                                sendBroadcast(intent)
+                                Toast.makeText(this@SeckillActivity, "正在获取规格，稍后自动进入结算页...", Toast.LENGTH_SHORT).show()
+                            } else {
+                                openMemberGoodsTarget(good, quantity)
+                            }
+                        }
                     )
                 }
             }
@@ -370,6 +411,39 @@ class SeckillActivity : ComponentActivity() {
         } catch (e: Exception) {
             JSONObject()
         }
+    }
+
+    /** 唤起支付宝打开指定链接（scheme 直用，http(s) 包 startapp） */
+    private fun openAlipay(url: String) {
+        val scheme = if (url.startsWith("alipays://")) url
+        else "alipays://platformapi/startapp?appId=20000067&url=${Uri.encode(url)}"
+        try {
+            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(scheme)).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            startActivity(intent)
+        } catch (e: Exception) {
+            Toast.makeText(this, "无法唤起支付宝: ${e.message}", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    /** 打开商品目标页：有规格的实物走下单结算页，否则兜底 actionUrl 详情页 */
+    private fun openMemberGoodsTarget(good: MemberGood, quantity: Int = 1) {
+        val isPhysical = good.itemId.isNotEmpty() && good.itemId.all { it.isDigit() }
+        val targetUrl = if (isPhysical && good.skuId != "-1") {
+            val orderItemsJson = "[{\"itemId\":\"${good.itemId}\",\"skuId\":\"${good.skuId}\",\"number\":$quantity}]"
+            val encodedOrderItems = Uri.encode(orderItemsJson)
+            val encodedExtJson = Uri.encode("{\"requestSourceInfo\":\"来源\"}")
+            val tmallUrl = "https://pages.tmall.com/wow/wt/act/lm-pages?env=&extJson=$encodedExtJson&orderItems=$encodedOrderItems&verifyPoint=${good.points}&wh_page=buy"
+            "https://pages.tmall.com/wow/z/wt/act/alipay-login?goToUrl=${Uri.encode(tmallUrl)}"
+        } else {
+            good.actionUrl
+        }
+        if (targetUrl.isEmpty()) {
+            Toast.makeText(this, "该商品无可用链接", Toast.LENGTH_SHORT).show()
+            return
+        }
+        openAlipay(targetUrl)
     }
 
     /** 按列表 key 读取商品：listKey 形如 cat_<deliveryId> / zone_<deliveryId>_<zone> / search */
@@ -596,9 +670,11 @@ class SeckillActivity : ComponentActivity() {
                                 }
                             }
 
-                            if (itemId.isNotEmpty() && !seen.contains(benefitId)) {
+                            // 无 itemId 的券类/虚拟权益也收录（可显示、可直达详情页），itemId 留空
+                            if (!seen.contains(benefitId)) {
                                 seen.add(benefitId)
-                                list.add(MemberGood(benefitId, name, itemId, points, price, skuId, actionUrl, skuIdsList))
+                                val exchangeStartTime = obj.optLong("nextExchangeStartTime", 0L)
+                                list.add(MemberGood(benefitId, name, itemId, points, price, skuId, actionUrl, skuIdsList, exchangeStartTime))
                             }
                         }
                         obj.keys().forEach { key ->
@@ -661,13 +737,30 @@ fun SeckillScreen(
     isSearchMode: Boolean,
     onSearchQueryChange: (String) -> Unit,
     onServerSearch: (query: String) -> Unit,
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    onDirectJump: (good: MemberGood, quantity: Int) -> Unit
 ) {
     val categories = MEMBER_CATEGORIES
 
     var selectedTabIndex by remember { mutableStateOf(0) }
     var generatedUrl by remember { mutableStateOf("") }
     var searchQuery by remember { mutableStateOf("") }
+    // 当前选中商品的开抢时间（nextExchangeStartTime），用于排期预填
+    var selectedExchangeStart by remember { mutableStateOf(0L) }
+
+    val scheduleTimePrefill: (Long) -> Unit = { startMillis ->
+        val sdf = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
+        if (startMillis > System.currentTimeMillis()) {
+            onScheduleTimeStrChange(sdf.format(java.util.Date(startMillis)))
+        } else {
+            // 缓存时间已过期（列表是旧数据），回退到下一个整点
+            val cal = Calendar.getInstance()
+            cal.add(Calendar.HOUR_OF_DAY, 1)
+            cal.set(Calendar.MINUTE, 0)
+            cal.set(Calendar.SECOND, 0)
+            onScheduleTimeStrChange(sdf.format(cal.time))
+        }
+    }
 
     var seckillTasks by remember { mutableStateOf(listOf<JSONObject>()) }
 
@@ -909,10 +1002,7 @@ fun SeckillScreen(
                                         onSchedulePointsChange(verifyPoint)
                                         onScheduleNameChange("自定义秒杀商品")
                                         onScheduleTypeChange("H5")
-                                        val cal = Calendar.getInstance()
-                                        cal.set(Calendar.MINUTE, 0)
-                                        cal.set(Calendar.SECOND, 0)
-                                        onScheduleTimeStrChange(SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(cal.time))
+                                        scheduleTimePrefill(selectedExchangeStart)
                                         onShowScheduleDialogChange(true)
                                     },
                                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.tertiary),
@@ -1005,6 +1095,7 @@ fun SeckillScreen(
                                             onSkuIdChange(good.skuId)
                                             onActiveBenefitIdChange(good.benefitId)
                                             onSelectedSkuIdsChange(good.skuIds)
+                                            selectedExchangeStart = good.exchangeStartTime
                                             
                                             // Trigger automatic background SKU lookup
                                             if (good.skuId == "-1") {
@@ -1026,6 +1117,14 @@ fun SeckillScreen(
                                             Text("ID: ${good.itemId}", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                             Spacer(modifier = Modifier.width(6.dp))
                                             Text("积分: ${good.points} + ${good.price}元", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                            if (good.exchangeStartTime > 0) {
+                                                Spacer(modifier = Modifier.width(6.dp))
+                                                Text(
+                                                    "开抢: ${SimpleDateFormat("MM-dd HH:mm", Locale.getDefault()).format(java.util.Date(good.exchangeStartTime))}",
+                                                    fontSize = 10.sp,
+                                                    color = if (good.exchangeStartTime > System.currentTimeMillis()) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                                                )
+                                            }
                                             if (good.skuId != "-1") {
                                                 Spacer(modifier = Modifier.width(6.dp))
                                                 Text("SKU: ${good.skuId}", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -1036,33 +1135,8 @@ fun SeckillScreen(
                                     Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                                         Button(
                                             onClick = {
-                                                val isPhysical = good.itemId.all { it.isDigit() }
-                                                val targetUrl = if (isPhysical && good.skuId != "-1") {
-                                                    val numVal = quantityNumber.toIntOrNull() ?: 1
-                                                    val orderItemsJson = "[{\"itemId\":\"${good.itemId}\",\"skuId\":\"${good.skuId}\",\"number\":$numVal}]"
-                                                    val encodedOrderItems = Uri.encode(orderItemsJson)
-                                                    val extJson = "{\"requestSourceInfo\":\"来源\"}"
-                                                    val encodedExtJson = Uri.encode(extJson)
-                                                    val tmallUrl = "https://pages.tmall.com/wow/wt/act/lm-pages?env=&extJson=$encodedExtJson&orderItems=$encodedOrderItems&verifyPoint=${good.points}&wh_page=buy"
-                                                    "https://pages.tmall.com/wow/z/wt/act/alipay-login?goToUrl=${Uri.encode(tmallUrl)}"
-                                                } else {
-                                                    if (good.actionUrl.isNotEmpty()) good.actionUrl else ""
-                                                }
-                                                
-                                                val scheme = if (targetUrl.startsWith("alipays://")) {
-                                                    targetUrl
-                                                } else {
-                                                    "alipays://platformapi/startapp?appId=20000067&url=${Uri.encode(targetUrl)}"
-                                                }
-                                                
-                                                try {
-                                                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(scheme)).apply {
-                                                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                                                    }
-                                                    context.startActivity(intent)
-                                                } catch (e: Exception) {
-                                                    Toast.makeText(context, "无法唤起支付宝: ${e.message}", Toast.LENGTH_SHORT).show()
-                                                }
+                                                // 无规格的实物商品由 Activity 先自动查规格，回包后自动进入结算页
+                                                onDirectJump(good, quantityNumber.toIntOrNull() ?: 1)
                                             },
                                             contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
                                             modifier = Modifier.height(28.dp),
@@ -1079,6 +1153,7 @@ fun SeckillScreen(
                                                 onScheduleTypeChange("H5")
                                                 onActiveBenefitIdChange(good.benefitId)
                                                 onSelectedSkuIdsChange(good.skuIds)
+                                                selectedExchangeStart = good.exchangeStartTime
                                                 
                                                 // Trigger background SKU resolution
                                                 if (good.skuId == "-1") {
@@ -1088,11 +1163,8 @@ fun SeckillScreen(
                                                     }
                                                     context.sendBroadcast(intent)
                                                 }
-                                                
-                                                val cal = Calendar.getInstance()
-                                                cal.set(Calendar.MINUTE, 0)
-                                                cal.set(Calendar.SECOND, 0)
-                                                onScheduleTimeStrChange(SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(cal.time))
+
+                                                scheduleTimePrefill(good.exchangeStartTime)
                                                 onShowScheduleDialogChange(true)
                                             },
                                             contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
@@ -1241,7 +1313,7 @@ fun SeckillScreen(
                             ),
                             modifier = Modifier.weight(1f).height(36.dp)
                         ) {
-                            Text("后台 RPC (虚拟)", fontSize = 11.sp)
+                            Text("后台 RPC（仅限无需支付）", fontSize = 11.sp)
                         }
                     }
 
