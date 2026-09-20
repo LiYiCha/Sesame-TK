@@ -68,9 +68,6 @@ public class ExtendActivity extends BaseActivity {
         //模块重新加载
         Button restartModule = findViewById(R.id.restart_module);
         restartModule.setOnClickListener(new RestartModule());
-        // 状态检查
-        Button checkStatus = findViewById(R.id.check_status);
-        checkStatus.setOnClickListener(new CheckStatusListener());
 
     }
     /**
@@ -86,19 +83,6 @@ public class ExtendActivity extends BaseActivity {
         intent.putExtra("startTime", SystemClock.elapsedRealtime());
         sendBroadcast(intent); // 发送广播
         Log.debug("扩展工具主动调用广播查询📢：" + type);
-    }
-
-    /**
-     * 检查运行状态监听器
-     */
-    private class CheckStatusListener implements View.OnClickListener {
-        @Override
-        public void onClick(View v) {
-            // 发送检查状态广播
-            Intent intent = new Intent("com.eg.android.AlipayGphone.sesame.checkStatus");
-            sendBroadcast(intent);
-            ToastUtil.makeText(ExtendActivity.this, "已发送状态检查请求", Toast.LENGTH_SHORT).show();
-        }
     }
 
     /**

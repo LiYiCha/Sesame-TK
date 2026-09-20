@@ -1,7 +1,6 @@
 package fansirsqi.xposed.sesame.hook
 
 import android.content.Context
-import fansirsqi.xposed.sesame.hook.context.AppContext
 import fansirsqi.xposed.sesame.hook.lifecycle.LifecycleManager
 import fansirsqi.xposed.sesame.hook.scheduler.TaskScheduler
 import fansirsqi.xposed.sesame.hook.theme.ThemeManager
@@ -9,7 +8,6 @@ import android.content.Intent
 import fansirsqi.xposed.sesame.util.Log
 import fansirsqi.xposed.sesame.util.Files
 import fansirsqi.xposed.sesame.util.GlobalThreadPools
-import fansirsqi.xposed.sesame.util.maps.UserMap
 import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
 
@@ -177,91 +175,6 @@ class ExtendHandle {
             }
         }
 
-        /**
-         * 处理状态检查请求
-         * @param context 上下文
-         */
-        @JvmStatic
-        fun handleCheckStatus(context: Context) {
-            try {
-                val statusInfo = buildString {
-                    append("======= 芝麻粒运行状态检查 =======\n")
-
-                    // 检查支付宝运行状态
-                    val isAlipayRunning = AppContext.getService() != null && context != null
-                    append("应用运行状态: ${if (isAlipayRunning) "✅ 运行中" else "❌ 未运行"}\n")
-
-                    // 检查模块状态
-                    append("模块Hook状态: ${if (ApplicationHook.isHooked()) "✅ 已Hook" else "❌ 未Hook"}\n")
-                    append("模块初始化状态: ${if (LifecycleManager.isInit()) "✅ 已初始化" else "❌ 未初始化"}\n")
-
-                    // 检查主任务调度器状态
-                    val isSchedulerExecuting = TaskScheduler.isExecuting()
-                    append("主任务调度器: ${if (isSchedulerExecuting) "✅ 运行中" else "❌ 已停止"}\n")
-
-                    // 检查具体任务运行状态
-                    append("\n--- 任务详细状态 ---\n")
-                    val modelArray = fansirsqi.xposed.sesame.model.Model.modelArray
-                    var runningTaskCount = 0
-                    val runningTasks = mutableListOf<String>()
-
-                    modelArray?.forEach { model ->
-                        if (model is fansirsqi.xposed.sesame.task.ModelTask) {
-                            if (model.isRunning) {
-                                runningTaskCount++
-                                runningTasks.add(model.getName() ?: "未知任务")
-                            }
-                        }
-                    }
-
-                    append("正在运行的任务数: $runningTaskCount\n")
-                    if (runningTasks.isNotEmpty()) {
-                        append("运行中的任务:\n")
-                        runningTasks.forEach { taskName ->
-                            append("  - $taskName\n")
-                        }
-                    }
-
-                    // 检查子任务状态
-                    append("\n--- 子任务状态 ---\n")
-                    val waitingChildTaskCount = fansirsqi.xposed.sesame.task.ModelTask.ChildModelTask.getWaitingCount()
-                    append("等待中的子任务数: $waitingChildTaskCount\n")
-
-                    if (waitingChildTaskCount > 0) {
-                        val waitingTasks = fansirsqi.xposed.sesame.task.ModelTask.ChildModelTask.getWaitingTasks()
-                        append("等待中的子任务列表:\n")
-                        waitingTasks.forEach { childTask ->
-                            val remainingTime = childTask.execTime - System.currentTimeMillis()
-                            val remainingSeconds = (remainingTime / 1000).coerceAtLeast(0)
-                            append("  - ${childTask.id} (剩余: ${remainingSeconds}秒)\n")
-                        }
-                    }
-
-                    // 显示版本信息
-                    append("\n--- 系统信息 ---\n")
-                    append("模块版本: ${ApplicationHook.getModelVersion()}\n")
-
-                    // 显示用户信息
-                    val currentUid = UserMap.currentUid
-                    append("当前用户ID: ${currentUid ?: "未登录"}\n")
-
-                    // 显示其他状态
-                    append("离线状态: ${if (LifecycleManager.isOffline()) "✅ 离线" else "❌ 在线"}\n")
-                    append("重登录次数: ${ApplicationHook.getReLoginCount().get()}\n")
-
-                    append("================================")
-                }
-
-                Log.runtime(statusInfo)
-                Toast.show("状态检查完成，详情请查看日志", true)
-
-            } catch (e: Exception) {
-                Log.runtime("状态检查失败: ${e.message}")
-                Log.printStackTrace("ExtendHandle", e)
-                Toast.show("状态检查失败: ${e.message}", false)
-            }
-        }
-
         @JvmStatic
         fun handleFetchMemberGoodsList(
             context: Context,
@@ -310,7 +223,7 @@ class ExtendHandle {
                     params
                 )
 
-                if (response.isNullOrEmpty()) {
+                if (response.isEmpty()) {
                     if (!hasSavedAny) {
                         Log.error("获取会员商品列表失败：返回为空, deliveryId: $deliveryId, page: $curPage")
                         val intent = Intent("fansirsqi.xposed.sesame.fetchMemberGoodsList.failed").apply {
@@ -389,7 +302,7 @@ class ExtendHandle {
                     params
                 )
 
-                if (response.isNullOrEmpty()) {
+                if (response.isEmpty()) {
                     if (!hasSavedAny) {
                         Log.error("获取全部商品分区失败：返回为空, zone: $zoneIndex, page: $curPage")
                         val intent = Intent("fansirsqi.xposed.sesame.fetchMemberGoodsList.failed").apply {
@@ -453,7 +366,7 @@ class ExtendHandle {
                         params
                     )
 
-                    if (response.isNullOrEmpty()) {
+                    if (response.isEmpty()) {
                         Log.error("搜索会员商品失败：返回为空")
                         val intent = Intent("fansirsqi.xposed.sesame.searchMemberGoods.failed").apply {
                             putExtra("query", query)
@@ -497,7 +410,7 @@ class ExtendHandle {
                     "com.alipay.alipaymember.biz.rpc.member.h5.queryMemberInfo",
                     "[{\"needExpirePoint\":true,\"needGrade\":true,\"needPoint\":true,\"queryScene\":\"POINT_EXCHANGE_SCENE\",\"source\":\"POINT_EXCHANGE_SCENE\",\"sourcePassMap\":{\"innerSource\":\"\",\"source\":\"\",\"unid\":\"\"}}]"
                 )
-                if (response.isNullOrEmpty()) return -1
+                if (response.isEmpty()) return -1
                 val jo = org.json.JSONObject(response)
                 jo.optInt("pointBalance", -1)
             } catch (e: Exception) {
@@ -649,7 +562,7 @@ class ExtendHandle {
         private fun readMemberGoodsJsonFile(file: java.io.File): org.json.JSONObject {
             if (file.exists()) {
                 val content = Files.readFromFile(file)
-                if (!content.isNullOrEmpty()) {
+                if (content.isNotEmpty()) {
                     return try {
                         org.json.JSONObject(content)
                     } catch (e: Exception) {
@@ -678,7 +591,7 @@ class ExtendHandle {
                         params
                     )
                     
-                    if (response.isNullOrEmpty()) {
+                    if (response.isEmpty()) {
                         Log.error("查询商品详情规格失败：返回为空")
                         return@execute
                     }

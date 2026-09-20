@@ -116,14 +116,6 @@
                 android:text="模块重新加载"
                 android:layout_marginBottom="8dp"
                 style="@style/Widget.App.Button.Main" />
-
-            <Button
-                android:id="@+id/check_status"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="检查运行状态"
-                android:layout_marginBottom="8dp"
-                style="@style/Widget.App.Button.Main" />
         </LinearLayout>
 
     </ScrollView>

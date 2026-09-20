@@ -105,10 +105,6 @@ public class SesameReceiver extends BroadcastReceiver {
                     }
                     ExtendHandle.handleReRun(actionType);
                     break;
-                case "com.eg.android.AlipayGphone.sesame.checkStatus":
-                    // 处理状态检测逻辑
-                    ExtendHandle.handleCheckStatus(context);
-                    break;
                 case "com.eg.android.AlipayGphone.sesame.memberOperation":
                     // 统一会员/秒杀操作
                     ExtendHandle.handleMemberOperation(context, intent);
@@ -180,7 +176,6 @@ public class SesameReceiver extends BroadcastReceiver {
         intentFilter.addAction("com.eg.android.AlipayGphone.sesame.rpctest"); // 调试RPC的动作
         intentFilter.addAction("com.eg.android.AlipayGphone.sesame.rpcresponse"); // 调试RPC的动作
         intentFilter.addAction("com.eg.android.AlipayGphone.sesame.rerun"); // 重新执行任务
-        intentFilter.addAction("com.eg.android.AlipayGphone.sesame.checkStatus"); // 状态检测
         intentFilter.addAction("com.eg.android.AlipayGphone.sesame.exactAlarm"); // 精确唤醒任务
         intentFilter.addAction("com.eg.android.AlipayGphone.sesame.memberOperation"); // 统一会员/秒杀操作
         intentFilter.addAction("com.eg.android.AlipayGphone.sesame.themeOperation"); // 主题操作（导出/删除/更新，IPC广播）
