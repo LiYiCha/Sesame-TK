@@ -33,13 +33,26 @@ public class ResChecker {
                 return true;
             }
 
-            Log.error(TAG, "Check failed: " + jo);
+            Log.error(TAG, "Check failed at " + getCallerInfo() + ": " + jo);
             return false;
 
         } catch (Throwable t) {
             Log.printStackTrace(TAG, "Error checking JSON success:", t);
             return false;
         }
+    }
+
+    /**
+     * 从调用栈中获取 ResChecker 调用方的类名和方法名，用于失败日志定位调用点
+     */
+    private static String getCallerInfo() {
+        for (StackTraceElement e : Thread.currentThread().getStackTrace()) {
+            String cls = e.getClassName();
+            if (!ResChecker.class.getName().equals(cls) && !cls.startsWith("java.")) {
+                return cls.substring(cls.lastIndexOf('.') + 1) + "." + e.getMethodName();
+            }
+        }
+        return "unknown";
     }
 
     /**

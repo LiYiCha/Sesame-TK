@@ -124,8 +124,8 @@ class PrivilegeTask {
                     val taskGroupList = studentTaskModule.optJSONArray("taskGroupList")
                     if (taskGroupList == null || taskGroupList.length() == 0) {
                         Log.forest("$STUDENT_SIGN_PREFIX 所有任务已完成🏆")
-                        claimTrialPrize()
                         claimMonthlyPrivilege()
+                        claimTrialPrize()
                         return
                     }
 
@@ -133,8 +133,8 @@ class PrivilegeTask {
                     val taskList = firstGroup?.optJSONArray("taskList")
                     if (taskList == null || taskList.length() == 0) {
                         Log.forest("$STUDENT_SIGN_PREFIX 所有任务已完成🏆")
-                        claimTrialPrize()
                         claimMonthlyPrivilege()
+                        claimTrialPrize()
                         return
                     }
 
@@ -194,8 +194,8 @@ class PrivilegeTask {
                     // ── Step 3：退出条件 ──────────────────────────────────────
                     if (!foundPending) {
                         Log.forest("$STUDENT_SIGN_PREFIX 所有任务已完成🏆")
-                        claimTrialPrize()
                         claimMonthlyPrivilege()
+                        claimTrialPrize()
                         return
                     }
                     val pendingTasks = (0 until taskList.length())
@@ -209,8 +209,8 @@ class PrivilegeTask {
                     }
                     if (allPendingExhausted) {
                         Log.runtime("$STUDENT_SIGN_PREFIX 剩余任务全部因异常被跳过，退出执行")
-                        claimTrialPrize()
                         claimMonthlyPrivilege()
+                        claimTrialPrize()
                         return
                     }
                 }
@@ -375,7 +375,14 @@ class PrivilegeTask {
             try {
                 val response = JSONObject(CommonRequest().queryYouth100())
                 if (!isYouthSuccess(response)) {
-                    Log.error(TAG, "青春100查询失败: $response")
+                    val msg = response.optString("resultMessage", response.optString("resultDesc", ""))
+                    if (msg.contains("授权资金信息后即可使用")) {
+                        // 未授权资金 = 青春100未开通，属正常状态：打一次运行时日志并标记当天已处理，避免重复查询报错
+                        Log.runtime("$STUDENT_SIGN_PREFIX 青春100未开通（$msg），跳过月权益领取")
+                        Status.setFlagToday(FLAG_MONTHLY_PRIVILEGE)
+                    } else {
+                        Log.error(TAG, "青春100查询失败: $response")
+                    }
                     return
                 }
                 val feeds = response.optJSONArray("feeds") ?: run {
