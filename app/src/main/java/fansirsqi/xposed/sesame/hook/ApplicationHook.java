@@ -15,6 +15,7 @@ import de.robv.android.xposed.XposedBridge;
 import de.robv.android.xposed.XposedHelpers;
 import de.robv.android.xposed.callbacks.XC_LoadPackage;
 import fansirsqi.xposed.sesame.BuildConfig;
+import fansirsqi.xposed.sesame.data.Config;
 import fansirsqi.xposed.sesame.data.General;
 import fansirsqi.xposed.sesame.entity.AlipayVersion;
 import fansirsqi.xposed.sesame.hook.context.AppContext;
@@ -26,8 +27,12 @@ import fansirsqi.xposed.sesame.hook.core.modules.NetworkModule;
 import fansirsqi.xposed.sesame.hook.core.modules.MiscHookModule;
 import fansirsqi.xposed.sesame.hook.core.modules.LifecycleModule;
 import fansirsqi.xposed.sesame.hook.lifecycle.LifecycleManager;
+import fansirsqi.xposed.sesame.hook.network.HttpCaptureHook;
+import fansirsqi.xposed.sesame.hook.network.NetworkHook;
 import fansirsqi.xposed.sesame.hook.rpc.bridge.RpcVersion;
 import fansirsqi.xposed.sesame.hook.scheduler.AlarmScheduler;
+import fansirsqi.xposed.sesame.model.BaseModel;
+import fansirsqi.xposed.sesame.util.GlobalThreadPools;
 import fansirsqi.xposed.sesame.util.Log;
 
 public class ApplicationHook implements IXposedHookLoadPackage {
@@ -215,33 +220,36 @@ public class ApplicationHook implements IXposedHookLoadPackage {
                             HookModuleManager.INSTANCE.dispatchPostAppAttach(context, lpparam.classLoader);
 
                             // 子进程处理：根据各自开关开启网络及RPC调试抓包
+                            // attach 在主线程，Config.load 有磁盘 IO，连同 hook 安装一起移到后台执行
                             if (!General.PACKAGE_NAME.equals(lpparam.processName)) {
-                                try {
-                                    if (!fansirsqi.xposed.sesame.data.Config.isLoaded()) {
-                                        fansirsqi.xposed.sesame.data.Config.load("");
-                                    }
-                                } catch (Throwable t) {
-                                    // 忽略
-                                }
-
-                                if (fansirsqi.xposed.sesame.model.BaseModel.getDebugMode().getValue()) {
+                                GlobalThreadPools.INSTANCE.execute(() -> {
                                     try {
-                                        LifecycleManager.setupRpcDebugHooks();
-                                        Log.runtime(TAG, "Subprocess setupRpcDebugHooks success");
+                                        if (!Config.isLoaded()) {
+                                            Config.load("");
+                                        }
                                     } catch (Throwable t) {
-                                        Log.runtime(TAG, "Subprocess setupRpcDebugHooks err: " + t.getMessage());
+                                        // 忽略
                                     }
-                                }
 
-                                if (fansirsqi.xposed.sesame.model.BaseModel.enableHttpCapture.getValue()) {
-                                    try {
-                                        fansirsqi.xposed.sesame.hook.network.HttpCaptureHook.setup(lpparam.classLoader);
-                                        fansirsqi.xposed.sesame.hook.network.NetworkHook.setupHooks(lpparam.classLoader);
-                                        Log.runtime(TAG, "Subprocess HttpCaptureHook setup success");
-                                    } catch (Throwable t) {
-                                        Log.runtime(TAG, "Subprocess HttpCaptureHook setup err: " + t.getMessage());
+                                    if (BaseModel.getDebugMode().getValue()) {
+                                        try {
+                                            LifecycleManager.setupRpcDebugHooks();
+                                            Log.runtime(TAG, "Subprocess setupRpcDebugHooks success");
+                                        } catch (Throwable t) {
+                                            Log.runtime(TAG, "Subprocess setupRpcDebugHooks err: " + t.getMessage());
+                                        }
                                     }
-                                }
+
+                                    if (BaseModel.enableHttpCapture.getValue()) {
+                                        try {
+                                            HttpCaptureHook.setup(lpparam.classLoader);
+                                            NetworkHook.setupHooks(lpparam.classLoader);
+                                            Log.runtime(TAG, "Subprocess HttpCaptureHook setup success");
+                                        } catch (Throwable t) {
+                                            Log.runtime(TAG, "Subprocess HttpCaptureHook setup err: " + t.getMessage());
+                                        }
+                                    }
+                                });
                             }
                         }
                     });

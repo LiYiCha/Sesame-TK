@@ -24,6 +24,7 @@ import fansirsqi.xposed.sesame.hook.lifecycle.LifecycleManager
 import fansirsqi.xposed.sesame.hook.network.HttpCaptureHook
 import fansirsqi.xposed.sesame.hook.scheduler.TaskScheduler
 import fansirsqi.xposed.sesame.util.Log
+import fansirsqi.xposed.sesame.util.GlobalThreadPools
 import fansirsqi.xposed.sesame.util.maps.UserMap
 
 class LifecycleModule : HookModule {
@@ -38,9 +39,9 @@ class LifecycleModule : HookModule {
             XposedHelpers.findAndHookMethod("com.alipay.mobile.quinox.LauncherActivity", classLoader, "onResume",
                 object : XC_MethodHook() {
                     override fun afterHookedMethod(param: MethodHookParam) {
-                        val activity = param.thisObject as Activity
-                        Handler(Looper.getMainLooper()).post {
-                            handleActivityResume(activity)
+                        // resume 处理包含文件 IO 与可能的全量初始化，不在主线程执行
+                        GlobalThreadPools.execute {
+                            handleActivityResume()
                         }
                     }
                 })
@@ -77,7 +78,7 @@ class LifecycleModule : HookModule {
         }
     }
 
-    private fun handleActivityResume(activity: Activity) {
+    private fun handleActivityResume() {
         try {
             if (TaskScheduler.isStopped()) {
                 return
@@ -106,13 +107,6 @@ class LifecycleModule : HookModule {
             if (LifecycleManager.isOffline()) {
                 LifecycleManager.setOffline(false)
                 TaskScheduler.executeTask()
-                Handler(Looper.getMainLooper()).postDelayed({
-                    try {
-                        activity.finish()
-                    } catch (t: Throwable) {
-                        Log.printStackTrace(TAG, t)
-                    }
-                }, 300)
             }
 
         } catch (t: Throwable) {
@@ -126,26 +120,32 @@ class LifecycleModule : HookModule {
         AppContext.setService(appService)
         AppContext.setMainHandler(Handler(Looper.getMainLooper()))
 
-        val cl = AppContext.getClassLoader()
-        if (cl != null) {
-            SecurityBodyHelper.init(cl)
-            LocationHelper.init(cl)
-            SmartSchedulerManager.initialize(appService.applicationContext)
-            AlipayMiniMarkHelper.init(cl)
-            AuthCodeHelper.init(cl)
-//            AuthCodeHelper.getAuthCode("2021005114632037")
+        // 宿主 Service.onCreate 回调必须快速返回，重初始化全部移到后台线程
+        GlobalThreadPools.execute {
+            try {
+                val cl = AppContext.getClassLoader()
+                if (cl != null) {
+                    SecurityBodyHelper.init(cl)
+                    LocationHelper.init(cl)
+                    SmartSchedulerManager.initialize(appService.applicationContext)
+                    AlipayMiniMarkHelper.init(cl)
+                    AuthCodeHelper.init(cl)
+                }
+
+                SesameReceiver.register(appService, object : SesameReceiver.BroadcastCallback {
+                    override fun onInitHandler(force: Boolean) {
+                        LifecycleManager.initHandler(force)
+                    }
+                    override fun onReLogin() {
+                        LifecycleManager.reLogin()
+                    }
+                })
+
+                LifecycleManager.initHandler(true)
+            } catch (t: Throwable) {
+                Log.printStackTrace(TAG, t)
+            }
         }
-
-        SesameReceiver.register(appService, object : SesameReceiver.BroadcastCallback {
-            override fun onInitHandler(force: Boolean) {
-                LifecycleManager.initHandler(force)
-            }
-            override fun onReLogin() {
-                LifecycleManager.reLogin()
-            }
-        })
-
-        LifecycleManager.initHandler(true)
     }
 
     private fun handleServiceDestroy(service: Service) {
@@ -163,9 +163,7 @@ class LifecycleModule : HookModule {
                 Log.printStackTrace(ex)
             }
         }
-        
-        try {
-            service.sendBroadcast(android.content.Intent("com.eg.android.AlipayGphone.sesame.restart"))
-        } catch (t: Throwable) {}
+        // 不做自动重启自愈。把服务销毁当作"异常退出需要恢复"会引发
+        // 反复复活（重启风暴叠加任务风暴），放大支付宝风控误判风险
     }
 }

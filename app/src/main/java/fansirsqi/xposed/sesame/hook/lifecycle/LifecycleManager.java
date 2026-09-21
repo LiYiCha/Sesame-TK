@@ -36,6 +36,7 @@ import fansirsqi.xposed.sesame.util.DataStore;
 import fansirsqi.xposed.sesame.task.BaseTask;
 import fansirsqi.xposed.sesame.task.ModelTask;
 import fansirsqi.xposed.sesame.task.TaskCommon;
+import fansirsqi.xposed.sesame.task.otherTask2.SeckillScheduler;
 import fansirsqi.xposed.sesame.util.Files;
 import fansirsqi.xposed.sesame.util.Log;
 import fansirsqi.xposed.sesame.util.Notify;
@@ -182,15 +183,36 @@ public class LifecycleManager {
     }
 
     /**
+     * 初始化进行中标记：Service.onCreate 与 Launcher.onResume 双路径并发触发时，防止重复全量初始化
+     */
+    private static volatile boolean pendingInit = false;
+
+    /**
      * 初始化处理器
      */
     @SuppressLint("WakelockTimeout")
     public static synchronized Boolean initHandler(Boolean force) {
+        if (pendingInit) {
+            Log.runtime(TAG, "初始化正在进行中，跳过本次重复触发");
+            return false;
+        }
         try {
             if (TaskScheduler.isStopped() && (force == null || !force)) {
                 Log.runtime(TAG, "⏸ 任务已被用户停止，跳过 initHandler 自动重载与执行");
                 return false;
             }
+            // 已完成初始化、用户未变化且非离线时，跳过重复全量初始化，只按需补跑任务
+            if (init && !offline) {
+                String loggedInUser = AppContext.getUserId();
+                if (loggedInUser != null && loggedInUser.equals(UserMap.currentUid)) {
+                    Log.runtime(TAG, "已初始化且用户未变化，跳过重复全量初始化");
+                    if (!TaskScheduler.isStopped()) {
+                        execHandler();
+                    }
+                    return true;
+                }
+            }
+            pendingInit = true;
             TaskCommon.update();
             Service service = AppContext.getService();
             if (service == null) {
@@ -204,7 +226,7 @@ public class LifecycleManager {
             if (force) {
                 String userId = AppContext.getUserId();
                 if (userId == null) {
-                    String activeUser = fansirsqi.xposed.sesame.util.Files.getActiveUser();
+                    String activeUser = Files.getActiveUser();
                     if (activeUser != null && retryCount < 5) {
                         retryCount++;
                         Log.runtime("有已保存的活跃用户(" + activeUser + ")，但当前获取为null，可能是服务未就绪，将在5秒后重试(" + retryCount + "/5)...");
@@ -220,7 +242,7 @@ public class LifecycleManager {
                     return false;
                 }
                 retryCount = 0; // 重置重试计数器
-                fansirsqi.xposed.sesame.util.Files.saveActiveUser(userId);
+                Files.saveActiveUser(userId);
 
                 // 在确保支付宝相关类加载后再初始化 UserMap
                 try {
@@ -280,7 +302,7 @@ public class LifecycleManager {
                 }
                 AlarmScheduler.setWakenAtTimeAlarm();
                 // 进程重启后动态接收器与闹钟回调均已丢失，重新读取 seckill_tasks.json 排期秒杀闹钟
-                fansirsqi.xposed.sesame.task.otherTask2.SeckillScheduler.syncTasks(service);
+                SeckillScheduler.syncTasks(service);
                 rpcBridge = new NewRpcBridge();
                 rpcBridge.load();
                 rpcVersion = rpcBridge.getVersion();
@@ -328,6 +350,8 @@ public class LifecycleManager {
             Log.printStackTrace(TAG, th);
             Toast.show("芝麻粒加载失败 🎃");
             return false;
+        } finally {
+            pendingInit = false;
         }
     }
 
