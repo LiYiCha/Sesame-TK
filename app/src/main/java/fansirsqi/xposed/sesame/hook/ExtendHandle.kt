@@ -1,13 +1,21 @@
 package fansirsqi.xposed.sesame.hook
 
 import android.content.Context
+import android.content.Intent
+import fansirsqi.xposed.sesame.hook.keepalive.SmartSchedulerManager
 import fansirsqi.xposed.sesame.hook.lifecycle.LifecycleManager
+import fansirsqi.xposed.sesame.hook.scheduler.AlarmScheduler
 import fansirsqi.xposed.sesame.hook.scheduler.TaskScheduler
 import fansirsqi.xposed.sesame.hook.theme.ThemeManager
-import android.content.Intent
-import fansirsqi.xposed.sesame.util.Log
+import fansirsqi.xposed.sesame.task.ModelTask
+import fansirsqi.xposed.sesame.task.antForest.EnergyWaitingManager
+import fansirsqi.xposed.sesame.task.exchange.ThreadPoolManager
+import fansirsqi.xposed.sesame.task.otherTask2.PrivilegeTask
+import fansirsqi.xposed.sesame.task.otherTask2.SeckillScheduler
 import fansirsqi.xposed.sesame.util.Files
 import fansirsqi.xposed.sesame.util.GlobalThreadPools
+import fansirsqi.xposed.sesame.util.Log
+import fansirsqi.xposed.sesame.util.Notify
 import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
 
@@ -96,7 +104,7 @@ class ExtendHandle {
                         handleQueryBenefitDetail(context, benefitId)
                     }
                 }
-                "SYNC_SECKILL_TASKS" -> fansirsqi.xposed.sesame.task.otherTask2.SeckillScheduler.syncTasks(context)
+                "SYNC_SECKILL_TASKS" -> SeckillScheduler.syncTasks(context)
                 else -> Log.runtime("未知的会员操作: ${intent.getStringExtra("operation")}")
             }
         }
@@ -130,7 +138,7 @@ class ExtendHandle {
                     }
                     ACTION_PAUSE -> {
                         TaskScheduler.setPaused(true)
-                        fansirsqi.xposed.sesame.task.ModelTask.stopAllTask()
+                        ModelTask.stopAllTask()
                         Log.runtime("[PauseRunReceiver]任务已暂停⏸")
                         Toast.show("任务已暂停", true)
                     }
@@ -141,30 +149,35 @@ class ExtendHandle {
                         TaskScheduler.setStopped(true)
                         TaskScheduler.setPaused(false)
 
-                        // 第二层：停止批量启动流程和已启动的 ModelTask（必须在关闭调度器之前，
-                        // 先掐断任务来源，再关执行器，否则留下"调度器已停但任务还在启动"的竞态窗口）
-                        fansirsqi.xposed.sesame.task.ModelTask.stopAllTask()
+                        // 第二层：停止主任务循环 + 批量启动流程 + 所有已启动的 ModelTask
+                        // （LifecycleManager.stopHandler 内部已调用 ModelTask.stopAllTask，不再重复调用）
+                        LifecycleManager.stopHandler()
 
                         // 第三层：停止通过 GlobalThreadPools 创建的任务（只取消任务，不取消作用域）
                         GlobalThreadPools.cancelAll()
 
                         // 第四层：停止生命周期和定时调度
-                        LifecycleManager.stopHandler()
                         TaskScheduler.shutdownExecutors()
 
-                        // 第五层：停止脱离统一生命周期的独立任务资源
-                        fansirsqi.xposed.sesame.task.otherTask2.PrivilegeTask.stopTask()
-                        fansirsqi.xposed.sesame.task.exchange.ThreadPoolManager.shutdownNow()
+                        // 短暂等待，让已下发取消信号的在途任务（协程/线程）有时间响应退出，
+                        // 减少后续资源清理时仍在执行导致的异常打印
+                        try { Thread.sleep(300) } catch (_: InterruptedException) {
+                            Thread.currentThread().interrupt()
+                        }
 
-                        fansirsqi.xposed.sesame.task.antForest.EnergyWaitingManager.clearAllWaitingTasks()
-                        fansirsqi.xposed.sesame.hook.keepalive.SmartSchedulerManager.cancelAll()
-                        fansirsqi.xposed.sesame.hook.keepalive.SmartSchedulerManager.cleanup()
-                        fansirsqi.xposed.sesame.hook.scheduler.AlarmScheduler.unsetWakenAtTimeAlarm()
-                        fansirsqi.xposed.sesame.hook.scheduler.AlarmScheduler.cancelAllExactAlarms()
+                        // 第五层：停止脱离统一生命周期的独立任务资源
+                        // 每一步独立 try-catch，避免某个资源清理异常阻塞后续清理
+                        try { PrivilegeTask.stopTask() } catch (_: Throwable) {}
+                        try { ThreadPoolManager.shutdownNow() } catch (_: Throwable) {}
+                        try { EnergyWaitingManager.clearAllWaitingTasks() } catch (_: Throwable) {}
+                        try { SmartSchedulerManager.cancelAll() } catch (_: Throwable) {}
+                        try { SmartSchedulerManager.cleanup() } catch (_: Throwable) {}
+                        try { AlarmScheduler.unsetWakenAtTimeAlarm() } catch (_: Throwable) {}
+                        try { AlarmScheduler.cancelAllExactAlarms() } catch (_: Throwable) {}
                         try {
-                            fansirsqi.xposed.sesame.util.Notify.setStatusTextDisabled()
-                            fansirsqi.xposed.sesame.util.Notify.updateNextExecText(-1)
-                        } catch (t: Throwable) {}
+                            Notify.setStatusTextDisabled()
+                            Notify.updateNextExecText(-1)
+                        } catch (_: Throwable) {}
                         Log.runtime("[StopRunReceiver]停止信号已全部下发，后台任务将陆续退出")
                         Toast.show("任务已停止并清除", true)
                     }

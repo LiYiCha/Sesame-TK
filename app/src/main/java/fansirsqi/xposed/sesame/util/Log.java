@@ -4,6 +4,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import fansirsqi.xposed.sesame.BuildConfig;
+import fansirsqi.xposed.sesame.hook.scheduler.TaskScheduler;
 import fansirsqi.xposed.sesame.model.BaseModel;
 
 /**
@@ -109,6 +110,12 @@ public class Log {
     }
 
     public static void error(String message) {
+        // 停止态静默：任务停止期间产生的异常（多为中断/取消导致）降级为 runtime 日志，
+        // 不发通知、不写 error 日志，避免停止时刷异常栈
+        if (TaskScheduler.isStopped()) {
+            runtime(message);
+            return;
+        }
         if (BaseModel.errNotify.value) {
             Notify.sendNewNotification("‼️芝麻粒运行时发生异常，详情查看异常日志", message);
         }
@@ -121,8 +128,6 @@ public class Log {
 
     public static void error(String TAG, String message) {
         error("[" + TAG + "]: " + message);
-        // 添加结束分隔符
-        ERROR_LOGGER.error(separator);
     }
 
     public static void capture(String message) {

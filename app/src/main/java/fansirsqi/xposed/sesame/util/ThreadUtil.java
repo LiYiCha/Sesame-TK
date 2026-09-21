@@ -1,4 +1,5 @@
 package fansirsqi.xposed.sesame.util;
+import fansirsqi.xposed.sesame.hook.scheduler.TaskScheduler;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
@@ -24,22 +25,31 @@ public class ThreadUtil {
     }
     /**
      * 使当前线程暂停指定的毫秒数。
+     * 中断处理：若因全局停止（TaskScheduler.isStopped）引起，仅打印 runtime 日志，
+     * 避免 error 通知和异常栈；否则按原有逻辑处理。
      *
      * @param millis 毫秒数。
      */
     public static void sleep(long millis) {
+        boolean stopped = TaskScheduler.isStopped();
         if (Thread.currentThread().isInterrupted()) {
-            Log.error("ThreadUtil", "Thread already interrupted, skipping sleep");
-            Log.system("ThreadUtil", "Thread already interrupted, skipping sleep");
+            if (stopped) {
+                Log.runtime("ThreadUtil", "任务已停止，跳过 sleep");
+            } else {
+                Log.system("ThreadUtil", "Thread already interrupted, skipping sleep");
+            }
             return;
         }
         try {
             Thread.sleep(millis);
         } catch (InterruptedException e) {
-            // 恢复中断状态
+            // 恢复中断状态，让调用方可以检测到中断
             Thread.currentThread().interrupt();
-            // 可以选择记录日志或抛出自定义异常
-            Log.printStackTrace("ThreadUtil Thread sleep interrupted", e);
+            if (TaskScheduler.isStopped()) {
+                Log.runtime("ThreadUtil", "任务已停止，sleep 被中断");
+            } else {
+                Log.printStackTrace("ThreadUtil Thread sleep interrupted", e);
+            }
         }
     }
     public boolean shutdownAndAwaitTermination(ExecutorService pool) {

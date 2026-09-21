@@ -2,7 +2,9 @@ package fansirsqi.xposed.sesame.task
 
 import android.annotation.SuppressLint
 import fansirsqi.xposed.sesame.hook.keepalive.SmartSchedulerManager
+import fansirsqi.xposed.sesame.hook.core.ModuleScope
 import fansirsqi.xposed.sesame.hook.scheduler.TaskScheduler
+import fansirsqi.xposed.sesame.data.Status
 import fansirsqi.xposed.sesame.model.BaseModel
 import fansirsqi.xposed.sesame.model.Model
 import fansirsqi.xposed.sesame.model.ModelFields
@@ -279,7 +281,7 @@ abstract class ModelTask : Model() {
                     isRunning = false
                     updateNextExecText(-1)
                     try {
-                        fansirsqi.xposed.sesame.data.Status.save(java.util.Calendar.getInstance(), true)
+                        Status.save(java.util.Calendar.getInstance(), true)
                     } catch (t: Throwable) {
                         Log.printStackTrace("保存状态异常", t)
                     }
@@ -404,7 +406,7 @@ abstract class ModelTask : Model() {
         taskScope = null
 
         // 使用 ModuleScope 确保清理逻辑能够完成，即使父作用域已被取消
-        fansirsqi.xposed.sesame.hook.core.ModuleScope.launch(Dispatchers.Default) {
+        ModuleScope.launch(Dispatchers.Default) {
             try {
                 childTaskMap.values.forEach { childTask ->
                     try {
@@ -701,7 +703,7 @@ abstract class ModelTask : Model() {
             val newJob = globalTaskScope.launch(start = CoroutineStart.LAZY) {
                 try {
                     // 设置状态文本为"执行中"
-                    fansirsqi.xposed.sesame.util.Notify.setStatusTextExec()
+                    setStatusTextExec()
 
                     for (model in modelArray) {
                         currentCoroutineContext().ensureActive()

@@ -8,6 +8,7 @@ import kotlinx.coroutines.CoroutineName
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -171,12 +172,19 @@ object EnergyWaitingManager {
     // 智能重试策略
     private val smartRetryStrategy = SmartRetryStrategy()
 
-    // 协程作用域
-    private val managerScope = CoroutineScope(
-        Dispatchers.Default +
-                SupervisorJob() +
-                CoroutineName("PreciseEnergyWaitingManager")
-    )
+    // 协程作用域（可重新创建：停止时 cancel，下次访问自动重建）
+    @Volatile
+    private var _managerScope: CoroutineScope? = null
+    private val managerScope: CoroutineScope
+        get() {
+            val s = _managerScope
+            if (s != null && s.isActive) return s
+            return CoroutineScope(
+                Dispatchers.Default +
+                        SupervisorJob() +
+                        CoroutineName("PreciseEnergyWaitingManager")
+            ).also { _managerScope = it }
+        }
 
     // 互斥锁，防止并发操作
     private val taskMutex = Mutex()
@@ -233,6 +241,9 @@ object EnergyWaitingManager {
                 Log.runtime(TAG, "🧹 已经清空所有能量蹲点任务及持久化缓存")
             }
         }
+        // 取消蹲点协程作用域，停止正在等待/收取能量的协程；下次访问 managerScope 自动重建
+        _managerScope?.cancel()
+        _managerScope = null
     }
 
     /**
