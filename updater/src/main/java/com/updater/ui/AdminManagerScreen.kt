@@ -356,7 +356,13 @@ private fun UploadCard(
                 Column(Modifier.padding(12.dp)) {
                     Text(
                         text = selectedFile?.let {
-                            "已选: ${it.fileName}\n大小: ${formatFileSize(it.sizeBytes)}  |  MD5: ${it.md5.take(8)}..."
+                            buildString {
+                                append("已选: ${it.fileName}\n")
+                                append("大小: ${formatFileSize(it.sizeBytes)}  |  MD5: ${it.md5.take(8)}...")
+                                if (it.versionCode > 0) {
+                                    append("\n自动提取版本: v${it.versionName} (${it.versionCode})")
+                                }
+                            }
                         } ?: "未选择本地 APK 文件",
                         style = MaterialTheme.typography.bodySmall,
                         color = colors.onSurfaceVariant
@@ -480,8 +486,11 @@ private fun PackageItemCard(pkg: JSONObject, onDelete: () -> Unit) {
             }
             Spacer(Modifier.height(6.dp))
             val md5Short = if (md5.length > 8) md5.take(8) else md5
+            val pkgVersionCode = pkg.optLong("versionCode", 0)
+            val pkgVersionName = pkg.optString("versionName", "")
+            val versionText = if (pkgVersionCode > 0) "  |  版本: v$pkgVersionName ($pkgVersionCode)" else ""
             Text(
-                text = "大小: ${formatFileSize(sizeBytes)}  |  MD5: $md5Short\n路径: $downloadUrl",
+                text = "大小: ${formatFileSize(sizeBytes)}$versionText  |  MD5: $md5Short\n路径: $downloadUrl",
                 style = MaterialTheme.typography.labelSmall,
                 color = colors.onSurfaceVariant
             )

@@ -5,6 +5,7 @@ import android.net.Uri
 import android.os.Handler
 import android.os.Looper
 import android.provider.OpenableColumns
+import androidx.core.content.pm.PackageInfoCompat
 import okhttp3.Call
 import okhttp3.Callback
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
@@ -64,7 +65,11 @@ class AdminRepository(
         val fileName: String,
         val sizeBytes: Long,
         val md5: String,
-        val appLabel: String
+        val appLabel: String,
+        // 从 APK 内 AndroidManifest 自动提取的版本信息（解析失败时 versionCode 为 0）
+        val packageName: String,
+        val versionCode: Long,
+        val versionName: String
     )
 
     // ------------------------------------------------------------------
@@ -331,10 +336,16 @@ class AdminRepository(
                 }
 
                 var appLabel = ""
+                var pkgId = ""
+                var pkgVersionCode = 0L
+                var pkgVersionName = ""
                 try {
                     val pInfo = context.packageManager.getPackageArchiveInfo(targetFile.absolutePath, 0)
                     if (pInfo != null) {
                         appLabel = pInfo.applicationInfo?.loadLabel(context.packageManager)?.toString() ?: ""
+                        pkgId = pInfo.packageName ?: ""
+                        pkgVersionCode = PackageInfoCompat.getLongVersionCode(pInfo)
+                        pkgVersionName = pInfo.versionName ?: ""
                     }
                 } catch (_: Throwable) {}
 
@@ -346,7 +357,10 @@ class AdminRepository(
                                 fileName = fileName,
                                 sizeBytes = targetFile.length(),
                                 md5 = calculateMD5(targetFile),
-                                appLabel = appLabel
+                                appLabel = appLabel,
+                                packageName = pkgId,
+                                versionCode = pkgVersionCode,
+                                versionName = pkgVersionName
                             )
                         )
                     )
@@ -481,6 +495,9 @@ class AdminRepository(
                     put("apkSize", file.length())
                     put("apkMd5", calculateMD5(file))
                     put("description", pkgDesc)
+                    // 自动提取的版本信息（与网页端发布数据模型对齐）
+                    if (picked.versionCode > 0) put("versionCode", picked.versionCode)
+                    if (picked.versionName.isNotBlank()) put("versionName", picked.versionName)
                 }
                 val updatedPackages = JSONArray()
                 for (i in 0 until existingPackages.length()) {
@@ -492,7 +509,11 @@ class AdminRepository(
                 updatedPackages.put(newPackage)
 
                 val publishResp = client.newCall(
-                    publishRequest(baseHost, token, snapshot.appJson, snapshot.matchedAppId, targetAppId, updatedPackages)
+                    publishRequest(
+                        baseHost, token, snapshot.appJson, snapshot.matchedAppId, targetAppId, updatedPackages,
+                        newVersionCode = picked.versionCode,
+                        newVersionName = picked.versionName
+                    )
                 ).execute()
                 val publishSuccess = publishResp.isSuccessful
                 val publishCode = publishResp.code
@@ -536,13 +557,25 @@ class AdminRepository(
         appJson: JSONObject,
         matchedAppId: String,
         targetAppId: String,
-        packages: JSONArray
+        packages: JSONArray,
+        // 上传新包时传入 APK 内自动提取的版本号：更高则自动提升清单的"最新版本"
+        newVersionCode: Long = 0L,
+        newVersionName: String = ""
     ): Request {
         val actualId = matchedAppId.ifBlank { targetAppId }
         val appName = appJson.optString("appName").ifBlank { "芝麻-TK" }
-        val rawCode = appJson.optInt("latestVersionCode", 0)
-        val latestVersionCode = if (rawCode > 0) rawCode else 35
-        val latestVersionName = appJson.optString("latestVersionName").ifBlank { "0.5.0" }
+        var latestVersionCode = appJson.optLong("latestVersionCode", 0L)
+        var latestVersionName = appJson.optString("latestVersionName").ifBlank { "" }
+        if (newVersionCode > 0 && newVersionCode > latestVersionCode) {
+            // 上传的 APK 版本比清单记录更新：自动更新版本号，客户端即可检测到新版本
+            latestVersionCode = newVersionCode
+            if (newVersionName.isNotBlank()) latestVersionName = newVersionName
+        }
+        if (latestVersionCode <= 0L) {
+            // 既无清单版本也无法提取时的兜底
+            latestVersionCode = 35L
+            latestVersionName = latestVersionName.ifBlank { "0.5.0" }
+        }
         val payload = JSONObject().apply {
             put("appId", actualId)
             put("appName", appName)

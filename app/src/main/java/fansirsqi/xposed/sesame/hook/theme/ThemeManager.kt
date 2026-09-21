@@ -6,6 +6,9 @@ import fansirsqi.xposed.sesame.util.JsonUtil
 import fansirsqi.xposed.sesame.util.Log
 import fansirsqi.xposed.sesame.util.maps.UserMap
 import java.io.File
+import java.lang.reflect.Modifier
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * 主题管理器
@@ -30,6 +33,15 @@ object ThemeManager {
     private const val THEMES_FOLDER = "themes"
     private const val EXPORTED_THEMES_FOLDER = "exported_themes"
     private const val SELECTED_THEME_FILE = "selected_theme"
+
+    // SCCacheInfoModel 的候选类路径（不同版本包路径可能不同）
+    private val SC_CACHE_MODEL_CLASSES = arrayOf(
+        "com.alipay.mobile.skincenter.model.SCCacheInfoModel",
+        "com.alipay.mobile.skincenter.manage.SCCacheInfoModel"
+    )
+
+    // 缓存 Map 识别用的场景键（与 cached_skin_info_v2 的 JSON 键一致）
+    private val SCENE_KEYS = setOf("theme", "ltp", "aptrip", "widget", "emoji", "atmospheric_aptrip")
 
     /**
      * 获取当前用户ID
@@ -92,9 +104,10 @@ object ThemeManager {
     }
 
     /**
-     * 立即直接删除主题缓存
+     * 删除自定义主题
      *
      * 响应 UI 层删除操作，由 IPC 广播触发
+     * 只删除带 theme_info.json 的导入主题目录，不动支付宝官方皮肤缓存
      */
     fun deleteThemeCacheDirectly(targetUserId: String? = null): Pair<Boolean, String> {
         return try {
@@ -102,13 +115,27 @@ object ThemeManager {
             if (userId == null) {
                 return Pair(false, "无法获取用户ID")
             }
-            val userThemeDir = File(INTERNAL_STORAGE_PATH, userId)
-            if (!userThemeDir.exists()) {
-                return Pair(false, "主题目录不存在: ${userThemeDir.absolutePath}")
+            val themeBaseDir = File(File(INTERNAL_STORAGE_PATH, userId), "theme")
+            if (!themeBaseDir.isDirectory) {
+                return Pair(false, "主题目录不存在: ${themeBaseDir.absolutePath}")
             }
-            userThemeDir.deleteRecursively()
-            Log.runtime(TAG, "✓ 主题缓存已删除")
-            Pair(true, "主题缓存已删除")
+            val customThemes = themeBaseDir.listFiles { file ->
+                file.isDirectory && File(file, "theme_info.json").exists()
+            }
+            if (customThemes.isNullOrEmpty()) {
+                return Pair(false, "没有可删除的自定义主题")
+            }
+            var deletedCount = 0
+            customThemes.forEach { theme ->
+                if (theme.deleteRecursively()) {
+                    Log.runtime(TAG, "✓ 已删除自定义主题: ${theme.name}")
+                    deletedCount++
+                } else {
+                    Log.runtime(TAG, "✗ 删除自定义主题失败: ${theme.name}")
+                }
+            }
+            Log.runtime(TAG, "✓ 自定义主题删除完成: $deletedCount/${customThemes.size}")
+            Pair(true, "已删除 $deletedCount 个自定义主题")
         } catch (e: Exception) {
             Pair(false, "删除失败: ${e.message}")
         }
@@ -324,17 +351,11 @@ object ThemeManager {
                 Log.runtime(TAG, "   主题ID: $selectedThemeId")
                 Log.runtime(TAG, "   MD5: ${updatedThemeInfo.md5}")
 
-                //*** *** 步骤3: 更新 SharedPreferences
-                updateSharedPreferences(userId, selectedThemeId, updatedThemeInfo)
+                //*** *** 步骤3: 更新 SharedPreferences（key 为 cached_skin_info_v2<userId>，与 SCInnerManager 读取格式一致）
+                val mergedJson = updateSharedPreferences(userId, selectedThemeId, updatedThemeInfo)
 
-                // 步骤4: 清除内存缓存 (没用到也成功)
-                clearMemoryCache()
-
-                // 步骤5: 重新读取缓存 (没用到也成功)
-                reloadCache()
-
-                //*** *** 步骤6: 刷新 UI
-                notifySkinChanged()
+                // 步骤4: 重载 SkinCenter 内存缓存并通知 UI 应用主题
+                reloadAndNotifySkinCenter(mergedJson)
 
                 Log.runtime(TAG, "✅ 主题切换成功: ${updatedThemeInfo.name}")
                 if (!quiet) showToast("主题已切换: ${updatedThemeInfo.name}")
@@ -418,122 +439,230 @@ object ThemeManager {
     /**
      * 更新 SharedPreferences
      *
-     * 将主题信息写入 SharedPreferences，指向新主题
+     * 按 SCInnerManager 的读取格式写入：
+     * - key: "cached_skin_info_v2" + userId（无分隔符直接拼接，见 SCCommonUtil.putString）
+     * - value: 全场景合并 JSON {aptrip/atmospheric_aptrip/emoji/ltp/theme/widget}，只替换 theme 场景，不覆盖其它场景
+     * - 另写 "cached_skin_theme" + userId = skinId
+     *
+     * @return 合并后的完整缓存 JSON 字符串（供内存手动填充兜底使用），失败返回 null
      */
-    private fun updateSharedPreferences(userId: String, themeId: String, themeInfo: ThemeInfo) {
+    private fun updateSharedPreferences(userId: String, themeId: String, themeInfo: ThemeInfo): String? {
         try {
             val context = AppContext.getAppContext()
             if (context == null) {
                 Log.runtime(TAG, "✗ 无法获取 Context")
-                return
+                return null
             }
 
-            // 构造缓存信息
-            val cacheInfo = mapOf(
-                "theme" to mapOf(
-                    "usageScene" to "theme",
-                    "skinId" to themeInfo.skinId,
-                    "userSkinId" to themeId,  // 关键：指向新主题目录
-                    "userId" to userId,
-                    "md5" to themeInfo.md5,
-                    "appSquareMd5" to themeInfo.md5,
-                    "cacheTime" to (themeInfo.cacheTime + 365 * 24 * 3600),
-                    "versionLimit" to themeInfo.versionLimit,
-                    "isDiySkin" to false,
-                    "name" to themeInfo.name,
-                    "expireDate" to themeInfo.expireDate,
-                    "skinType" to themeInfo.skinType,
-                    "materialId" to "",
-                    "diyExpiredTime" to Long.MAX_VALUE
-                )
+            // 构造 theme 场景缓存条目（字段与官方缓存格式一致）
+            val themeEntry = mapOf(
+                "cacheTime" to (System.currentTimeMillis() / 1000),
+                "diyExpiredTime" to 0L,
+                "expireDate" to themeInfo.expireDate,
+                "isDiySkin" to false,
+                "materialId" to "",
+                "md5" to themeInfo.md5,
+                "name" to themeInfo.name,
+                "skinId" to themeInfo.skinId,
+                "skinType" to themeInfo.skinType,
+                "usageScene" to "theme",
+                "userId" to userId,
+                "userSkinId" to themeId,
+                "versionLimit" to themeInfo.versionLimit
             )
 
-            // 序列化为 JSON
-            val json = JsonUtil.formatJson(cacheInfo)
-
-            // 使用 Android 标准 SharedPreferences API
             val prefs = context.getSharedPreferences("prefs_skincenter_file", android.content.Context.MODE_PRIVATE)
+            val cacheKey = "cached_skin_info_v2$userId"
+
+            // 读取旧缓存并合并，避免冲掉 aptrip/ltp/widget 等其它场景
+            val merged: LinkedHashMap<String, Any> = try {
+                val existing = prefs.getString(cacheKey, null)
+                if (!existing.isNullOrEmpty()) {
+                    LinkedHashMap(JsonUtil.parseObject(existing, Map::class.java) as Map<String, Any>)
+                } else {
+                    LinkedHashMap()
+                }
+            } catch (e: Exception) {
+                Log.runtime(TAG, "⚠️ 解析旧缓存失败，将只写入 theme 场景: ${e.message}")
+                LinkedHashMap()
+            }
+            merged["theme"] = themeEntry
+
+            val json = JsonUtil.formatJson(merged)
             prefs.edit()
-                .putString("cached_skin_info_v2#$userId", json)
+                .putString(cacheKey, json)
+                .putString("cached_skin_theme$userId", themeInfo.skinId)
                 .apply()
 
             Log.runtime(TAG, "✓ 已更新 SharedPreferences")
             Log.runtime(TAG, "   userSkinId: $themeId")
-            Log.runtime(TAG, "   key: cached_skin_info_v2#$userId")
+            Log.runtime(TAG, "   key: $cacheKey (场景: ${merged.keys.joinToString("/")})")
+            Log.runtime(TAG, "   cached_skin_theme: ${themeInfo.skinId}")
+            return json
         } catch (e: Exception) {
             Log.runtime(TAG, "✗ 更新 SharedPreferences 失败: ${e.message}")
             Log.printStackTrace(TAG, e)
+            return null
         }
     }
 
     /**
-     * 清除内存缓存
+     * 重载 SkinCenter 内存缓存并通知 UI 应用主题
      *
-     * 清除 SCInnerManager 的内存缓存 this.g 中的 theme 条目
+     * 链路对齐支付宝官方流程：
+     * 1. 拿 SCInnerManager 单例（类型扫描定位，避免硬编码混淆名跨版本失效）
+     * 2. 调读缓存方法（本版为 G()，旧版为 K()，即 readSkinInfoFromLocalCache）把 prefs 刷新进内存
+     * 3. 读缓存失败时手动填充缓存 Map（等价实现）
+     * 4. 调 notifyThemeSkin（本版为 C(String)，旧版为 G(String)）触发主题应用
+     * 5. 兜底调稳定的 AntSkinRenderManager.notifySkinChanged() 刷新已注册的渲染视图
+     *
+     * @param mergedJson 合并后的完整缓存 JSON，手动填充兜底时使用，可为 null
      */
-    private fun clearMemoryCache() {
-        try {
-            val classLoader = AppContext.getClassLoader()
-            if (classLoader == null) {
-                Log.runtime(TAG, "✗ 无法获取 ClassLoader")
-                return
-            }
+    private fun reloadAndNotifySkinCenter(mergedJson: String?) {
+        val classLoader = AppContext.getClassLoader()
+        if (classLoader == null) {
+            Log.runtime(TAG, "✗ 无法获取 ClassLoader")
+            return
+        }
 
-            val scInnerManagerClass = classLoader.loadClass(
-                "com.alipay.mobile.skincenter.manage.SCInnerManager"
-            )
+        val managerClass = try {
+            classLoader.loadClass("com.alipay.mobile.skincenter.manage.SCInnerManager")
+        } catch (e: Exception) {
+            Log.runtime(TAG, "✗ 无法加载 SCInnerManager: ${e.message}")
+            return
+        }
 
-            // 获取单例实例（方法名是 m()，不是 getInstance()）
-            val getInstanceMethod = scInnerManagerClass.getDeclaredMethod("m")
-            val instance = getInstanceMethod.invoke(null)
+        // 1. 定位单例
+        val instance = findSingletonInstance(managerClass)
+        if (instance == null) {
+            Log.runtime(TAG, "✗ 无法定位 SCInnerManager 单例")
+            notifySkinChanged()
+            return
+        }
 
-            // 获取内存缓存 Map (字段名: g)
-            val gField = scInnerManagerClass.getDeclaredField("g")
-            gField.isAccessible = true
-            val cacheMap = gField.get(instance) as? MutableMap<*, *>
+        // 2. 从 prefs 重载内存缓存（G()=本版 / K()=旧版 readSkinInfoFromLocalCache）
+        val reloaded = listOf("G", "K").any { name ->
+            runCatching {
+                val method = managerClass.getDeclaredMethod(name)
+                method.isAccessible = true
+                method.invoke(instance)
+                Log.runtime(TAG, "✓ 已重载内存缓存 ($name: readSkinInfoFromLocalCache)")
+                true
+            }.getOrElse { false }
+        }
 
-            if (cacheMap != null) {
-                // 清除 theme 缓存
-                cacheMap.remove("theme")
-                Log.runtime(TAG, "✓ 已清除内存缓存")
+        // 3. 重载失败时手动填充缓存 Map（等价实现：解析 JSON 为 SCCacheInfoModel 后按场景写入）
+        if (!reloaded && mergedJson != null) {
+            if (manualPopulateCache(managerClass, instance, mergedJson)) {
+                Log.runtime(TAG, "✓ 已手动填充内存缓存")
             } else {
-                Log.runtime(TAG, "⚠️ 无法获取内存缓存 Map")
+                Log.runtime(TAG, "✗ 手动填充内存缓存失败")
             }
-        } catch (e: Exception) {
-            Log.runtime(TAG, "✗ 清除内存缓存失败: ${e.message}")
-            Log.printStackTrace(TAG, e)
+        } else if (!reloaded) {
+            Log.runtime(TAG, "✗ 内存缓存重载失败且无合并 JSON 可用于兜底")
         }
+
+        // 4. 触发主题应用（C(String)=本版 / G(String)=旧版 notifyThemeSkin）
+        val notified = listOf("C", "G").any { name ->
+            runCatching {
+                val method = managerClass.getDeclaredMethod(name, String::class.java)
+                method.isAccessible = true
+                method.invoke(instance, null as Any?)
+                Log.runtime(TAG, "✓ 已触发 notifyThemeSkin ($name)")
+                true
+            }.getOrElse { false }
+        }
+        if (!notified) {
+            Log.runtime(TAG, "⚠️ 未找到 notifyThemeSkin 入口，降级为 notifySkinChanged")
+        }
+
+        // 5. 兜底：notifySkinChanged 名称未被混淆，刷新已注册的渲染视图
+        notifySkinChanged()
     }
 
     /**
-     * 重新读取缓存
+     * 按类型定位 SCInnerManager 单例
      *
-     * 调用 SCInnerManager.K() 方法，从 SharedPreferences 重新加载缓存
+     * 优先扫静态字段（类型为自身），其次扫无参静态方法（返回类型为自身）
      */
-    private fun reloadCache() {
+    private fun findSingletonInstance(managerClass: Class<*>): Any? {
         try {
-            val classLoader = AppContext.getClassLoader()
-            if (classLoader == null) {
-                Log.runtime(TAG, "✗ 无法获取 ClassLoader")
-                return
+            for (field in managerClass.declaredFields) {
+                if (Modifier.isStatic(field.modifiers) && field.type == managerClass) {
+                    field.isAccessible = true
+                    return field.get(null)
+                }
             }
-
-            val scInnerManagerClass = classLoader.loadClass(
-                "com.alipay.mobile.skincenter.manage.SCInnerManager"
-            )
-
-            // 获取单例实例（方法名是 m()，不是 getInstance()）
-            val getInstanceMethod = scInnerManagerClass.getDeclaredMethod("m")
-            val instance = getInstanceMethod.invoke(null)
-
-            // 调用 K() 方法重新读取缓存
-            val kMethod = scInnerManagerClass.getDeclaredMethod("K")
-            kMethod.invoke(instance)
-
-            Log.runtime(TAG, "✓ 已重新读取缓存")
+            for (method in managerClass.declaredMethods) {
+                if (Modifier.isStatic(method.modifiers) && method.parameterTypes.isEmpty() && method.returnType == managerClass) {
+                    return method.invoke(null)
+                }
+            }
         } catch (e: Exception) {
-            Log.runtime(TAG, "✗ 重新读取缓存失败: ${e.message}")
+            Log.runtime(TAG, "✗ 定位单例异常: ${e.message}")
+        }
+        return null
+    }
+
+    /**
+     * 手动填充内存缓存（读缓存方法调用失败时的兜底）
+     *
+     * 1. 用宿主 fastjson 把各场景 JSON 解析为 SCCacheInfoModel
+     * 2. 写入缓存 Map（识别依据：当前含 theme/ltp/aptrip 等场景键的 ConcurrentHashMap 实例字段）
+     * 3. 置位"缓存已加载" AtomicBoolean 标记
+     */
+    private fun manualPopulateCache(managerClass: Class<*>, instance: Any, mergedJson: String): Boolean {
+        return try {
+            val classLoader = AppContext.getClassLoader() ?: return false
+            val fastjsonClass = classLoader.loadClass("com.alibaba.fastjson.JSON")
+            val parseMethod = fastjsonClass.getMethod("parseObject", String::class.java, Class::class.java)
+            val modelClass = SC_CACHE_MODEL_CLASSES.firstNotNullOfOrNull { classLoader.loadClass(it) }
+                ?: run {
+                    Log.runtime(TAG, "✗ 无法加载 SCCacheInfoModel")
+                    return false
+                }
+
+            val root = JsonUtil.parseObject(mergedJson, Map::class.java) as? Map<*, *> ?: return false
+            val sceneModels = root.entries.mapNotNull { (scene, value) ->
+                try {
+                    scene as String to parseMethod.invoke(null, JsonUtil.formatJson(value), modelClass)
+                } catch (e: Exception) {
+                    Log.runtime(TAG, "⚠️ 解析场景 $scene 失败: ${e.message}")
+                    null
+                }
+            }
+            if (sceneModels.isEmpty()) return false
+
+            // 识别缓存 Map：含场景键的 ConcurrentHashMap 实例字段
+            val mapField = managerClass.declaredFields
+                .filter { !Modifier.isStatic(it.modifiers) && it.type == ConcurrentHashMap::class.java }
+                .firstOrNull { field ->
+                    field.isAccessible = true
+                    val map = field.get(instance) as? Map<*, *>
+                    map != null && map.keys.any { it is String && it in SCENE_KEYS }
+                } ?: managerClass.declaredFields.firstOrNull {
+                    !Modifier.isStatic(it.modifiers) && it.type == ConcurrentHashMap::class.java
+                }
+            if (mapField == null) {
+                Log.runtime(TAG, "✗ 未找到缓存 Map 字段")
+                return false
+            }
+            mapField.isAccessible = true
+            val cacheMap = mapField.get(instance) as? MutableMap<Any?, Any?> ?: return false
+            sceneModels.forEach { (scene, model) -> cacheMap[scene] = model }
+
+            // 置位"缓存已加载"标记
+            managerClass.declaredFields
+                .firstOrNull { !Modifier.isStatic(it.modifiers) && it.type == AtomicBoolean::class.java }
+                ?.let { field ->
+                    field.isAccessible = true
+                    (field.get(instance) as? AtomicBoolean)?.set(true)
+                }
+            true
+        } catch (e: Exception) {
+            Log.runtime(TAG, "✗ 手动填充异常: ${e.message}")
             Log.printStackTrace(TAG, e)
+            false
         }
     }
 
