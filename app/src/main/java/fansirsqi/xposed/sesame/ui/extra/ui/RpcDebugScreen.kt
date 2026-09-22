@@ -1,10 +1,14 @@
 package fansirsqi.xposed.sesame.ui.extra.ui
 
 import android.annotation.SuppressLint
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ElevatedCard
@@ -13,14 +17,13 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.Surface
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.Alignment
@@ -34,6 +37,8 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import fansirsqi.xposed.sesame.ui.extra.Callbacks
 import fansirsqi.xposed.sesame.ui.extra.RequestItem
 import fansirsqi.xposed.sesame.ui.extra.viewmodel.RpcDebugViewModel
+import fansirsqi.xposed.sesame.ui.theme.app.SesameTheme
+import fansirsqi.xposed.sesame.util.ToastUtil
 
 /**
  * RPC 调试工具（重设计 — 卡片式分区布局）
@@ -59,7 +64,11 @@ private fun RpcDebugScreen(vm: RpcDebugViewModel, callbacks: Callbacks) {
 
     Column(
         modifier = Modifier
-            .heightIn(min = 300.dp, max = 600.dp)
+            .fillMaxSize()
+            // Edge-to-Edge：Activity 已 setDecorFitsSystemWindows(false)，这里自行避让系统栏与键盘
+            .statusBarsPadding()
+            .navigationBarsPadding()
+            .imePadding()
             .padding(12.dp)
             .verticalScroll(scroll),
         verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -240,10 +249,9 @@ private fun RpcDebugScreen(vm: RpcDebugViewModel, callbacks: Callbacks) {
                                     append("\"data\":\"${editData.replace("\"", "\\\"")}\"")
                                     append("}")
                                 }
-                                val cm = context
-                                    .getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
-                                cm.setPrimaryClip(android.content.ClipData.newPlainText("rpc_request", exportJson))
-                                fansirsqi.xposed.sesame.util.ToastUtil.showToast(
+                                val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                                cm.setPrimaryClip(ClipData.newPlainText("rpc_request", exportJson))
+                                ToastUtil.showToast(
                                     context, "已复制请求到剪贴板"
                                 )
                             },
@@ -355,13 +363,13 @@ object RpcDebugScreenBinder {
     @JvmStatic
     fun bindFullScreen(composeView: ComposeView, initial: List<RequestItem>, callbacks: Callbacks) {
         composeView.setContent {
-            MaterialTheme {
+            SesameTheme {
                 Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-                val vm: RpcDebugViewModel = viewModel()
-                // 只在首次为空时加载初始
-                if (vm.items.value.isEmpty()) vm.load(initial)
-                RpcDebugScreen(vm, callbacks)
-            }
+                    val vm: RpcDebugViewModel = viewModel()
+                    // 只在首次为空时加载初始
+                    if (vm.items.value.isEmpty()) vm.load(initial)
+                    RpcDebugScreen(vm, callbacks)
+                }
             }
         }
     }

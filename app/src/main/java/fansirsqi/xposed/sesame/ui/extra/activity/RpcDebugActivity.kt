@@ -11,8 +11,11 @@ import androidx.annotation.Nullable
 import androidx.appcompat.app.AppCompatActivity
 import androidx.compose.ui.platform.ComposeView
 import androidx.core.net.toUri
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.ViewModelProvider
 import fansirsqi.xposed.sesame.ui.logviewer.LogViewerComposeActivity
+import fansirsqi.xposed.sesame.data.ViewAppInfo
 import fansirsqi.xposed.sesame.ui.extra.Callbacks
 import fansirsqi.xposed.sesame.ui.extra.RequestItem
 import fansirsqi.xposed.sesame.ui.extra.viewmodel.RpcDebugViewModel
@@ -21,18 +24,31 @@ import fansirsqi.xposed.sesame.util.Files
 import fansirsqi.xposed.sesame.util.ToastUtil
 import fansirsqi.xposed.sesame.util.Log
 import fansirsqi.xposed.sesame.util.extra.RequestStorage
+import org.json.JSONArray
+import org.json.JSONObject
+import java.util.regex.Matcher
+import java.util.regex.Pattern
 
 /**
  * 全量 Compose 化的 Rpc 调试页面（模拟请求）。
  */
 class RpcDebugActivity : AppCompatActivity() {
+    companion object {
+        private const val ACTION_RPC_TEST = "com.eg.android.AlipayGphone.sesame.rpctest"
+        private const val ACTION_RPC_RESPONSE = "com.eg.android.AlipayGphone.sesame.rpcresponse"
+    }
+
     private val requests = mutableListOf<RequestItem>()
     private lateinit var broadcastReceiver: BroadcastReceiver
     private lateinit var vm: RpcDebugViewModel
 
     override fun onCreate(@Nullable savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        fansirsqi.xposed.sesame.data.ViewAppInfo.init(applicationContext)
+        ViewAppInfo.init(applicationContext)
+        // Edge-to-Edge：内容延伸至状态栏/导航栏，由 Compose 端自行处理 insets
+        WindowCompat.setDecorFitsSystemWindows(window, false)
+        val isSystemNight = (resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK) == android.content.res.Configuration.UI_MODE_NIGHT_YES
+        WindowInsetsControllerCompat(window, window.decorView).isAppearanceLightStatusBars = !isSystemNight
 
         vm = ViewModelProvider(this).get(RpcDebugViewModel::class.java)
 
@@ -68,14 +84,14 @@ class RpcDebugActivity : AppCompatActivity() {
     }
 
     private fun registerRpcReceiver() {
-        val intentFilter = IntentFilter("com.eg.android.AlipayGphone.sesame.rpcresponse")
+        val intentFilter = IntentFilter(ACTION_RPC_RESPONSE)
         // 注册广播接收器（赋值给成员变量，确保可以在 onDestroy 中注销）
         broadcastReceiver = object : BroadcastReceiver() {
             override fun onReceive(context: Context, intent: Intent) {
                 val action = intent.action
                 Log.runtime("receive broadcast:$action intent:$intent")
                 when (action) {
-                    "com.eg.android.AlipayGphone.sesame.rpcresponse" -> {
+                    ACTION_RPC_RESPONSE -> {
                         val result = intent.getStringExtra("result")
                         vm.updateResult(result ?: "收到广播但无数据")
                     }
@@ -96,10 +112,10 @@ class RpcDebugActivity : AppCompatActivity() {
                 val repaired = repairJson(trimmed)
                 val isValid = try {
                     if (repaired.startsWith("[")) {
-                        org.json.JSONArray(repaired)
+                        JSONArray(repaired)
                         true
                     } else if (repaired.startsWith("{")) {
-                        org.json.JSONObject(repaired)
+                        JSONObject(repaired)
                         true
                     } else {
                         false
@@ -113,7 +129,7 @@ class RpcDebugActivity : AppCompatActivity() {
                 }
             }
 
-            val intent = Intent("com.eg.android.AlipayGphone.sesame.rpctest")
+            val intent = Intent(ACTION_RPC_TEST)
             intent.putExtra("method", method)
             intent.putExtra("data", data)
             intent.putExtra("type", "Rpc")
@@ -127,15 +143,15 @@ class RpcDebugActivity : AppCompatActivity() {
 
     private fun repairJson(s: String): String {
         try {
-            val pattern = java.util.regex.Pattern.compile("\"([^\"]+)\"\\s*:\\s*\"(\\{.*?\\})\"")
+            val pattern = Pattern.compile("\"([^\"]+)\"\\s*:\\s*\"(\\{.*?\\})\"")
             val matcher = pattern.matcher(s)
-            val sb = java.lang.StringBuffer()
+            val sb = StringBuffer()
             while (matcher.find()) {
                 val key = matcher.group(1)
                 val inner = matcher.group(2)
                 val innerUnescaped = inner.replace("\\\"", "\"")
                 val innerEscaped = innerUnescaped.replace("\"", "\\\"")
-                matcher.appendReplacement(sb, java.util.regex.Matcher.quoteReplacement("\"$key\":\"$innerEscaped\""))
+                matcher.appendReplacement(sb, Matcher.quoteReplacement("\"$key\":\"$innerEscaped\""))
             }
             matcher.appendTail(sb)
             return sb.toString()

@@ -14,11 +14,13 @@ import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -37,6 +39,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
@@ -74,6 +77,40 @@ private const val ALL_GOODS_DELIVERY_ID = "94000SR2023102305988003"
 
 // "全部商品"的积分区间子 Tab（对齐 queryDeliveryZoneDetail 的 lowerPoint/upperPoint）
 private val MEMBER_ZONE_NAMES = listOf("0-501分", "501-3000分", "3001-10000分", "10000分+")
+
+// 描边输入框：基于 BasicTextField + DecorationBox，高度由 contentPadding 控制约 38dp，
+@Composable
+private fun CompactOutlinedField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    hint: String? = null,
+    modifier: Modifier = Modifier,
+    keyboardType: KeyboardType = KeyboardType.Number
+) {
+    val interactionSource = remember { MutableInteractionSource() }
+    BasicTextField(
+        value = value,
+        onValueChange = onValueChange,
+        singleLine = true,
+        textStyle = LocalTextStyle.current.copy(fontSize = 12.sp),
+        keyboardOptions = KeyboardOptions(keyboardType = keyboardType),
+        modifier = modifier,
+        decorationBox = { innerTextField ->
+            OutlinedTextFieldDefaults.DecorationBox(
+                value = value,
+                innerTextField = innerTextField,
+                enabled = true,
+                singleLine = true,
+                visualTransformation = VisualTransformation.None,
+                interactionSource = interactionSource,
+                contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 10.dp, bottom = 10.dp),
+                placeholder = if (hint != null) {
+                    { Text(hint, fontSize = 11.sp) }
+                } else null
+            )
+        }
+    )
+}
 
 class SeckillActivity : ComponentActivity() {
 
@@ -893,44 +930,49 @@ fun SeckillScreen(
                         .padding(vertical = 8.dp),
                     shape = RoundedCornerShape(12.dp)
                 ) {
-                    Column(modifier = Modifier.padding(16.dp)) {
-                        Text("手动配置商品参数", fontWeight = FontWeight.Bold, fontSize = 15.sp)
-                        Spacer(modifier = Modifier.height(6.dp))
-                        OutlinedTextField(
+                    Column(modifier = Modifier.padding(10.dp)) {
+                        Text("手动配置商品参数", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                        Spacer(modifier = Modifier.height(4.dp))
+                        CompactOutlinedField(
                             value = itemId,
                             onValueChange = onItemIdChange,
-                            label = { Text("商品 ID / 权益 ID (itemId)") },
-                            modifier = Modifier.fillMaxWidth(),
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                            hint = "商品 ID / 权益 ID (itemId)",
+                            modifier = Modifier.fillMaxWidth()
                         )
-                        Spacer(modifier = Modifier.height(6.dp))
+                        Spacer(modifier = Modifier.height(4.dp))
                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            OutlinedTextField(
-                                value = verifyPoint,
-                                onValueChange = onVerifyPointChange,
-                                label = { Text("所需积分") },
-                                modifier = Modifier.weight(1.1f),
-                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
-                            )
-                            OutlinedTextField(
-                                value = skuId,
-                                onValueChange = onSkuIdChange,
-                                label = { Text("规格 ID") },
-                                modifier = Modifier.weight(1.1f),
-                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
-                            )
-                            OutlinedTextField(
-                                value = quantityNumber,
-                                onValueChange = onQuantityNumberChange,
-                                label = { Text("数量") },
-                                modifier = Modifier.weight(0.8f),
-                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
-                            )
+                            Column(modifier = Modifier.weight(1.1f)) {
+                                Text("所需积分", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Spacer(modifier = Modifier.height(2.dp))
+                                CompactOutlinedField(
+                                    value = verifyPoint,
+                                    onValueChange = onVerifyPointChange,
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                            }
+                            Column(modifier = Modifier.weight(1.1f)) {
+                                Text("规格 ID", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Spacer(modifier = Modifier.height(2.dp))
+                                CompactOutlinedField(
+                                    value = skuId,
+                                    onValueChange = onSkuIdChange,
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                            }
+                            Column(modifier = Modifier.weight(0.8f)) {
+                                Text("数量", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Spacer(modifier = Modifier.height(2.dp))
+                                CompactOutlinedField(
+                                    value = quantityNumber,
+                                    onValueChange = onQuantityNumberChange,
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                            }
                         }
 
                         // Specification Chips Selector
                         if (selectedSkuIds.size > 1) {
-                            Spacer(modifier = Modifier.height(10.dp))
+                            Spacer(modifier = Modifier.height(6.dp))
                             Text("已发现该商品有多个规格，点击快速选择：", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
                             Spacer(modifier = Modifier.height(4.dp))
                             Row(
@@ -966,9 +1008,9 @@ fun SeckillScreen(
                         }
                         
                         if (verifyPoint.isNotEmpty() && itemId.isNotEmpty()) {
-                            Spacer(modifier = Modifier.height(10.dp))
+                            Spacer(modifier = Modifier.height(6.dp))
                             Text("快捷秒杀控制面板已就绪", color = MaterialTheme.colorScheme.primary, fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                            Spacer(modifier = Modifier.height(8.dp))
+                            Spacer(modifier = Modifier.height(4.dp))
                             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                 Button(
                                     onClick = {
@@ -1113,18 +1155,19 @@ fun SeckillScreen(
                                     Column(modifier = Modifier.weight(1f)) {
                                         Text(good.name, fontWeight = FontWeight.SemiBold, fontSize = 13.sp, maxLines = 1)
                                         Spacer(modifier = Modifier.height(2.dp))
+                                        if (good.exchangeStartTime > 0) {
+                                            Text(
+                                                "开抢: ${SimpleDateFormat("MM-dd HH:mm", Locale.getDefault()).format(java.util.Date(good.exchangeStartTime))}",
+                                                fontSize = 10.sp,
+                                                maxLines = 1,
+                                                color = if (good.exchangeStartTime > System.currentTimeMillis()) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                            Spacer(modifier = Modifier.height(2.dp))
+                                        }
                                         Row {
                                             Text("ID: ${good.itemId}", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                             Spacer(modifier = Modifier.width(6.dp))
                                             Text("积分: ${good.points} + ${good.price}元", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                            if (good.exchangeStartTime > 0) {
-                                                Spacer(modifier = Modifier.width(6.dp))
-                                                Text(
-                                                    "开抢: ${SimpleDateFormat("MM-dd HH:mm", Locale.getDefault()).format(java.util.Date(good.exchangeStartTime))}",
-                                                    fontSize = 10.sp,
-                                                    color = if (good.exchangeStartTime > System.currentTimeMillis()) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
-                                                )
-                                            }
                                             if (good.skuId != "-1") {
                                                 Spacer(modifier = Modifier.width(6.dp))
                                                 Text("SKU: ${good.skuId}", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)

@@ -4,6 +4,7 @@ import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.compositeOver
 import java.util.Calendar
 import fansirsqi.xposed.sesame.util.DataStore
 import androidx.appcompat.app.AppCompatDelegate
@@ -561,11 +562,16 @@ data class ThemePalette(
     val onSurfaceVariant: Color
 ) {
     fun toColorScheme(): ColorScheme {
+        // 调色板未定义 secondaryContainer（FilledTonalButton 等色调组件使用），
+        // 由 secondary 以 25% 透明度混合到 surface 生成：既不回退 Material 默认紫色，
+        // 也不会像 primaryContainer 那样与卡片背景过于接近
+        val secondaryContainerColor = secondary.copy(alpha = 0.25f).compositeOver(surface)
         return if (isDark) {
             darkColorScheme(
                 primary = primary, onPrimary = onPrimary,
                 primaryContainer = primaryContainer, onPrimaryContainer = onPrimaryContainer,
                 secondary = secondary, onSecondary = onSecondary,
+                secondaryContainer = secondaryContainerColor, onSecondaryContainer = onSurface,
                 background = background, onBackground = onBackground,
                 surface = surface, onSurface = onSurface,
                 surfaceVariant = surfaceVariant, onSurfaceVariant = onSurfaceVariant,
@@ -580,6 +586,7 @@ data class ThemePalette(
                 primary = primary, onPrimary = onPrimary,
                 primaryContainer = primaryContainer, onPrimaryContainer = onPrimaryContainer,
                 secondary = secondary, onSecondary = onSecondary,
+                secondaryContainer = secondaryContainerColor, onSecondaryContainer = onSurface,
                 background = background, onBackground = onBackground,
                 surface = surface, onSurface = onSurface,
                 surfaceVariant = surfaceVariant, onSurfaceVariant = onSurfaceVariant,
