@@ -10,7 +10,6 @@ import java.util.function.Supplier;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.locks.ReentrantLock;
 import fansirsqi.xposed.sesame.data.Status;
-import fansirsqi.xposed.sesame.hook.RequestManager;
 import fansirsqi.xposed.sesame.task.otherTask.BaseCommTask;
 import fansirsqi.xposed.sesame.task.otherTask.CompletedKeyEnum;
 import fansirsqi.xposed.sesame.util.GlobalThreadPools;

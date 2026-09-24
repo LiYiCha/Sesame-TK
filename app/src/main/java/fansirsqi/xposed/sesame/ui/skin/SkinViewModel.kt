@@ -39,7 +39,6 @@ class SkinViewModel(context: Context) : ViewModel() {
                 currentState.copy(
                     selectedGrade = repository.getCurrentMemberGrade(),
                     operationStates = repository.getAllOperationStates(),
-                    isResourceInstalled = repository.isResourceInstalled(),
                     isFirstRun = repository.isFirstRun()
                 )
             }
@@ -119,33 +118,6 @@ class SkinViewModel(context: Context) : ViewModel() {
                 callback(false, "操作异常: ${e.message}")
             }
         }
-    }
-
-    /**
-     * 下载资源包
-     *
-     * 启动下载流程，并更新下载状态
-     */
-    fun downloadResource() {
-        viewModelScope.launch {
-            repository.downloadAndExtractResource().collect { downloadState ->
-                _state.update { it.copy(downloadState = downloadState) }
-
-                // 下载成功后更新资源安装状态
-                if (downloadState is DownloadState.Success) {
-                    _state.update { it.copy(isResourceInstalled = repository.isResourceInstalled()) }
-                }
-            }
-        }
-    }
-
-    /**
-     * 重置下载状态
-     *
-     * 将下载状态重置为空闲
-     */
-    fun resetDownloadState() {
-        _state.update { it.copy(downloadState = DownloadState.Idle) }
     }
 
     /**

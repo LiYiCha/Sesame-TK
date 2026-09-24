@@ -315,7 +315,7 @@ object EnergyWaitingManager {
                     // 自己的账号：不获取保护时间，直接设置为0
                     finalShieldEndTime = 0L
                     finalBombEndTime = 0L
-                    Log.runtime(TAG, "⭐️ [主号|$userName]不检查保护罩，到时间直接收取")
+                    //Log.runtime(TAG, "⭐️ [主号|$userName]不检查保护罩，到时间直接收取")
                 }
 
                 // 注释：原本的时间有效性检查已删除

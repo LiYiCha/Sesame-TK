@@ -142,7 +142,6 @@ class SesameAlchemy {
                                 val curStamina = checkData.optInt("staminaCurrent", 0)
                                 val status = checkData.optString("staminaStatus", "")
                                 if (curStamina <= 70 || status == "EXHAUSTED") {
-                                    Log.other("芝麻炼金⚗️当前体力[${curStamina}]，使用药水保持体力爆棚🔥")
                                     if (!ensureStamina(true) && (status == "EXHAUSTED" || curStamina == 0)) {
                                         Log.other("芝麻炼金⚗️体力已耗尽且无法恢复，退出炼金")
                                         break
@@ -199,7 +198,6 @@ class SesameAlchemy {
                         } else if (resultView.contains("体力") || upperView.contains("STAMINA") || upperView.contains("EXHAUSTED")
                             || upperCode.contains("STAMINA") || upperCode.contains("EXHAUSTED")
                         ) {
-                            Log.other("芝麻炼金⚗️炼金过程中体力耗尽，尝试恢复体力...")
                             val recovered = ensureStamina(hasBottleQuota = true)
                             if (recovered) {
                                 sleepCompat(1500)
@@ -404,13 +402,11 @@ class SesameAlchemy {
                 return true
             }
 
-            // 2. 如果背包无药水，检查是否有兑换药水配额
+            // 2. 如果背包无药水，检查是否有兑换药水配额（退出原因由调用方记录）
             if (!hasBottleQuota) {
-                Log.other("芝麻炼金⚗️背包无药水且今日兑换配额已用完")
                 return false
             }
 
-            Log.other("芝麻炼金⚗️体力不足，正在通过做任务获取体力药水...")
             val listRes = AntMemberRpcCall.Zmxy.Alchemy.queryListV3()
             val listJo = JSONObject(listRes)
             if (!listJo.optBoolean("success")) {
@@ -440,7 +436,6 @@ class SesameAlchemy {
                     val (pushSuccess, pushErr) = pushActivity(recordId, title)
                     if (pushSuccess) {
                         handleTaskSuccess(title)
-                        Log.other("芝麻炼金⚗️[获取体力任务完成]#$title")
                         sleepCompat(1500)
                         if (useStaminaFromBag()) {
                             return true

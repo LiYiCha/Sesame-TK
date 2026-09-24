@@ -3,15 +3,10 @@ package fansirsqi.xposed.sesame.task.antMember;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
-
 import java.util.List;
-import java.util.UUID;
-
-import fansirsqi.xposed.sesame.hook.ApplicationHook;
 import fansirsqi.xposed.sesame.hook.RequestManager;
 import fansirsqi.xposed.sesame.util.Log;
 import fansirsqi.xposed.sesame.util.RandomUtil;
-import fansirsqi.xposed.sesame.util.TimeUtil;
 
 public class AntMemberRpcCall {
     private static final String TAG = AntMemberRpcCall.class.getSimpleName();
@@ -415,7 +410,7 @@ public class AntMemberRpcCall {
      */
     public static String collectInsuredGold(JSONObject goldBallObj) {
         return RequestManager.requestString("com.alipay.insgiftbff.insgiftMain.gainMyAndFamilySumInsured",
-                goldBallObj.toString(), "insgiftbff", "gainMyAndFamilySumInsured", "insgiftMain");
+                new JSONArray().put(goldBallObj).toString(), "insgiftbff", "gainMyAndFamilySumInsured", "insgiftMain");
     }
 
     // 安心豆
@@ -507,7 +502,7 @@ public class AntMemberRpcCall {
                 "\"queryNoReserve\":true," +
                 "\"resourceCardChannel\":\"ZERO_EXCHANGE_CHANNEL\"," +
                 "\"sourcePassMap\":{\"innerSource\":\"\",\"source\":\"\",\"unid\":\"\"}," +
-                "\"startPageFirstQuery\":false," +
+                "\"startPageFirstQuery\":" + (pageNum == 1) + "," +
                 "\"topIdList\":[\"202412231259661040\"]," +
                 "\"uniqueId\":\"" + uniqueId + "\"," +
                 "\"upperPoint\":99999999," +
@@ -545,57 +540,96 @@ public class AntMemberRpcCall {
         return RequestManager.requestString("com.alipay.alipaymember.biz.rpc.exchange.h5.exchangeBenefit", data);
     }*/
 
-    public static String exchangeBenefit(String benefitId, String itemId, String userId) {
-        long now = System.currentTimeMillis();
+    /**
+     * 会员积分兑换道具
+     *
+     * @param benefitId         benefitId（兑换权益ID）
+     * @param itemId            itemId（为空时不携带该字段）
+     * @param cityCode          城市编码（可为空串）
+     * @param requestSourceInfo 来源信息（为空时不携带该字段）
+     * @return 接口请求结果
+     */
+    public static String exchangeBenefit(String benefitId, String itemId, String cityCode, String requestSourceInfo) {
+        try {
+            JSONObject sourcePassMap = buildMemberSourcePassMap();
+            sourcePassMap.put("alipayClientVersion", "10.8.20.8000");
+            sourcePassMap.put("mobileOsType", "Android");
+            JSONObject args = new JSONObject();
+            args.put("benefitId", benefitId);
+            args.put("cityCode", cityCode);
+            args.put("exchangeType", "POINT_PAY");
+            if (itemId != null && !itemId.isEmpty()) {
+                args.put("itemId", itemId);
+            }
+            args.put("miniAppId", "");
+            args.put("orderSource", "");
+            args.put("requestId", "requestId" + System.currentTimeMillis());
+            if (requestSourceInfo != null && !requestSourceInfo.isEmpty()) {
+                args.put("requestSourceInfo", requestSourceInfo);
+            }
+            args.put("sourcePassMap", sourcePassMap);
+            args.put("userOutAccount", "");
+            return RequestManager.requestString("com.alipay.alipaymember.biz.rpc.exchange.h5.exchangeBenefit",
+                    new JSONArray().put(args).toString());
+        } catch (Exception e) {
+            return "";
+        }
+    }
 
-        // 1. 生成请求ID
-        String requestId = "requestId" + now;
+    /**
+     * 查询单个权益详情（兑换前详情复核）
+     * 对应: com.alipay.alipaymember.biz.rpc.config.h5.querySingleBenefitDetail
+     */
+    public static String querySingleBenefitDetail(String benefitId, String cityCode) {
+        try {
+            JSONObject args = new JSONObject();
+            args.put("benefitId", benefitId);
+            args.put("cityCode", cityCode);
+            args.put("miniAppId", "");
+            args.put("sourcePassMap", buildMemberSourcePassMap());
+            return RequestManager.requestString(
+                    "com.alipay.alipaymember.biz.rpc.config.h5.querySingleBenefitDetail",
+                    new JSONArray().put(args).toString());
+        } catch (Exception e) {
+            return "";
+        }
+    }
 
-        // 2. 生成唯一unid (UUID)
-        String unid = UUID.randomUUID().toString();
+    /**
+     * 查询权益下单确认信息（兑换前确认页复核）
+     * 对应: com.alipay.alipaymember.biz.rpc.config.h5.queryPromoBenefitOrderConfirmInfo
+     */
+    public static String queryPromoBenefitOrderConfirmInfo(String benefitId) {
+        try {
+            JSONObject args = new JSONObject();
+            args.put("benefitId", benefitId);
+            args.put("sourcePassMap", buildMemberSourcePassMap());
+            return RequestManager.requestString(
+                    "com.alipay.alipaymember.biz.rpc.config.h5.queryPromoBenefitOrderConfirmInfo",
+                    new JSONArray().put(args).toString());
+        } catch (Exception e) {
+            return "";
+        }
+    }
 
-        // 3. 生成 uniqueId (通常是 userId + 时间戳，或者直接是 userId)
-        // 根据你提供的 JSON，这里似乎直接是 userId 拼接了一个标记或时间戳
-        String uniqueId = userId + now;
-
-        // 4. 拼接 requestSourceInfo
-        String requestSourceInfo = String.format("SID:%s|0", uniqueId);
-
-        // 5. 构建符合最新结构的 JSON 数据
-        // 注意：增加了 itemId, cityCode, miniAppId 等字段
-        String data = String.format("[" +
-                        "{" +
-                        "\"benefitId\":\"%s\"," +
-                        "\"cityCode\":\"\"," +
-                        "\"exchangeType\":\"POINT_PAY\"," +
-                        "\"itemId\":\"%s\"," +
-                        "\"miniAppId\":\"\"," +
-                        "\"orderSource\":\"\"," +
-                        "\"requestId\":\"%s\"," +
-                        "\"requestSourceInfo\":\"%s\"," +
-                        "\"sourcePassMap\":{" +
-                        "\"alipayClientVersion\":\"10.7.80.8000\"," +
-                        "\"bid\":\"\"," +
-                        "\"feedsIndex\":\"0\"," +
-                        "\"innerSource\":\"a159.b52659\"," +
-                        "\"isCpc\":\"\"," +
-                        "\"mobileOsType\":\"Android\"," +
-                        "\"source\":\"\"," +
-                        "\"unid\":\"%s\"," +
-                        "\"uniqueId\":\"%s\"" +
-                        "}," +
-                        "\"userOutAccount\":\"\"" +
-                        "}" +
-                        "]",
-                benefitId,
-                itemId,
-                requestId,
-                requestSourceInfo,
-                unid,
-                uniqueId);
-
-        // 6. 发起接口请求
-        return RequestManager.requestString("com.alipay.alipaymember.biz.rpc.exchange.h5.exchangeBenefit", data);
+    /**
+     * 查询单笔兑换订单详情（兑换后结果回查）
+     * 对应: com.alipay.alipaymember.biz.rpc.exchange.h5.querySingleExchangeOrderDetail
+     */
+    public static String querySingleExchangeOrderDetail(String benefitId, String bizType, String outBizNo) {
+        try {
+            JSONObject args = new JSONObject();
+            args.put("benefitId", benefitId);
+            args.put("bizType", bizType);
+            args.put("miniAppId", "");
+            args.put("outBizNo", outBizNo);
+            args.put("sourcePassMap", buildMemberSourcePassMap());
+            return RequestManager.requestString(
+                    "com.alipay.alipaymember.biz.rpc.exchange.h5.querySingleExchangeOrderDetail",
+                    new JSONArray().put(args).toString());
+        } catch (Exception e) {
+            return "";
+        }
     }
 
     /**

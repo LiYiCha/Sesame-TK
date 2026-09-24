@@ -68,7 +68,8 @@ class GoldBeanPark @JvmOverloads constructor(
     private val sesameExchangeAmount: Int = 0,
     private val scene: BeanScene = BeanScene.FARM
 ) {
-    private val TAG = "金豆夺宝🎡"
+    // 农场版与炼金版共用本类，日志按场景区分来源
+    private val TAG = if (scene == BeanScene.ZHIMA) "金豆夺宝·芝麻🎡" else "金豆夺宝·农场🎡"
 
     companion object {
         private const val THEMES_FOLDER = "themes"
@@ -362,14 +363,13 @@ class GoldBeanPark @JvmOverloads constructor(
 
                         val gameContract = GameCenterPlayRpcCall.resolveContract(task, displayConfig)
                         if (gameContract != null) {
-                            Log.other(TAG, "检测到小游戏任务[$title]，开始上报时长(${gameContract.playTime}s)...")
                             val ack = GameCenterPlayRpcCall.submitForAck(gameContract)
-                            if (ack.accepted) {
-                                Log.other(TAG, "小游戏时长上报成功[$title]，准备完成任务")
-                            } else {
-                                Log.other(TAG, "小游戏时长上报响应[$title]: ${ack.raw}，尝试继续完成")
-                            }
+                            Log.other(TAG, "小游戏[$title]时长上报${if (ack.accepted) "成功" else "未受理"}(${gameContract.playTime}s)")
                             delay(1500 + (0..500).random().toLong())
+                        } else if (title.contains("小游戏")) {
+                            // 非时长类小游戏任务（解析不出时长契约），禁止 RPC 强完，需真实游玩
+                            //Log.other(TAG, "跳过小游戏任务[$title]#非时长类，等待真实游玩")
+                            continue
                         }
 
                         val userId = UserMap.currentUid ?: ""
@@ -767,7 +767,6 @@ class GoldBeanPark @JvmOverloads constructor(
                 if (updatedRemaining >= remainingTimes) return
                 remainingTimes = updatedRemaining
                 canGrab = updatedProgress.optBoolean("canGrab", false)
-                Log.other(TAG, "金猫矿工抓取成功 remainingTimes=$remainingTimes canGrab=$canGrab")
             }
             // 最终回查
             val finalRes = goldenBeanMinerIndex()

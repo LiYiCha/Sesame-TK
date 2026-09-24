@@ -4,14 +4,10 @@ import android.content.Context
 import android.content.SharedPreferences
 import android.net.Uri
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.withContext
 import net.lingala.zip4j.ZipFile
-import java.io.BufferedInputStream
 import java.io.File
 import java.io.FileOutputStream
-import java.net.URL
 
 /**
  * 皮肤模块数据仓库
@@ -158,83 +154,10 @@ class SkinRepository(private val context: Context) {
     }
 
     /**
-     * 检查资源包是否已安装
-     */
-    fun isResourceInstalled(): Boolean {
-        val skinFolder = File(SkinConstants.EXTRACT_PATH, "000_HOHO_ALIPAY_SKIN")
-        return skinFolder.exists() && skinFolder.isDirectory
-    }
-
-    /**
-     * 下载并解压资源包
-     *
-     * 使用 Flow 来报告下载进度
-     *
-     * @return Flow<DownloadState> 下载状态流
-     */
-    fun downloadAndExtractResource(): Flow<DownloadState> = flow {
-        try {
-            emit(DownloadState.Downloading(0))
-
-            // 下载文件
-            val url = URL(SkinConstants.DOWNLOAD_URL)
-            val connection = url.openConnection()
-            connection.connect()
-
-            val fileLength = connection.contentLength
-            val tempFile = File(SkinConstants.EXTRACT_PATH, "temp.zip")
-
-            // 确保目录存在
-            tempFile.parentFile?.mkdirs()
-
-            BufferedInputStream(url.openStream()).use { input ->
-                FileOutputStream(tempFile).use { output ->
-                    val data = ByteArray(1024)
-                    var total = 0L
-                    var count: Int
-
-                    while (input.read(data).also { count = it } != -1) {
-                        total += count
-                        val progress = ((total * 100) / fileLength).toInt()
-                        emit(DownloadState.Downloading(progress))
-                        output.write(data, 0, count)
-                    }
-                }
-            }
-
-            // 解压文件
-            emit(DownloadState.Downloading(100))
-            unzip(tempFile.absolutePath, SkinConstants.EXTRACT_PATH)
-
-            // 删除临时文件
-            tempFile.delete()
-
-            emit(DownloadState.Success)
-        } catch (e: Exception) {
-            emit(DownloadState.Error(e.message ?: "Unknown error"))
-        }
-    }
-
-    /**
-     * 解压 ZIP 文件
-     *
-     * @param zipFilePath ZIP 文件路径
-     * @param destDirectory 目标目录
-     */
-    private fun unzip(zipFilePath: String, destDirectory: String) {
-        try {
-            val zipFile = ZipFile(zipFilePath)
-            zipFile.extractAll(destDirectory)
-        } catch (e: Exception) {
-            throw Exception("Failed to extract zip file: ${e.message}")
-        }
-    }
-
-    /**
      * 获取资源文件夹路径
      */
     fun getResourceFolderPath(): String {
-        return File(SkinConstants.EXTRACT_PATH, "000_HOHO_ALIPAY_SKIN").absolutePath
+        return File(SkinConstants.EXTRACT_PATH, "YC_SKIN").absolutePath
     }
 
     /**

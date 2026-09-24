@@ -26,7 +26,7 @@ import de.robv.android.xposed.callbacks.XC_LoadPackage;
  * Created by qzj_ on 2016/5/9.
  */
 public class PluginMain implements IXposedHookLoadPackage {
-    private static final String EXTERNAL_STORAGE_PATH = Environment.getExternalStorageDirectory() + "/Android/media/com.eg.android.AlipayGphone/000_HOHO_ALIPAY_SKIN";
+    private static final String EXTERNAL_STORAGE_PATH = Environment.getExternalStorageDirectory() + "/Android/media/com.eg.android.AlipayGphone/YC_SKIN";
     private static final String packageName = "com.eg.android.AlipayGphone";
     public static volatile boolean isModuleLoaded = false;
 
@@ -242,7 +242,7 @@ public class PluginMain implements IXposedHookLoadPackage {
                         // create dir
                         new File(basePathUpdates).mkdirs();
                     }
-                    String fixedPathUpdates = basePathUpdates + "/000_HOHO_ALIPAY_SKIN";
+                    String fixedPathUpdates = basePathUpdates + "/YC_SKIN";
 
                     File skinActived = new File(fixedPathUpdates + "/actived");
                     File skinUpdateRequired = new File(fixedPathUpdates + "/update");

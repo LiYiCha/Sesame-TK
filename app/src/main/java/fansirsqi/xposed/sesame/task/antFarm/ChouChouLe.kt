@@ -417,7 +417,7 @@ class ChouChouLe {
                 }
             }
             if (activityId.isNotEmpty() && AntFarm.instance?.autoExchange?.value == true) {
-                batchExchangeRewards(activityId)
+                batchExchangeRewards(activityId, endTime)
             }
             return allSuccess
         } catch (t: Throwable) {
@@ -509,8 +509,28 @@ class ChouChouLe {
     /**
      * 批量兑换奖励（严格优先级策略：攒钱买最好的）
      */
-    fun batchExchangeRewards(activityId: String) {
+    fun batchExchangeRewards(activityId: String, endTime: Long) {
         try {
+            // 兑换时机控制：活动已结束 / 未到提前兑换窗口则跳过
+            val daysBefore = AntFarm.instance?.exchangeDaysBeforeEndIp?.value ?: 0
+            if (endTime > 0 && endTime <= System.currentTimeMillis()) {
+                Log.runtime(TAG, "[自动兑换]: 抽奖活动已结束，跳过兑换")
+                return
+            }
+            if (daysBefore > 0 && endTime <= 0) {
+                Log.runtime(TAG, "[自动兑换]: 活动结束时间未确认，跳过本次兑换")
+                return
+            }
+            if (daysBefore > 0 && endTime > 0) {
+                val remainingMs = endTime - System.currentTimeMillis()
+                val limitMs = daysBefore * 24 * 60 * 60 * 1000L
+                if (remainingMs > limitMs) {
+                    val remainingDays = remainingMs / (24 * 60 * 60 * 1000L)
+                    Log.runtime(TAG, "[自动兑换]: 未到兑换时间：活动尚余${remainingDays}天结束，设定提前${daysBefore}天兑换，跳过")
+                    return
+                }
+            }
+
             val response = AntFarmRpcCall.getItemList(activityId, 10, 0)
             val respJson = JSONObject(response)
 

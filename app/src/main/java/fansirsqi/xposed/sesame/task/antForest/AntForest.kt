@@ -2434,7 +2434,7 @@ class AntForest : ModelTask(), EnergyCollectCallback {
             }
 
 //            Log.runtime(TAG, "📋 开始处理${friendList.length()}个${sourceName}（并发数:60）")
-            Log.runtime(TAG, "👥 ${friendNames.joinToString(" | ")}")
+            //Log.runtime(TAG, "👥 ${friendNames.joinToString(" | ")}")
             val startTime = System.currentTimeMillis()
 
             // 使用协程并发处理每个好友（带并发控制）
@@ -2447,7 +2447,7 @@ class AntForest : ModelTask(), EnergyCollectCallback {
                         // 直接调用内部方法，减少一层包装以提高性能
                         processEnergyInternal(friendObj, flag)
                     } catch (e: Exception) {
-                        Log.printStackTrace(TAG, "处理好友异常", e)
+                        Log.error(TAG+"处理好友异常:"+ e)
                     } finally {
                         concurrencyLimiter.release()
                     }

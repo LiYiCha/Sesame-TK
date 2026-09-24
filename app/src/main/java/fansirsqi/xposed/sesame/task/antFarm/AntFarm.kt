@@ -200,6 +200,11 @@ class AntFarm : ModelTask() {
     private var donationMode: ChoiceModelField? = null
     private var donationAmount: IntegerModelField? = null
 
+    // 爱心鸡结号总开关；捐蛋模式仅控制是否捐蛋（0=不捐蛋，1=仅任务，2=激进，3=稳定）
+    internal var loveChickenGathering: BooleanModelField? = null
+    internal var loveChickenMode: ChoiceModelField? = null
+    internal var loveChickenOvertakeAmount: IntegerModelField? = null
+
     /**
      * 饲料任务
      */
@@ -235,6 +240,7 @@ class AntFarm : ModelTask() {
     private var enableChouchoule: BooleanModelField? = null
     private var enableChouchouleTime: StringModelField? = null // 抽抽乐执行时间
     var autoExchange: BooleanModelField? = null
+    var exchangeDaysBeforeEndIp: IntegerModelField? = null // IP兑换提前天数
     var doChouChouLeDonationTask: BooleanModelField? = null
     private var listOrnaments: BooleanModelField? = null
     private var hireAnimal: BooleanModelField? = null
@@ -370,6 +376,12 @@ class AntFarm : ModelTask() {
                 "IP抽抽乐自动从高到低兑换物品",
                 false
             ).also { autoExchange = it })
+        modelFields.addField(
+            IntegerModelField(
+                "exchangeDaysBeforeEndIp",
+                "IP抽抽乐兑换提前天数(0=立即兑换)",
+                0, 0, null
+            ).also { exchangeDaysBeforeEndIp = it })
         modelFields.addField(
             StringModelField(
                 "enableChouchouleTime",
@@ -564,6 +576,27 @@ class AntFarm : ModelTask() {
                 1,
                 20000
             ).also { donationAmount = it })
+        modelFields.addField(
+            BooleanModelField(
+                "loveChickenGathering",
+                "爱心鸡结号 | 开启",
+                false
+            ).also { loveChickenGathering = it })
+        modelFields.addField(
+            ChoiceModelField(
+                "loveChickenMode",
+                "爱心鸡结号 | 捐蛋模式",
+                0,
+                arrayOf("关闭", "仅任务", "激进", "稳定")
+            ).also { loveChickenMode = it })
+        modelFields.addField(
+            IntegerModelField(
+                "loveChickenOvertakeAmount",
+                "爱心鸡结号 | 反超额外捐蛋数",
+                1,
+                1,
+                10000
+            ).also { loveChickenOvertakeAmount = it })
         modelFields.addField(
             BooleanModelField(
                 "useSpecialFood",
@@ -789,6 +822,12 @@ class AntFarm : ModelTask() {
             if (donation!!.value && Status.canDonationEgg(userId) && harvestBenevolenceScore >= amount) {
                 handleDonation(donationMode?.value ?: DonationMode.ONE_AVAILABLE_PROJECT)
                 tc.countDebug("每日捐蛋")
+            }
+
+            // 爱心鸡结号
+            if (loveChickenGathering?.value == true) {
+                AntFarmLoveChickenGathering.run(this)
+                tc.countDebug("爱心鸡结号")
             }
 
             // 做饲料任务
@@ -2345,7 +2384,7 @@ class AntFarm : ModelTask() {
                             }
                             else -> {
                                 // --- 普通任务通用逻辑 ---
-                                Log.runtime(TAG, "开始处理庄园任务: $title ($bizKey)")
+                                //Log.runtime(TAG, "开始处理庄园任务: $title ($bizKey)")
                                 handleGeneralTask(bizKey, title)
                             }
                         }
@@ -3376,6 +3415,48 @@ class AntFarm : ModelTask() {
         }
     }
 
+    /* ========== 爱心鸡结号内部桥接（供 AntFarmLoveChickenGathering 调用，避免扩大私有成员可见性） ========== */
+
+    internal fun lcSyncFarmStatus() {
+        syncAnimalStatus(ownerFarmId)
+    }
+
+    internal fun lcCurrentEggs(): Int = harvestBenevolenceScore.toInt().coerceAtLeast(0)
+
+    internal fun lcHarvestEggs() {
+        if (benevolenceScore >= 1) {
+            harvestProduce(ownerFarmId)
+        }
+    }
+
+    internal fun lcOwnerAnimalSleeping(): Boolean =
+        AnimalFeedStatus.SLEEPY.name == ownerAnimal.animalFeedStatus
+
+    internal fun lcSpecialFoodEnabled(): Boolean = useSpecialFood?.value == true
+
+    internal fun lcNewEggCardEnabled(): Boolean = useNewEggCard?.value == true
+
+    internal fun lcUseNewEggCard(): Boolean = useFarmTool(ownerFarmId, ToolType.NEWEGGTOOL)
+
+    /** 通过特殊食品补蛋，返回补蛋后可用蛋数 */
+    internal fun lcUseSpecialFood(maxUsage: Int): Int {
+        return try {
+            val uid = UserMap.currentUid
+            val jo = JSONObject(AntFarmRpcCall.enterFarm(uid, uid))
+            if (!ResChecker.checkRes("$TAG[enterFarm]", jo)) return lcCurrentEggs()
+            val cuisineList = jo.optJSONArray("cuisineList") ?: return lcCurrentEggs()
+            jo.optJSONObject("farmVO")?.optDouble("harvestBenevolenceScore", harvestBenevolenceScore)?.let {
+                harvestBenevolenceScore = it
+            }
+            useSpecialFood(cuisineList, maxUsage)
+            syncAnimalStatus(ownerFarmId)
+            lcCurrentEggs()
+        } catch (t: Throwable) {
+            Log.printStackTrace(TAG, "lcUseSpecialFood err:", t)
+            lcCurrentEggs()
+        }
+    }
+
     private fun drawLotteryPlus(lotteryPlusInfo: JSONObject) {
         try {
             if (!lotteryPlusInfo.has("userSevenDaysGiftsItem")) return
@@ -3952,8 +4033,11 @@ class AntFarm : ModelTask() {
             val selectedNpcNames = npcAnimalTypeMulti?.value?.toList() ?: emptyList()
 
             if (selectedNpcNames.isNotEmpty()) {
-                // 使用智能调度
-                Log.runtime(TAG, "NPC智能调度🤖[已选择: ${selectedNpcNames.joinToString(", ")}]")
+                // 使用智能调度（选择列表固定，每日只打印一次，避免每轮重复）
+                if (!Status.hasFlagToday("NpcChicken_Selected_Logged")) {
+                    Log.runtime(TAG, "NPC智能调度🤖[已选择: ${selectedNpcNames.joinToString(", ")}]")
+                    Status.setFlagToday("NpcChicken_Selected_Logged")
+                }
                 val npcChicken = NpcChicken()
                 ownerFarmId?.let { npcChicken.runSmartScheduler(it, selectedNpcNames) }
                 return

@@ -70,8 +70,8 @@ public class AntMemberRpcCall {
     }
 
     public static String queryMemberSigninCalendar() {
-        return RequestManager.requestString("com.alipay.amic.biz.rpc.signin.h5.queryMemberSigninCalendar", 
-                "[{\"autoSignIn\":true,\"chInfo\":\"memberHomePage_myTab\",\"invitorUserId\":\"\",\"sceneCode\":\"QUERY\",\"sourcePassMap\":{\"innerSource\":\"\",\"source\":\"myTab\",\"unid\":\"\"}}]");
+        return RequestManager.requestString("com.alipay.amic.biz.rpc.signin.h5.queryMemberSigninCalendar",
+                "[{\"autoSignIn\":true,\"chInfo\":\"memberHomePage_ch_mytab\",\"invitorUserId\":\"\",\"sceneCode\":\"QUERY\",\"sourcePassMap\":{\"innerSource\":\"\",\"source\":\"mytab\",\"unid\":\"\"}}]");
     }
 
     public static String signPageTaskList() {

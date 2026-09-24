@@ -27,7 +27,7 @@ object ThemeManager {
 
     // 外部存储路径（SD卡）
     private val EXTERNAL_STORAGE_PATH: String
-        get() = "${android.os.Environment.getExternalStorageDirectory().absolutePath}/Android/media/com.eg.android.AlipayGphone/000_HOHO_THEME_CENTER"
+        get() = "${android.os.Environment.getExternalStorageDirectory().absolutePath}/Android/media/com.eg.android.AlipayGphone/YC_THEME"
 
     // 主题文件夹路径
     private const val THEMES_FOLDER = "themes"
@@ -42,6 +42,9 @@ object ThemeManager {
 
     // 缓存 Map 识别用的场景键（与 cached_skin_info_v2 的 JSON 键一致）
     private val SCENE_KEYS = setOf("theme", "ltp", "aptrip", "widget", "emoji", "atmospheric_aptrip")
+
+    // 官方换肤广播（SCConstants.SKIN_THEME_UPDATED），UI 层接收后走 SkinStyleHelper 应用新皮肤
+    private const val ACTION_SKIN_THEME_UPDATED = "com.alipay.skincenter.skinUpdated.theme"
 
     /**
      * 获取当前用户ID
@@ -354,11 +357,17 @@ object ThemeManager {
                 //*** *** 步骤3: 更新 SharedPreferences（key 为 cached_skin_info_v2<userId>，与 SCInnerManager 读取格式一致）
                 val mergedJson = updateSharedPreferences(userId, selectedThemeId, updatedThemeInfo)
 
+                if (mergedJson == null) {
+                    Log.runtime(TAG, "✗ 主题缓存写入失败，终止主题应用")
+                    showToast("主题更新失败: 缓存写入失败")
+                    return
+                }
+
                 // 步骤4: 重载 SkinCenter 内存缓存并通知 UI 应用主题
                 reloadAndNotifySkinCenter(mergedJson)
 
                 Log.runtime(TAG, "✅ 主题切换成功: ${updatedThemeInfo.name}")
-                if (!quiet) showToast("主题已切换: ${updatedThemeInfo.name}")
+                showToast("主题已切换:${updatedThemeInfo.name}")
 
             } catch (e: Exception) {
                 Log.runtime(TAG, "✗ 主题更新失败: ${e.message}")
@@ -454,6 +463,13 @@ object ThemeManager {
                 return null
             }
 
+            val runtimeUserId = getRuntimeUserId()
+            if (runtimeUserId == null) {
+                Log.runtime(TAG, "✗ 获取支付宝运行时用户ID失败，终止主题缓存写入")
+                return null
+            }
+            val effectiveUserId = runtimeUserId
+
             // 构造 theme 场景缓存条目（字段与官方缓存格式一致）
             val themeEntry = mapOf(
                 "cacheTime" to (System.currentTimeMillis() / 1000),
@@ -466,13 +482,13 @@ object ThemeManager {
                 "skinId" to themeInfo.skinId,
                 "skinType" to themeInfo.skinType,
                 "usageScene" to "theme",
-                "userId" to userId,
+                "userId" to effectiveUserId,
                 "userSkinId" to themeId,
                 "versionLimit" to themeInfo.versionLimit
             )
 
             val prefs = context.getSharedPreferences("prefs_skincenter_file", android.content.Context.MODE_PRIVATE)
-            val cacheKey = "cached_skin_info_v2$userId"
+            val cacheKey = "cached_skin_info_v2$effectiveUserId"
 
             // 读取旧缓存并合并，避免冲掉 aptrip/ltp/widget 等其它场景
             val merged: LinkedHashMap<String, Any> = try {
@@ -491,7 +507,7 @@ object ThemeManager {
             val json = JsonUtil.formatJson(merged)
             prefs.edit()
                 .putString(cacheKey, json)
-                .putString("cached_skin_theme$userId", themeInfo.skinId)
+                .putString("cached_skin_theme$effectiveUserId", themeInfo.skinId)
                 .apply()
 
             Log.runtime(TAG, "✓ 已更新 SharedPreferences")
@@ -562,6 +578,9 @@ object ThemeManager {
             Log.runtime(TAG, "✗ 内存缓存重载失败且无合并 JSON 可用于兜底")
         }
 
+        // 3.5 构建 SCMetaModel 渲染元数据（对齐官方 m(scene, model, true)，渲染层依赖它取新皮肤 meta）
+        buildMetaModel(managerClass, instance, mergedJson)
+
         // 4. 触发主题应用（C(String)=本版 / G(String)=旧版 notifyThemeSkin）
         val notified = listOf("C", "G").any { name ->
             runCatching {
@@ -578,6 +597,134 @@ object ThemeManager {
 
         // 5. 兜底：notifySkinChanged 名称未被混淆，刷新已注册的渲染视图
         notifySkinChanged()
+
+        // 6. 兜底：手动发送 skinUpdated.theme 本地广播（官方 UI 换肤的最终触发器，C() 链路静默失败时由它驱动刷新）
+        sendThemeUpdatedBroadcast(mergedJson)
+    }
+
+    /**
+     * 构建 SCMetaModel 渲染元数据
+     *
+     * 对齐官方链路：SCInnerManager.m(scene, model, true) 在 notifyThemeSkin 之前调用，
+     * 渲染层通过 SCMetaModel 获取新皮肤的 meta 信息，缺失会导致广播发出后渲染层拿不到资源路径
+     *
+     * @return 是否构建成功
+     */
+    private fun buildMetaModel(managerClass: Class<*>, instance: Any, mergedJson: String?): Boolean {
+        return try {
+            // theme 场景模型：优先取内存缓存，缺失时用宿主 fastjson 从合并 JSON 解析
+            val themeModel = findCacheMap(managerClass, instance)?.get("theme")
+                ?: parseThemeModelFromJson(mergedJson)
+            if (themeModel == null) {
+                Log.runtime(TAG, "✗ 无法获取 theme 场景缓存模型，跳过 SCMetaModel 构建")
+                return false
+            }
+            val mMethod = managerClass.getDeclaredMethod(
+                "m", String::class.java, themeModel.javaClass, java.lang.Boolean.TYPE
+            )
+            mMethod.isAccessible = true
+            mMethod.invoke(instance, "theme", themeModel, true)
+            Log.runtime(TAG, "✓ 已构建 SCMetaModel (m: theme)")
+            true
+        } catch (e: Exception) {
+            Log.runtime(TAG, "⚠️ 构建 SCMetaModel 失败（版本签名可能不同）: ${e.message}")
+            false
+        }
+    }
+
+    /**
+     * 用宿主 fastjson 从合并缓存 JSON 解析 theme 场景的 SCCacheInfoModel
+     */
+    private fun parseThemeModelFromJson(mergedJson: String?): Any? {
+        if (mergedJson.isNullOrEmpty()) return null
+        return try {
+            val classLoader = AppContext.getClassLoader() ?: return null
+            val modelClass = SC_CACHE_MODEL_CLASSES.firstNotNullOfOrNull {
+                runCatching { classLoader.loadClass(it) }.getOrNull()
+            } ?: return null
+            val parseMethod = classLoader.loadClass("com.alibaba.fastjson.JSON")
+                .getMethod("parseObject", String::class.java, Class::class.java)
+            val root = JsonUtil.parseObject(mergedJson, Map::class.java) as? Map<*, *> ?: return null
+            val themeJson = root["theme"] ?: return null
+            parseMethod.invoke(null, JsonUtil.formatJson(themeJson), modelClass)
+        } catch (e: Exception) {
+            Log.runtime(TAG, "⚠️ 解析 theme 缓存模型失败: ${e.message}")
+            null
+        }
+    }
+
+    /**
+     * 识别 SCInnerManager 中按场景存放缓存模型的 Map
+     * （含 theme/ltp/aptrip 等场景键的 ConcurrentHashMap 实例字段）
+     */
+    private fun findCacheMap(managerClass: Class<*>, instance: Any): MutableMap<Any?, Any?>? {
+        for (field in managerClass.declaredFields) {
+            if (Modifier.isStatic(field.modifiers) || field.type != ConcurrentHashMap::class.java) continue
+            field.isAccessible = true
+            val map = field.get(instance) as? MutableMap<Any?, Any?> ?: continue
+            if (map.keys.any { it is String && it in SCENE_KEYS }) return map
+        }
+        return null
+    }
+
+    /**
+     * 手动发送 skinUpdated.theme 本地广播
+     *
+     * 对齐官方 c/a Runnable 的收尾动作：通过 LocalBroadcastManager 发送
+     * "com.alipay.skincenter.skinUpdated.theme"（extras 与官方一致：
+     * skinId/userSkinId/hasEnableSkin/materialId），UI 层接收后走
+     * SkinStyleHelper 应用新皮肤，是换肤生效的最终触发器
+     */
+    private fun sendThemeUpdatedBroadcast(mergedJson: String?) {
+        try {
+            val root = mergedJson?.let {
+                JsonUtil.parseObject(it, Map::class.java) as? Map<*, *>
+            }?.get("theme") as? Map<*, *> ?: return
+
+            val context = AppContext.getAppContext()
+            val classLoader = AppContext.getClassLoader()
+            if (context == null || classLoader == null) return
+
+            val intent = android.content.Intent(ACTION_SKIN_THEME_UPDATED).apply {
+                putExtra("skinId", root["skinId"] as? String ?: "")
+                putExtra("userSkinId", root["userSkinId"] as? String ?: "")
+                putExtra("hasEnableSkin", true)
+                putExtra("materialId", root["materialId"] as? String ?: "")
+            }
+
+            val lbmClass = runCatching {
+                classLoader.loadClass("android.support.v4.content.LocalBroadcastManager")
+            }.getOrNull() ?: run {
+                Log.runtime(TAG, "⚠️ 未找到 LocalBroadcastManager，跳过广播兜底")
+                return
+            }
+            val lbm = lbmClass.getMethod("getInstance", android.content.Context::class.java)
+                .invoke(null, context)
+            lbmClass.getMethod("sendBroadcast", android.content.Intent::class.java)
+                .invoke(lbm, intent)
+            Log.runtime(TAG, "✓ 已发送 skinUpdated.theme 广播 (skinId=${root["skinId"]})")
+        } catch (e: Exception) {
+            Log.runtime(TAG, "✗ 发送 skinUpdated.theme 广播失败: ${e.message}")
+        }
+    }
+
+    /**
+     * 反射获取支付宝运行时的当前用户ID（SCCommonUtil.getCurrentUserId()）
+     *
+     * 官方 v()/I() 会校验缓存 userId 与运行时用户一致，不一致则静默拒绝换肤，
+     * 因此写入缓存的 userId 必须以运行时取值为准
+     */
+    private fun getRuntimeUserId(): String? {
+        return try {
+            val classLoader = AppContext.getClassLoader() ?: return null
+            val utilClass = classLoader.loadClass("com.alipay.mobile.skincenter.util.SCCommonUtil")
+            val method = utilClass.getMethod("getCurrentUserId")
+            method.isAccessible = true
+            method.invoke(null) as? String
+        } catch (e: Exception) {
+            Log.runtime(TAG, "⚠️ 反射获取运行时 userId 失败: ${e.message}")
+            null
+        }
     }
 
     /**

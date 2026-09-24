@@ -2226,7 +2226,7 @@ class AntSports : ModelTask() {
          */
         private fun handleHealthIslandTask() {
             try {
-                Log.runtime(TAG, "开始检查健康岛浏览任务")
+//                Log.runtime(TAG, "开始检查健康岛浏览任务")
                 var hasTask = true
                 while (hasTask) {
                     val taskInfoResp = JSONObject(

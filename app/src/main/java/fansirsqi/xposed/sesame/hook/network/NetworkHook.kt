@@ -2,6 +2,7 @@ package fansirsqi.xposed.sesame.hook.network
 
 import de.robv.android.xposed.XC_MethodHook
 import de.robv.android.xposed.XposedHelpers
+import fansirsqi.xposed.sesame.hook.rpc.TokenHooker
 import fansirsqi.xposed.sesame.util.CaptureFilter
 import java.lang.reflect.Method
 import java.net.HttpURLConnection
@@ -87,7 +88,10 @@ object NetworkHook {
 
                     if (opType.isNotEmpty()) {
                         XposedHelpers.setAdditionalInstanceField(param, "opType", opType)
-                        
+
+                        // TokenHooker：从真实广告请求中捕获庄园 referToken（不受抓包过滤影响）
+                        //TokenHooker.handleRpc(opType, param.args.getOrNull(2) as? Array<Any?> ?: emptyArray())
+
                         // --- 动态过滤（RPC 链路，内置噪音 + 用户关键词） ---
                         if (CaptureFilter.isFiltered(opType)) {
                             XposedHelpers.setAdditionalInstanceField(param, "rpc_skip", true)

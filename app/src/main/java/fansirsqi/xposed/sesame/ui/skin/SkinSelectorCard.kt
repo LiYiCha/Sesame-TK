@@ -284,7 +284,7 @@ private fun EmptySkinState(
         )
         Spacer(modifier = Modifier.height(4.dp))
         Text(
-            text = "点击上方「导入 ZIP」或「导入目录」添加皮肤，\n或先下载资源包",
+            text = "点击上方「导入 ZIP」或「导入目录」添加皮肤",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
             textAlign = TextAlign.Center

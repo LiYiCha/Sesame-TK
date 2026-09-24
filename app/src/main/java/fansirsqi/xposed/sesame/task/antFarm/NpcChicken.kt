@@ -14,6 +14,11 @@ import org.json.JSONException
 import org.json.JSONObject
 
 class NpcChicken {
+    companion object {
+        /** 各NPC上次打印的工作进度，进度无变化不重复打印 */
+        private val lastLoggedProgress = mutableMapOf<String, Double>()
+    }
+
     private val TAG = "🐥NPC小鸡"
     private val VERSION = "1.8.2302070202.46"
     private var ownerFarmId: String = ""
@@ -498,10 +503,10 @@ class NpcChicken {
         try {
             this.ownerFarmId = ownerFarmId
 
-            // 1. 初始化农场，获取NPC配置
+            // 初始化农场，获取NPC配置
             initFarm()
 
-            // 2. 从 DataStore.json 动态加载最新 NPC 配置对象列表
+            // 从 DataStore.json 动态加载最新 NPC 配置对象列表
             val npcConfigMap = getNpcConfigs()
             val selectedConfigs = selectedNpcNames.mapNotNull { npcConfigMap[it] }
 
@@ -510,15 +515,13 @@ class NpcChicken {
                 return
             }
 
-            Log.runtime(TAG, "智能调度🤖[已选择: ${selectedConfigs.joinToString(", ") { it.nickName }}]")
-
-            // 3. 加载历史记录
+            // 加载历史记录
             val records = loadNpcRecords(selectedConfigs)
 
-            // 4. 查询当前农场状态
+            // 查询当前农场状态
             val currentNpc = getCurrentNpc()
 
-            // 5. 执行智能调度
+            // 执行智能调度
             executeSmartSchedule(selectedConfigs, records, currentNpc)
 
         } catch (e: Exception) {
@@ -603,8 +606,11 @@ class NpcChicken {
             GlobalThreadPools.sleep(2000)
             hireNextAvailableNpc(configs, updatedRecords)
         } else {
-            // 未满产，执行任务
-            Log.runtime(TAG, "智能调度🤖[$currentName 工作中... 进度:$currentReward/${currentConfig.rewardThreshold}]")
+            // 未满产，执行任务（进度无变化时不重复打印）
+            if (lastLoggedProgress[currentAnimalId] != currentReward) {
+                Log.runtime(TAG, "智能调度🤖[$currentName 工作中... 进度:$currentReward/${currentConfig.rewardThreshold}]")
+                lastLoggedProgress[currentAnimalId] = currentReward
+            }
 
             // 执行对应的任务
             try {

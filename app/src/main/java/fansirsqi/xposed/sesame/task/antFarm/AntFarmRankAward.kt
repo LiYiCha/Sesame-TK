@@ -46,8 +46,9 @@ class AntFarmRankAward {
                 val status = awardInfo.optString("status")
                 val rightsId = awardInfo.optString("rightsId")
                 val levelName = awardInfo.optString("levelName")
-                
-                if (status == "unreceived") {
+
+                // 接口返回的未领取状态为 unclaimed（received=已领取，unattained=未达标）
+                if (status == "unclaimed") {
                     Log.runtime(TAG, "发现未领取的等级奖励: $levelName (rightsId: $rightsId)")
                     val claimRes = AntFarmRpcCall.receiveDonationLevelReward(rightsId)
                     if (!claimRes.isNullOrBlank()) {

@@ -11,7 +11,7 @@ object ThemeConstants {
     // 外部存储路径（SD卡）
     // 使用通过 API 获取的路径，避免在 Xposed Hook 或者双开环境下路径错误
     val EXTERNAL_STORAGE_PATH: String
-        get() = "${android.os.Environment.getExternalStorageDirectory().absolutePath}/Android/media/com.eg.android.AlipayGphone/000_HOHO_THEME_CENTER"
+        get() = "${android.os.Environment.getExternalStorageDirectory().absolutePath}/Android/media/com.eg.android.AlipayGphone/YC_THEME"
 
     // 主题文件夹路径
     const val THEMES_FOLDER = "themes"

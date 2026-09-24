@@ -1,77 +1,40 @@
 package im.hoho.alipayInstallB;
 
-import android.Manifest;
 import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.ActivityNotFoundException;
 import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.SharedPreferences;
-import android.content.pm.PackageManager;
 import android.net.Uri;
-import android.os.Build;
 import android.os.Bundle;
 import android.os.Environment;
-import android.os.Handler;
-import android.os.Looper;
-import android.provider.Settings;
 import android.view.View;
 import android.widget.AdapterView;
 import android.widget.ArrayAdapter;
 import android.widget.Button;
 import android.widget.ImageView;
-import android.widget.ProgressBar;
 import android.widget.Spinner;
 import android.widget.TextView;
 import android.widget.Toast;
 
-import net.lingala.zip4j.ZipFile;
-import net.lingala.zip4j.exception.ZipException;
-
-import java.io.BufferedInputStream;
 import java.io.File;
-import java.io.FileOutputStream;
-import java.io.InputStream;
-import java.io.OutputStream;
-import java.net.URL;
-import java.net.URLConnection;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 
 public class MainActivity extends Activity {
 
-    private static final String EXTERNAL_STORAGE_PATH = Environment.getExternalStorageDirectory() + "/Android/media/com.eg.android.AlipayGphone/000_HOHO_ALIPAY_SKIN";
+    private static final String EXTERNAL_STORAGE_PATH = Environment.getExternalStorageDirectory() + "/Android/media/com.eg.android.AlipayGphone/YC_SKIN";
     private static final String EXPORT_FILE = EXTERNAL_STORAGE_PATH + "/export";
     private static final String DELETE_FILE = EXTERNAL_STORAGE_PATH + "/delete";
     private static final String UPDATE_FILE = EXTERNAL_STORAGE_PATH + "/update";
     private static final String ACTIVATE_FILE = EXTERNAL_STORAGE_PATH + "/actived";
-    private static final int PERMISSION_REQUEST_CODE = 1001;
-    private static final String DOWNLOAD_URL = "https://github.com/nov30th/AlipayHighHeadsomeRichAndroid/raw/master/SD%E5%8D%A1%E8%B5%84%E6%BA%90%E6%96%87%E4%BB%B6%E5%8C%85/SD%E8%B5%84%E6%BA%90%E6%96%87%E4%BB%B6.zip";
     private static final String EXTRACT_PATH = Environment.getExternalStorageDirectory() + "/Android/media/com.eg.android.AlipayGphone/";
     private final String[] memberGrades = {"原有", "普通 (primary)", "黄金 (golden)", "铂金 (platinum)", "钻石 (diamond)"};
     private Button btnExport, btnDelete, btnUpdate, btnActivate;
     private ImageView ivExportStatus, ivDeleteStatus, ivUpdateStatus, ivActivateStatus;
-    private Button btnDownload;
-    private ProgressBar progressBar;
-    private ExecutorService executorService;
-    private Handler mainHandler;
     private Spinner spinnerMemberGrade;
 
     private static final String PREFS_NAME = "AppPreferences";
     private static final String KEY_FIRST_RUN = "isFirstRun";
-
-    @Override
-    public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
-        if (requestCode == PERMISSION_REQUEST_CODE) {
-            if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-                // 权限被授予
-                Toast.makeText(this, "Storage permission granted", Toast.LENGTH_SHORT).show();
-            } else {
-                // 权限被拒绝
-                Toast.makeText(this, "Storage permission denied", Toast.LENGTH_SHORT).show();
-            }
-        }
-    }
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -85,7 +48,7 @@ public class MainActivity extends Activity {
             new AlertDialog.Builder(this)
                     .setTitle("隐私说明")
                     .setMessage("本应用不会收集、不会上传任何用户信息或使用数据。\n\n" +
-                            "应用仅在本地运行，不会与任何服务器通信（除非您主动点击\"下载资源包\"按钮从 Github 下载资源）。\n\n" +
+                            "应用仅在本地运行，不会与任何服务器通信。\n\n" +
                             "所有操作均在您的设备本地完成，请放心使用。")
                     .setPositiveButton("我知道了", new DialogInterface.OnClickListener() {
                         @Override
@@ -122,29 +85,13 @@ public class MainActivity extends Activity {
         setupButtons();
         updateStatuses();
 
-
-        btnDownload = findViewById(R.id.btnDownload);
-        progressBar = findViewById(R.id.progressBar);
-
-        executorService = Executors.newSingleThreadExecutor();
-        mainHandler = new Handler(Looper.getMainLooper());
-
-        updateDownloadButtonText();
-
-        btnDownload.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                downloadAndExtract();
-            }
-        });
-
         Button btnOpenResourceFolder = findViewById(R.id.btnOpenResourceFolder);
         TextView tvGithubLink = findViewById(R.id.tvGithubLink);
 
         btnOpenResourceFolder.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                File resourceFolder = new File(EXTRACT_PATH + "000_HOHO_ALIPAY_SKIN");
+                File resourceFolder = new File(EXTRACT_PATH + "YC_SKIN");
                 if (resourceFolder.exists() && resourceFolder.isDirectory()) {
                     Intent intent = new Intent(Intent.ACTION_GET_CONTENT);
                     Uri uri = Uri.parse(resourceFolder.getAbsolutePath());
@@ -232,7 +179,6 @@ public class MainActivity extends Activity {
     protected void onResume() {
         super.onResume();
         updateStatuses();
-        updateDownloadButtonText();
     }
 
     private void updateStatuses() {
@@ -246,105 +192,6 @@ public class MainActivity extends Activity {
 
     private void updateStatus(ImageView imageView, String filePath) {
         imageView.setImageResource(new File(filePath).exists() ? R.drawable.green_circle : R.drawable.red_circle);
-    }
-
-    private void updateDownloadButtonText() {
-        File skinFolder = new File(EXTRACT_PATH + "000_HOHO_ALIPAY_SKIN");
-        btnDownload.setText(skinFolder.exists() ? "重新下载资源包 (Github) 需要SD卡权限" : "下载资源包 (Github) 需要SD卡权限");
-    }
-
-    private void downloadAndExtract() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            if (!Environment.isExternalStorageManager()) {
-                Intent intent = new Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION);
-                Uri uri = Uri.fromParts("package", getPackageName(), null);
-                intent.setData(uri);
-                startActivity(intent);
-            }
-        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            if (checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
-                requestPermissions(new String[]{Manifest.permission.WRITE_EXTERNAL_STORAGE, Manifest.permission.READ_EXTERNAL_STORAGE}, PERMISSION_REQUEST_CODE);
-            }
-        }
-
-        btnDownload.setEnabled(false);
-        progressBar.setVisibility(View.VISIBLE);
-        progressBar.setProgress(0);
-
-        executorService.execute(new Runnable() {
-            @Override
-            public void run() {
-                try {
-                    URL url = new URL(DOWNLOAD_URL);
-                    URLConnection connection = url.openConnection();
-                    connection.connect();
-
-                    int fileLength = connection.getContentLength();
-
-                    InputStream input = new BufferedInputStream(url.openStream());
-                    OutputStream output = new FileOutputStream(EXTRACT_PATH + "temp.zip");
-
-                    byte[] data = new byte[1024];
-                    long total = 0;
-                    int count;
-                    while ((count = input.read(data)) != -1) {
-                        total += count;
-                        final int progress = (int) (total * 100 / fileLength);
-                        mainHandler.post(new Runnable() {
-                            @Override
-                            public void run() {
-                                progressBar.setProgress(progress);
-                            }
-                        });
-                        output.write(data, 0, count);
-                    }
-
-                    output.flush();
-                    output.close();
-                    input.close();
-
-                    // 解压文件
-                    unzip(EXTRACT_PATH + "temp.zip", EXTRACT_PATH);
-
-                    mainHandler.post(new Runnable() {
-                        @Override
-                        public void run() {
-                            btnDownload.setEnabled(true);
-                            progressBar.setVisibility(View.GONE);
-                            Toast.makeText(MainActivity.this, "Download and extraction completed", Toast.LENGTH_LONG).show();
-                            updateDownloadButtonText();
-                        }
-                    });
-                } catch (final Exception e) {
-                    mainHandler.post(new Runnable() {
-                        @Override
-                        public void run() {
-                            btnDownload.setEnabled(true);
-                            progressBar.setVisibility(View.GONE);
-                            Toast.makeText(MainActivity.this, "Error: " + e.getMessage(), Toast.LENGTH_LONG).show();
-                        }
-                    });
-                }
-            }
-        });
-    }
-
-    public void unzip(String zipFilePath, String destDirectory) {
-        try {
-            ZipFile zipFile = new ZipFile(zipFilePath);
-            zipFile.extractAll(destDirectory);
-        } catch (ZipException e) {
-            e.printStackTrace();
-            // 处理异常
-        }
-    }
-
-    @Override
-    protected void onDestroy() {
-        super.onDestroy();
-        if (executorService != null) {
-            executorService.shutdown();
-        }
     }
 
     private void setupMemberGradeSpinner() {

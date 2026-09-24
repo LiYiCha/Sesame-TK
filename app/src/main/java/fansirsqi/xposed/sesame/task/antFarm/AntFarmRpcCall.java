@@ -838,6 +838,73 @@ public class AntFarmRpcCall {
                 "[{\"requestType\":\"NORMAL\",\"rightsId\":\"" + rightsId + "\",\"sceneCode\":\"ANTFARM\",\"source\":\"H5\",\"version\":\"" + VERSION + "\"}]");
     }
 
+    // 进入捐蛋活动入口（排位赛/爱心鸡结号共用）
+    public static String enterDonationCompetitionRank() {
+        return RequestManager.requestString("com.alipay.antfarm.enterDonationCompetitionRank",
+                "[{\"requestType\":\"NORMAL\",\"sceneCode\":\"ANTFARM\",\"source\":\"H5\",\"version\":\"" + VERSION + "\"}]");
+    }
+
+    // 爱心鸡结号：报名活动
+    public static String participateCompetition() {
+        return RequestManager.requestString("com.alipay.antfarm.participateCompetition",
+                "[{\"requestType\":\"NORMAL\",\"sceneCode\":\"ANTFARM\",\"source\":\"H5\",\"version\":\"" + VERSION + "\"}]");
+    }
+
+    // 爱心鸡结号：领取周年蛋糕食品
+    public static String getAnnGift() {
+        return RequestManager.requestString("com.alipay.antfarm.getAnnGift",
+                "[{\"requestType\":\"NORMAL\",\"sceneCode\":\"ANTFARM\",\"source\":\"H5\",\"version\":\"" + VERSION + "\"}]");
+    }
+
+    // 爱心鸡结号：查询活动任务列表
+    public static String listCompetitionTask() {
+        return RequestManager.requestString("com.alipay.antfarm.listCompetitionTask",
+                "[{\"requestType\":\"NORMAL\",\"sceneCode\":\"ANTFARM\",\"source\":\"H5\",\"version\":\"" + VERSION + "\"}]");
+    }
+
+    // 爱心鸡结号：领取活动任务奖励
+    public static String receiveTaskAwardAntFarm(String sceneCode, String taskType, int awardCountForReceive) throws JSONException {
+        JSONObject args = new JSONObject();
+        args.put("awardCountForReceive", awardCountForReceive);
+        args.put("ignoreLimit", true);
+        args.put("requestType", "RPC");
+        args.put("sceneCode", sceneCode);
+        args.put("source", "antfarm");
+        args.put("taskType", taskType);
+        return RequestManager.requestString("com.alipay.antieptask.receiveTaskAwardantfarm", "[" + args + "]");
+    }
+
+    // 爱心鸡结号：查询全部成员捐蛋排行（首页）
+    public static String queryAllMemberRankInfo() {
+        return RequestManager.requestString("com.alipay.antfarm.queryAllMemberRankInfo",
+                "[{\"requestType\":\"NORMAL\",\"sceneCode\":\"ANTFARM\",\"source\":\"H5\",\"version\":\"" + VERSION + "\"}]");
+    }
+
+    // 爱心鸡结号：分页查询捐蛋排行
+    public static String queryPageRankInfo(String rankRoundId, int pageNo) throws JSONException {
+        JSONObject args = new JSONObject();
+        args.put("pageNo", pageNo);
+        args.put("rankRoundId", rankRoundId);
+        args.put("requestType", "NORMAL");
+        args.put("sceneCode", "ANTFARM");
+        args.put("source", "H5");
+        args.put("version", VERSION);
+        return RequestManager.requestString("com.alipay.antfarm.queryPageRankInfo", "[" + args + "]");
+    }
+
+    // 爱心鸡结号：向活动指定项目捐蛋
+    public static String donationToLoveChickenProject(String projectId, int donationAmount) throws JSONException {
+        JSONObject args = new JSONObject();
+        args.put("cele", 1);
+        args.put("donationAmount", donationAmount);
+        args.put("projectId", projectId);
+        args.put("requestType", "NORMAL");
+        args.put("sceneCode", "ANTFARM");
+        args.put("source", "H5");
+        args.put("version", VERSION);
+        return RequestManager.requestString("com.alipay.antfarm.donation", "[" + args + "]");
+    }
+
     public static String deliverContentExpand(
             String ariverRpcTraceId,
             String eventId,

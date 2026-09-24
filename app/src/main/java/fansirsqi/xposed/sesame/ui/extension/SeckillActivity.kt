@@ -25,7 +25,6 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
@@ -51,6 +50,8 @@ import org.json.JSONObject
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Locale
+import androidx.compose.ui.platform.LocalLocale
+import fansirsqi.xposed.sesame.ui.theme.app.SesameTheme
 
 data class MemberGood(
     val benefitId: String,
@@ -294,7 +295,7 @@ class SeckillActivity : ComponentActivity() {
 
         setContent {
             // 使用全局统一的 SesameTheme
-            fansirsqi.xposed.sesame.ui.theme.app.SesameTheme {
+            SesameTheme {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
@@ -1157,7 +1158,7 @@ fun SeckillScreen(
                                         Spacer(modifier = Modifier.height(2.dp))
                                         if (good.exchangeStartTime > 0) {
                                             Text(
-                                                "开抢: ${SimpleDateFormat("MM-dd HH:mm", Locale.getDefault()).format(java.util.Date(good.exchangeStartTime))}",
+                                                "开抢: ${SimpleDateFormat("MM-dd HH:mm", LocalLocale.current.platformLocale).format(java.util.Date(good.exchangeStartTime))}",
                                                 fontSize = 10.sp,
                                                 maxLines = 1,
                                                 color = if (good.exchangeStartTime > System.currentTimeMillis()) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
@@ -1168,10 +1169,14 @@ fun SeckillScreen(
                                             Text("ID: ${good.itemId}", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                             Spacer(modifier = Modifier.width(6.dp))
                                             Text("积分: ${good.points} + ${good.price}元", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                            if (good.skuId != "-1") {
-                                                Spacer(modifier = Modifier.width(6.dp))
-                                                Text("SKU: ${good.skuId}", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                            }
+                                        }
+                                        if (good.skuId != "-1") {
+                                            Spacer(modifier = Modifier.height(2.dp))
+                                            Text(
+                                                if (good.skuIds.size > 1) "规格: ${good.skuIds.size}个" else "SKU: ${good.skuId}",
+                                                fontSize = 10.sp,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
                                         }
                                     }
                                     Spacer(modifier = Modifier.width(4.dp))
@@ -1356,7 +1361,7 @@ fun SeckillScreen(
                             ),
                             modifier = Modifier.weight(1f).height(36.dp)
                         ) {
-                            Text("后台 RPC（仅限无需支付）", fontSize = 11.sp)
+                            Text("RPC(非需支付)", fontSize = 11.sp)
                         }
                     }
 

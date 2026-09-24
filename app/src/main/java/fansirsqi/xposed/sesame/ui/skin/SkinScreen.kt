@@ -10,7 +10,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Palette
@@ -79,7 +78,7 @@ fun SkinScreen(
                 // 忽略
             }
         } else {
-            Toast.makeText(context, "资源文件夹不存在，请先下载资源包", Toast.LENGTH_SHORT).show()
+            Toast.makeText(context, "资源文件夹不存在，请先导入皮肤", Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -225,16 +224,7 @@ fun SkinScreen(
                 )
             }
 
-            // 5. 资源包
-            item {
-                ResourceCard(
-                    isInstalled = state.isResourceInstalled,
-                    downloadState = state.downloadState,
-                    onDownload = { viewModel.downloadResource() }
-                )
-            }
-
-            // 6. 提示
+            // 5. 提示
             item {
                 Text(
                     text = "重新打开付款码使更改生效",
@@ -437,75 +427,6 @@ private fun SettingsCard(
                             }
                         )
                     }
-                }
-            }
-        }
-    }
-}
-
-/**
- * 资源包：单行状态 + 下载
- */
-@Composable
-private fun ResourceCard(
-    isInstalled: Boolean,
-    downloadState: DownloadState,
-    onDownload: () -> Unit
-) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Row(
-                modifier = Modifier.weight(1f),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Download,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary
-                )
-                Column {
-                    Text(
-                        text = "资源包",
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.Medium
-                    )
-                    val subtitle = when (downloadState) {
-                        is DownloadState.Downloading -> "下载中 ${downloadState.progress}%"
-                        is DownloadState.Success -> "已安装"
-                        is DownloadState.Error -> "下载失败"
-                        else -> if (isInstalled) "已安装" else "未安装，下载供导入使用"
-                    }
-                    Text(
-                        text = subtitle,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
-
-            if (downloadState is DownloadState.Downloading) {
-                CircularProgressIndicator(
-                    modifier = Modifier.size(24.dp),
-                    strokeWidth = 3.dp
-                )
-            } else {
-                Button(
-                    onClick = onDownload,
-                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
-                    shape = RoundedCornerShape(12.dp)
-                ) {
-                    Text(if (isInstalled) "重新下载" else "下载")
                 }
             }
         }

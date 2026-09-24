@@ -46,11 +46,15 @@ public class ResChecker {
      * 从调用栈中获取 ResChecker 调用方的类名和方法名，用于失败日志定位调用点
      */
     private static String getCallerInfo() {
+        String selfPrefix = ResChecker.class.getName();
         for (StackTraceElement e : Thread.currentThread().getStackTrace()) {
             String cls = e.getClassName();
-            if (!ResChecker.class.getName().equals(cls) && !cls.startsWith("java.")) {
-                return cls.substring(cls.lastIndexOf('.') + 1) + "." + e.getMethodName();
+            // 跳过 JVM/Android 内部帧和 ResChecker 自身（含 lambda 合成类），剩下的才是真实调用方
+            if (cls.startsWith("java.") || cls.startsWith("dalvik.")
+                    || cls.startsWith("com.android.") || cls.startsWith(selfPrefix)) {
+                continue;
             }
+            return cls.substring(cls.lastIndexOf('.') + 1) + "." + e.getMethodName();
         }
         return "unknown";
     }

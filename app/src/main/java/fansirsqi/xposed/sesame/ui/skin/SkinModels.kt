@@ -9,7 +9,7 @@ import android.os.Environment
  */
 object SkinConstants {
     // 存储路径
-    val EXTERNAL_STORAGE_PATH = "${Environment.getExternalStorageDirectory()}/Android/media/com.eg.android.AlipayGphone/000_HOHO_ALIPAY_SKIN"
+    val EXTERNAL_STORAGE_PATH = "${Environment.getExternalStorageDirectory()}/Android/media/com.eg.android.AlipayGphone/YC_SKIN"
     val EXTRACT_PATH = "${Environment.getExternalStorageDirectory()}/Android/media/com.eg.android.AlipayGphone/"
 
     // 控制文件路径
@@ -17,9 +17,6 @@ object SkinConstants {
     val DELETE_FILE = "$EXTERNAL_STORAGE_PATH/delete"
     val UPDATE_FILE = "$EXTERNAL_STORAGE_PATH/update"
     val ACTIVATE_FILE = "$EXTERNAL_STORAGE_PATH/actived"
-
-    // 下载 URL
-    const val DOWNLOAD_URL = "https://github.com/LiYiCha/AlipayHighHeadsomeRichAndroid/raw/master/SD%E5%8D%A1%E8%B5%84%E6%BA%90%E6%96%87%E4%BB%B6%E5%8C%85/SD%E8%B5%84%E6%BA%90%E6%96%87%E4%BB%B6.zip"
 
     // GitHub 仓库 URL
     const val GITHUB_REPO_URL = "https://github.com/LiYiCha/AlipayHighHeadsomeRichAndroid"
@@ -74,25 +71,6 @@ enum class SkinOperation(val displayName: String, val filePath: String) {
 }
 
 /**
- * 下载状态
- *
- * 表示资源包下载的状态
- */
-sealed class DownloadState {
-    /** 空闲状态 */
-    object Idle : DownloadState()
-
-    /** 下载中 */
-    data class Downloading(val progress: Int) : DownloadState()
-
-    /** 下载成功 */
-    object Success : DownloadState()
-
-    /** 下载失败 */
-    data class Error(val message: String) : DownloadState()
-}
-
-/**
  * 皮肤信息
  *
  * 表示单个皮肤的详细信息
@@ -133,12 +111,6 @@ data class SkinState(
 
     /** 各操作的启用状态 */
     val operationStates: Map<SkinOperation, Boolean> = emptyMap(),
-
-    /** 下载状态 */
-    val downloadState: DownloadState = DownloadState.Idle,
-
-    /** 资源包是否已安装 */
-    val isResourceInstalled: Boolean = false,
 
     /** 是否首次运行 */
     val isFirstRun: Boolean = true,

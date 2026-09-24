@@ -25,7 +25,7 @@ object SkinHook {
     private const val TAG = "SkinHook"
 
     // 存储路径常量
-    private val EXTERNAL_STORAGE_PATH = "${Environment.getExternalStorageDirectory()}/Android/media/com.eg.android.AlipayGphone/000_HOHO_ALIPAY_SKIN"
+    private val EXTERNAL_STORAGE_PATH = "${Environment.getExternalStorageDirectory()}/Android/media/com.eg.android.AlipayGphone/YC_SKIN"
     private const val SKIN_DIR_IN_ALIPAY = "/data/data/com.eg.android.AlipayGphone/files/onsitepay_skin_dir/HOHO"
 
     // Hook 状态标记
