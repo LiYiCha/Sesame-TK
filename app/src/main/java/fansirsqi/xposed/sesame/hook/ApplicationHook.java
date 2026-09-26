@@ -175,21 +175,7 @@ public class ApplicationHook implements IXposedHookLoadPackage {
             HookModuleManager.INSTANCE.dispatchHandleLoadPackage(lpparam);
             performAlipayHook(lpparam);
 
-            String[] requiredClasses = {
-                    "com.alipay.mobile.nebulaappproxy.api.rpc.H5AppRpcUpdate",
-                    "com.alipay.mobile.quinox.LauncherActivity",
-                    "com.alipay.mobile.quinox.LauncherApplication",
-                    "com.alipay.mobile.common.fgbg.FgBgMonitorImpl",
-                    "com.alipay.mobile.common.transport.utils.MiscUtils"
-            };
-
-            ClassChecker.waitForClasses(lpparam.classLoader, requiredClasses, allClassesExist -> {
-                if (allClassesExist) {
-                    Log.runtime(TAG, "所有必需类已就绪");
-                } else {
-                    Log.runtime(TAG, "等待类加载超时或部分类未找到");
-                }
-            });
+            // 移除 ClassChecker.waitForClasses 轮询死循环，避免冷启动类加载锁争用与超时自杀
         }
     }
 
@@ -209,13 +195,16 @@ public class ApplicationHook implements IXposedHookLoadPackage {
                             Context context = (Context) param.args[0];
                             AppContext.setContext(context);
                             AppContext.setMainHandler(new Handler(Looper.getMainLooper()));
-                            
-                            try {
-                                AlipayVersion version = new AlipayVersion(context.getPackageManager().getPackageInfo(context.getPackageName(), 0).versionName);
-                                AppContext.setAlipayVersion(version);
-                            } catch (Exception e) {
-                                Log.runtime(TAG, "获取版本失败: " + e.getMessage());
-                            }
+
+                            // 跨进程 IPC (getPackageInfo) 延后到后台线程，确保宿主 attach 0 毫秒放行不卡死
+                            GlobalThreadPools.INSTANCE.execute(() -> {
+                                try {
+                                    AlipayVersion version = new AlipayVersion(context.getPackageManager().getPackageInfo(context.getPackageName(), 0).versionName);
+                                    AppContext.setAlipayVersion(version);
+                                } catch (Exception e) {
+                                    Log.runtime(TAG, "获取版本失败: " + e.getMessage());
+                                }
+                            });
 
                             HookModuleManager.INSTANCE.dispatchPostAppAttach(context, lpparam.classLoader);
 

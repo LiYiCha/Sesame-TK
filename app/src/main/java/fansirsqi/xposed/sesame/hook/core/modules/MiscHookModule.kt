@@ -69,40 +69,8 @@ class MiscHookModule : HookModule {
 
 
 
-        // Hook system WebViewClient for Tmall Seckill Auto-Submit
-        try {
-            val systemClientClass = Class.forName("android.webkit.WebViewClient")
-            XposedBridge.hookAllMethods(systemClientClass, "onPageFinished", object : XC_MethodHook() {
-                override fun afterHookedMethod(param: MethodHookParam) {
-                    val view = param.args[0]
-                    val url = param.args[1] as? String ?: return
-                    handleWebPageFinished(view, url)
-                }
-            })
-            Log.runtime(TAG, "✅ Hook android.webkit.WebViewClient.onPageFinished 成功")
-        } catch (t: Throwable) {
-            Log.runtime(TAG, "❌ Hook android.webkit.WebViewClient 失败: ${t.message}")
-        }
+        // 移除对全局系统 android.webkit.WebViewClient 的 Hook，避免引发 Native 内存异常和冷启动干扰
 
-        // Hook UC WebViewClient for Tmall Seckill Auto-Submit
-        try {
-            val ucClientClass = XposedHelpers.findClassIfExists("com.uc.webview.export.WebViewClient", classLoader)
-            if (ucClientClass != null) {
-                XposedBridge.hookAllMethods(ucClientClass, "onPageFinished", object : XC_MethodHook() {
-                    override fun afterHookedMethod(param: MethodHookParam) {
-                        val view = param.args[0]
-                        val url = param.args[1] as? String ?: return
-                        handleWebPageFinished(view, url)
-                    }
-                })
-                Log.runtime(TAG, "✅ Hook UC WebViewClient.onPageFinished 成功")
-            } else {
-//                精简日志
-//                Log.runtime(TAG, "ℹ️ UC WebView 尚未装载，跳过即时挂钩（UC浏览器服务动态加载属正常情况）")
-            }
-        } catch (t: Throwable) {
-            // 静默忽略
-        }
     }
 
     companion object {
@@ -117,20 +85,6 @@ class MiscHookModule : HookModule {
             }
             Log.runtime(TAG, "开始执行延迟的动态 bundle 及 Activity Hook 注册...")
 
-            // 1. Hook H5AppRpcUpdate
-            try {
-                val targetClass =
-                    classLoader.loadClass("com.alipay.mobile.nebulaappproxy.api.rpc.H5AppRpcUpdate")
-                val h5PageClass = classLoader.loadClass(General.H5PAGE_NAME)
-                XposedHelpers.findAndHookMethod(
-                    targetClass, "matchVersion",
-                    h5PageClass, Map::class.java, String::class.java,
-                    XC_MethodReplacement.returnConstant(false)
-                )
-                Log.runtime(TAG, "✅ 延迟 Hook H5AppRpcUpdate 成功")
-            } catch (t: Throwable) {
-                Log.runtime(TAG, "❌ 延迟 Hook H5AppRpcUpdate 失败: ${t.message}")
-            }
 
             // 2. Hook CDPBService
             try {
@@ -148,51 +102,6 @@ class MiscHookModule : HookModule {
                 Log.runtime(TAG, "❌ 延迟 Hook CDPBService 失败: ${t.message}")
             }
 
-        }
-
-        @JvmStatic
-        private fun handleWebPageFinished(view: Any, url: String) {
-            if (url.contains("pages.tmall.com/wow/wt/act/lm-pages")) {
-                Log.runtime(TAG, "🚀 检测到进入天猫提单页: ${'$'}url，准备注入自动提交订单脚本")
-                
-                val jsCode = """
-                    (function() {
-                        var count = 0;
-                        var timer = setInterval(function() {
-                            count++;
-                            if (count > 600) {
-                                clearInterval(timer);
-                                return;
-                            }
-                            var btn = document.querySelector('.submit-btn') || 
-                                      document.querySelector('.submitBtn') ||
-                                      document.querySelector('[class*="submit"]') ||
-                                      Array.from(document.querySelectorAll('button, div, span')).find(el => {
-                                          return el.textContent && el.textContent.includes('提交订单');
-                                      });
-                            if (btn) {
-                                if (btn.disabled || btn.getAttribute('disabled') !== null || btn.classList.contains('disabled')) {
-                                    return;
-                                }
-                                if (typeof btn.click === 'function') {
-                                    btn.click();
-                                } else {
-                                    var event = new MouseEvent('click', { bubbles: true, cancelable: true });
-                                    btn.dispatchEvent(event);
-                                }
-                                clearInterval(timer);
-                            }
-                        }, 50);
-                    })()
-                """.trimIndent()
-                
-                try {
-                    XposedHelpers.callMethod(view, "loadUrl", "javascript:${'$'}jsCode")
-                    Log.runtime(TAG, "✅ 自动提交订单脚本已成功注入 WebView")
-                } catch (e: Exception) {
-                    Log.runtime(TAG, "❌ 注入自动提交订单脚本失败: ${e.message}")
-                }
-            }
         }
     }
 
