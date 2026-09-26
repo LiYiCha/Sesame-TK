@@ -675,17 +675,7 @@ public class LifecycleManager {
                         return;
                     }
                     Object callback = args[args.length - 1];
-                    // 智能寻找参数对象（排除方法名与最后的callback）
-                    Object requestContext = null;
-                    for (int i = 1; i < args.length - 1; i++) {
-                        if (args[i] != null) {
-                            requestContext = args[i];
-                            break;
-                        }
-                    }
-                    if (requestContext == null && args.length > 1 && args[1] != null) {
-                        requestContext = args[1];
-                    }
+                    Object requestContext = args.length > 4 ? args[4] : null;
                     // 标记当前 H5 请求已由上层 Bridge 接管，通知底层 Hook 3 勿重复打印 [BOTTOM]
                     markH5BridgePending(method, requestContext);
                     
@@ -731,7 +721,8 @@ public class LifecycleManager {
                             if (recordArray != null && param.args.length > 0 && param.args[0] != null) {
                                 String timeStamp = String.valueOf(recordArray[0]);
                                 String method = String.valueOf(recordArray[1]);
-                                String params = String.valueOf(recordArray[2]);
+                                String coreParams = extractCoreParamsSignature(recordArray[2]);
+                                String params = (coreParams != null && !coreParams.isEmpty()) ? coreParams : String.valueOf(recordArray[2]);
                                 String rawData = param.args[0].toString();
 
                                 removeH5BridgePending(method, recordArray[2]);

@@ -565,47 +565,51 @@ public class YebExpGold extends BaseCommTask {
                     "alipay.yebprod.query.queryYebTrialCertVoucher",
                     "\"component\":\"PROMO_ACTIVITY\",\"sortType\":\"drawTime\",\"source\":\"QIANAPP\"," +
                             "\"voucherTemplateIdList\":[\"202312260007300180780087H5IR\",\"2026011300073001807800H1558H\"]");
-            if (queryResponse == null || !isSuccess(queryResponse)) {
-                Log.system(TAG, "余额宝体验金券查询失败: " + getErrorDesc(queryResponse));
-                return false;
-            }
-
-            Integer pendingCount = getVoucherCount(queryResponse);
-            if (pendingCount == null) {
-                Log.system(TAG, "余额宝体验金券查询缺少totalCount/certVoucherInfoList，停止当前链路");
-                return false;
-            }
-            if (pendingCount == 0) {
-                Status.setFlagToday(FLAG_VOUCHER);
-                return false;
-            }
-
+            
+            Integer pendingCount = (queryResponse != null && isSuccess(queryResponse)) ? getVoucherCount(queryResponse) : null;
+            // 若查询返回数量为0或查询未匹配模板，执行一次兑换探测，避免漏领新模板卡包券
+            boolean isDirectProbe = (pendingCount == null || pendingCount == 0);
+            int remaining = isDirectProbe ? 1 : pendingCount;
             boolean handled = false;
+
             // 2. while 循环：不断转换直到没有待使用券
-            while (pendingCount > 0) {
+            while (remaining > 0) {
                 JSONObject convertResponse = requestString(
                         "com.alipay.yebscenebff.needle.yebExpGoldVoucherConvert",
                         "\"convertType\":\"all\",\"isShowExchangeModal\":true");
 
                 if (convertResponse == null) {
-                    Log.system(TAG, "余额宝体验金券使用请求失败");
-                    return handled;
+                    if (!isDirectProbe) Log.system(TAG, "余额宝体验金券兑换请求失败: 返回为空");
+                    break;
                 }
 
                 // 判断 convertResults 中是否有 fulfilled + value.success 的结果
                 if (!isVoucherConvertSuccess(convertResponse)) {
-                    Log.system(TAG, "余额宝体验金券使用失败: " + getErrorDesc(convertResponse));
-                    return handled;
+                    String msg = convertResponse.optString("message", "");
+                    String desc = getErrorDesc(convertResponse);
+                    // 服务端返回“无有效的权益”表示卡包已无待兑换凭证，属于正常状态
+                    if (msg.contains("无有效") || desc.contains("无有效")) {
+                        Status.setFlagToday(FLAG_VOUCHER);
+                        return handled;
+                    }
+                    if (!isDirectProbe) {
+                        Log.system(TAG, "余额宝体验金券兑换失败: " + (desc.isEmpty() ? msg : desc));
+                    }
+                    break;
                 }
 
                 handled = true;
                 String rewardText = getVoucherConvertText(convertResponse);
-                Log.other("余额宝体验金💰[券自动使用]#" + (rewardText.isEmpty() ? "成功" : rewardText));
+                Log.other("余额宝体验金💰[卡包券兑换]#" + (rewardText.isEmpty() ? "成功" : rewardText));
 
                 // 3. 支持服务端返回的 delayRefreshTime 延迟
                 long delayRefreshTime = convertResponse.optLong("delayRefreshTime", 0L);
                 if (delayRefreshTime > 0L) {
                     TimeUtil.sleep(delayRefreshTime);
+                }
+
+                if (isDirectProbe) {
+                    break;
                 }
 
                 // 4. 回查验证：再次查询确认库存真的减少
@@ -614,26 +618,22 @@ public class YebExpGold extends BaseCommTask {
                         "\"component\":\"PROMO_ACTIVITY\",\"sortType\":\"drawTime\",\"source\":\"QIANAPP\"," +
                                 "\"voucherTemplateIdList\":[\"202312260007300180780087H5IR\",\"2026011300073001807800H1558H\"]");
                 if (queryResponse == null || !isSuccess(queryResponse)) {
-                    Log.system(TAG, "余额宝体验金券使用后回查失败: " + getErrorDesc(queryResponse));
-                    return handled;
+                    break;
                 }
-                Integer remainingCount = getVoucherCount(queryResponse);
-                if (remainingCount == null) {
-                    Log.system(TAG, "余额宝体验金券使用后回查缺少totalCount/certVoucherInfoList");
-                    return handled;
-                }
-                if (remainingCount == 0) {
+                Integer countAfter = getVoucherCount(queryResponse);
+                if (countAfter == null || countAfter == 0) {
                     Status.setFlagToday(FLAG_VOUCHER);
                     return handled;
                 }
-                if (remainingCount >= pendingCount) {
-                    Log.system(TAG, "余额宝体验金券使用后库存未减少: " + pendingCount + "→" + remainingCount + "，停止当前链路");
+                if (countAfter >= remaining) {
+                    Log.system(TAG, "余额宝体验金券使用后库存未减少: " + remaining + "→" + countAfter + "，停止当前链路");
                     Status.setFlagToday(FLAG_VOUCHER);
                     return handled;
                 }
-                Log.other("余额宝体验金券使用后仍有待使用券: " + remainingCount);
-                pendingCount = remainingCount;
+                Log.other("余额宝体验金券使用后仍有待使用券: " + countAfter);
+                remaining = countAfter;
             }
+            Status.setFlagToday(FLAG_VOUCHER);
             return handled;
         } catch (Throwable th) {
             return false;

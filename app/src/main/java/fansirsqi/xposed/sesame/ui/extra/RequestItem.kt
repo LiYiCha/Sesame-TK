@@ -15,11 +15,11 @@ import com.fasterxml.jackson.module.kotlin.readValue
  * @param expanded 是否展开（默认不展开）
  */
 data class RequestItem @JsonCreator constructor(
-    @JsonProperty("id") val id: Int,
-    @JsonProperty("title") var title: String,
+    @JsonProperty("id") val id: Int = 0,
+    @JsonProperty("title") var title: String = "",
     @JsonProperty("description") var description: String = "",
-    @JsonProperty("method") var method: String,
-    @JsonProperty("data") var data: String,
+    @JsonProperty("method") var method: String = "",
+    @JsonProperty("data") var data: String = "",
     @JsonProperty("expanded") var expanded: Boolean = false
 ) {
     constructor(title: String, method: String, data: String) : this(0, title, "", method, data, false)

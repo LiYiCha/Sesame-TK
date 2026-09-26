@@ -199,37 +199,47 @@ class RpcDebugViewModel : ViewModel() {
      * @param jsonText JSON 文本
      * @return Pair<成功数量, 失败数量>
      */
+    /**
+     * 从 JSON 文本批量导入请求
+     * 支持多种格式：
+     * 1. 现有格式：{"title":"","method":"","data":""}
+     * 2. 新格式：{"Name":"","Description":"","methodName":"","requestData":[]}
+     * 3. 日志抓包格式：包含 Method: xxx 和 Params: xxx
+     * 4. 纯 RPC 数组：["methodName", "paramsJson"]
+     * 5. 纯参数 JSON：自动转换为带数据的请求项
+     *
+     * @param jsonText JSON 文本
+     * @return Pair<成功数量, 失败数量>
+     */
     fun importFromJson(jsonText: String): Pair<Int, Int> {
         var successCount = 0
         var failCount = 0
 
         val trimmed = jsonText.trim()
+        if (trimmed.isEmpty()) return Pair(0, 0)
 
-        // 优先检查是否是从日志/弹窗复制的纯文本抓包格式
-        // 例如：
-        // Method: com.alipay.gamecenteruprod.biz.rpc.p2e.doGoldMallPrizeExchange
-        // Params: {"__apiCallStartTime":1785227273225, ... , "requestData":[{"...": "..."}]}
+        // 1. 检查是否是从日志/弹窗复制的纯文本抓包格式
         if (trimmed.contains("Method:", ignoreCase = true) && trimmed.contains("Params:", ignoreCase = true)) {
             try {
                 val methodRegex = Regex("(?i)Method:\\s*([^\\n\\r]+)")
                 val methodMatch = methodRegex.find(trimmed)
-                
-                val paramsRegex = Regex("(?i)Params:\\s*([\\s\\S]+)")
-                val paramsMatch = paramsRegex.find(trimmed)
-                
-                if (methodMatch != null && paramsMatch != null) {
+
+                val paramsIndex = trimmed.indexOf("Params:", ignoreCase = true)
+                val paramsPart = if (paramsIndex != -1) trimmed.substring(paramsIndex + 7).trimStart() else ""
+                val rpcParamsJsonStr = extractFirstCompleteJson(paramsPart) ?: paramsPart.lines().firstOrNull()?.trim() ?: ""
+
+                if (methodMatch != null && rpcParamsJsonStr.isNotBlank()) {
                     val rpcMethod = methodMatch.groupValues[1].trim()
-                    val rpcParamsJsonStr = paramsMatch.groupValues[1].trim()
-                    
                     val mapper = com.fasterxml.jackson.databind.ObjectMapper()
-                    val paramsNode = mapper.readTree(rpcParamsJsonStr)
-                    
                     var finalData = rpcParamsJsonStr
-                    // 精准提取 requestData 层，并保持其原生的数组结构 [] 不变！
-                    if (paramsNode.has("requestData") && paramsNode.get("requestData").isArray) {
-                        finalData = mapper.writeValueAsString(paramsNode.get("requestData"))
+                    try {
+                        val paramsNode = mapper.readTree(rpcParamsJsonStr)
+                        if (paramsNode.has("requestData") && paramsNode.get("requestData").isArray) {
+                            finalData = mapper.writeValueAsString(paramsNode.get("requestData"))
+                        }
+                    } catch (ignored: Exception) {
                     }
-                    
+
                     val newItem = RequestItem(
                         title = rpcMethod.substringAfterLast("."),
                         method = rpcMethod,
@@ -239,25 +249,25 @@ class RpcDebugViewModel : ViewModel() {
                     return Pair(1, 0)
                 }
             } catch (e: Exception) {
-                // 若由于特殊字符导致原生 JSON 解析失败，则直接回退到下方的通用 JSON 导入逻辑
                 android.util.Log.w("RpcDebugViewModel", "纯文本提取解析失败: ${e.message}")
             }
         }
-        
-        // 检查是否是单个 RPC 数组格式: ["methodName", "paramsJson", null]
+
+        // 2. 检查是否是单个 RPC 数组格式: ["methodName", "paramsJson", null]
         if (trimmed.startsWith("[") && trimmed.endsWith("]")) {
             try {
                 val mapper = com.fasterxml.jackson.databind.ObjectMapper()
                 val jsonNode = mapper.readTree(trimmed)
-                if (jsonNode.isArray && jsonNode.size() >= 2) {
+                if (jsonNode.isArray && jsonNode.size() >= 2 && jsonNode.get(0).isTextual) {
                     val rpcMethod = jsonNode.get(0).asText()
-                    val rpcParams = jsonNode.get(1).asText()
                     if (rpcMethod != null && rpcMethod.contains(".")) {
-                        val cleanParams = unescapeString(rpcParams)
+                        val rpcParams = jsonNode.get(1).let {
+                            if (it.isTextual) unescapeString(it.asText()) else mapper.writeValueAsString(it)
+                        }
                         val newItem = RequestItem(
                             title = rpcMethod.substringAfterLast("."),
                             method = rpcMethod,
-                            data = cleanParams
+                            data = rpcParams
                         )
                         add(newItem)
                         return Pair(1, 0)
@@ -271,23 +281,21 @@ class RpcDebugViewModel : ViewModel() {
         try {
             val mapper = com.fasterxml.jackson.databind.ObjectMapper()
 
-            // 尝试解析为 JSON 数组
+            // 尝试提取所有 JSON 单元（支持数组、状态机切分或单个对象）
             val jsonObjects = mutableListOf<String>()
 
             if (trimmed.startsWith("[") && trimmed.endsWith("]")) {
-                // 如果是 JSON 数组格式
                 try {
                     val array = mapper.readTree(trimmed)
                     if (array.isArray) {
                         array.forEach { jsonObjects.add(it.toString()) }
                     }
                 } catch (e: Exception) {
-                    // 不是有效的 JSON 数组，尝试其他方式
+                    // 不是标准数组，继续尝试
                 }
             }
 
             if (jsonObjects.isEmpty()) {
-                // 尝试按 "}{" 分割（多个 JSON 对象连在一起）
                 val parts = trimmed.split("}{")
                 if (parts.size > 1) {
                     parts.forEachIndexed { index, part ->
@@ -299,35 +307,20 @@ class RpcDebugViewModel : ViewModel() {
                         jsonObjects.add(fixed)
                     }
                 } else {
-                    // 使用状态机解析多个 JSON 对象
-                    // 支持：多个换行、逗号分隔、任意空白字符分隔
                     val extracted = extractJsonObjects(trimmed)
-                    if (extracted.size > 1) {
-                        // 找到多个 JSON 对象
+                    if (extracted.isNotEmpty()) {
                         jsonObjects.addAll(extracted)
                     } else {
-                        // 单个 JSON 对象
                         jsonObjects.add(trimmed)
                     }
                 }
             }
 
-            // 解析每个 JSON 对象
+            // 逐个解析 JSON
             jsonObjects.forEach { jsonStr ->
                 try {
                     val jsonNode = mapper.readTree(jsonStr)
-
-                    // 判断是哪种格式
-                    val item = if (jsonNode.has("Name") || jsonNode.has("methodName")) {
-                        // 新格式
-                        val importFormat = mapper.treeToValue(jsonNode, fansirsqi.xposed.sesame.ui.extra.ImportRequestFormat::class.java)
-                        importFormat.toRequestItem()
-                    } else if (jsonNode.has("title") && jsonNode.has("method")) {
-                        // 现有格式
-                        mapper.treeToValue(jsonNode, RequestItem::class.java)
-                    } else {
-                        null
-                    }
+                    val item = parseJsonNodeToRequestItem(jsonNode, mapper)
 
                     if (item != null) {
                         add(item)
@@ -340,12 +333,115 @@ class RpcDebugViewModel : ViewModel() {
                     failCount++
                 }
             }
+
+            // 兜底：如果完全没有成功项，但整个输入是一个合法的纯 JSON（数组或对象），作为纯参数导入
+            if (successCount == 0 && jsonObjects.size <= 1) {
+                try {
+                    val jsonNode = mapper.readTree(trimmed)
+                    if (jsonNode.isArray || jsonNode.isObject) {
+                        val pureData = mapper.writeValueAsString(jsonNode)
+                        val fallbackItem = RequestItem(
+                            title = "导入参数",
+                            method = "",
+                            data = pureData
+                        )
+                        add(fallbackItem)
+                        return Pair(1, 0)
+                    }
+                } catch (ignored: Exception) {
+                }
+            }
         } catch (e: Exception) {
             android.util.Log.e("RpcDebugViewModel", "导入失败: ${e.message}")
             failCount++
         }
 
         return Pair(successCount, failCount)
+    }
+
+    /**
+     * 智能从 JsonNode 构造 RequestItem，兼容格式 1、格式 2 以及各种大小写别名
+     */
+    private fun parseJsonNodeToRequestItem(
+        jsonNode: com.fasterxml.jackson.databind.JsonNode,
+        mapper: com.fasterxml.jackson.databind.ObjectMapper
+    ): RequestItem? {
+        if (!jsonNode.isObject) return null
+
+        // 1. 提取方法名
+        val method = listOf("method", "methodName", "operationType", "rpcMethod", "Method", "operation")
+            .firstNotNullOfOrNull { key -> jsonNode.get(key)?.asText()?.takeIf { it.isNotBlank() } }
+
+        // 2. 提取标题
+        var title = listOf("title", "Name", "name", "Title")
+            .firstNotNullOfOrNull { key -> jsonNode.get(key)?.asText()?.takeIf { it.isNotBlank() } }
+
+        // 若无标题但有方法名，取方法名末尾
+        if (title.isNullOrBlank() && !method.isNullOrBlank()) {
+            title = method.substringAfterLast(".")
+        }
+
+        // 3. 提取描述
+        val description = listOf("description", "Description", "desc", "Desc")
+            .firstNotNullOfOrNull { key -> jsonNode.get(key)?.asText() } ?: ""
+
+        // 4. 提取数据
+        val dataNode = listOf("data", "requestData", "params", "Data", "Params", "request")
+            .firstNotNullOfOrNull { key -> jsonNode.get(key) }
+
+        var dataStr = when {
+            dataNode == null -> "[]"
+            dataNode.isTextual -> dataNode.asText()
+            else -> try { mapper.writeValueAsString(dataNode) } catch (e: Exception) { dataNode.toString() }
+        }
+
+        if (shouldAutoUnescape(dataStr)) {
+            dataStr = unescapeString(dataStr)
+        }
+
+        // 校验：至少要有方法名或标题
+        if (method.isNullOrBlank() && title.isNullOrBlank()) {
+            return null
+        }
+
+        return RequestItem(
+            id = jsonNode.get("id")?.asInt() ?: 0,
+            title = title ?: (method ?: "未命名请求"),
+            description = description,
+            method = method ?: "",
+            data = dataStr,
+            expanded = jsonNode.get("expanded")?.asBoolean() ?: false
+        )
+    }
+
+    /**
+     * 提取文本中第一个完整的 JSON 对象或数组字符串（支持配对括号和转义字符串）
+     */
+    private fun extractFirstCompleteJson(text: String): String? {
+        var depth = 0
+        var inString = false
+        var escapeNext = false
+        var startIndex = -1
+
+        for (i in text.indices) {
+            val char = text[i]
+            when {
+                escapeNext -> escapeNext = false
+                char == '\\' && inString -> escapeNext = true
+                char == '"' && !escapeNext -> inString = !inString
+                (char == '{' || char == '[') && !inString -> {
+                    if (depth == 0) startIndex = i
+                    depth++
+                }
+                (char == '}' || char == ']') && !inString -> {
+                    depth--
+                    if (depth == 0 && startIndex != -1) {
+                        return text.substring(startIndex, i + 1)
+                    }
+                }
+            }
+        }
+        return null
     }
 
     /**
