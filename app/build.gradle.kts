@@ -118,15 +118,24 @@ android {
         getByName("debug") {
         }
         val keyFile = rootProject.file("key/ycKey.jks")
-        val envStorePass = System.getenv("ANDROID_SIGNING_PASSWORD")
-        val envKeyAlias = System.getenv("ANDROID_KEY_ALIAS")
-        val envKeyPass = System.getenv("ANDROID_KEY_PASSWORD")
-        if (keyFile.exists() && !envStorePass.isNullOrBlank() && !envKeyAlias.isNullOrBlank() && !envKeyPass.isNullOrBlank()) {
+        val localProps = Properties().apply {
+            val propFile = rootProject.file("local.properties")
+            if (propFile.exists()) {
+                propFile.inputStream().use { load(it) }
+            }
+        }
+
+        // CI 环境变量优先；本地打包从 local.properties 读取
+        val storePass = System.getenv("ANDROID_SIGNING_PASSWORD") ?: localProps.getProperty("ANDROID_SIGNING_PASSWORD")
+        val keyAlias = System.getenv("ANDROID_KEY_ALIAS") ?: localProps.getProperty("ANDROID_KEY_ALIAS")
+        val keyPass = System.getenv("ANDROID_KEY_PASSWORD") ?: localProps.getProperty("ANDROID_KEY_PASSWORD")
+
+        if (keyFile.exists() && !storePass.isNullOrBlank() && !keyAlias.isNullOrBlank() && !keyPass.isNullOrBlank()) {
             create("release") {
                 storeFile = keyFile
-                storePassword = envStorePass
-                keyAlias = envKeyAlias
-                keyPassword = envKeyPass
+                storePassword = storePass
+                this.keyAlias = keyAlias
+                keyPassword = keyPass
                 enableV1Signing = true
                 enableV2Signing = true
             }

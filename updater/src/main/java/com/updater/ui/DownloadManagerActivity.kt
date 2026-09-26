@@ -73,6 +73,7 @@ import com.updater.db.DownloadTask
 import com.updater.download.ForegroundDownloadService
 import com.updater.model.UpdateInfo
 import com.updater.model.UpdatePackage
+import com.updater.model.UpdateSourceType
 import com.updater.utils.ApkCleanupManager
 import com.updater.utils.ApkInstaller
 import com.updater.utils.MarkdownUtils
@@ -321,7 +322,15 @@ class DownloadManagerActivity : AppCompatActivity() {
         return reconcileTaskFileState(task)
     }
 
-    private fun reconcileTaskFileState(task: DownloadTask): DownloadTask {
+    private fun reconcileTaskFileState(rawTask: DownloadTask): DownloadTask {
+        val sanitizedUrl = getAbsoluteUrl(rawTask.url)
+        val task = if (rawTask.url != sanitizedUrl) {
+            val updated = rawTask.copy(url = sanitizedUrl)
+            dbHelper.insertOrUpdateTask(updated)
+            updated
+        } else {
+            rawTask
+        }
         val file = File(task.savePath)
         return if (file.exists() && file.length() > 0) {
             val lengthMatches = (task.totalBytes <= 0 || file.length() >= task.totalBytes)
@@ -549,17 +558,8 @@ class DownloadManagerActivity : AppCompatActivity() {
     }
 
     private fun getAbsoluteUrl(relativeUrl: String): String {
-        // GitHub Release 直链加速：若配置了代理（如自建 CF Worker gh-proxy 或 ghproxy.net），
-        // 改写为业界通用的 "代理域名/原始完整URL" 格式，由 Worker 流式转发下载体
-        var proxyHost = try {
-            configManager.githubProxyHost.trim().trimEnd('/')
-        } catch (_: Throwable) { "" }
-        if (proxyHost.isNotEmpty() && !proxyHost.startsWith("http://", ignoreCase = true) && !proxyHost.startsWith("https://", ignoreCase = true)) {
-            proxyHost = "https://$proxyHost"
-        }
-
-        // 提取真实的 GitHub 原目标地址（避免被重复拼接或嵌套代理）
-        val cleanRelative = if (relativeUrl.contains("/https://github.com/", ignoreCase = true)) {
+        // 1. 提取真实的原始地址（防止被重复拼接代理）
+        val cleanUrl = if (relativeUrl.contains("/https://github.com/", ignoreCase = true)) {
             relativeUrl.substring(relativeUrl.indexOf("https://github.com/", ignoreCase = true))
         } else if (relativeUrl.contains("/http://github.com/", ignoreCase = true)) {
             "https://" + relativeUrl.substring(relativeUrl.indexOf("http://github.com/", ignoreCase = true) + "http://".length)
@@ -567,33 +567,69 @@ class DownloadManagerActivity : AppCompatActivity() {
             relativeUrl
         }
 
-        if (proxyHost.isNotEmpty() && cleanRelative.startsWith("https://github.com/", ignoreCase = true)) {
-            return "$proxyHost/$cleanRelative"
-        }
-        if (cleanRelative.startsWith("https://github.com/", ignoreCase = true)) {
-            return cleanRelative
+        // 2. 智能纠偏：若历史地址被错误拼接为 GitHub 域名 + /raw/ 或 /apk/ 相对路径（即受到污染的旧任务地址）
+        // GitHub Releases 不会以 /raw/ 或 /apk/ 提供安装包，该路径 100% 属于网盘源，剥离后重新按源解析
+        val isPoisonedGithubUrl = cleanUrl.contains("github.com", ignoreCase = true) &&
+                (cleanUrl.contains("/raw/", ignoreCase = true) || cleanUrl.contains("/apk/", ignoreCase = true))
+
+        val resolvedUrl = if (isPoisonedGithubUrl) {
+            if (cleanUrl.contains("/raw/", ignoreCase = true)) {
+                "/raw/" + cleanUrl.substringAfter("/raw/")
+            } else if (cleanUrl.contains("/apk/", ignoreCase = true)) {
+                "/apk/" + cleanUrl.substringAfter("/apk/")
+            } else {
+                "/" + cleanUrl.substringAfter("github.com/").substringAfter("/")
+            }
+        } else {
+            cleanUrl
         }
 
-        val customDownloadHost = intent.getStringExtra("download_host")
-        if (!customDownloadHost.isNullOrEmpty()) {
-            val host = customDownloadHost.trimEnd('/')
-            val path = if (relativeUrl.startsWith("http://", ignoreCase = true) || relativeUrl.startsWith("https://", ignoreCase = true)) {
-                try {
-                    val uri = java.net.URI(relativeUrl)
+        val isGitHubUrl = !isPoisonedGithubUrl && resolvedUrl.startsWith("https://github.com/", ignoreCase = true)
+
+        // 3. 核心原则：只要不是 GitHub 链接，绝对不使用任何 GitHub 代理！
+        if (isGitHubUrl) {
+            var proxyHost = try {
+                configManager.githubProxyHost.trim().trimEnd('/')
+            } catch (_: Throwable) { "" }
+            if (proxyHost.isNotEmpty() && !proxyHost.startsWith("http://", ignoreCase = true) && !proxyHost.startsWith("https://", ignoreCase = true)) {
+                proxyHost = "https://$proxyHost"
+            }
+            return if (proxyHost.isNotEmpty()) "$proxyHost/$resolvedUrl" else resolvedUrl
+        }
+
+        // 4. 非 GitHub 链接（普通直链、自建网盘等）：如果已经是完整 http(s) 地址，直接使用，绝不走 GitHub 代理
+        if (resolvedUrl.startsWith("http://", ignoreCase = true) || resolvedUrl.startsWith("https://", ignoreCase = true)) {
+            val customDownloadHost = intent.getStringExtra("download_host")
+                ?.takeIf { !it.contains("github.com", ignoreCase = true) && it.isNotBlank() }
+                ?: configManager.getSources().find { it.type == UpdateSourceType.CLOUDFLARE_R2 }?.downloadHost?.takeIf { it.isNotBlank() }
+
+            if (!customDownloadHost.isNullOrEmpty()) {
+                val host = customDownloadHost.trimEnd('/')
+                val path = try {
+                    val uri = java.net.URI(resolvedUrl)
                     uri.rawPath + if (uri.rawQuery != null) "?${uri.rawQuery}" else ""
                 } catch (e: Exception) {
-                    "/" + relativeUrl.substringAfter("://").substringAfter("/", "")
+                    "/" + resolvedUrl.substringAfter("://").substringAfter("/", "")
                 }
-            } else {
-                "/" + relativeUrl.removePrefix("/")
+                return "$host$path"
             }
-            return "$host$path"
+            return resolvedUrl
         }
 
-        if (relativeUrl.startsWith("http", ignoreCase = true)) return relativeUrl
-        val baseHost = intent.getStringExtra("base_host") ?: "https://cicha.de5.net"
-        val host = baseHost.trimEnd('/')
-        return "$host/" + relativeUrl.removePrefix("/")
+        // 5. 若仍为相对路径（如历史缓存数据）：动态从已配置的更新源中查找，严禁写死任何硬编码域名
+        val dynamicSource = configManager.getSources().find { it.type == UpdateSourceType.CLOUDFLARE_R2 }
+            ?: configManager.getSelectedSource()
+        val baseHost = intent.getStringExtra("base_host")
+            ?.takeIf { !it.contains("github.com", ignoreCase = true) && it.isNotBlank() }
+            ?: dynamicSource?.downloadHost?.takeIf { it.isNotBlank() }
+            ?: dynamicSource?.url?.takeIf { !it.contains("github.com", ignoreCase = true) && it.isNotBlank() }
+            ?: ""
+
+        return if (baseHost.isNotEmpty()) {
+            "${baseHost.trimEnd('/')}/" + resolvedUrl.removePrefix("/")
+        } else {
+            resolvedUrl
+        }
     }
 
     private fun formatSize(size: Long): String {

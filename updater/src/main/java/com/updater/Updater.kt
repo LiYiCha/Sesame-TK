@@ -416,6 +416,13 @@ class Updater private constructor(
                             if (pkgTime <= 0L) {
                                 pkgTime = lastUpdated
                             }
+                            val rawUrl = pkgJson.optString("downloadUrl")
+                            val fullDownloadUrl = if (rawUrl.startsWith("http://", ignoreCase = true) || rawUrl.startsWith("https://", ignoreCase = true)) {
+                                rawUrl
+                            } else {
+                                val host = (source.downloadHost?.takeIf { it.isNotBlank() } ?: baseHost).trimEnd('/')
+                                "$host/" + rawUrl.removePrefix("/")
+                            }
                             packagesList.add(
                                 UpdatePackage(
                                     packageId = pkgJson.optString("packageId"),
@@ -423,7 +430,7 @@ class Updater private constructor(
                                     versionName = pkgJson.optString("versionName"),
                                     versionCode = pkgJson.optInt("versionCode"),
                                     description = pkgJson.optString("description"),
-                                    downloadUrl = pkgJson.optString("downloadUrl"),
+                                    downloadUrl = fullDownloadUrl,
                                     apkSize = pkgJson.optLong("apkSize"),
                                     apkMd5 = pkgJson.optString("apkMd5"),
                                     updatedAt = pkgTime
@@ -436,6 +443,12 @@ class Updater private constructor(
                     if (packagesList.isEmpty()) {
                         val singleUrl = json.optString("downloadUrl")
                         if (singleUrl.isNotEmpty()) {
+                            val fullSingleUrl = if (singleUrl.startsWith("http://", ignoreCase = true) || singleUrl.startsWith("https://", ignoreCase = true)) {
+                                singleUrl
+                            } else {
+                                val host = (source.downloadHost?.takeIf { it.isNotBlank() } ?: baseHost).trimEnd('/')
+                                "$host/" + singleUrl.removePrefix("/")
+                            }
                             packagesList.add(
                                 UpdatePackage(
                                     packageId = "main",
@@ -443,7 +456,7 @@ class Updater private constructor(
                                     versionName = latestVersionName,
                                     versionCode = latestVersionCode,
                                     description = "标准版安装包",
-                                    downloadUrl = singleUrl,
+                                    downloadUrl = fullSingleUrl,
                                     apkSize = json.optLong("apkSize", 0L),
                                     apkMd5 = json.optString("apkMd5", ""),
                                     updatedAt = lastUpdated
@@ -772,10 +785,18 @@ class Updater private constructor(
         }
 
         val currentSource = configManager.getSelectedSource()
+        val cfSource = if (currentSource?.type == UpdateSourceType.CLOUDFLARE_R2) {
+            currentSource
+        } else {
+            configManager.getSources().find { it.type == UpdateSourceType.CLOUDFLARE_R2 }
+        }
+
         val intent = Intent(context, DownloadManagerActivity::class.java).apply {
-            putExtra("base_host", currentSource?.url ?: "")
-            if (!currentSource?.downloadHost.isNullOrEmpty()) {
-                putExtra("download_host", currentSource?.downloadHost)
+            if (!cfSource?.url.isNullOrEmpty()) {
+                putExtra("base_host", cfSource?.url)
+            }
+            if (!cfSource?.downloadHost.isNullOrEmpty()) {
+                putExtra("download_host", cfSource?.downloadHost)
             }
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         }
