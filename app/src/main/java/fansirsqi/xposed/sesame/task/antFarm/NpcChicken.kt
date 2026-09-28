@@ -91,7 +91,7 @@ class NpcChicken {
                 }
 
                 val taskSceneCode = match.optString("taskSceneCode")
-                val bizRewardName = match.optString("bizRewardName")
+                match.optString("bizRewardName")
                 val bizRewardThreshold = match.optDouble("bizRewardThreshold", 0.0)
                 val directBizRewardAfterHire = match.optDouble("directBizRewardAfterHire", 0.0)
                 val hireDuration = match.optInt("hireDuration")
@@ -193,7 +193,7 @@ class NpcChicken {
                 val farmTaskList = taskJson.getJSONArray("farmTaskList")
                 for (i in 0 until farmTaskList.length()) {
                     val taskListJson = farmTaskList.getJSONObject(i)
-                    val awardCount = taskListJson.optInt("awardCount")
+                    taskListJson.optInt("awardCount")
                     val bizKey = taskListJson.optString("bizKey")
                     val taskStatus = taskListJson.optString("taskStatus")
                     val title = taskListJson.optString("title")

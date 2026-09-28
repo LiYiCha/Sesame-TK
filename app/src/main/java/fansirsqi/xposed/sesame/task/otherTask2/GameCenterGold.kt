@@ -133,7 +133,7 @@ class GameCenterGold : BaseCommTask() {
     /**
      * 1. 访问首页 RPC
      */
-    private fun queryHomePage(): String? {
+    private fun queryHomePage(): String {
         val method = "com.alipay.gamecenteruprod.biz.rpc.p2e.queryHomePage"
         val params = "[{\"canAddHome\":false,\"deviceLevel\":\"high\",\"screenType\":10,\"source\":\"ch_appcenter__chsub_9patch\",\"unityDeviceLevel\":\"high\"}]"
         return RequestManager.requestString(method, params)
@@ -142,7 +142,7 @@ class GameCenterGold : BaseCommTask() {
     /**
      * 2. 获取任务列表 RPC
      */
-    private fun queryTaskList(): String? {
+    private fun queryTaskList(): String {
         val method = "com.alipay.gamecenteruprod.biz.rpc.p2e.queryTaskList"
         val sessionId = System.currentTimeMillis().toString()
         val params = "[{\"deviceLevel\":\"high\",\"panelLaunchableCheckMap\":{\"SET_HEAD_TASK\":false},\"sessionId\":\"$sessionId\",\"setHeadPanelCheck\":false,\"source\":\"ch_appcenter__chsub_9patch\",\"unityDeviceLevel\":\"high\"}]"
@@ -173,7 +173,7 @@ class GameCenterGold : BaseCommTask() {
     /**
      * 4. 报名浏览任务
      */
-    private fun platformTaskSignUp(taskId: String, taskToken: String, actionChannel: String): String? {
+    private fun platformTaskSignUp(taskId: String, taskToken: String, actionChannel: String): String {
         val method = "com.alipay.gamecenteruprod.biz.rpc.platformTaskSignUp"
         val params = "[{\"actionChannel\":\"$actionChannel\",\"activityId\":\"P2E_PLATFORM_TASK\",\"source\":\"ch_appcenter__chsub_9patch\",\"taskId\":\"$taskId\",\"taskToken\":\"$taskToken\"}]"
         return RequestManager.requestString(method, params)
@@ -182,7 +182,7 @@ class GameCenterGold : BaseCommTask() {
     /**
      * 5. 完成浏览任务
      */
-    private fun platformTaskComplete(taskId: String, taskToken: String, actionChannel: String): String? {
+    private fun platformTaskComplete(taskId: String, taskToken: String, actionChannel: String): String {
         val method = "com.alipay.gamecenteruprod.biz.rpc.platformTaskComplete"
         val params = "[{\"actionChannel\":\"$actionChannel\",\"activityId\":\"P2E_PLATFORM_TASK\",\"source\":\"ch_appcenter__chsub_9patch\",\"taskId\":\"$taskId\",\"taskToken\":\"$taskToken\"}]"
         return RequestManager.requestString(method, params)
@@ -191,7 +191,7 @@ class GameCenterGold : BaseCommTask() {
     /**
      * 6. 领取浏览任务奖励
      */
-    private fun gameP2eTaskReceive(taskId: String, taskToken: String): String? {
+    private fun gameP2eTaskReceive(taskId: String, taskToken: String): String {
         val method = "com.alipay.gamecenteruprod.biz.rpc.p2e.gameP2eTaskReceive"
         val params = "[{\"actionChannel\":\"taskList\",\"activityId\":\"P2E_PLATFORM_TASK\",\"oriChInfo\":\"ch_appcenter__chsub_9patch\",\"source\":\"ch_appcenter__chsub_9patch\",\"taskId\":\"$taskId\",\"taskToken\":\"$taskToken\",\"taskType\":\"PLATFORM_TRAN_TASK\"}]"
         return RequestManager.requestString(method, params)
@@ -200,7 +200,7 @@ class GameCenterGold : BaseCommTask() {
     /**
      * 6b. 领取阶段里程碑任务奖励
      */
-    private fun receiveTaskMileStoneReward(taskMileStoneId: String, outBizNo: String, sign: String): String? {
+    private fun receiveTaskMileStoneReward(taskMileStoneId: String, outBizNo: String, sign: String): String {
         val method = "com.alipay.gamecenteruprod.biz.rpc.p2e.receiveTaskMileStoneReward"
         val params = "[{\"__git\":\"9e159d58cce04c13a\",\"oriChInfo\":\"ch_appcenter__chsub_9patch\",\"outBizNo\":\"$outBizNo\",\"sign\":\"$sign\",\"source\":\"ch_appcenter__chsub_9patch\",\"taskMileStoneId\":\"$taskMileStoneId\"}]"
         return RequestManager.requestString(method, params)
@@ -209,7 +209,7 @@ class GameCenterGold : BaseCommTask() {
     /**
      * 7. 60秒游戏咨询 (启动游戏)
      */
-    private fun gameP2eFloatingBallConsult(gameId: String, gameModuleId: String): String? {
+    private fun gameP2eFloatingBallConsult(gameId: String, gameModuleId: String): String {
         val method = "com.alipay.gamecenteruprod.biz.rpc.p2e.gameP2eFloatingBallConsult"
         val params = "[{\"__git\":\"9e159d58cce04c13a\",\"gameId\":\"$gameId\",\"gameModuleId\":\"$gameModuleId\",\"source\":\"ch_appcenter__chsub_9patch\",\"trafficDriverId\":\"\"}]"
         return RequestManager.requestString(method, params)
@@ -595,7 +595,7 @@ class GameCenterGold : BaseCommTask() {
     /**
      * 8. 签到 RPC
      */
-    private fun signIn(date: String, index: Int, signSequenceId: String): String? {
+    private fun signIn(date: String, index: Int, signSequenceId: String): String {
         val method = "com.alipay.gamecenteruprod.biz.rpc.p2e.signIn"
         val params = "[{\"__git\":\"9e159d58cce04c13a\",\"date\":\"$date\",\"index\":$index,\"signSequenceId\":\"$signSequenceId\",\"source\":\"ch_appcenter__chsub_9patch\"}]"
         return RequestManager.requestString(method, params)
@@ -604,7 +604,7 @@ class GameCenterGold : BaseCommTask() {
     /**
      * 8b. 金币抽奖/重新抽奖 RPC
      */
-    private fun drawGold(): String? {
+    private fun drawGold(): String {
         val method = "com.alipay.gamecenteruprod.biz.rpc.p2e.drawGold"
         val params = "[{\"__git\":\"9e159d58cce04c13a\"}]"
         return RequestManager.requestString(method, params)
@@ -668,7 +668,7 @@ class GameCenterGold : BaseCommTask() {
     /**
      * 12. 60秒游戏结算 RPC
      */
-    private fun gameP2eFloatingBallComplete(gameId: String, gameModuleId: String): String? {
+    private fun gameP2eFloatingBallComplete(gameId: String, gameModuleId: String): String {
         val method = "com.alipay.gamecenteruprod.biz.rpc.p2e.gameP2eFloatingBallComplete"
         val params = "[{\"floatingBallTypeList\":[\"P2E_GAME_BROWSE_TASK_FLOATING_BALL\"],\"gameId\":\"$gameId\",\"gameModuleId\":\"$gameModuleId\",\"oriChInfo\":\"ch_appcenter__chsub_9patch\",\"source\":\"ch_appcenter__chsub_9patch\",\"trafficDriverId\":\"\"}]"
         return RequestManager.requestString(method, params)

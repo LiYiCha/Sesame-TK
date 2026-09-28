@@ -17,8 +17,8 @@ import fansirsqi.xposed.sesame.util.RandomUtil;
 import fansirsqi.xposed.sesame.util.TimeUtil;
 
 public class JobRight extends BaseCommTask{
-    private static String method = "alipay.imasp.program.programInvoke";
-    private String displayName = "就业|积分💼";
+    private static final String method = "alipay.imasp.program.programInvoke";
+    private final String displayName = "就业|积分💼";
     
     // 静态锁对象，确保所有JobRight实例的handle方法同步执行
     private static final Object HANDLE_LOCK = new Object();

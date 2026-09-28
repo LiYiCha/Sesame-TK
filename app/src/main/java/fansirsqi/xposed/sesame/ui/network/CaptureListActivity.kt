@@ -29,7 +29,7 @@ class CaptureListActivity : BaseActivity() {
         captureReceiver = receiver
         val filter = android.content.IntentFilter("fansirsqi.xposed.sesame.NEW_CAPTURE")
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
-            registerReceiver(receiver, filter, android.content.Context.RECEIVER_EXPORTED)
+            registerReceiver(receiver, filter, RECEIVER_EXPORTED)
         } else {
             registerReceiver(receiver, filter)
         }

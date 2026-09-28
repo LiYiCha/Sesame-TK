@@ -347,7 +347,7 @@ private fun CodeBlock(lines: List<String>, base64Data: String? = null, isRpc: Bo
 
     Surface(color = MaterialTheme.colorScheme.surfaceVariant, shape = RoundedCornerShape(8.dp), modifier = Modifier.fillMaxWidth()) {
         Column {
-            Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)) {
                 if (base64Data != null) {
                     TabRow(selectedTabIndex = viewMode, containerColor = Color.Transparent, modifier = Modifier.width(120.dp).height(32.dp), divider = {}) {
                         Tab(selected = viewMode == 0, onClick = { viewMode = 0 }) { Text("文本", fontSize = 10.sp) }

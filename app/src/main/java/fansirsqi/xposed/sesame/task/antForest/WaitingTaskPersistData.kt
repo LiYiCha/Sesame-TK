@@ -233,8 +233,8 @@ object EnergyWaitingPersistence {
                 if (ForestUtil.shouldSkipWaitingDueToProtection(userHomeObj, task.produceTime)) {
                     val protectionEndTime = ForestUtil.getProtectionEndTime(userHomeObj)
                     val timeDifference = protectionEndTime - task.produceTime
-                    val hours = timeDifference / (1000 * 60 * 60)
-                    val minutes = (timeDifference % (1000 * 60 * 60)) / (1000 * 60)
+                    timeDifference / (1000 * 60 * 60)
+                    (timeDifference % (1000 * 60 * 60)) / (1000 * 60)
 
 //                    Log.runtime(
 //                        TAG,

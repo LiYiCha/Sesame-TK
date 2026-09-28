@@ -2059,8 +2059,8 @@ class AntMember : ModelTask() {
     private fun processBeanBrowseTask(task: JSONObject) {
         try {
             val taskProcessStatus = task.optString("taskProcessStatus", "")
-            val taskMainType = task.optString("taskMainType", "")
-            val taskType = task.optString("taskType", "")
+            task.optString("taskMainType", "")
+            task.optString("taskType", "")
             val appletId = task.optString("appletId", "")
             val center = task.optString("taskCenterId", "")
             val orderKey = "$appletId|$center"
@@ -2690,7 +2690,7 @@ class AntMember : ModelTask() {
             val templateId = timeLimitedTaskVO.getString("templateId") // 动态获取
             val state = timeLimitedTaskVO.optInt("state", 0) // 1: 可领取, 2: 未到时间
             val tomorrow = timeLimitedTaskVO.optBoolean("tomorrow", false)
-            val rewardAmount = timeLimitedTaskVO.optInt("rewardAmount", 0)
+            timeLimitedTaskVO.optInt("rewardAmount", 0)
 //            Log.runtime(
 //                TAG, "芝麻炼金⚗️[任务检查] 任务=$taskName 状态=$state 奖励=$rewardAmount 明天=$tomorrow"
 //            )
@@ -3438,7 +3438,7 @@ class AntMember : ModelTask() {
         res.optBoolean("success") && res.optInt("resultCode", -1) == 200
 
     companion object {
-        private val TAG: String = AntMember::class.java.getSimpleName()
+        private val TAG: String = AntMember::class.java.simpleName
 
         /**
          * 查询 + 自动领取可领取球（精简一行输出领取信息）
@@ -4424,7 +4424,7 @@ class AntMember : ModelTask() {
 
             // 检查结果
             if (ResChecker.checkRes(TAG, jo)) {
-                val recordId = jo.optJSONObject("data")?.optString("awardRecordId", "")
+                jo.optJSONObject("data")?.optString("awardRecordId", "")
                 Log.other("芝麻粒兑换🛒[成功] $name #消耗${point}粒")
                 return true
             } else {

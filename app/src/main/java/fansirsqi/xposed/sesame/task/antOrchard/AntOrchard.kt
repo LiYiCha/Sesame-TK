@@ -97,10 +97,7 @@ class AntOrchard : ModelTask() {
     }
 
     override fun check(): Boolean {
-        if(!super.check()) return false
-        else {
-            return true
-        }
+        return super.check()
     }
 
     override suspend fun runSuspend() {
@@ -400,7 +397,7 @@ class AntOrchard : ModelTask() {
                     }
                     Status.setFlagToday(STATUS_MONEY_TREE_COLLECTED)
                 } else {
-                    Log.runtime(TAG, "摇钱树奖励领取失败: ${json.toString()}")
+                    Log.runtime(TAG, "摇钱树奖励领取失败: $json")
                 }
 
                 try {
@@ -579,7 +576,7 @@ class AntOrchard : ModelTask() {
                 val actionType = task.optString("actionType")
                 val sceneCode = task.optString("sceneCode")
                 val taskId = task.optString("taskId")
-                val groupId = task.optString("groupId")
+                task.optString("groupId")
 
                 var title = if (task.has("taskDisplayConfig")) {
                     task.getJSONObject("taskDisplayConfig").optString("title", "未知任务")
@@ -975,7 +972,7 @@ class AntOrchard : ModelTask() {
 
             for (i in 0 until childTasks.length()) {
                 val child = childTasks.optJSONObject(i) ?: continue
-                val childTaskId = child.optString("taskId", "未知ID")
+                child.optString("taskId", "未知ID")
                 val actionType = child.optString("actionType")
                 val groupId = child.optString("groupId")
                 val taskStatus = child.optString("taskStatus")

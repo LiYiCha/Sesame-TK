@@ -158,7 +158,7 @@ class MainActivity : BaseActivity() {
         }
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            registerReceiver(broadcastReceiver, intentFilter, Context.RECEIVER_EXPORTED)
+            registerReceiver(broadcastReceiver, intentFilter, RECEIVER_EXPORTED)
         } else {
             registerReceiver(broadcastReceiver, intentFilter)
         }
@@ -267,7 +267,7 @@ class MainActivity : BaseActivity() {
     private fun checkAlipayRunningStatus() {
         try {
             // 检查支付宝服务是否在运行
-            val am = getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
+            val am = getSystemService(ACTIVITY_SERVICE) as ActivityManager
             val runningServices = am.getRunningServices(Int.MAX_VALUE)
             var isAlipayRunning = false
 
@@ -290,8 +290,7 @@ class MainActivity : BaseActivity() {
 
     fun onClick(v: View) {
         var data = "file://"
-        val id = v.id
-        when (id) {
+        when (val id = v.id) {
             R.id.btn_forest_log -> {
                 data += Files.getForestLogFile().absolutePath
             }
@@ -322,7 +321,7 @@ class MainActivity : BaseActivity() {
 
         }
         val it = Intent(this, LogViewerComposeActivity::class.java)
-        it.putExtra("canClear", true);
+        it.putExtra("canClear", true)
         it.data = data.toUri()
         startActivity(it)
     }
@@ -331,7 +330,7 @@ class MainActivity : BaseActivity() {
         try {
             // 使用清单文件中定义的完整别名
             val aliasComponent = ComponentName(this, General.MODULE_PACKAGE_UI_ICON)
-            val state = packageManager.getComponentEnabledSetting(aliasComponent)
+            packageManager.getComponentEnabledSetting(aliasComponent)
             // 注意状态判断逻辑修正
 //        val isEnabled = state != PackageManager.COMPONENT_ENABLED_STATE_DISABLED
 //        menu.add(0, 1, 1, R.string.hide_the_application_icon).setCheckable(true).isChecked = !isEnabled
@@ -434,7 +433,7 @@ class MainActivity : BaseActivity() {
 
     private fun selectSettingUid() {
         val latch = CountDownLatch(1)
-        val dialog = StringDialog.showSelectionDialog(this, "📌 请选择配置", userNameArray, { dialog1: DialogInterface, which: Int ->
+        StringDialog.showSelectionDialog(this, "📌 请选择配置", userNameArray, { dialog1: DialogInterface, which: Int ->
             goSettingActivity(which)
             dialog1.dismiss()
             latch.countDown()

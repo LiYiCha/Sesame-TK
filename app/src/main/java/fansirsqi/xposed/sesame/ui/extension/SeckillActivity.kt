@@ -279,7 +279,7 @@ class SeckillActivity : ComponentActivity() {
             addAction("fansirsqi.xposed.sesame.queryBenefitDetail.success")
         }
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
-            registerReceiver(receiver, filter, Context.RECEIVER_EXPORTED)
+            registerReceiver(receiver, filter, RECEIVER_EXPORTED)
         } else {
             registerReceiver(receiver, filter)
         }

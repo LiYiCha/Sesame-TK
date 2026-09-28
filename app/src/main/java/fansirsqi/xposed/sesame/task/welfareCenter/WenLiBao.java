@@ -42,7 +42,7 @@ public class WenLiBao extends BaseCommTask {
             if (Boolean.TRUE.equals(this.mapHandler.get("wenLiBao"))) {
                 if (!Status.hasFlagToday(CompletedKeyEnum.WenLiBao.name())) {
                     executeWithLogging(() -> {
-                        WelfareCenterRpcCall.doTask("AP13266408", this.TAG, this.displayName);
+                        WelfareCenterRpcCall.doTask("AP13266408", TAG, this.displayName);
                         createRecording();
                     }, "核心任务执行");
 
@@ -110,16 +110,14 @@ public class WenLiBao extends BaseCommTask {
     }
 
     private String buildQueryParams() {
-        return new StringBuilder()
-                .append("\"extInfo\": {},")
-                .append("\"queryStatusEnumList\": [\"")
-                .append(STATUS_ENUMS[0])
-                .append("\",\"")
-                .append(STATUS_ENUMS[1])
-                .append("\"],")
-                .append("\"vrtlType\": ")
-                .append(VRTL_TYPE)
-                .toString();
+        return "\"extInfo\": {}," +
+                "\"queryStatusEnumList\": [\"" +
+                STATUS_ENUMS[0] +
+                "\",\"" +
+                STATUS_ENUMS[1] +
+                "\"]," +
+                "\"vrtlType\": " +
+                VRTL_TYPE;
     }
 
     private String buildDecisionParams(String benefitId) {

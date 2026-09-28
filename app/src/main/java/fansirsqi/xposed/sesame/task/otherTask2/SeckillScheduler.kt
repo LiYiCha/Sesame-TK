@@ -45,9 +45,9 @@ object SeckillScheduler {
             for (i in 0 until ja.length()) {
                 val jo = ja.optJSONObject(i) ?: continue
                 val itemId = jo.optString("itemId")
-                val skuId = jo.optString("skuId", "-1")
-                val points = jo.optInt("points")
-                val timeStr = jo.optString("seckillTime")
+                jo.optString("skuId", "-1")
+                jo.optInt("points")
+                jo.optString("seckillTime")
                 val timeMillis = jo.optLong("timeMillis", 0)
                 val type = jo.optString("type", "H5")
                 val name = jo.optString("name", "未知商品")

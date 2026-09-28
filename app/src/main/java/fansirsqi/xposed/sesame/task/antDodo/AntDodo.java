@@ -494,7 +494,7 @@ public class AntDodo extends ModelTask {
 
                 // 判断是否应该帮助该好友
                 boolean inList = collectToFriendList.getValue().contains(userId);
-                boolean shouldCollect = (collectToFriendType.getValue() == CollectToFriendType.COLLECT) ? inList : !inList;
+                boolean shouldCollect = (collectToFriendType.getValue() == CollectToFriendType.COLLECT) == inList;
 
                 if (!shouldCollect) {
                     continue;

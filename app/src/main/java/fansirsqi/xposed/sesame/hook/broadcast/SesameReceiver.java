@@ -15,6 +15,7 @@ import fansirsqi.xposed.sesame.hook.ExtendHandle;
 import fansirsqi.xposed.sesame.hook.lifecycle.LifecycleManager;
 import fansirsqi.xposed.sesame.hook.rpc.debug.DebugRpc;
 import fansirsqi.xposed.sesame.hook.scheduler.AlarmScheduler;
+import fansirsqi.xposed.sesame.task.otherTask2.SeckillScheduler;
 import fansirsqi.xposed.sesame.util.Log;
 import fansirsqi.xposed.sesame.util.StringUtil;
 import fansirsqi.xposed.sesame.util.maps.UserMap;
@@ -114,7 +115,7 @@ public class SesameReceiver extends BroadcastReceiver {
                     String taskId = intent.getStringExtra("taskId");
                     if (taskId != null) {
                         if (taskId.startsWith("seckill_")) {
-                            fansirsqi.xposed.sesame.task.otherTask2.SeckillScheduler.INSTANCE.executeSeckillById(context, taskId);
+                            SeckillScheduler.executeSeckillById(context, taskId);
                         } else {
                             AlarmScheduler.handleExactAlarmTrigger(taskId);
                             if (taskId.startsWith("WAKEUP_")) {

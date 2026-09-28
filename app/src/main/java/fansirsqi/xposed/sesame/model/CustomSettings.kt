@@ -299,7 +299,7 @@ object CustomSettings {
                     try {
                         val dialogField: Field = ListDialog::class.java.getDeclaredField("listDialog")
                         dialogField.isAccessible = true
-                        val dialog = dialogField.get(null) as? androidx.appcompat.app.AlertDialog
+                        val dialog = dialogField.get(null) as? AlertDialog
                         dialog?.setOnDismissListener { save(uid) }
                     } catch (e: Exception) {
                     }

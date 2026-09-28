@@ -622,7 +622,7 @@ class SesameAlchemy {
                 for (i in 0 until entryList.length()){
                     val entry = entryList.getJSONObject(i)
                     val title = entry.optString("title")
-                    val entryCode = entry.optString("entryCode") //CHECK_IN_TASK
+                    entry.optString("entryCode") //CHECK_IN_TASK
                     if (title.contains("签到")&& entry.optBoolean("showBadge")){
                         //执行签到
                         signIn()

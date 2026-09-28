@@ -574,10 +574,6 @@ class PrivilegeEX : BaseFlashSaleTask(), YouthPrivilegeSupport {
         return wakeUpMinuteBefore
     }
 
-    override fun check(): Boolean {
-        return super.check()
-    }
-
     override fun getFields(): ModelFields {
         // 不再定义任何字段，由 FlashSaleModule 统一管理
         return ModelFields()

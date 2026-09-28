@@ -18,7 +18,7 @@ import java.util.Date
 import java.util.Locale
 
 class EcoProtection : ModelTask() {
-    override fun getName(): String? {
+    override fun getName(): String {
         return "生态保护"
     }
 
@@ -32,7 +32,7 @@ class EcoProtection : ModelTask() {
 
     private var ancientTreeOnlyWeek: BooleanModelField? = null
     private var ancientTreeCityCodeList: SelectModelField? = null
-    public override fun getFields(): ModelFields {
+    override fun getFields(): ModelFields {
         val modelFields = ModelFields()
         modelFields.addField(BooleanModelField("ancientTreeOnlyWeek", "仅星期一、三、五运行保护古树", false).also { ancientTreeOnlyWeek = it })
         modelFields.addField(
@@ -71,7 +71,7 @@ class EcoProtection : ModelTask() {
     }
 
     companion object {
-        private val TAG: String = EcoProtection::class.java.getSimpleName()
+        private val TAG: String = EcoProtection::class.java.simpleName
         private fun ancientTree(ancientTreeCityCodeList: MutableCollection<String>) {
             try {
                 for (cityCode in ancientTreeCityCodeList) {

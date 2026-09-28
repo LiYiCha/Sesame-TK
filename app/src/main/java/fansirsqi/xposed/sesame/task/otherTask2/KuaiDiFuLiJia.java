@@ -16,7 +16,7 @@ import fansirsqi.xposed.sesame.util.TimeUtil;
 
 public class KuaiDiFuLiJia extends MemberNew {
     private static final String TAG = "快递积分任务🎁";
-    private int executeIntervalInt = 2000;
+    private final int executeIntervalInt = 2000;
 
     private void listQuery(String str) {
         String str2 = "listQuery err ";
@@ -45,10 +45,10 @@ public class KuaiDiFuLiJia extends MemberNew {
                 return;
             }
             Log.error(TAG,"查询出错:"+ stringBuilder);
-            TimeUtil.sleep((long) this.executeIntervalInt);
+            TimeUtil.sleep(this.executeIntervalInt);
         } catch (Throwable th) {
             Log.error(TAG, str2+th);
-            TimeUtil.sleep((long) this.executeIntervalInt);
+            TimeUtil.sleep(this.executeIntervalInt);
         }
     }
     private void listQuery2(String str) {
@@ -79,10 +79,10 @@ public class KuaiDiFuLiJia extends MemberNew {
                 return;
             }
             Log.error(TAG,"查询2出错:"+ stringBuilder);
-            TimeUtil.sleep((long) this.executeIntervalInt);
+            TimeUtil.sleep(this.executeIntervalInt);
         } catch (Throwable th) {
             Log.error(TAG, "listQuery2 err:"+th);
-            TimeUtil.sleep((long) this.executeIntervalInt);
+            TimeUtil.sleep(this.executeIntervalInt);
         }
     }
 

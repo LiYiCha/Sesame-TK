@@ -11,7 +11,7 @@ object AntOrchardRpcCall {
     fun orchardIndex(): String {
         return RequestManager.requestString("com.alipay.antfarm.orchardIndex",
             "[{\"inHomepage\":\"true\",\"requestType\":\"NORMAL\",\"sceneCode\":\"ORCHARD\",\"source\":\"ch_appcenter__chsub_commonapp\",\"version\":\""
-                    + VERSION + "\"}]");
+                    + VERSION + "\"}]")
     }
 
     /**
@@ -357,9 +357,9 @@ object AntOrchardRpcCall {
         )
     }
     fun newQueryGameCenter(): String {
-        val method = "com.alipay.antorchard.queryGameCenter";
-        val params = "[{\"queryGameCenterTheme\":true,\"requestType\":\"NORMAL\",\"sceneCode\":\"ORCHARD\",\"source\":\"ch_appcenter__chsub_commonapp\",\"version\":\""+VERSION+"\"}]";
-        return RequestManager.requestString(method, params);
+        val method = "com.alipay.antorchard.queryGameCenter"
+        val params = "[{\"queryGameCenterTheme\":true,\"requestType\":\"NORMAL\",\"sceneCode\":\"ORCHARD\",\"source\":\"ch_appcenter__chsub_commonapp\",\"version\":\""+VERSION+"\"}]"
+        return RequestManager.requestString(method, params)
     }
 
     fun queryCallAppSchema(sceneCode: String): String {
@@ -378,8 +378,8 @@ object AntOrchardRpcCall {
         urlSource: String
     ): String {
         try {
-            val ja = org.json.JSONArray()
-            val jo = org.json.JSONObject()
+            val ja = JSONArray()
+            val jo = JSONObject()
             jo.put("appIdSource", appIdSource)
             jo.put("extInfo", extInfo)
             jo.put("operate", operate)

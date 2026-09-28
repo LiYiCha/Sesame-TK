@@ -293,7 +293,7 @@ public class ContentInteract extends BaseCommTask {
                 }
             }
         } catch (Throwable th) {
-            Log.printStackTrace(this.TAG, th);
+            Log.printStackTrace(TAG, th);
         }
     }
 

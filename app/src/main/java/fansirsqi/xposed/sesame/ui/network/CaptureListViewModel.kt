@@ -233,7 +233,7 @@ class CaptureListViewModel : ViewModel() {
     fun addRecordFromJson(json: String) {
         viewModelScope.launch(Dispatchers.Default) {
             try {
-                val record = fansirsqi.xposed.sesame.util.JsonUtil.parseObject(json, CaptureRecord::class.java)
+                val record = JsonUtil.parseObject(json, CaptureRecord::class.java)
                 if (record != null) {
                     val today = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
                     // 仅处理当天的实时数据
@@ -447,7 +447,4 @@ class CaptureListViewModel : ViewModel() {
         }
     }
 
-    override fun onCleared() {
-        super.onCleared()
-    }
 }

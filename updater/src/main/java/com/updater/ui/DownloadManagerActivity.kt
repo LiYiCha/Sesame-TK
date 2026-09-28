@@ -1201,7 +1201,7 @@ class DownloadManagerActivity : AppCompatActivity() {
             confirmButton = {
                 TextButton(onClick = {
                     try {
-                        val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                        val clipboard = getSystemService(CLIPBOARD_SERVICE) as ClipboardManager
                         clipboard.setPrimaryClip(ClipData.newPlainText("下载错误详情", data.details))
                         Toast.makeText(context, "已复制", Toast.LENGTH_SHORT).show()
                     } catch (_: Throwable) {}

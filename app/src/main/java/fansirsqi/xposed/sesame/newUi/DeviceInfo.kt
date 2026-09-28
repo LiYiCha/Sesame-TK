@@ -90,7 +90,7 @@ fun DeviceInfoCard(info: Map<String, String>, oneWord: String? = null) {
         activity?.updateToolbarTheme()
     }
     
-    val holidayColors: HolidayTheme.ThemeColors? = remember(themeMode, customColor, darkMode) {
+    val holidayColors: HolidayTheme.ThemeColors = remember(themeMode, customColor, darkMode) {
         HolidayTheme.getActiveThemeColors()
     }
     
@@ -133,7 +133,7 @@ fun DeviceInfoCard(info: Map<String, String>, oneWord: String? = null) {
                 ) { page ->
                     when (page) {
                         0 -> {
-                            val timePhase = fansirsqi.xposed.sesame.ui.theme.app.HolidayTheme.getCurrentTimePhase()
+                            val timePhase = HolidayTheme.getCurrentTimePhase()
                             val dynamicGreeting = when (timePhase) {
                                 "dawn" -> "早安"
                                 "day" -> "午安"
@@ -175,9 +175,17 @@ fun DeviceInfoCard(info: Map<String, String>, oneWord: String? = null) {
                                                                     animType = (1..3).random()
                                                                     coroutineScope.launch {
                                                                         when (animType) {
-                                                                            1 -> { iconScale.animateTo(0.6f, androidx.compose.animation.core.tween(100)); iconScale.animateTo(1.3f, androidx.compose.animation.core.spring(dampingRatio = 0.4f)); iconScale.animateTo(1f) }
-                                                                            2 -> { iconRotation.animateTo(-30f, androidx.compose.animation.core.tween(50)); iconRotation.animateTo(30f, androidx.compose.animation.core.tween(100)); iconRotation.animateTo(0f, androidx.compose.animation.core.spring()) }
-                                                                            3 -> { iconFlip.animateTo(360f, androidx.compose.animation.core.tween(500)); iconFlip.snapTo(0f) }
+                                                                            1 -> { iconScale.animateTo(0.6f,
+                                                                                tween(100)
+                                                                            ); iconScale.animateTo(1.3f, androidx.compose.animation.core.spring(dampingRatio = 0.4f)); iconScale.animateTo(1f) }
+                                                                            2 -> { iconRotation.animateTo(-30f,
+                                                                                tween(50)
+                                                                            ); iconRotation.animateTo(30f,
+                                                                                tween(100)
+                                                                            ); iconRotation.animateTo(0f, androidx.compose.animation.core.spring()) }
+                                                                            3 -> { iconFlip.animateTo(360f,
+                                                                                tween(500)
+                                                                            ); iconFlip.snapTo(0f) }
                                                                         }
                                                                         animType = 0
                                                                     }
@@ -215,9 +223,17 @@ fun DeviceInfoCard(info: Map<String, String>, oneWord: String? = null) {
                                                                     animType = (1..3).random()
                                                                     coroutineScope.launch {
                                                                         when (animType) {
-                                                                            1 -> { iconScale.animateTo(0.6f, androidx.compose.animation.core.tween(100)); iconScale.animateTo(1.3f, androidx.compose.animation.core.spring(dampingRatio = 0.4f)); iconScale.animateTo(1f) }
-                                                                            2 -> { iconRotation.animateTo(-30f, androidx.compose.animation.core.tween(50)); iconRotation.animateTo(30f, androidx.compose.animation.core.tween(100)); iconRotation.animateTo(0f, androidx.compose.animation.core.spring()) }
-                                                                            3 -> { iconFlip.animateTo(360f, androidx.compose.animation.core.tween(500)); iconFlip.snapTo(0f) }
+                                                                            1 -> { iconScale.animateTo(0.6f,
+                                                                                tween(100)
+                                                                            ); iconScale.animateTo(1.3f, androidx.compose.animation.core.spring(dampingRatio = 0.4f)); iconScale.animateTo(1f) }
+                                                                            2 -> { iconRotation.animateTo(-30f,
+                                                                                tween(50)
+                                                                            ); iconRotation.animateTo(30f,
+                                                                                tween(100)
+                                                                            ); iconRotation.animateTo(0f, androidx.compose.animation.core.spring()) }
+                                                                            3 -> { iconFlip.animateTo(360f,
+                                                                                tween(500)
+                                                                            ); iconFlip.snapTo(0f) }
                                                                         }
                                                                         animType = 0
                                                                     }
@@ -285,9 +301,17 @@ fun DeviceInfoCard(info: Map<String, String>, oneWord: String? = null) {
                                                             animalAnimType = (1..3).random()
                                                             coroutineScope.launch {
                                                                 when (animalAnimType) {
-                                                                    1 -> { animalScale.animateTo(0.6f, androidx.compose.animation.core.tween(100)); animalScale.animateTo(1.3f, androidx.compose.animation.core.spring(dampingRatio = 0.4f)); animalScale.animateTo(1f) }
-                                                                    2 -> { animalRotation.animateTo(-30f, androidx.compose.animation.core.tween(50)); animalRotation.animateTo(30f, androidx.compose.animation.core.tween(100)); animalRotation.animateTo(0f, androidx.compose.animation.core.spring()) }
-                                                                    3 -> { animalFlip.animateTo(360f, androidx.compose.animation.core.tween(500)); animalFlip.snapTo(0f) }
+                                                                    1 -> { animalScale.animateTo(0.6f,
+                                                                        tween(100)
+                                                                    ); animalScale.animateTo(1.3f, androidx.compose.animation.core.spring(dampingRatio = 0.4f)); animalScale.animateTo(1f) }
+                                                                    2 -> { animalRotation.animateTo(-30f,
+                                                                        tween(50)
+                                                                    ); animalRotation.animateTo(30f,
+                                                                        tween(100)
+                                                                    ); animalRotation.animateTo(0f, androidx.compose.animation.core.spring()) }
+                                                                    3 -> { animalFlip.animateTo(360f,
+                                                                        tween(500)
+                                                                    ); animalFlip.snapTo(0f) }
                                                                 }
                                                                 animalAnimType = 0
                                                             }
@@ -423,7 +447,7 @@ fun DeviceInfoCard(info: Map<String, String>, oneWord: String? = null) {
                                             style = MaterialTheme.typography.bodySmall.copy(fontFamily = androidx.compose.ui.text.font.FontFamily.Serif),
                                             color = accentColor.copy(alpha = 0.7f),
                                             modifier = Modifier.fillMaxWidth(),
-                                            textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                                            textAlign = TextAlign.Center
                                         )
                                     }
                                 }
@@ -495,9 +519,17 @@ fun DeviceInfoCard(info: Map<String, String>, oneWord: String? = null) {
                                                                     ecoAnimType = (1..3).random()
                                                                     coroutineScope.launch {
                                                                         when (ecoAnimType) {
-                                                                            1 -> { ecoScale.animateTo(0.6f, androidx.compose.animation.core.tween(100)); ecoScale.animateTo(1.3f, androidx.compose.animation.core.spring(dampingRatio = 0.4f)); ecoScale.animateTo(1f) }
-                                                                            2 -> { ecoRotation.animateTo(-30f, androidx.compose.animation.core.tween(50)); ecoRotation.animateTo(30f, androidx.compose.animation.core.tween(100)); ecoRotation.animateTo(0f, androidx.compose.animation.core.spring()) }
-                                                                            3 -> { ecoFlip.animateTo(360f, androidx.compose.animation.core.tween(500)); ecoFlip.snapTo(0f) }
+                                                                            1 -> { ecoScale.animateTo(0.6f,
+                                                                                tween(100)
+                                                                            ); ecoScale.animateTo(1.3f, androidx.compose.animation.core.spring(dampingRatio = 0.4f)); ecoScale.animateTo(1f) }
+                                                                            2 -> { ecoRotation.animateTo(-30f,
+                                                                                tween(50)
+                                                                            ); ecoRotation.animateTo(30f,
+                                                                                tween(100)
+                                                                            ); ecoRotation.animateTo(0f, androidx.compose.animation.core.spring()) }
+                                                                            3 -> { ecoFlip.animateTo(360f,
+                                                                                tween(500)
+                                                                            ); ecoFlip.snapTo(0f) }
                                                                         }
                                                                         ecoAnimType = 0
                                                                     }
@@ -534,9 +566,17 @@ fun DeviceInfoCard(info: Map<String, String>, oneWord: String? = null) {
                                                                     ecoAnimType = (1..3).random()
                                                                     coroutineScope.launch {
                                                                         when (ecoAnimType) {
-                                                                            1 -> { ecoScale.animateTo(0.6f, androidx.compose.animation.core.tween(100)); ecoScale.animateTo(1.3f, androidx.compose.animation.core.spring(dampingRatio = 0.4f)); ecoScale.animateTo(1f) }
-                                                                            2 -> { ecoRotation.animateTo(-30f, androidx.compose.animation.core.tween(50)); ecoRotation.animateTo(30f, androidx.compose.animation.core.tween(100)); ecoRotation.animateTo(0f, androidx.compose.animation.core.spring()) }
-                                                                            3 -> { ecoFlip.animateTo(360f, androidx.compose.animation.core.tween(500)); ecoFlip.snapTo(0f) }
+                                                                            1 -> { ecoScale.animateTo(0.6f,
+                                                                                tween(100)
+                                                                            ); ecoScale.animateTo(1.3f, androidx.compose.animation.core.spring(dampingRatio = 0.4f)); ecoScale.animateTo(1f) }
+                                                                            2 -> { ecoRotation.animateTo(-30f,
+                                                                                tween(50)
+                                                                            ); ecoRotation.animateTo(30f,
+                                                                                tween(100)
+                                                                            ); ecoRotation.animateTo(0f, androidx.compose.animation.core.spring()) }
+                                                                            3 -> { ecoFlip.animateTo(360f,
+                                                                                tween(500)
+                                                                            ); ecoFlip.snapTo(0f) }
                                                                         }
                                                                         ecoAnimType = 0
                                                                     }
@@ -564,10 +604,10 @@ fun DeviceInfoCard(info: Map<String, String>, oneWord: String? = null) {
                                         )
                                     }
                                     Spacer(modifier = Modifier.weight(1f))
-                                    androidx.compose.material3.Switch(
+                                    Switch(
                                         checked = isEcoEnabled,
                                         onCheckedChange = { fansirsqi.xposed.sesame.ui.theme.app.EcosystemManager.saveEcoEnabled(it) },
-                                        colors = androidx.compose.material3.SwitchDefaults.colors(
+                                        colors = SwitchDefaults.colors(
                                             checkedThumbColor = brandColor,
                                             checkedTrackColor = brandColor.copy(alpha = 0.3f)
                                         ),
@@ -596,9 +636,17 @@ fun DeviceInfoCard(info: Map<String, String>, oneWord: String? = null) {
                                                         ecoAnimType = (1..3).random()
                                                         coroutineScope.launch {
                                                             when (ecoAnimType) {
-                                                                1 -> { ecoScale.animateTo(0.6f, androidx.compose.animation.core.tween(100)); ecoScale.animateTo(1.3f, androidx.compose.animation.core.spring(dampingRatio = 0.4f)); ecoScale.animateTo(1f) }
-                                                                2 -> { ecoRotation.animateTo(-30f, androidx.compose.animation.core.tween(50)); ecoRotation.animateTo(30f, androidx.compose.animation.core.tween(100)); ecoRotation.animateTo(0f, androidx.compose.animation.core.spring()) }
-                                                                3 -> { ecoFlip.animateTo(360f, androidx.compose.animation.core.tween(500)); ecoFlip.snapTo(0f) }
+                                                                1 -> { ecoScale.animateTo(0.6f,
+                                                                    tween(100)
+                                                                ); ecoScale.animateTo(1.3f, androidx.compose.animation.core.spring(dampingRatio = 0.4f)); ecoScale.animateTo(1f) }
+                                                                2 -> { ecoRotation.animateTo(-30f,
+                                                                    tween(50)
+                                                                ); ecoRotation.animateTo(30f,
+                                                                    tween(100)
+                                                                ); ecoRotation.animateTo(0f, androidx.compose.animation.core.spring()) }
+                                                                3 -> { ecoFlip.animateTo(360f,
+                                                                    tween(500)
+                                                                ); ecoFlip.snapTo(0f) }
                                                             }
                                                             ecoAnimType = 0
                                                         }
@@ -609,7 +657,7 @@ fun DeviceInfoCard(info: Map<String, String>, oneWord: String? = null) {
                                         },
                                     contentAlignment = Alignment.Center
                                 ) {
-                                    val infiniteTransition = androidx.compose.animation.core.rememberInfiniteTransition()
+                                    val infiniteTransition = rememberInfiniteTransition()
                                     val breathScale by infiniteTransition.animateFloat(
                                         initialValue = 0.95f,
                                         targetValue = 1.05f,
@@ -760,7 +808,7 @@ fun DeviceInfoCard(info: Map<String, String>, oneWord: String? = null) {
                                     Text(
                                         text = label,
                                         modifier = Modifier.padding(vertical = 8.dp),
-                                        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                                        textAlign = TextAlign.Center,
                                         fontSize = 13.sp,
                                         fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
                                         color = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
@@ -770,7 +818,7 @@ fun DeviceInfoCard(info: Map<String, String>, oneWord: String? = null) {
                         }
 
                         if (darkMode == "schedule" || (darkMode == "auto" && themeMode == "auto")) {
-                            val timePhase = fansirsqi.xposed.sesame.ui.theme.app.HolidayTheme.getCurrentTimePhase()
+                            val timePhase = HolidayTheme.getCurrentTimePhase()
                             val phaseName = when (timePhase) {
                                 "dawn" -> "晨曦"
                                 "day" -> "白昼"
@@ -844,7 +892,7 @@ fun DeviceInfoCard(info: Map<String, String>, oneWord: String? = null) {
                         var showCustom by remember { mutableStateOf(false) }
                         Surface(
                             color = if (themeMode == "custom") brandColor.copy(alpha = 0.12f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
-                            border = androidx.compose.foundation.BorderStroke(
+                            border = BorderStroke(
                                 1.dp,
                                 if (themeMode == "custom") brandColor else MaterialTheme.colorScheme.outline
                             ),
@@ -900,7 +948,7 @@ fun DeviceInfoCard(info: Map<String, String>, oneWord: String? = null) {
                                                 verticalAlignment = Alignment.CenterVertically
                                             ) {
                                                 Icon(
-                                                    imageVector = androidx.compose.material.icons.Icons.Rounded.Palette,
+                                                    imageVector = Icons.Rounded.Palette,
                                                     contentDescription = "Random Color",
                                                     tint = brandColor,
                                                     modifier = Modifier.size(16.dp)

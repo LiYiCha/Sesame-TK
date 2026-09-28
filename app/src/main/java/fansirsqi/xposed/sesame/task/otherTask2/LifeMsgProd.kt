@@ -181,11 +181,7 @@ class LifeMsgProd {
     //处理任务
     private fun doTask(code:String ,recordNo:String):Boolean{
         val taskHandle = CommonRequest().lifeMsgProdTaskHandle(code,recordNo,accessId)
-        if(isSuccess(taskHandle)) {
-            return  true
-        }else{
-            return false
-        }
+        return isSuccess(taskHandle)
     }
 
     // 游戏任务

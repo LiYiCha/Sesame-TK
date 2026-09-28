@@ -8,11 +8,11 @@ import lombok.Data;
  */
 @Data
 public class GameCenterExchangePrize {
-    private String campId;
-    private String prizeId;
-    private String prizeName;
-    private int consumePointAmount;
-    private String prizeType;
+    private final String campId;
+    private final String prizeId;
+    private final String prizeName;
+    private final int consumePointAmount;
+    private final String prizeType;
 
     public GameCenterExchangePrize(String campId, String prizeId, String prizeName, int consumePointAmount, String prizeType) {
         this.campId = campId;

@@ -176,7 +176,7 @@ public class AntFarmRpcCall {
                 args.put("projectId", projectId);
                 args.put("targetId", targetId);
             }
-            return RequestManager.requestString("com.alipay.antfarm.donation", "[" + args.toString() + "]");
+            return RequestManager.requestString("com.alipay.antfarm.donation", "[" + args + "]");
         } catch (JSONException e) {
             return "";
         }

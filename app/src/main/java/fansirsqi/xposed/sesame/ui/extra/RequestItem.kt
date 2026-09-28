@@ -2,8 +2,6 @@ package fansirsqi.xposed.sesame.ui.extra
 
 import com.fasterxml.jackson.annotation.JsonCreator
 import com.fasterxml.jackson.annotation.JsonProperty
-import com.fasterxml.jackson.databind.ObjectMapper
-import com.fasterxml.jackson.module.kotlin.readValue
 
 /**
  * 请求数据项
@@ -42,48 +40,6 @@ data class RequestItem @JsonCreator constructor(
             method = map["method"] as String,
             data = map["data"] as String,
             expanded = map["expanded"] as Boolean
-        )
-    }
-}
-
-/**
- * 新格式的请求数据（用于导入）
- * 支持格式：
- * {
- *   "Name": "标题",
- *   "Description": "描述",
- *   "methodName": "方法名",
- *   "requestData": [{}]
- * }
- */
-data class ImportRequestFormat(
-    @JsonProperty("Name") val name: String? = null,
-    @JsonProperty("Description") val description: String? = null,
-    @JsonProperty("methodName") val methodName: String? = null,
-    @JsonProperty("requestData") val requestData: List<Any>? = null
-) {
-    /**
-     * 转换为 RequestItem
-     */
-    fun toRequestItem(): RequestItem? {
-        val title = name ?: return null
-        val method = methodName ?: return null
-        val dataStr = try {
-            if (requestData != null) {
-                ObjectMapper().writeValueAsString(requestData)
-            } else {
-                "[]"
-            }
-        } catch (e: Exception) {
-            "[]"
-        }
-        return RequestItem(
-            id = 0,
-            title = title,
-            description = description ?: "",
-            method = method,
-            data = dataStr,
-            expanded = false
         )
     }
 }

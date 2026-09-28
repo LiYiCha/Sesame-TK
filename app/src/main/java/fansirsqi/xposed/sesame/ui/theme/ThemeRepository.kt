@@ -563,7 +563,7 @@ class ThemeRepository(private val context: Context) {
             )
 
             // 保存到theme_info.json
-            themeInfoFile.writeText(fansirsqi.xposed.sesame.util.JsonUtil.formatJson(themeInfo))
+            themeInfoFile.writeText(JsonUtil.formatJson(themeInfo))
         } catch (e: Exception) {
             Log.error("ThemeRepository", "生成theme_info.json失败: e")
         }

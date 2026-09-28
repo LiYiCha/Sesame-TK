@@ -73,8 +73,6 @@ import fansirsqi.xposed.sesame.util.StringUtil;
 
 public class WebSettingsActivity extends BaseActivity {
     private static final String TAG = "WebSettingsActivity";
-    private static final Integer EXPORT_REQUEST_CODE = 1;
-    private static final Integer IMPORT_REQUEST_CODE = 2;
     private ActivityResultLauncher<Intent> exportLauncher;
     private ActivityResultLauncher<Intent> importLauncher;
     private WebView webView;
@@ -120,10 +118,8 @@ public class WebSettingsActivity extends BaseActivity {
             @Override
             public void handleOnBackPressed() {
                 if (webView.canGoBack()) {
-//                    Log.runtime(TAG, "WebSettingsActivity.handleOnBackPressed: go back");
                     webView.goBack();
                 } else {
-//                    Log.runtime(TAG, "WebSettingsActivity.handleOnBackPressed: save");
                     save();
                     finish();
                 }
@@ -232,13 +228,10 @@ public class WebSettingsActivity extends BaseActivity {
         for (ModelGroup modelGroup : ModelGroup.values()) {
             groupList.add(new ModelGroupDto(modelGroup.getCode(), modelGroup.getName(), modelGroup.getIcon()));
         }
-        WatermarkView watermarkView = WatermarkView.Companion.install(this);
         String tag = "用户: " + userName + "\n ID: " + userId;
         if ("默认".equals(userName) || userId == null) {
             tag = "用户: " + "未登录" + "\n ID: " + "*************";
         }
-        //设置水印文案
-        //watermarkView.setWatermarkText(tag);
     }
 
     public class WebAppInterface {
@@ -265,9 +258,6 @@ public class WebSettingsActivity extends BaseActivity {
         @JavascriptInterface
         public String getTabs() {
             String result = JsonUtil.formatJson(tabList, false);
-//            if (BuildConfig.DEBUG) {
-//                Log.runtime(TAG, "WebSettingsActivity.getTabs: " + result);
-//            }
             return result;
         }
 
@@ -279,9 +269,6 @@ public class WebSettingsActivity extends BaseActivity {
         @JavascriptInterface
         public String getGroup() {
             String result = JsonUtil.formatJson(groupList, false);
-//            if (BuildConfig.DEBUG) {
-//                Log.runtime(TAG, "WebSettingsActivity.getGroup: " + result);
-//            }
             return result;
         }
 
@@ -297,9 +284,6 @@ public class WebSettingsActivity extends BaseActivity {
                 modelDtoList.add(new ModelDto(modelConfig.getCode(), modelConfig.getName(), modelConfig.getIcon(), groupCode, modelFields));
             }
             String result = JsonUtil.formatJson(modelDtoList, false);
-//            if (BuildConfig.DEBUG) {
-//                Log.runtime(TAG, "WebSettingsActivity.getModelByGroup: " + result);
-//            }
             return result;
         }
 
@@ -337,9 +321,6 @@ public class WebSettingsActivity extends BaseActivity {
                     list.add(ModelFieldShowDto.toShowDto(modelField));
                 }
                 String result = JsonUtil.formatJson(list, false);
-//                if (BuildConfig.DEBUG) {
-//                    Log.runtime(TAG, "WebSettingsActivity.getModel: " + result);
-//                }
                 return result;
             }
             return null;
@@ -541,7 +522,6 @@ public class WebSettingsActivity extends BaseActivity {
                 exportIntent.addCategory(Intent.CATEGORY_OPENABLE);
                 exportIntent.setType("*/*");
                 exportIntent.putExtra(Intent.EXTRA_TITLE, "[" + userName + "]-config_v2.json");
-//                startActivityForResult(exportIntent, EXPORT_REQUEST_CODE);
                 exportLauncher.launch(exportIntent);
                 break;
             case 2:
@@ -549,7 +529,6 @@ public class WebSettingsActivity extends BaseActivity {
                 importIntent.addCategory(Intent.CATEGORY_OPENABLE);
                 importIntent.setType("*/*");
                 importIntent.putExtra(Intent.EXTRA_TITLE, "config_v2.json");
-//                startActivityForResult(importIntent, IMPORT_REQUEST_CODE);
                 importLauncher.launch(importIntent);
                 break;
             case 3:
@@ -632,9 +611,6 @@ public class WebSettingsActivity extends BaseActivity {
     }
 
     private void save() {
-//        if (!ViewAppInfo.INSTANCE.getVeriftag()) {
-//            ToastUtil.showToastWithDelay(this, "非内测用户！", 100);
-//        }
         if (Config.isModify(userId)) {
             if (Config.save(userId, false)) {
                 Toast.makeText(context, "保存成功！", Toast.LENGTH_SHORT).show();

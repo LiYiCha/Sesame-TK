@@ -23,7 +23,7 @@ import kotlin.concurrent.Volatile
 
 @SuppressLint("StaticFieldLeak")
 object Notify {
-    private val TAG: String = Notify::class.java.getSimpleName()
+    private val TAG: String = Notify::class.java.simpleName
 
     @SuppressLint("StaticFieldLeak")
     var context: Context? = null
@@ -71,7 +71,7 @@ object Notify {
                 lastUpdateTime = System.currentTimeMillis()
                 mNotifyManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager?
                 val it = Intent(Intent.ACTION_VIEW)
-                it.setData("alipays://platformapi/startapp?appId=".toUri())
+                it.data = "alipays://platformapi/startapp?appId=".toUri()
                 val pi = PendingIntent.getActivity(context, 0, it, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                     val notificationChannel = NotificationChannel(CHANNEL_ID, "🔔 芝麻粒能量提醒", NotificationManager.IMPORTANCE_LOW)

@@ -23,7 +23,7 @@ import org.json.JSONException;
 import org.json.JSONObject;
 
 public class NeverLand extends BaseCommTask {
-    private List<Integer> levelIds;
+    private final List<Integer> levelIds;
     private String mapId;
     private final String branchId;
     // 任务错误缓存
@@ -69,12 +69,11 @@ public class NeverLand extends BaseCommTask {
                 if (optJSONArray != null) {
                     for (int i = 0; i < optJSONArray.length(); i++) {
                         JSONObject jSONObject = optJSONArray.getJSONObject(i);
-                        StringBuilder stringBuilder = new StringBuilder();
-                        stringBuilder.append(this.displayName);
-                        stringBuilder.append("领取离线奖励[");
-                        stringBuilder.append(JsonUtil.getValueByPath(jSONObject, "modifyCount"));
-                        stringBuilder.append("]能量");
-                        Log.other(stringBuilder.toString());
+                        String stringBuilder = this.displayName +
+                                "领取离线奖励[" +
+                                JsonUtil.getValueByPath(jSONObject, "modifyCount") +
+                                "]能量";
+                        Log.other(stringBuilder);
                     }
                 }
             }
@@ -143,11 +142,10 @@ public class NeverLand extends BaseCommTask {
                 }
 
                 if (validRecordIds.length() != 0) {
-                    StringBuilder stringBuilder = new StringBuilder();
-                    stringBuilder.append("\"source\": \"jkddicon\",\"medEnergyBallInfoRecordIds\": ");
-                    stringBuilder.append(validRecordIds);
+                    String stringBuilder = "\"source\": \"jkddicon\",\"medEnergyBallInfoRecordIds\": " +
+                            validRecordIds;
                     TimeUtil.sleep(3000L);
-                    requestString = requestString("com.alipay.neverland.biz.rpc.pickBubbleTaskEnergy", stringBuilder.toString());
+                    requestString = requestString("com.alipay.neverland.biz.rpc.pickBubbleTaskEnergy", stringBuilder);
 
                     if (requestString != null && requestString.optBoolean("success")) {
                         JSONObject dataObj = requestString.optJSONObject("data");
@@ -289,7 +287,7 @@ public class NeverLand extends BaseCommTask {
                                 if (!bresult){
                                     break;
                                 }
-                                TimeUtil.sleep((long) this.executeIntervalInt);
+                                TimeUtil.sleep(this.executeIntervalInt);
                             }
                         }
                     }
@@ -317,12 +315,11 @@ public class NeverLand extends BaseCommTask {
                         stringBuilder.append(i);
                         stringBuilder.append("\",\"source\":\"jkdwodesign\",\"type\":\"LIGHT_FEEDS_TASK\"");
                         if (requestString("com.alipay.neverland.biz.rpc.energyReceive", stringBuilder.toString()) != null) {
-                            StringBuilder stringBuilder2 = new StringBuilder();
-                            stringBuilder2.append(this.displayName);
-                            stringBuilder2.append("任务获得[");
-                            stringBuilder2.append(i);
-                            stringBuilder2.append("]能量");
-                            Log.other(stringBuilder2.toString());
+                            String stringBuilder2 = this.displayName +
+                                    "任务获得[" +
+                                    i +
+                                    "]能量";
+                            Log.other(stringBuilder2);
                         } else {
                             return;
                         }
@@ -350,12 +347,11 @@ public class NeverLand extends BaseCommTask {
                             if (!jSONObject.getBoolean("signIn")) {
                                 requestString = requestString("com.alipay.neverland.biz.rpc.takeSign", "\"source\":\"jkddicon\"");
                                 if (requestString != null) {
-                                    StringBuilder stringBuilder = new StringBuilder();
-                                    stringBuilder.append(this.displayName);
-                                    stringBuilder.append("签到成功，获得[");
-                                    stringBuilder.append(JsonUtil.getValueByPath(requestString, "data.userItems.[0].modifyCount"));
-                                    stringBuilder.append("]");
-                                    Log.other(stringBuilder.toString());
+                                    String stringBuilder = this.displayName +
+                                            "签到成功，获得[" +
+                                            JsonUtil.getValueByPath(requestString, "data.userItems.[0].modifyCount") +
+                                            "]";
+                                    Log.other(stringBuilder);
                                 } else {
                                     return;
                                 }
@@ -417,13 +413,12 @@ public class NeverLand extends BaseCommTask {
             JSONObject requestString = requestString("com.alipay.neverland.biz.rpc.taskReceive", jSONObject2.substring(1, jSONObject2.length() - 1));
             TimeUtil.sleep(3000);
             if (requestString != null && requestString.optBoolean("success")) {
-                StringBuilder stringBuilder = new StringBuilder();
-                stringBuilder.append(this.displayName);
-                stringBuilder.append("完成[");
-                stringBuilder.append(jSONObject.getString("title"));
-                stringBuilder.append("]+");
-                stringBuilder.append(JsonUtil.getValueByPath(requestString, "data.userItems.[0].modifyCount"));
-                Log.other(stringBuilder.toString());
+                String stringBuilder = this.displayName +
+                        "完成[" +
+                        jSONObject.getString("title") +
+                        "]+" +
+                        JsonUtil.getValueByPath(requestString, "data.userItems.[0].modifyCount");
+                Log.other(stringBuilder);
             }
         } catch (Exception e) {
             Log.error(TAG,".taskSend错误:"+e);
@@ -512,10 +507,7 @@ public class NeverLand extends BaseCommTask {
             String title = jSONObject.optString("title", "未知任务");
             String bizId = logExtMap.getString("bizId");
 
-            StringBuilder stringBuilder = new StringBuilder("\"bizId\": \"");
-            stringBuilder.append(bizId).append("\"");
-
-            JSONObject response = requestString("com.alipay.adtask.biz.mobilegw.service.task.finish", stringBuilder.toString());
+            JSONObject response = requestString("com.alipay.adtask.biz.mobilegw.service.task.finish", "\"bizId\": \"" + bizId + "\"");
             TimeUtil.sleep(3000);
             if (response != null && response.optBoolean("success")) {
                 String prizeCount = JsonUtil.getValueByPath(jSONObject, "prizes.[0].prizeCount");
@@ -694,7 +686,7 @@ public class NeverLand extends BaseCommTask {
                         if (!awardTaskIdList.isEmpty()) {
                             String s3 = RequestManager.requestString(method2,
                                     "[{" +
-                                            "\"medPromTaskIds\":" + awardTaskIdJsonArray.toString() + "," +
+                                            "\"medPromTaskIds\":" + awardTaskIdJsonArray + "," +
                                             "\"stageCode\":\"send\"," +
                                             "\"version\":\"2.0\"" +
                                             "}]");
@@ -1050,27 +1042,27 @@ public class NeverLand extends BaseCommTask {
             // 初始化黑名单
             initBlackList();
 
-            TimeUtil.sleep((long) this.executeIntervalInt);
+            TimeUtil.sleep(this.executeIntervalInt);
             receiveSpecialPrize();
-            TimeUtil.sleep((long) this.executeIntervalInt);
+            TimeUtil.sleep(this.executeIntervalInt);
             viewDailyAds();
-            TimeUtil.sleep((long) this.executeIntervalInt);
+            TimeUtil.sleep(this.executeIntervalInt);
             boolean b = queryBaseinfo();
             if (!b) {
                 return;
             }
 
             queryTaskCenter();
-            TimeUtil.sleep((long) this.executeIntervalInt);
+            TimeUtil.sleep(this.executeIntervalInt);
             // 处理任务--气泡
             handleInitBubbleTasks();
 
             queryTaskInfo();
-            TimeUtil.sleep((long) this.executeIntervalInt);
+            TimeUtil.sleep(this.executeIntervalInt);
             if (!Status.hasTemporaryStatusValid("NeverLandPickTemp30")) {
                 queryBubbleTask();
             }
-            TimeUtil.sleep((long) this.executeIntervalInt);
+            TimeUtil.sleep(this.executeIntervalInt);
 
             String flagKey = getCurrentTimePeriod();
 
@@ -1078,7 +1070,7 @@ public class NeverLand extends BaseCommTask {
                 offlineAward();
                 Status.setFlagToday(flagKey);
             }
-            TimeUtil.sleep((long) this.executeIntervalInt);
+            TimeUtil.sleep(this.executeIntervalInt);
 
             // 状态/是否执行跳一跳
             if (!Status.hasFlagToday(CompletedKeyEnum.NeverlandJump.name())

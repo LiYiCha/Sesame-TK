@@ -276,10 +276,6 @@ class FlashSaleModule : BaseFlashSaleTask() {
         return fields
     }
 
-    override fun check(): Boolean {
-        return super.check()
-    }
-
     override fun runJava() {
         if (!check()) return
 

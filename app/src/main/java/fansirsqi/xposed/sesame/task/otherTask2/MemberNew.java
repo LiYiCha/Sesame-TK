@@ -168,7 +168,7 @@ public class MemberNew extends BaseCommTask {
             isRunning.set(false);
             executionLock.unlock();
             if (!Thread.currentThread().isInterrupted()) {
-                TimeUtil.sleep((long) this.executeIntervalInt);
+                TimeUtil.sleep(this.executeIntervalInt);
             }
         }
     }
@@ -241,7 +241,7 @@ public class MemberNew extends BaseCommTask {
                 } else {
                     Log.error(TAG, "签到失败: " + response.optString("resultDesc"));
                     checkResponseError1009(response);
-                    TimeUtil.sleep((long) this.executeIntervalInt);
+                    TimeUtil.sleep(this.executeIntervalInt);
                     return false;
                 }
             }

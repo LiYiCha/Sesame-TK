@@ -87,8 +87,7 @@ public class LifecycleManager {
     private static String extractCoreParamsSignature(Object obj) {
         if (obj == null) return "";
         try {
-            if (obj instanceof org.json.JSONObject) {
-                org.json.JSONObject jo = (org.json.JSONObject) obj;
+            if (obj instanceof org.json.JSONObject jo) {
                 Object reqData = jo.opt("requestData");
                 if (reqData != null) return normalizeReqDataString(reqData);
             }
@@ -961,7 +960,7 @@ public class LifecycleManager {
         try {
             if (obj instanceof String) return "\"" + obj + "\"";
             if (obj instanceof Number || obj instanceof Boolean) return obj.toString();
-            if (obj.getClass().isEnum()) return "\"" + obj.toString() + "\"";
+            if (obj.getClass().isEnum()) return "\"" + obj + "\"";
 
             if (obj.getClass().isArray()) {
                 StringBuilder sb = new StringBuilder("[");
@@ -991,7 +990,7 @@ public class LifecycleManager {
                 boolean first = true;
                 for (java.util.Map.Entry<?, ?> entry : ((java.util.Map<?, ?>) obj).entrySet()) {
                     if (!first) sb.append(", ");
-                    sb.append("\"").append(String.valueOf(entry.getKey())).append("\": ");
+                    sb.append("\"").append(entry.getKey()).append("\": ");
                     sb.append(reflectDump(entry.getValue(), depth + 1));
                     first = false;
                 }

@@ -31,7 +31,7 @@ public class YebSceneBffish extends BaseCommTask {
             String method = "com.alipay.yebscenebff.needle.incomePlus.index";
 
         } catch (Throwable th) {
-            TimeUtil.sleep((long) this.executeIntervalInt);
+            TimeUtil.sleep(this.executeIntervalInt);
             Log.error(this.displayName + "receiveFood error: " + th);
         }
     }
@@ -86,7 +86,7 @@ public class YebSceneBffish extends BaseCommTask {
         } catch (Throwable th) {
             Log.error(this.displayName + "incomePlusFeedTaskList error: " + th);
         } finally {
-            TimeUtil.sleep((long) this.executeIntervalInt);
+            TimeUtil.sleep(this.executeIntervalInt);
         }
     }
 
@@ -121,7 +121,7 @@ public class YebSceneBffish extends BaseCommTask {
         } catch (Throwable th) {
             Log.error(this.displayName + "queryPrizeRedemptionInfo error: " + th);
         } finally {
-            TimeUtil.sleep((long) this.executeIntervalInt);
+            TimeUtil.sleep(this.executeIntervalInt);
         }
     }
 
@@ -162,7 +162,7 @@ public class YebSceneBffish extends BaseCommTask {
         } catch (Throwable th) {
             Log.error(this.displayName + "sign error: " + th);
         } finally {
-            TimeUtil.sleep((long) this.executeIntervalInt);
+            TimeUtil.sleep(this.executeIntervalInt);
         }
     }
 
@@ -194,7 +194,7 @@ public class YebSceneBffish extends BaseCommTask {
         } catch (Throwable th) {
             Log.error(this.displayName + "index error: " + th);
         } finally {
-            TimeUtil.sleep((long) this.executeIntervalInt);
+            TimeUtil.sleep(this.executeIntervalInt);
         }
     }
 
@@ -254,7 +254,7 @@ public class YebSceneBffish extends BaseCommTask {
         } catch (Exception e) {
             Log.error(displayName + "领取鱼饲料或者金球出错:" + e);
         } finally {
-            TimeUtil.sleep((long) this.executeIntervalInt);
+            TimeUtil.sleep(this.executeIntervalInt);
         }
     }
 
@@ -284,7 +284,7 @@ public class YebSceneBffish extends BaseCommTask {
         } catch (Throwable th) {
             Log.error(this.displayName + "receiveGold error: " + th);
         } finally {
-            TimeUtil.sleep((long) this.executeIntervalInt);
+            TimeUtil.sleep(this.executeIntervalInt);
         }
     }
 

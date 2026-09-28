@@ -140,7 +140,7 @@ class GameCenterGoldEX : BaseFlashSaleTask() {
         return hour.toLong()
     }
 
-    override val exchangeMode: ExchangeMode?
+    override val exchangeMode: ExchangeMode
         get() = ExchangeMode.MULTI
 
     override val completedKey: String

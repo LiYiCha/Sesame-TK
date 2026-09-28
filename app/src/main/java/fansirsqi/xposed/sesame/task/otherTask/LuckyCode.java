@@ -19,7 +19,7 @@ public class LuckyCode extends BaseCommTask {
 
     private void dailyProfit(Object obj, String str) {
         if (obj == null) {
-            TimeUtil.sleep((long) this.executeIntervalInt);
+            TimeUtil.sleep(this.executeIntervalInt);
             return;
         }
         try {
@@ -36,9 +36,9 @@ public class LuckyCode extends BaseCommTask {
         } catch (Exception e) {
             Log.printStackTrace(e);
         } catch (Throwable th) {
-            TimeUtil.sleep((long) this.executeIntervalInt);
+            TimeUtil.sleep(this.executeIntervalInt);
         }
-        TimeUtil.sleep((long) this.executeIntervalInt);
+        TimeUtil.sleep(this.executeIntervalInt);
     }
 
     private void queryHistoryV3() {
@@ -54,20 +54,18 @@ public class LuckyCode extends BaseCommTask {
                             if ("WAIT_RECEIVE".equals(jSONObject.getString("status"))) {
                                 String string = jSONObject.getString("batchId");
                                 String string2 = jSONObject.getString("playId");
-                                StringBuilder stringBuilder = new StringBuilder();
-                                stringBuilder.append("\"batchId\": \"");
-                                stringBuilder.append(string);
-                                stringBuilder.append("\",\"playId\": \"");
-                                stringBuilder.append(string2);
-                                stringBuilder.append("\"");
-                                jSONObject = requestString("com.alipay.finpromobff.luckycode.receiveAward", stringBuilder.toString());
+                                String stringBuilder = "\"batchId\": \"" +
+                                        string +
+                                        "\",\"playId\": \"" +
+                                        string2 +
+                                        "\"";
+                                jSONObject = requestString("com.alipay.finpromobff.luckycode.receiveAward", stringBuilder);
                                 if (jSONObject != null) {
-                                    StringBuilder stringBuilder2 = new StringBuilder();
-                                    stringBuilder2.append(this.displayName);
-                                    stringBuilder2.append("中奖领取成功[");
-                                    stringBuilder2.append(toChinese(JsonUtil.getValueByPath(jSONObject, "result.calculateResult.dividePrizeDecidedDTOList.[0].extInfo.prizeLevel.name")));
-                                    stringBuilder2.append("]");
-                                    Log.other(stringBuilder2.toString());
+                                    String stringBuilder2 = this.displayName +
+                                            "中奖领取成功[" +
+                                            toChinese(JsonUtil.getValueByPath(jSONObject, "result.calculateResult.dividePrizeDecidedDTOList.[0].extInfo.prizeLevel.name")) +
+                                            "]";
+                                    Log.other(stringBuilder2);
                                 }
                             }
                         } else {
@@ -86,7 +84,7 @@ public class LuckyCode extends BaseCommTask {
         try {
             JSONObject requestString = requestString("com.alipay.finpromobff.luckycode.queryV3", "");
             if (requestString == null) {
-                TimeUtil.sleep((long) this.executeIntervalInt);
+                TimeUtil.sleep(this.executeIntervalInt);
                 return;
             }
             this.isReceive = false;
@@ -99,11 +97,11 @@ public class LuckyCode extends BaseCommTask {
             sendTask(optJSONArray2, valueByPath);
             updateSlot(requestString, valueByPath);
             queryHistoryV3();
-            TimeUtil.sleep((long) this.executeIntervalInt);
+            TimeUtil.sleep(this.executeIntervalInt);
         } catch (Exception e) {
             Log.printStackTrace(e);
         } catch (Throwable th) {
-            TimeUtil.sleep((long) this.executeIntervalInt);
+            TimeUtil.sleep(this.executeIntervalInt);
         }
     }
 
@@ -121,27 +119,26 @@ public class LuckyCode extends BaseCommTask {
             stringBuilder.append(str5);
             stringBuilder.append("\"");
             if (requestString("com.alipay.finpromobff.luckycode.receiveNumber", stringBuilder.toString()) == null) {
-                TimeUtil.sleep((long) this.executeIntervalInt);
+                TimeUtil.sleep(this.executeIntervalInt);
                 return;
             }
             this.isReceive = true;
-            StringBuilder stringBuilder2 = new StringBuilder();
-            stringBuilder2.append(this.displayName);
-            stringBuilder2.append("获得好运码[");
-            stringBuilder2.append(str2);
-            stringBuilder2.append("]");
-            Log.other(stringBuilder2.toString());
-            TimeUtil.sleep((long) this.executeIntervalInt);
+            String stringBuilder2 = this.displayName +
+                    "获得好运码[" +
+                    str2 +
+                    "]";
+            Log.other(stringBuilder2);
+            TimeUtil.sleep(this.executeIntervalInt);
         } catch (Exception e) {
             Log.printStackTrace(e);
         } catch (Throwable th) {
-            TimeUtil.sleep((long) this.executeIntervalInt);
+            TimeUtil.sleep(this.executeIntervalInt);
         }
     }
 
     private void sendTask(JSONArray jSONArray, String str) {
         if (jSONArray == null) {
-            TimeUtil.sleep((long) this.executeIntervalInt);
+            TimeUtil.sleep(this.executeIntervalInt);
             return;
         }
         int i = 0;
@@ -163,12 +160,11 @@ public class LuckyCode extends BaseCommTask {
                                 stringBuilder.append(string);
                                 stringBuilder.append("\"");
                                 if (requestString("com.alipay.finpromobff.luckycode.sendTask", stringBuilder.toString()) != null) {
-                                    StringBuilder stringBuilder2 = new StringBuilder();
-                                    stringBuilder2.append(this.displayName);
-                                    stringBuilder2.append("完成[");
-                                    stringBuilder2.append(valueByPath);
-                                    stringBuilder2.append("]");
-                                    Log.other(stringBuilder2.toString());
+                                    String stringBuilder2 = this.displayName +
+                                            "完成[" +
+                                            valueByPath +
+                                            "]";
+                                    Log.other(stringBuilder2);
                                     receiveNumber(string2, String.valueOf(RandomUtil.nextInt(10,15)), string, str, "LUCKY_CODE_TASK");
                                 }
                             }
@@ -179,10 +175,10 @@ public class LuckyCode extends BaseCommTask {
             } catch (Exception e) {
                 Log.printStackTrace(e);
             } catch (Throwable th) {
-                TimeUtil.sleep((long) this.executeIntervalInt);
+                TimeUtil.sleep(this.executeIntervalInt);
             }
         }
-        TimeUtil.sleep((long) this.executeIntervalInt);
+        TimeUtil.sleep(this.executeIntervalInt);
     }
 
     private String toChinese(String str) {
@@ -240,7 +236,7 @@ public class LuckyCode extends BaseCommTask {
                     this.isReceive = false;
                     jSONObject = jSONObject.getJSONObject("result");
                 }
-                TimeUtil.sleep((long) this.executeIntervalInt);
+                TimeUtil.sleep(this.executeIntervalInt);
             }
             JSONArray optJSONArray = jSONObject.optJSONArray("slotLuckyCode");
             Object valueByPathObject = JsonUtil.getValueByPathObject(jSONObject, "totalLuckyCode.[0].number");
@@ -276,20 +272,19 @@ public class LuckyCode extends BaseCommTask {
                     stringBuilder.append(optJSONArray);
                     stringBuilder.append("\"");
                     if (requestString("com.alipay.finpromobff.luckycode.updateSlot", stringBuilder.toString()) != null) {
-                        StringBuilder stringBuilder2 = new StringBuilder();
-                        stringBuilder2.append(this.displayName);
-                        stringBuilder2.append("更新幸运码");
-                        Log.other(stringBuilder2.toString());
-                        TimeUtil.sleep((long) this.executeIntervalInt);
+                        String stringBuilder2 = this.displayName +
+                                "更新幸运码";
+                        Log.other(stringBuilder2);
+                        TimeUtil.sleep(this.executeIntervalInt);
                         return;
                     }
                 }
             }
-            TimeUtil.sleep((long) this.executeIntervalInt);
+            TimeUtil.sleep(this.executeIntervalInt);
         } catch (Exception e) {
             Log.printStackTrace(e);
         } catch (Throwable th) {
-            TimeUtil.sleep((long) this.executeIntervalInt);
+            TimeUtil.sleep(this.executeIntervalInt);
         }
     }
 

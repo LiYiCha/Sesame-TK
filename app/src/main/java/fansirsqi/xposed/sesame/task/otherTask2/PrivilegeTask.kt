@@ -258,7 +258,7 @@ class PrivilegeTask {
                     return
                 }
                 val action = checkInInfo.optString("action")
-                val checkInDate = checkInInfo.optString("checkInDate")
+                checkInInfo.optString("checkInDate")
                 val checkInSumDays = checkInInfo.optInt("checkInSumDays", 0)
 
                 when (action) {
@@ -339,8 +339,8 @@ class PrivilegeTask {
                 Thread.sleep(1500)
 
                 // 1. 查询触发前
-                val beforeDaily = queryTrialAwards(month = false)
-                val beforeMonthly = queryTrialAwards(month = true)
+                queryTrialAwards(month = false)
+                queryTrialAwards(month = true)
 
                 // 2. 触发领取
                 val triggerResp = JSONObject(CommonRequest().triggerTrialPrize())

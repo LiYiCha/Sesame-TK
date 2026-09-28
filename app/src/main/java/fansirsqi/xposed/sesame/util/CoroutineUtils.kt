@@ -23,7 +23,7 @@ object CoroutineUtils {
             throw CancellationException("任务已被用户停止，终止延迟等待")
         }
         try {
-            kotlinx.coroutines.delay(millis)
+            delay(millis)
         } catch (ce: CancellationException) {
             throw ce
         } catch (e: Exception) {
@@ -57,7 +57,7 @@ object CoroutineUtils {
                 runBlocking {
                     delay(step)
                 }
-            } catch (ce: kotlinx.coroutines.CancellationException) {
+            } catch (ce: CancellationException) {
                 throw ce
             } catch (e: Exception) {
                 // 降级到传统的 Thread.sleep()

@@ -686,7 +686,7 @@ class AntForest : ModelTask(), EnergyCollectCallback {
             return
         }
         try {
-            val energyTimeStr = BaseModel.energyTime.value.toString()
+            BaseModel.energyTime.value.toString()
             //Log.runtime(TAG, "⏸ 当前为只收能量时间【$energyTimeStr】，开始循环收取自己、好友和PK好友的能量")
             runBlocking {
                 try {
@@ -1468,7 +1468,7 @@ class AntForest : ModelTask(), EnergyCollectCallback {
             val end = System.currentTimeMillis()
             // 安全获取服务器时间，如果没有则使用当前时间
             val serverTime = userHomeObj.optLong("now", System.currentTimeMillis())
-            val offsetTime = offsetTimeMath.nextInteger(((start + end) / 2 - serverTime).toInt())
+            offsetTimeMath.nextInteger(((start + end) / 2 - serverTime).toInt())
             // Log.runtime(TAG, "服务器时间：$serverTime，本地与服务器时间差：$offsetTime")
         } catch (t: Throwable) {
             Log.printStackTrace(TAG, "查询自己主页异常", t)
@@ -1501,7 +1501,7 @@ class AntForest : ModelTask(), EnergyCollectCallback {
             val end = System.currentTimeMillis()
             // 安全获取服务器时间，如果没有则使用当前时间
             val serverTime = friendHomeObj.optLong("now", System.currentTimeMillis())
-            val offsetTime = offsetTimeMath.nextInteger(((start + end) / 2 - serverTime).toInt())
+            offsetTimeMath.nextInteger(((start + end) / 2 - serverTime).toInt())
             //  Log.runtime(TAG, "服务器时间：$serverTime，本地与服务器时间差：$offsetTime")
         } catch (t: Throwable) {
             Log.printStackTrace(TAG, "查询好友主页异常, userId: " + UserMap.getMaskName(userId), t)
@@ -2119,7 +2119,7 @@ class AntForest : ModelTask(), EnergyCollectCallback {
         // 1. 冷却检查
         val currentTime = System.currentTimeMillis()
         if (currentTime < nextTakeLookTime) {
-            val remaining = (nextTakeLookTime - currentTime) / 1000
+            (nextTakeLookTime - currentTime) / 1000
 //            Log.runtime(TAG, "找能量冷却中，等待 ${remaining / 60}分${remaining % 60}秒")
             return
         }
@@ -2207,8 +2207,8 @@ class AntForest : ModelTask(), EnergyCollectCallback {
                 val hasBomb = hasBombCard(friendHomeObj, now)
 
                 if (hasShield || hasBomb) {
-                    val friendName = UserMap.getMaskName(friendId) ?: "未知好友"
-                    val type = if (hasShield) "保护罩" else "炸弹卡"
+                    UserMap.getMaskName(friendId) ?: "未知好友"
+                    if (hasShield) "保护罩" else "炸弹卡"
 //                    Log.runtime(TAG, "发现[$friendName]有$type，跳过")
                     // 记录到全局缓存，防止下次运行再次浪费时间查询
                     addToSkipUsers(friendId)
@@ -2246,7 +2246,7 @@ class AntForest : ModelTask(), EnergyCollectCallback {
         // 1. 冷却检查
         val currentTime = System.currentTimeMillis()
         if (currentTime < nextTakeLookTime) {
-            val remaining = (nextTakeLookTime - currentTime) / 1000
+            (nextTakeLookTime - currentTime) / 1000
 //            Log.runtime(TAG, "找能量冷却中，等待 ${remaining / 60}分${remaining % 60}秒")
             return
         }
@@ -3433,7 +3433,7 @@ class AntForest : ModelTask(), EnergyCollectCallback {
                 return
             }
             val targetTimeCalendar = TimeUtil.getTodayCalendarByTimeStr(targetTimeStr) ?: return
-            val targetTime = targetTimeCalendar.getTimeInMillis()
+            val targetTime = targetTimeCalendar.timeInMillis
             val now = System.currentTimeMillis()
             if (now > targetTime) {
                 continue
@@ -4956,7 +4956,7 @@ class AntForest : ModelTask(), EnergyCollectCallback {
     }
 
     companion object {
-        val TAG: String = AntForest::class.java.getSimpleName()
+        val TAG: String = AntForest::class.java.simpleName
 
         @JvmField
         var instance: AntForest? = null

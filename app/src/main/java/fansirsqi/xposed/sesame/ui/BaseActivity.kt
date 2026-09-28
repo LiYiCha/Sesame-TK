@@ -50,7 +50,7 @@ open class BaseActivity : AppCompatActivity() {
     private var currentThemeVersion = 0
 
     private val themeObserver: () -> Unit = {
-        val isSystemNight = (resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK) == android.content.res.Configuration.UI_MODE_NIGHT_YES
+        val isSystemNight = (resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES
         // 单一数据源：统一调色板，XML 端与 Compose 端一致
         val palette = HolidayTheme.resolvePalette(isSystemNight)
         val isDark = palette.isDark
@@ -74,9 +74,9 @@ open class BaseActivity : AppCompatActivity() {
 
     private fun applyThemeToViews(view: android.view.View, isNightMode: Boolean, mainColorInt: Int, bgColorInt: Int, surfaceColorInt: Int, surfaceVariantInt: Int, textColorInt: Int) {
         try {
-            val defaultColorPrimary = androidx.core.content.ContextCompat.getColor(this, R.color.colorPrimary)
-            val defaultF5F5F5 = android.graphics.Color.parseColor("#F5F5F5")
-            val defaultBackground = androidx.core.content.ContextCompat.getColor(this, R.color.background)
+            val defaultColorPrimary = ContextCompat.getColor(this, R.color.colorPrimary)
+            val defaultF5F5F5 = Color.parseColor("#F5F5F5")
+            val defaultBackground = ContextCompat.getColor(this, R.color.background)
             
             // 1. 按钮 (Button / MaterialButton) 染色
             if (view is android.widget.Button) {
@@ -89,7 +89,7 @@ open class BaseActivity : AppCompatActivity() {
             
             // 2. WebView 设为透明以露出底色
             if (view is android.webkit.WebView) {
-                view.setBackgroundColor(android.graphics.Color.TRANSPARENT)
+                view.setBackgroundColor(Color.TRANSPARENT)
             }
             
             // 3. 替换 CardView 颜色
@@ -112,7 +112,7 @@ open class BaseActivity : AppCompatActivity() {
                     if (view.id != android.view.View.NO_ID && view.id != android.R.id.content) {
                         view.setBackgroundColor(surfaceVariantInt)
                     } else {
-                        view.setBackgroundColor(android.graphics.Color.TRANSPARENT)
+                        view.setBackgroundColor(Color.TRANSPARENT)
                     }
                 }
             }
@@ -215,7 +215,7 @@ open class BaseActivity : AppCompatActivity() {
 
     fun updateToolbarTheme() {
         val tb = toolbar ?: return
-        val isSystemNight = (resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK) == android.content.res.Configuration.UI_MODE_NIGHT_YES
+        val isSystemNight = (resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES
         val palette = HolidayTheme.resolvePalette(isSystemNight)
         val isNightMode = palette.isDark
         
@@ -232,7 +232,7 @@ open class BaseActivity : AppCompatActivity() {
                 intArrayOf(startColor, endColor)
             )
             appBar.background = gradientDrawable
-            tb.setBackgroundColor(android.graphics.Color.TRANSPARENT)
+            tb.setBackgroundColor(Color.TRANSPARENT)
         } else {
             tb.setBackgroundColor(startColor)
         }

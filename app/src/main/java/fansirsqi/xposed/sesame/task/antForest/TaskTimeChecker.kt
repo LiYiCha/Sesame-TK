@@ -59,7 +59,7 @@ object TaskTimeChecker {
      * @param defaultTime 默认时间
      * @return 清理后的时间字符串，如果验证失败返回 null
      */
-    private fun cleanAndValidateTime(timeStr: String, defaultTime: String): String? {
+    private fun cleanAndValidateTime(timeStr: String, defaultTime: String): String {
         try {
             // 移除所有空格、冒号和逗号
             var cleaned = timeStr.replace(":", "").replace(" ", "").replace(",", "").trim()

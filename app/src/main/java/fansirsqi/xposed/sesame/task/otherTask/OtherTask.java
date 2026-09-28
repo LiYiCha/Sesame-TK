@@ -110,7 +110,7 @@ public class OtherTask extends ModelTask {
     @Getter
     private final static BooleanModelField fishpondAngle = new BooleanModelField("fishpondAngle", "福气鱼塘-自动钓鱼", false);
     @Getter
-    private static StringModelField fishpondToken = new StringModelField("fishpondToken", "福气鱼塘钓鱼Token", "");
+    private static final StringModelField fishpondToken = new StringModelField("fishpondToken", "福气鱼塘钓鱼Token", "");
     private final BooleanModelField promoprodRedEnvelope = new BooleanModelField("promoprodRedEnvelope", "实体红包", false);
     private final BooleanModelField fundapplication = new BooleanModelField("fundapplication", "摇红包", false);
     private final BooleanModelField salaryday = new BooleanModelField("salaryday", "红包雨", false);
@@ -344,7 +344,7 @@ public class OtherTask extends ModelTask {
                 // 悦动健康
                 if (neverland.getValue()) {
                     new NeverLand().run(executeIntervalInt, new LinkedHashMap<String, Object>() {{
-                        put("neverLandJump", OtherTask.this.neverLandJump.getValue());
+                        put("neverLandJump", neverLandJump.getValue());
                     }});
                 }
             } catch (Exception e) {

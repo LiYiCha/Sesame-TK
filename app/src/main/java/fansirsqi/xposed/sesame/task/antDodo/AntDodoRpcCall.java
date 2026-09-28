@@ -124,7 +124,7 @@ public class AntDodoRpcCall {
             }
 
 
-            return RequestManager.requestString("alipay.antdodo.rpc.h5.queryBookList", "[" + params.toString() + "]");
+            return RequestManager.requestString("alipay.antdodo.rpc.h5.queryBookList", "[" + params + "]");
         } catch (Exception e) {
             return "";
         }

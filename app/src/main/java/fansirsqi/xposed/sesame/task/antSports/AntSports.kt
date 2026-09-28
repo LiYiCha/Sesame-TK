@@ -558,11 +558,7 @@ class AntSports : ModelTask() {
                 val errorMsg = resultData.optString("errorMsg", "未知错误")
                 val errorCode = resultData.optString("errorCode", "")
                 Log.error(TAG, "做任务得能量🎈[领取失败：$taskName，错误：$errorCode - $errorMsg]")
-                if (!resultData.optBoolean("retryable", true) || errorCode == "CAMP_TRIGGER_ERROR") {
-                    true
-                } else {
-                    false
-                }
+                !resultData.optBoolean("retryable", true) || errorCode == "CAMP_TRIGGER_ERROR"
             }
         } catch (e: Exception) {
             Log.error(TAG, "做任务得能量🎈[领取异常：$taskName，错误：${e.message}]")
@@ -697,8 +693,8 @@ class AntSports : ModelTask() {
                     val assetCoinAmount = dataObj?.optInt("assetCoinAmount", 0) ?: 0
                     Log.other("运动球任务✅[$sourceName]#奖励$assetCoinAmount💰")
                 } else {
-                    val errorCode = completeRes.optString("errorCode", "")
-                    val errorMsg = completeRes.optString("errorMsg", "")
+                    completeRes.optString("errorCode", "")
+                    completeRes.optString("errorMsg", "")
                     Log.error(TAG, "运动球任务❌[$sourceName]#$completeRes 任务：$bubble")
 
                     if (id.isNotEmpty()) {

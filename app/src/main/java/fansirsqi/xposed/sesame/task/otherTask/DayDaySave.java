@@ -68,7 +68,7 @@ public class DayDaySave extends BaseCommTask {
         } catch (Throwable th) {
             Log.error(this.displayName + "[.index]异常"+th);
         } finally {
-            TimeUtil.sleep((long) this.executeIntervalInt);
+            TimeUtil.sleep(this.executeIntervalInt);
         }
     }
 
@@ -111,7 +111,7 @@ public class DayDaySave extends BaseCommTask {
         } catch (Throwable th) {
             Log.error(this.displayName + "[.collection]异常"+ th);
         } finally {
-            TimeUtil.sleep((long) this.executeIntervalInt);
+            TimeUtil.sleep(this.executeIntervalInt);
         }
     }
 
@@ -146,7 +146,7 @@ public class DayDaySave extends BaseCommTask {
         } catch (Throwable th) {
             Log.error(this.displayName + "[.peakIndex]异常"+th);
         } finally {
-            TimeUtil.sleep((long) this.executeIntervalInt);
+            TimeUtil.sleep(this.executeIntervalInt);
         }
     }
 

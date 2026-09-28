@@ -16,7 +16,7 @@ import fansirsqi.xposed.sesame.util.RandomUtil;
 import fansirsqi.xposed.sesame.util.TimeUtil;
 
 public class MonthTra extends BaseCommTask {
-    private String displayName = "月月赚 💰";
+    private final String displayName = "月月赚 💰";
     //存储已经完成的任务
     private static final Map<String, Boolean> completedTasksMap = new HashMap<>();
     @Override

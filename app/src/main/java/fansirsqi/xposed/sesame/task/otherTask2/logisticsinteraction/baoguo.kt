@@ -93,7 +93,7 @@ object baoguo {
 
                 // Step A: 报名 (如果需要)
                 if (needSignUp && status == "NONE_SIGNUP") {
-                    val signupRes = baoguoRpcCall.handleTask(taskId, "signup", taskCenInfo)
+                    baoguoRpcCall.handleTask(taskId, "signup", taskCenInfo)
 
                     delay(2000)
                 }

@@ -37,14 +37,13 @@ public class HundredTimesDiscountCard extends BaseCommTask {
             stringBuilder2.append(string2);
             stringBuilder2.append(str3);
             if (requestString("alipay.ofpgrowth.hundredtimesdiscountcard.task.receive", stringBuilder2.toString()) != null) {
-                StringBuilder stringBuilder3 = new StringBuilder();
-                stringBuilder3.append(this.displayName);
-                stringBuilder3.append("完成[");
-                stringBuilder3.append(jSONObject.optString("taskTitle"));
-                stringBuilder3.append("]获得");
-                stringBuilder3.append(jSONObject.optString("prizeCount"));
-                stringBuilder3.append("次");
-                Log.other(stringBuilder3.toString());
+                String stringBuilder3 = this.displayName +
+                        "完成[" +
+                        jSONObject.optString("taskTitle") +
+                        "]获得" +
+                        jSONObject.optString("prizeCount") +
+                        "次";
+                Log.other(stringBuilder3);
             }
         } catch (Exception e) {
             Log.printStackTrace(this.TAG, e);
@@ -87,25 +86,22 @@ public class HundredTimesDiscountCard extends BaseCommTask {
                     }
                 }
                 if (!str2.isEmpty()) {
-                    StringBuilder stringBuilder = new StringBuilder();
-                    stringBuilder.append("\"appletId\": \"");
-                    stringBuilder.append(str2);
-                    stringBuilder.append("\",\"stageCode\": \"send\",\"taskCenId\": \"");
-                    stringBuilder.append(string);
-                    stringBuilder.append(str);
-                    requestString("alipay.promoprod.applet.trigger", stringBuilder.toString());
-                    StringBuilder stringBuilder2 = new StringBuilder();
-                    stringBuilder2.append("\"chInfo\": \"signInTask\",\"taskId\": \"");
-                    stringBuilder2.append(str2);
-                    stringBuilder2.append(str);
-                    jSONObject = requestString("alipay.ofpgrowth.hundredtimesdiscountcard.task.receive", stringBuilder2.toString());
+                    String stringBuilder = "\"appletId\": \"" +
+                            str2 +
+                            "\",\"stageCode\": \"send\",\"taskCenId\": \"" +
+                            string +
+                            str;
+                    requestString("alipay.promoprod.applet.trigger", stringBuilder);
+                    String stringBuilder2 = "\"chInfo\": \"signInTask\",\"taskId\": \"" +
+                            str2 +
+                            str;
+                    jSONObject = requestString("alipay.ofpgrowth.hundredtimesdiscountcard.task.receive", stringBuilder2);
                     if (jSONObject != null) {
-                        StringBuilder stringBuilder3 = new StringBuilder();
-                        stringBuilder3.append(this.displayName);
-                        stringBuilder3.append("签到成功+");
-                        stringBuilder3.append(jSONObject.optString("modelAmount"));
-                        stringBuilder3.append(jSONObject.optString("modelUnit"));
-                        Log.other(stringBuilder3.toString());
+                        String stringBuilder3 = this.displayName +
+                                "签到成功+" +
+                                jSONObject.optString("modelAmount") +
+                                jSONObject.optString("modelUnit");
+                        Log.other(stringBuilder3);
                     }
                 }
             } catch (Throwable th) {

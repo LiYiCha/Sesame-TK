@@ -732,7 +732,7 @@ fun LogContent(
     lazyListState: LazyListState
 ) {
     val coroutineScope = rememberCoroutineScope()
-    val density = LocalDensity.current
+    LocalDensity.current
 
     // 双指缩放状态
     var zoomScale by remember { mutableFloatStateOf(1f) }
@@ -1527,7 +1527,7 @@ fun RequestOutlineDialog(
     onDismiss: () -> Unit,
     onJumpTo: ((Int) -> Unit)? = null
 ) {
-    val coroutineScope = rememberCoroutineScope()
+    rememberCoroutineScope()
     AlertDialog(
         onDismissRequest = onDismiss,
         title = {

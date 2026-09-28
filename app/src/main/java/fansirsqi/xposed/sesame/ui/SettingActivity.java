@@ -114,13 +114,10 @@ public class SettingActivity extends BaseActivity {
             setBaseSubtitle(getString(R.string.settings) + ": " + this.userName);
         }
         initializeTabs();
-        WatermarkView watermarkView = WatermarkView.Companion.install(this);
         String tag = "用户: " + userName + "\n ID: " + userId;
         if ("默认".equals(userName) || userId == null) {
             tag = "用户: " + "未登录" + "\n ID: " + "*************";
         }
-        //设置水印
-        //watermarkView.setWatermarkText(tag);
     }
 
     private void initializeTabs() {
@@ -252,9 +249,6 @@ public class SettingActivity extends BaseActivity {
 
     private void save() {
         try {
-//            if (!ViewAppInfo.INSTANCE.getVeriftag()) {
-//                ToastUtil.showToastWithDelay(this, "非内测用户！", 100);
-//            }
             if (Config.isModify(this.userId) && Config.save(this.userId, false)) {
                 ToastUtil.showToastWithDelay(this, "保存成功！", 100);
                 if (!StringUtil.isEmpty(this.userId)) {

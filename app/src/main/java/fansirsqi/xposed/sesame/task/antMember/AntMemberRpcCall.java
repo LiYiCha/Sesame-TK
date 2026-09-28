@@ -35,7 +35,7 @@ public class AntMemberRpcCall {
             args.put("sceneCode", "QUERY");
             args.put("sourcePassMap", buildMemberSourcePassMap());
             return RequestManager.requestString("com.alipay.amic.biz.rpc.signin.h5.queryMemberSigninCalendar",
-                    "[" + args.toString() + "]");
+                    "[" + args + "]");
         } catch (Exception e) {
             return "";
         }
@@ -207,7 +207,7 @@ public class AntMemberRpcCall {
             args.put("sourcePassMap", buildMemberSourcePassMap());
             args.put("taskProcessId", "");
             return RequestManager.requestString("com.alipay.amic.memtask.h5.MemTaskManagerFacade.executeTask",
-                    "[" + args.toString() + "]");
+                    "[" + args + "]");
         } catch (Exception e) {
             return "";
         }
@@ -218,7 +218,7 @@ public class AntMemberRpcCall {
             JSONObject args = new JSONObject();
             args.put("source", "signInAd");
             return RequestManager.requestString("com.alipay.amic.memtask.h5.MemTaskListQueryFacade.queryAllStatusTaskList",
-                    "[" + args.toString() + "]");
+                    "[" + args + "]");
         } catch (Exception e) {
             return "";
         }
@@ -432,7 +432,7 @@ public class AntMemberRpcCall {
 
     public static String beanExchange(String itemId, int pointAmount) {
         return RequestManager.requestString("com.alipay.insmarketingbff.onestop.planTrigger",
-                "[{\"extParams\":{\"itemId\":\"" + itemId + "\",\"pointAmount\":\"" + Integer.toString(pointAmount) + "\"},"
+                "[{\"extParams\":{\"itemId\":\"" + itemId + "\",\"pointAmount\":\"" + pointAmount + "\"},"
                         + "\"planCode\":\"bluebean_onestop\",\"planOperateCode\":\"exchange\"}]");
     }
 
@@ -447,7 +447,7 @@ public class AntMemberRpcCall {
             args.put("bizScene", "POSITION");
             args.put("entrance", "insplatform_mine_anxindou");
             return RequestManager.requestString("com.alipay.insmarketingbff.bean.queryAccountSummaryPoint",
-                    "[" + args.toString() + "]");
+                    "[" + args + "]");
         } catch (Exception e) {
             return "";
         }
@@ -495,7 +495,7 @@ public class AntMemberRpcCall {
 
         // 3. 构造完整的请求 Data 字符串
         String data = "[{" +
-                "\"deliveryIdList\":" + deliveryIdListJson.toString() + "," +
+                "\"deliveryIdList\":" + deliveryIdListJson + "," +
                 "\"lowerPoint\":0," +
                 "\"pageNum\":" + pageNum + "," +
                 "\"pageSize\":" + pageSize + "," +
@@ -1024,7 +1024,7 @@ public class AntMemberRpcCall {
         }
         sb.append("]");
 
-        String data = "[{\"month\":\"" + month + "\",\"stickerIds\":" + sb.toString() + ",\"year\":\"" + year + "\"}]";
+        String data = "[{\"month\":\"" + month + "\",\"stickerIds\":" + sb + ",\"year\":\"" + year + "\"}]";
         return RequestManager.requestString("alipay.memberasset.sticker.receiveSticker", data);
     }
 
@@ -1100,7 +1100,7 @@ public class AntMemberRpcCall {
 
     //芝麻信誉 部分
     public static class Zmxy {
-        private static String Version="2025-10-22";
+        private static final String Version="2025-10-22";
         //芝麻粒炼金
 
         /**
@@ -1202,17 +1202,15 @@ public class AntMemberRpcCall {
             if (answerStatus == null || answerStatus.isEmpty()) {
                 answerStatus = "RIGHT";
             }
-            StringBuilder sb = new StringBuilder();
-            sb.append("[{\"behaviorId\":\"")
-                    .append(behaviorId)
-                    .append("\",\"bizDate\":")
-                    .append(bizDate)
-                    .append(",\"extInfo\":{")
-                    .append("\"answerId\":\"").append(answerId).append("\",")
-                    .append("\"answerStatus\":\"").append(answerStatus).append("\",")
-                    .append("\"questionId\":\"").append(questionId).append("\"")
-                    .append("}}]");
-            String data = sb.toString();
+            String data = "[{\"behaviorId\":\"" +
+                    behaviorId +
+                    "\",\"bizDate\":" +
+                    bizDate +
+                    ",\"extInfo\":{" +
+                    "\"answerId\":\"" + answerId + "\"," +
+                    "\"answerStatus\":\"" + answerStatus + "\"," +
+                    "\"questionId\":\"" + questionId + "\"" +
+                    "}}]";
             return RequestManager.requestString(
                     "com.antgroup.zmxy.zmcustprod.biz.rpc.growthtask.api.GrowthTaskRpcManager.pushDailyTask",
                     data
@@ -1250,18 +1248,15 @@ public class AntMemberRpcCall {
                 answerStatus = "RIGHT";
             }
 
-            StringBuilder sb = new StringBuilder();
-            sb.append("[{")
-                    .append("\"behaviorId\":\"shipingwenda\",")
-                    .append("\"bizDate\":").append(bizDate).append(',')
-                    .append("\"extInfo\":{")
-                    .append("\"answerId\":\"").append(answerId).append("\",")
-                    .append("\"answerStatus\":\"").append(answerStatus).append("\",")
-                    .append("\"questionId\":\"").append(questionId).append("\"")
-                    .append("}")
-                    .append("}]");
-
-            String data = sb.toString();
+            String data = "[{" +
+                    "\"behaviorId\":\"shipingwenda\"," +
+                    "\"bizDate\":" + bizDate + ',' +
+                    "\"extInfo\":{" +
+                    "\"answerId\":\"" + answerId + "\"," +
+                    "\"answerStatus\":\"" + answerStatus + "\"," +
+                    "\"questionId\":\"" + questionId + "\"" +
+                    "}" +
+                    "}]";
 
             return RequestManager.requestString(
                     "com.antgroup.zmxy.zmcustprod.biz.rpc.growthtask.api.GrowthTaskRpcManager.pushDailyTask",
@@ -1541,7 +1536,7 @@ public class AntMemberRpcCall {
             args.put("source", "signInAd");
             return RequestManager.requestString(
                     "com.alipay.amic.memtask.h5.MemTaskListQueryFacade.queryAllStatusTaskList",
-                    "[" + args.toString() + "]");
+                    "[" + args + "]");
         } catch (Exception e) {
             return "";
         }
@@ -1563,7 +1558,7 @@ public class AntMemberRpcCall {
             args.put("taskTopConfigId", "");
             return RequestManager.requestString(
                     "com.alipay.amic.memtask.h5.MemTaskListQueryFacade.signPageTaskList",
-                    "[" + args.toString() + "]");
+                    "[" + args + "]");
         } catch (Exception e) {
             return "";
         }
@@ -1580,7 +1575,7 @@ public class AntMemberRpcCall {
             args.put("sourcePassMap", buildMemberSourcePassMap());
             return RequestManager.requestString(
                     "com.alipay.amic.memtask.h5.MemTaskManagerFacade.applyTask",
-                    "[" + args.toString() + "]");
+                    "[" + args + "]");
         } catch (Exception e) {
             return "";
         }
@@ -1597,7 +1592,7 @@ public class AntMemberRpcCall {
             args.put("sourcePassMap", buildMemberSourcePassMap());
             return RequestManager.requestString(
                     "com.alipay.amic.memtask.h5.MemTaskListQueryFacade.queryMemberTaskProcessList",
-                    "[" + args.toString() + "]");
+                    "[" + args + "]");
         } catch (Exception e) {
             return "";
         }
@@ -1614,7 +1609,7 @@ public class AntMemberRpcCall {
             args.put("taskProcessId", taskProcessId);
             return RequestManager.requestString(
                     "com.alipay.amic.memtask.h5.MemTaskListQueryFacade.querySingleTaskProcessDetail",
-                    "[" + args.toString() + "]");
+                    "[" + args + "]");
         } catch (Exception e) {
             return "";
         }
@@ -1632,7 +1627,7 @@ public class AntMemberRpcCall {
             args.put("sourcePassMap", buildMemberSourcePassMap());
             return RequestManager.requestString(
                     "com.alipay.alipaymember.biz.rpc.membertask.h5.award",
-                    "[" + args.toString() + "]");
+                    "[" + args + "]");
         } catch (Exception e) {
             return "";
         }
@@ -1648,7 +1643,7 @@ public class AntMemberRpcCall {
             args.put("sourcePassMap", buildMemberSourcePassMap());
             return RequestManager.requestString(
                     "com.alipay.amic.biz.rpc.signin.h5.querySignFloatingBall",
-                    "[" + args.toString() + "]");
+                    "[" + args + "]");
         } catch (Exception e) {
             return "";
         }
@@ -1666,7 +1661,7 @@ public class AntMemberRpcCall {
             args.put("sourcePassMap", buildMemberSourcePassMap());
             return RequestManager.requestString(
                     "com.alipay.amic.biz.rpc.signin.h5.triggerSignFloatingBall",
-                    "[" + args.toString() + "]");
+                    "[" + args + "]");
         } catch (Exception e) {
             return "";
         }
@@ -1683,7 +1678,7 @@ public class AntMemberRpcCall {
             args.put("sourcePassMap", buildMemberSourcePassMap());
             return RequestManager.requestString(
                     "com.alipay.amic.biz.rpc.signin.h5.querySignFloatingBallAdTask",
-                    "[" + args.toString() + "]");
+                    "[" + args + "]");
         } catch (Exception e) {
             return "";
         }
@@ -1699,7 +1694,7 @@ public class AntMemberRpcCall {
             args.put("sourcePassMap", buildMemberSourcePassMap());
             return RequestManager.requestString(
                     "com.alipay.amic.biz.rpc.game.h5.GameCenterQueryFacade.queryGameEntranceInfo",
-                    "[" + args.toString() + "]");
+                    "[" + args + "]");
         } catch (Exception e) {
             return "";
         }
@@ -1722,7 +1717,7 @@ public class AntMemberRpcCall {
             args.put("sourcePassMap", buildMemberSourcePassMap());
             return RequestManager.requestString(
                     "com.alipay.alipaymember.biz.rpc.pointcert.h5.queryPointCertV2",
-                    "[" + args.toString() + "]");
+                    "[" + args + "]");
         } catch (Exception e) {
             return "";
         }
@@ -1789,7 +1784,7 @@ public class AntMemberRpcCall {
             }
             return RequestManager.requestString(
                     "com.alipay.wealthgoldtwa.goldbill.v2.index.collect",
-                    "[" + args.toString() + "]");
+                    "[" + args + "]");
         } catch (Exception e) {
             return "";
         }
@@ -1826,7 +1821,7 @@ public class AntMemberRpcCall {
             args.put("taskCenId", taskCenterId);
             args.put("stageCode", stageCode);
             return RequestManager.requestString("com.alipay.insmarketingbff.bean.taskTrigger",
-                    "[" + args.toString() + "]");
+                    "[" + args + "]");
         } catch (Exception e) {
             return "";
         }
@@ -1846,7 +1841,7 @@ public class AntMemberRpcCall {
             args.put("sceneCode", sceneCode);
             args.put("taskCenterId", taskCenterId);
             return RequestManager.requestString("com.alipay.insmarketingbff.bean.taskCenterConsult",
-                    "[" + args.toString() + "]");
+                    "[" + args + "]");
         } catch (Exception e) {
             return "";
         }
@@ -1873,7 +1868,7 @@ public class AntMemberRpcCall {
             args.put("sourcePassMap", buildMemberSourcePassMap());
             return RequestManager.requestString(
                     "com.alipay.amic.memtask.h5.MemTaskManagerFacade.executeTask",
-                    "[" + args.toString() + "]");
+                    "[" + args + "]");
         } catch (Exception e) {
             return "";
         }
@@ -1911,7 +1906,7 @@ public class AntMemberRpcCall {
             args.put("taskId", bizId);
             return RequestManager.requestString(
                     "com.alipay.gamecenteruprod.biz.rpc.v3.doTaskSend",
-                    "[" + args.toString() + "]");
+                    "[" + args + "]");
         } catch (Exception e) {
             return "";
         }
@@ -1927,7 +1922,7 @@ public class AntMemberRpcCall {
             args.put("sourcePassMap", buildMemberSourcePassMap());
             return RequestManager.requestString(
                     "com.alipay.amic.memtask.h5.MemTaskManagerFacade.executeTask",
-                    "[" + args.toString() + "]");
+                    "[" + args + "]");
         } catch (Exception e) {
             return "";
         }

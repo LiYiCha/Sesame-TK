@@ -99,7 +99,7 @@ class RpcDebugActivity : AppCompatActivity() {
             }
         }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            registerReceiver(broadcastReceiver, intentFilter, Context.RECEIVER_EXPORTED)
+            registerReceiver(broadcastReceiver, intentFilter, RECEIVER_EXPORTED)
         } else {
             registerReceiver(broadcastReceiver, intentFilter)
         }

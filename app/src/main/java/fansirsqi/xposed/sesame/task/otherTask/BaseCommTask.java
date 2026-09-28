@@ -54,11 +54,8 @@ public abstract class BaseCommTask {
         }
 
         CompletedKeyEnum hoursKeyEnum = this.hoursKeyEnum;
-        if (hoursKeyEnum != null && Status.hasFlagToday(hoursKeyEnum.name())) {
-            return true; // 已完成当前时间段的任务
-        }
-
-        return false; // 任务未完成
+        return hoursKeyEnum != null && Status.hasFlagToday(hoursKeyEnum.name()); // 已完成当前时间段的任务
+// 任务未完成
     }
 
     /**

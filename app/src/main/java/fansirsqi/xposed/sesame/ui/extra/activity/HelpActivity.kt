@@ -1,6 +1,5 @@
 ﻿package fansirsqi.xposed.sesame.ui.extra.activity
 
-import android.annotation.SuppressLint
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
@@ -16,8 +15,6 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -29,7 +26,6 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
@@ -43,7 +39,6 @@ import fansirsqi.xposed.sesame.ui.theme.app.SesameTheme
 import fansirsqi.xposed.sesame.util.AppUpdaterManager
 import fansirsqi.xposed.sesame.util.Files
 import fansirsqi.xposed.sesame.util.PermissionUtil
-import fansirsqi.xposed.sesame.util.ToastUtil
 import java.io.File
 import java.util.*
 
@@ -66,8 +61,7 @@ class HelpActivity : BaseActivity() {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun HelpScreen(activity: android.app.Activity, onBackClick: () -> Unit) {
-    val context = activity
-    val configManager = remember { UpdaterConfigManager(context) }
+    val configManager = remember { UpdaterConfigManager(activity) }
 
     // 状态管理
     var updateMode by remember { mutableIntStateOf(configManager.updateMode) }
@@ -121,13 +115,13 @@ private fun HelpScreen(activity: android.app.Activity, onBackClick: () -> Unit) 
                         updateMode = newMode
                         configManager.updateMode = newMode
                         Toast.makeText(
-                            context.applicationContext,
+                            activity.applicationContext,
                             if (newMode == UpdaterConfigManager.UPDATE_MODE_MANUAL) "已设为：手动更新 (仅在下载列表点击刷新时检查)" else "已设为：自动更新 (启动时静默检测)",
                             Toast.LENGTH_SHORT
                         ).show()
                     },
                     onOpenDownloadListClick = {
-                        AppUpdaterManager.openDownloadList(context)
+                        AppUpdaterManager.openDownloadList(activity)
                     }
                 )
             }
@@ -167,8 +161,8 @@ private fun HelpScreen(activity: android.app.Activity, onBackClick: () -> Unit) 
                 Button(
                     onClick = {
                         showClearLogDialog = false
-                        val result = clearBackupLogs(context)
-                        Toast.makeText(context, result, Toast.LENGTH_SHORT).show()
+                        val result = clearBackupLogs(activity)
+                        Toast.makeText(activity, result, Toast.LENGTH_SHORT).show()
                         storageRefreshTrigger++
                     },
                     colors = ButtonDefaults.buttonColors(

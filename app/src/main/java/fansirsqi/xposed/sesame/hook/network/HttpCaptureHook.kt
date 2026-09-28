@@ -246,7 +246,7 @@ object HttpCaptureHook {
                     try {
                         val event = param.args[0] ?: return
                         val params = XposedHelpers.callMethod(event, "getParam") as? org.json.JSONObject ?: return
-                        val url = params.optString("url")
+                        params.optString("url")
                     } catch (_: Throwable) {}
                 }
             })

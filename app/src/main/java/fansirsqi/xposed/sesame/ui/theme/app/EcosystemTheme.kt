@@ -57,7 +57,7 @@ object EcosystemManager {
                 }
                 
                 try {
-                    isEcoEnabled = fansirsqi.xposed.sesame.newutil.MMKVUtil.getMMKV("sesame-tk").decodeBool("is_eco_enabled", true)
+                    isEcoEnabled = MMKVUtil.getMMKV("sesame-tk").decodeBool("is_eco_enabled", true)
                 } catch (e: Exception) {
                     e.printStackTrace()
                 }

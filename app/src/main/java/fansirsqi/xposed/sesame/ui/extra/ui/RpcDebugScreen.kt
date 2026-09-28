@@ -53,7 +53,6 @@ private fun RpcDebugScreen(vm: RpcDebugViewModel, callbacks: Callbacks) {
     val data by vm.data.collectAsState()
     val result by vm.result.collectAsState()
     val zoomed by vm.zoomed.collectAsState()
-    val items by vm.items.collectAsState()
     val editingItem by vm.editingItem.collectAsState()
 
     val scroll = rememberScrollState()

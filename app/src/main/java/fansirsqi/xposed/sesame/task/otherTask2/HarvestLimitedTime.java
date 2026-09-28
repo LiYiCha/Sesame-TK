@@ -200,7 +200,7 @@ public class HarvestLimitedTime extends OtherTask2{
                 signupParam.put("stageCode", "signup");
                 signupParam.put("taskCenId", taskCenId);
 
-                String params = "[" + signupParam.toString() + "]";
+                String params = "[" + signupParam + "]";
                 JSONObject s = new JSONObject(RequestManager.requestString("alipay.promoprod.applet.trigger", params));
                 if (!s.optBoolean("success")) {
                     Log.error(TAG + "领取任务失败: " + s);
@@ -227,7 +227,7 @@ public class HarvestLimitedTime extends OtherTask2{
             submitParam.put("stageCode", "send");
             submitParam.put("taskCenId", taskCenId);
 
-            String params = "[" + submitParam.toString() + "]";
+            String params = "[" + submitParam + "]";
             JSONObject s = new JSONObject(RequestManager.requestString("alipay.promoprod.applet.trigger", params));
             if (s.optBoolean("success")) {
                 JSONObject appletBaseConfigDTO = s.optJSONObject("appletBaseConfigDTO");

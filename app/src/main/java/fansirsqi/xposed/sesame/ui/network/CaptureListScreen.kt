@@ -59,7 +59,6 @@ fun CaptureListScreen(
     val hasMore by viewModel.hasMore.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
     val searchQuery by viewModel.searchQuery.collectAsState()
-    val categoryFilter by viewModel.categoryFilter.collectAsState()
     val isGlobal by viewModel.isGlobalSearch.collectAsState()
     val globalResults by viewModel.globalSearchResults.collectAsState()
     val blacklist by viewModel.blacklist.collectAsState()
@@ -77,7 +76,7 @@ fun CaptureListScreen(
     var pendingExportJson by remember { mutableStateOf("") }
     
     // 文件保存启动器
-    val saveLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
+    rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
         uri?.let {
             try {
                 context.contentResolver.openOutputStream(it)?.use { os ->
@@ -100,7 +99,7 @@ fun CaptureListScreen(
     }
 
     var showMenu by remember { mutableStateOf(false) }
-    val scope = rememberCoroutineScope()
+    rememberCoroutineScope()
 
     // 统计数据
     val stats by viewModel.stats.collectAsState()
@@ -124,7 +123,7 @@ fun CaptureListScreen(
                         val json = viewModel.exportSelected()
                         val clip = android.content.ClipData.newPlainText("Export", json)
                         (context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager).setPrimaryClip(clip)
-                        android.widget.Toast.makeText(context, "已复制 ${selectedIds.size} 条记录", android.widget.Toast.LENGTH_SHORT).show()
+                        Toast.makeText(context, "已复制 ${selectedIds.size} 条记录", Toast.LENGTH_SHORT).show()
                         viewModel.clearSelection()
                     },
                     onSaveFile = {
@@ -469,7 +468,7 @@ private fun RecordItem(
                             onClick = {
                                 val clip = android.content.ClipData.newPlainText("URL", record.url)
                                 (context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager).setPrimaryClip(clip)
-                                android.widget.Toast.makeText(context, "URL 已复制", android.widget.Toast.LENGTH_SHORT).show()
+                                Toast.makeText(context, "URL 已复制", Toast.LENGTH_SHORT).show()
                                 showMenu = false
                             }
                         )
@@ -480,7 +479,7 @@ private fun RecordItem(
                                 val json = fansirsqi.xposed.sesame.util.JsonUtil.formatJson(record)
                                 val clip = android.content.ClipData.newPlainText("Capture", json)
                                 (context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager).setPrimaryClip(clip)
-                                android.widget.Toast.makeText(context, "已复制 JSON 到剪贴板", android.widget.Toast.LENGTH_SHORT).show()
+                                Toast.makeText(context, "已复制 JSON 到剪贴板", Toast.LENGTH_SHORT).show()
                                 showMenu = false
                             }
                         )

@@ -1,5 +1,6 @@
 package fansirsqi.xposed.sesame.hook.skin
 
+import android.annotation.SuppressLint
 import android.os.Environment
 import de.robv.android.xposed.XC_MethodHook
 import de.robv.android.xposed.XposedHelpers
@@ -26,6 +27,7 @@ object SkinHook {
 
     // 存储路径常量
     private val EXTERNAL_STORAGE_PATH = "${Environment.getExternalStorageDirectory()}/Android/media/com.eg.android.AlipayGphone/YC_SKIN"
+    @SuppressLint("SdCardPath")
     private const val SKIN_DIR_IN_ALIPAY = "/data/data/com.eg.android.AlipayGphone/files/onsitepay_skin_dir/HOHO"
 
     // Hook 状态标记

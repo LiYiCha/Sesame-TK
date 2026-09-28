@@ -192,8 +192,7 @@ object ListDialog {
         }
 
         lvList.setOnItemLongClickListener { parent, _, position, _ ->
-            val cur = parent.adapter.getItem(position) as MapperEntity
-            when (cur) {
+            when (val cur = parent.adapter.getItem(position) as MapperEntity) {
                 is CooperateEntity -> {
                     MaterialAlertDialogBuilder(c)
                         .setTitle("删除 ${cur.name}")

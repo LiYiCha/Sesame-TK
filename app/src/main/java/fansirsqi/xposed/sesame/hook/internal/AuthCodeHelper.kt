@@ -139,13 +139,13 @@ object AuthCodeHelper {
         return when (type) {
             java.lang.Boolean.TYPE -> java.lang.Boolean::class.java
             java.lang.Byte.TYPE -> java.lang.Byte::class.java
-            java.lang.Character.TYPE -> java.lang.Character::class.java
+            Character.TYPE -> Character::class.java
             java.lang.Short.TYPE -> java.lang.Short::class.java
-            java.lang.Integer.TYPE -> java.lang.Integer::class.java
+            Integer.TYPE -> Integer::class.java
             java.lang.Long.TYPE -> java.lang.Long::class.java
             java.lang.Float.TYPE -> java.lang.Float::class.java
             java.lang.Double.TYPE -> java.lang.Double::class.java
-            java.lang.Void.TYPE -> java.lang.Void::class.java
+            Void.TYPE -> Void::class.java
             else -> type
         }
     }

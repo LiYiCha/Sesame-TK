@@ -115,7 +115,7 @@ class OtherCommonRpc {
 
         return JSONObject(RequestManager.requestString(
             "alipay.content.interact.task.reward",
-            "[${params.toString()}]"
+            "[$params]"
         ))
     }
 

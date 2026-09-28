@@ -2,6 +2,7 @@
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import java.util.Properties
 import java.util.TimeZone
 
 plugins {
@@ -19,8 +20,6 @@ android {
         applicationId = "fansirsqi.xposed.sesame"
         minSdk = 24
         targetSdk = 36
-
-
 
         val buildDate = SimpleDateFormat("yyyy-MM-dd", Locale.CHINA).apply {
             timeZone = TimeZone.getTimeZone("GMT+8")

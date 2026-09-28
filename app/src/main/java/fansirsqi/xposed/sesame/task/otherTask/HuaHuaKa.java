@@ -115,11 +115,11 @@ public class HuaHuaKa extends BaseCommTask {
                         processTask(task, true);
                     }
                 }
-                TimeUtil.sleep((long) this.executeIntervalInt);
+                TimeUtil.sleep(this.executeIntervalInt);
             }
         } catch (Throwable th) {
             Log.error(displayName + "queryV2 error: " + th);
-            TimeUtil.sleep((long) this.executeIntervalInt);
+            TimeUtil.sleep(this.executeIntervalInt);
         }
     }
 
@@ -300,11 +300,11 @@ public class HuaHuaKa extends BaseCommTask {
                     }
                 }
 
-                TimeUtil.sleep((long) this.executeIntervalInt);
+                TimeUtil.sleep(this.executeIntervalInt);
 
             } catch (Throwable th) {
                 Log.error("campConsult error: " + campId+"因为:"+ th);
-                TimeUtil.sleep((long) this.executeIntervalInt);
+                TimeUtil.sleep(this.executeIntervalInt);
             }
         }
     }
@@ -386,7 +386,7 @@ public class HuaHuaKa extends BaseCommTask {
                             }
                         }
                     }
-                    TimeUtil.sleep((long) this.executeIntervalInt);
+                    TimeUtil.sleep(this.executeIntervalInt);
                 } while (--i > 0);
             }
         } catch (Throwable th) {
@@ -484,13 +484,13 @@ public class HuaHuaKa extends BaseCommTask {
                 if (requestString != null) {
                     Log.other(this.displayName + "签到成功[" + JsonUtil.getValueByPath(requestString, "data.prizeSendOrderList.[0].prizeName") + "]");
                     Status.setFlagToday(CompletedKeyEnum.HuaHuaKaSign.name());
-                    TimeUtil.sleep((long) this.executeIntervalInt);
+                    TimeUtil.sleep(this.executeIntervalInt);
                     return;
                 }
             }
-            TimeUtil.sleep((long) this.executeIntervalInt);
+            TimeUtil.sleep(this.executeIntervalInt);
         } catch (Throwable th) {
-            TimeUtil.sleep((long) this.executeIntervalInt);
+            TimeUtil.sleep(this.executeIntervalInt);
         }
     }
 
@@ -500,10 +500,10 @@ public class HuaHuaKa extends BaseCommTask {
             if (requestString("com.alipay.pcreditbfweb.sdk.task.trigger", "\"appletId\": \"" + str2 + "\",\"outBizNo\": \"" + str2 + TimeUtil.getMinuteTimestamp() + "\",\"taskCenId\": \"" + str + "\",\"retryFlag\": true,\"stageCode\":\"" + str3 + "\"") != null) {
                 z = true;
             }
-            TimeUtil.sleep((long) this.executeIntervalInt);
+            TimeUtil.sleep(this.executeIntervalInt);
             return z;
         } catch (Throwable th) {
-            TimeUtil.sleep((long) this.executeIntervalInt);
+            TimeUtil.sleep(this.executeIntervalInt);
             throw th;
         }
     }

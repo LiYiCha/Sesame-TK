@@ -11,7 +11,6 @@ import java.util.List;
 import java.util.Map;
 
 import fansirsqi.xposed.sesame.data.Status;
-import fansirsqi.xposed.sesame.hook.ApplicationHook;
 import fansirsqi.xposed.sesame.hook.RequestManager;
 import fansirsqi.xposed.sesame.util.Log;
 import fansirsqi.xposed.sesame.util.TaskBlacklist;
@@ -47,21 +46,13 @@ public class YebExpGold extends BaseCommTask {
 
     private int executeIntervalInt;
 
-    /** 任务条目：来源 + 原始任务 JSON */
-    private static class TaskEntry {
-        final String taskId;
-        final String title;
-        final String source;
-        final JSONObject task;
-        final String fingerprint; // title|link|prizeIds 指纹
-
-        TaskEntry(String taskId, String title, String source, JSONObject task, String fingerprint) {
-            this.taskId = taskId;
-            this.title = title;
-            this.source = source;
-            this.task = task;
-            this.fingerprint = fingerprint;
-        }
+    /**
+     * 任务条目：来源 + 原始任务 JSON
+     *
+     * @param fingerprint title|link|prizeIds 指纹
+     */
+        private record TaskEntry(String taskId, String title, String source, JSONObject task,
+                                 String fingerprint) {
     }
 
     @Override
@@ -132,7 +123,7 @@ public class YebExpGold extends BaseCommTask {
             Status.setFlagToday(CompletedKeyEnum.YebExpGold.name());
         } catch (Throwable th) {
             Log.printStackTrace(TAG, "余额宝体验金运行异常:", th);
-            TimeUtil.sleep((long) this.executeIntervalInt);
+            TimeUtil.sleep(this.executeIntervalInt);
         }
     }
 
@@ -167,7 +158,7 @@ public class YebExpGold extends BaseCommTask {
             JSONObject signResponse = requestString(
                     "com.alipay.yebscenebff.needle.yebExpGold.signIn",
                     "\"signInPlayId\":\"" + SIGN_IN_PLAY_ID + "\"");
-            if (signResponse == null || !isSuccess(signResponse)) {
+            if (!isSuccess(signResponse)) {
                 Log.system(TAG, "余额宝体验金签到失败: " + getErrorDesc(signResponse));
                 manualTaskTitles.add(title);
                 return false;
@@ -176,7 +167,7 @@ public class YebExpGold extends BaseCommTask {
             Status.setFlagToday(FLAG_SIGN);
             return true;
         } catch (Throwable th) {
-            TimeUtil.sleep((long) this.executeIntervalInt);
+            TimeUtil.sleep(this.executeIntervalInt);
             return false;
         }
     }
@@ -246,7 +237,7 @@ public class YebExpGold extends BaseCommTask {
             JSONObject promoResponse = requestString(
                     "com.alipay.yebpromobff.promosdk2024.task.query",
                     "\"needTriggerPrize\":false,\"playActionCode\":\"TASK_LIST_CONSULT\",\"playEntrance\":\"HYQ_TASK_LIST_ENTRANCE_2\"");
-            if (promoResponse == null || !isSuccess(promoResponse)) {
+            if (!isSuccess(promoResponse)) {
                 Log.system(TAG, "余额宝体验金任务列表查询失败: " + getErrorDesc(promoResponse));
             } else {
                 JSONObject promoResult = promoResponse.optJSONObject("result");
@@ -292,7 +283,7 @@ public class YebExpGold extends BaseCommTask {
 
             return handled;
         } catch (Throwable th) {
-            TimeUtil.sleep((long) this.executeIntervalInt);
+            TimeUtil.sleep(this.executeIntervalInt);
             return false;
         }
     }
@@ -304,8 +295,7 @@ public class YebExpGold extends BaseCommTask {
     }
 
     private static void collectManualTasksRecursive(Object node, List<String> manualTaskTitles) {
-        if (node instanceof JSONObject) {
-            JSONObject obj = (JSONObject) node;
+        if (node instanceof JSONObject obj) {
             String taskId = obj.optString("taskId").trim();
             if (!taskId.isEmpty() && hasTrackableStatus(obj)) {
                 String status = runStatus(obj);
@@ -320,8 +310,7 @@ public class YebExpGold extends BaseCommTask {
             while (keys.hasNext()) {
                 collectManualTasksRecursive(obj.opt(keys.next()), manualTaskTitles);
             }
-        } else if (node instanceof JSONArray) {
-            JSONArray arr = (JSONArray) node;
+        } else if (node instanceof JSONArray arr) {
             for (int i = 0; i < arr.length(); i++) {
                 collectManualTasksRecursive(arr.opt(i), manualTaskTitles);
             }
@@ -331,7 +320,7 @@ public class YebExpGold extends BaseCommTask {
     private boolean tryExecuteTask(TaskEntry entry, List<TaskEntry> group, String status, String title) {
         try {
             JSONObject response = executeTask(entry, status);
-            if (response != null && isActionSuccess(response)) {
+            if (isActionSuccess(response)) {
                 logRewards(title, response);
                 markGroupHandled(group);
                 return true;
@@ -386,7 +375,7 @@ public class YebExpGold extends BaseCommTask {
                         "com.alipay.yebpromobff.promosdk2024.task.queryTaskByTaskId",
                         "\"appName\":\"yebpromobff\",\"playActionCode\":\"TASK_STATUS_QUERY\",\"playEntrance\":\"HYQ_TASK_LIST_ENTRANCE_2\",\"taskId\":\""
                                 + entry.taskId + "\"");
-                if (response == null || !isSuccess(response)) return null;
+                if (!isSuccess(response)) return null;
                 JSONObject result = response.optJSONObject("result");
                 JSONArray taskDetailList = result == null ? null : result.optJSONArray("taskDetailList");
                 if (taskDetailList == null) return null;
@@ -454,7 +443,7 @@ public class YebExpGold extends BaseCommTask {
                     response = forwardTask(actionTaskId, "task.trigger");
                 }
 
-                if (response != null && isActionSuccess(response)) {
+                if (isActionSuccess(response)) {
                     logRewards(title, response);
                     if (group != null) {
                         markGroupHandled(group);
@@ -547,7 +536,7 @@ public class YebExpGold extends BaseCommTask {
             Status.setFlagToday(FLAG_EXCHANGE);
             return true;
         } catch (Throwable th) {
-            TimeUtil.sleep((long) this.executeIntervalInt);
+            TimeUtil.sleep(this.executeIntervalInt);
             return false;
         }
     }
@@ -566,7 +555,7 @@ public class YebExpGold extends BaseCommTask {
                     "\"component\":\"PROMO_ACTIVITY\",\"sortType\":\"drawTime\",\"source\":\"QIANAPP\"," +
                             "\"voucherTemplateIdList\":[\"202312260007300180780087H5IR\",\"2026011300073001807800H1558H\"]");
             
-            Integer pendingCount = (queryResponse != null && isSuccess(queryResponse)) ? getVoucherCount(queryResponse) : null;
+            Integer pendingCount = (isSuccess(queryResponse)) ? getVoucherCount(queryResponse) : null;
             // 若查询返回数量为0或查询未匹配模板，执行一次兑换探测，避免漏领新模板卡包券
             boolean isDirectProbe = (pendingCount == null || pendingCount == 0);
             int remaining = isDirectProbe ? 1 : pendingCount;
@@ -617,7 +606,7 @@ public class YebExpGold extends BaseCommTask {
                         "alipay.yebprod.query.queryYebTrialCertVoucher",
                         "\"component\":\"PROMO_ACTIVITY\",\"sortType\":\"drawTime\",\"source\":\"QIANAPP\"," +
                                 "\"voucherTemplateIdList\":[\"202312260007300180780087H5IR\",\"2026011300073001807800H1558H\"]");
-                if (queryResponse == null || !isSuccess(queryResponse)) {
+                if (!isSuccess(queryResponse)) {
                     break;
                 }
                 Integer countAfter = getVoucherCount(queryResponse);
@@ -699,24 +688,24 @@ public class YebExpGold extends BaseCommTask {
         try {
             JSONObject response = requestString("alipay.yebprod.promo.yebTrialAsset", "");
             if (response == null) {
-                TimeUtil.sleep((long) this.executeIntervalInt);
+                TimeUtil.sleep(this.executeIntervalInt);
                 return;
             }
             JSONArray trialInfoList = response.optJSONArray("trialInfoList");
             if (trialInfoList == null) {
-                TimeUtil.sleep((long) this.executeIntervalInt);
+                TimeUtil.sleep(this.executeIntervalInt);
                 return;
             }
             for (int i = 0; i < trialInfoList.length(); i++) {
                 JSONObject item = trialInfoList.getJSONObject(i);
                 if (!"A".equals(item.optString("status"))) {
                     active(item.optString("trialId"), false);
-                    TimeUtil.sleep((long) this.executeIntervalInt);
+                    TimeUtil.sleep(this.executeIntervalInt);
                 }
             }
-            TimeUtil.sleep((long) this.executeIntervalInt);
+            TimeUtil.sleep(this.executeIntervalInt);
         } catch (Throwable th) {
-            TimeUtil.sleep((long) this.executeIntervalInt);
+            TimeUtil.sleep(this.executeIntervalInt);
         }
     }
 
@@ -767,7 +756,7 @@ public class YebExpGold extends BaseCommTask {
                 return null;
             }
             JSONObject jo = new JSONObject(response);
-            return isSuccess(jo) ? jo : jo;
+            return jo;
         } catch (Throwable th) {
             return null;
         }
@@ -905,8 +894,7 @@ public class YebExpGold extends BaseCommTask {
     }
 
     private static JSONObject findTaskByIdInNode(Object node, String taskId) {
-        if (node instanceof JSONObject) {
-            JSONObject obj = (JSONObject) node;
+        if (node instanceof JSONObject obj) {
             if (taskId.equals(obj.optString("taskId").trim()) && hasTrackableStatus(obj)) {
                 return obj;
             }
@@ -915,8 +903,7 @@ public class YebExpGold extends BaseCommTask {
                 JSONObject matched = findTaskByIdInNode(obj.opt(keys.next()), taskId);
                 if (matched != null) return matched;
             }
-        } else if (node instanceof JSONArray) {
-            JSONArray arr = (JSONArray) node;
+        } else if (node instanceof JSONArray arr) {
             for (int i = 0; i < arr.length(); i++) {
                 JSONObject matched = findTaskByIdInNode(arr.opt(i), taskId);
                 if (matched != null) return matched;
@@ -961,7 +948,7 @@ public class YebExpGold extends BaseCommTask {
 
     private static boolean isTaskReceived(JSONObject task) {
         return "complete".equals(runStatus(task))
-                || "RECEIVE_SUCCESS".equals(task.optString("taskProcessStatus").toUpperCase());
+                || "RECEIVE_SUCCESS".equalsIgnoreCase(task.optString("taskProcessStatus"));
     }
 
     private static boolean isSuccess(JSONObject jo) {

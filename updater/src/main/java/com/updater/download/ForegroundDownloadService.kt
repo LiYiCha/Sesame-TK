@@ -399,7 +399,7 @@ class ForegroundDownloadService : Service() {
             ).apply {
                 description = "展示网盘更新与配套模块的下载进度"
             }
-            val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            val manager = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
             manager.createNotificationChannel(channel)
         }
     }
@@ -429,7 +429,7 @@ class ForegroundDownloadService : Service() {
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .build()
 
-        val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        val manager = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
         manager.notify(NOTIFICATION_ID, notification)
     }
 

@@ -18,7 +18,7 @@ import fansirsqi.xposed.sesame.util.TimeUtil;
 
 public class LuckCard extends BaseCommTask {
 
-    private static HashSet<String> tasksLuckCardLocal = new HashSet<>();
+    private static final HashSet<String> tasksLuckCardLocal = new HashSet<>();
     public LuckCard() {
         this.displayName = "好运卡 🎯";
     }

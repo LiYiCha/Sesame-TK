@@ -82,7 +82,7 @@ public class JsonUtil {
                 if (pretty) {
                     return ((JSONObject) object).toString(4);
                 } else {
-                    return ((JSONObject) object).toString();
+                    return object.toString();
                 }
             }
             if (pretty) {

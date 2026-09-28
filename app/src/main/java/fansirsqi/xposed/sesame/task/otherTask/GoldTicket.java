@@ -68,38 +68,36 @@ public class GoldTicket extends BaseCommTask {
                 Log.error( this.displayName + ".getRankTasks error: ", String.valueOf(th));
             }
 
-            TimeUtil.sleep((long) this.executeIntervalInt);
+            TimeUtil.sleep(this.executeIntervalInt);
         }
 
-        TimeUtil.sleep((long) this.executeIntervalInt);
+        TimeUtil.sleep(this.executeIntervalInt);
     }
 
 
     private void goldBillCollect(String str) {
         try {
-            StringBuilder stringBuilder = new StringBuilder();
-            stringBuilder.append(str);
-            stringBuilder.append("\"trigger\":\"Y\"");
-            JSONObject requestString = requestString("com.alipay.wealthgoldtwa.goldbill.v2.index.collect", stringBuilder.toString());
+            String stringBuilder = str +
+                    "\"trigger\":\"Y\"";
+            JSONObject requestString = requestString("com.alipay.wealthgoldtwa.goldbill.v2.index.collect", stringBuilder);
             if (requestString != null && requestString.optBoolean("success")) {
                 JSONArray jSONArray = requestString.getJSONObject("result").getJSONArray("collectedList");
                 int length = jSONArray.length();
                 if (length != 0) {
                     for (int i = 0; i < length; i++) {
-                        StringBuilder stringBuilder2 = new StringBuilder();
-                        stringBuilder2.append(this.displayName);
-                        stringBuilder2.append("[");
-                        stringBuilder2.append(jSONArray.getString(i));
-                        stringBuilder2.append("]");
-                        Log.other(stringBuilder2.toString());
+                        String stringBuilder2 = this.displayName +
+                                "[" +
+                                jSONArray.getString(i) +
+                                "]";
+                        Log.other(stringBuilder2);
                     }
-                    TimeUtil.sleep((long) this.executeIntervalInt);
+                    TimeUtil.sleep(this.executeIntervalInt);
                     return;
                 }
             }
-            TimeUtil.sleep((long) this.executeIntervalInt);
+            TimeUtil.sleep(this.executeIntervalInt);
         } catch (Throwable th) {
-            TimeUtil.sleep((long) this.executeIntervalInt);
+            TimeUtil.sleep(this.executeIntervalInt);
         }
     }
 
@@ -143,14 +141,14 @@ public class GoldTicket extends BaseCommTask {
                         }
                     }
                 }
-                TimeUtil.sleep((long) this.executeIntervalInt);
+                TimeUtil.sleep(this.executeIntervalInt);
             } else {
                 Log.error(this.TAG + ".goldTicket.goldBillIndex", jSONObject.optString(str2));
-                TimeUtil.sleep((long) this.executeIntervalInt);
+                TimeUtil.sleep(this.executeIntervalInt);
             }
         } catch (Throwable th) {
             Log.printStackTrace(this.TAG, th);
-            TimeUtil.sleep((long) this.executeIntervalInt);
+            TimeUtil.sleep(this.executeIntervalInt);
         }
     }
 
@@ -174,15 +172,15 @@ public class GoldTicket extends BaseCommTask {
             String exchangeMoney = goldbillInfo.getString("exchangeMoney");
             String productId = goldProducts.getJSONObject(0).getString("productId");
 
-            StringBuilder submitData = new StringBuilder("\"amount\": ")
-                    .append(exchangeAmount)
-                    .append(",\"money\": \"")
-                    .append(exchangeMoney)
-                    .append("\",\"prizeName\": \"黄金\",\"prizeType\": \"GOLD\",\"productId\": \"")
-                    .append(productId)
-                    .append("\"");
+            String submitData = "\"amount\": " +
+                    exchangeAmount +
+                    ",\"money\": \"" +
+                    exchangeMoney +
+                    "\",\"prizeName\": \"黄金\",\"prizeType\": \"GOLD\",\"productId\": \"" +
+                    productId +
+                    "\"";
 
-            JSONObject submitResponse = requestString("com.alipay.wealthgoldtwa.goldbill.consume.submit", submitData.toString());
+            JSONObject submitResponse = requestString("com.alipay.wealthgoldtwa.goldbill.consume.submit", submitData);
             if (submitResponse == null || !submitResponse.optBoolean("success")) {
                 return;
             }
@@ -227,11 +225,10 @@ public class GoldTicket extends BaseCommTask {
                 }
 
                 Object upsertDataTask = JsonUtil.getValueByPathObject(requestString, "result.upsertData.task.tasks.todo");
-                if (!(upsertDataTask instanceof JSONArray)) {
+                if (!(upsertDataTask instanceof JSONArray jSONArray)) {
                     continue;
                 }
 
-                JSONArray jSONArray = (JSONArray) upsertDataTask;
                 int length = jSONArray.length();
                 if (length == 0) {
                     continue;
@@ -257,12 +254,12 @@ public class GoldTicket extends BaseCommTask {
                     TimeUtil.sleep(3000);
                     if (jsonObject != null && jsonObject.optBoolean("success")) {
                         Log.other(this.displayName + "完成[" + title + "]+" + amount);
-                        TimeUtil.sleep((long) this.executeIntervalInt);
+                        TimeUtil.sleep(this.executeIntervalInt);
                         triggerBigPrize();
                     }
                 }
 
-                TimeUtil.sleep((long) this.executeIntervalInt);
+                TimeUtil.sleep(this.executeIntervalInt);
             }
         } catch (Throwable th) {
             Log.printStackTrace(this.TAG, th);
@@ -279,13 +276,13 @@ public class GoldTicket extends BaseCommTask {
                     String price = requestString.getString("price");
                     String unit = requestString.getString("unit");
                     Log.other(displayName+"签到获得["+price+"|"+unit+"]");
-                    TimeUtil.sleep((long) this.executeIntervalInt);
+                    TimeUtil.sleep(this.executeIntervalInt);
                     return;
                 }
             }
-            TimeUtil.sleep((long) this.executeIntervalInt);
+            TimeUtil.sleep(this.executeIntervalInt);
         } catch (Throwable th) {
-            TimeUtil.sleep((long) this.executeIntervalInt);
+            TimeUtil.sleep(this.executeIntervalInt);
         }
     }
 
@@ -296,10 +293,9 @@ public class GoldTicket extends BaseCommTask {
                 return;
             }
             Object timelineObj = JsonUtil.getValueByPathObject(requestString, "result.upsertData.sign.timeline");
-            if (!(timelineObj instanceof JSONArray)) {
+            if (!(timelineObj instanceof JSONArray jSONArray)) {
                 return;
             }
-            JSONArray jSONArray = (JSONArray) timelineObj;
             for (int i = 0; i < jSONArray.length(); i++) {
                 JSONObject jSONObject = jSONArray.getJSONObject(i);
                 if (jSONObject.optBoolean("isToday") && !jSONObject.optBoolean("signed")) {
@@ -311,13 +307,13 @@ public class GoldTicket extends BaseCommTask {
                     JSONObject jsonObject = requestString("com.alipay.finaggexpbff.needle.weeklyWelfare.trigger", postData);
                     if (jsonObject!= null&& jsonObject.optBoolean("success")) {
                         Log.other(this.displayName + "每周福利签到获得[" + prizeNum + "]");
-                        TimeUtil.sleep((long) this.executeIntervalInt);
+                        TimeUtil.sleep(this.executeIntervalInt);
                         return;
                     }
                 }
             }
 
-            TimeUtil.sleep((long) this.executeIntervalInt);
+            TimeUtil.sleep(this.executeIntervalInt);
         } catch (Throwable th) {
             Log.printStackTrace(this.TAG, th);
             TimeUtil.sleep(1500);
@@ -392,7 +388,7 @@ public class GoldTicket extends BaseCommTask {
         } catch (Throwable th){
             Log.printStackTrace(displayName, th);
         }finally {
-            Status.setFlagToday("GoldTicket_TaskCompleted");;
+            Status.setFlagToday("GoldTicket_TaskCompleted");
             //Log.other(displayName+"执行完毕");
         }
     }

@@ -266,7 +266,7 @@ object HolidayTheme {
             "light" -> false
             "dark" -> true
             "schedule" -> {
-                val hour = java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY)
+                val hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
                 hour in 18..23 || hour in 0..5
             }
             else -> false
@@ -309,7 +309,7 @@ object HolidayTheme {
 
     /** 根据当前时间返回对应的时段主题 */
     fun getTimeTheme(): ThemeColors? {
-        val hour = java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY)
+        val hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
         return when (hour) {
             in 5..7 -> TIME_THEMES["dawn"]
             in 8..11 -> TIME_THEMES["morning"]

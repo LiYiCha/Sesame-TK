@@ -51,7 +51,7 @@ class CaptureDetailViewModel : ViewModel() {
                         try {
                             val lastLine = f.readLines().lastOrNull { it.contains("\"id\":\"$id\"") }
                             if (lastLine != null) {
-                                rec = fansirsqi.xposed.sesame.util.JsonUtil.parseObject(lastLine.trim(), CaptureRecord::class.java)
+                                rec = JsonUtil.parseObject(lastLine.trim(), CaptureRecord::class.java)
                                 if (rec != null) break
                             }
                         } catch (_: Exception) {}

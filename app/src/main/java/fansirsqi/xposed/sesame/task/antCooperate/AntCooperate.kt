@@ -394,7 +394,7 @@ class AntCooperate : ModelTask() {
     }
 
     companion object {
-        private val TAG: String = AntCooperate::class.java.getSimpleName()
+        private val TAG: String = AntCooperate::class.java.simpleName
 
 
         /**

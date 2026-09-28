@@ -34,9 +34,6 @@ object CaptureFilter {
         "alipay.client.getUnionResource"
     )
 
-    /** 兼容旧代码引用 */
-    val BUILTIN_NOISE = DEFAULT_NOISE
-
     /**
      * 获取当前生效的过滤关键词列表（首次使用默认加载 DEFAULT_NOISE）
      */

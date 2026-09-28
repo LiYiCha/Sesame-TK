@@ -31,7 +31,7 @@ import fansirsqi.xposed.sesame.util.maps.UserMap;
 public class AntFishpond extends BaseCommTask {
     private Integer fishCount = 0;
     private Integer leftFishTimes = 0;//还剩需要捕鱼次数才可以领取鱼竿
-    private Integer rodCount = 0; // 鱼竿总数
+    private final Integer rodCount = 0; // 鱼竿总数
 
     private String fishData = "";
     // 不做游戏任务
@@ -484,7 +484,6 @@ public class AntFishpond extends BaseCommTask {
             if (json != null) {
                 if (json.optBoolean("success")) {
                     // 领取成功
-                    return;
                 } else {
                     String errorCode = json.optString("code", "");
                     String errorMsg = json.optString("desc", "");
@@ -492,7 +491,6 @@ public class AntFishpond extends BaseCommTask {
                     // 处理已领取或已完结的情况，不记录为错误
                     if ("400000005".equals(errorCode) || "400000030".equals(errorCode)) {
                         // 任务已领取或已完结，这是正常情况，不需要特别处理
-                        return;
                     } else {
                         // 其他错误情况记录日志
                         Log.error(this.TAG + "领取任务奖励出错: " + errorMsg + " (code: " + errorCode + ")");

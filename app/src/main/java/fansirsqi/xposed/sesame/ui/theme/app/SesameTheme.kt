@@ -94,7 +94,7 @@ fun SesameTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
     content: @Composable () -> Unit
 ) {
-    val version = HolidayTheme.themeVersion.intValue
+    HolidayTheme.themeVersion.intValue
     val palette = HolidayTheme.resolvePalette(darkTheme)
     val colorScheme = palette.toColorScheme()
     val resolvedDark = palette.isDark

@@ -103,7 +103,7 @@ class CaptureResendViewModel : ViewModel() {
             
             for (i in 0 until count) {
                 if (count > 1 && i > 0) {
-                    kotlinx.coroutines.delay((800..3000).random().toLong())
+                    delay((800..3000).random().toLong())
                 }
                 
                 try {
@@ -133,7 +133,7 @@ class CaptureResendViewModel : ViewModel() {
                 } else {
                     // RPC 模式下，如果 15 秒没收到广播，则视为超时
                     _result.value = lastResult // 先显示“已发送”提示
-                    kotlinx.coroutines.delay(15000)
+                    delay(15000)
                     if (_isSending.value) {
                         _result.value = ResendResult(
                             -1, emptyMap(), "等待 RPC 响应超时。请检查抓包列表确认请求是否成功。", 0, false
@@ -214,11 +214,6 @@ class CaptureResendViewModel : ViewModel() {
         }
     }
 
-    override fun onCleared() {
-        super.onCleared()
-        // ViewModel 销毁时清理 receiver 是保险做法，但通常 context 会先失效
-    }
-
     fun addHeader() { headers.value = headers.value + ("" to "") }
     fun removeHeader(index: Int) {
         val list = headers.value.toMutableList()
@@ -240,8 +235,7 @@ class CaptureResendViewModel : ViewModel() {
         while (i < len) {
             val c = s[i]
             if (c == '\\' && i + 1 < len) {
-                val next = s[i + 1]
-                when (next) {
+                when (val next = s[i + 1]) {
                     '"' -> sb.append('"')
                     '\\' -> sb.append('\\')
                     'n' -> sb.append('\n')

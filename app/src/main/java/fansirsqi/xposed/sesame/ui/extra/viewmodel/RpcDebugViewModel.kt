@@ -141,8 +141,7 @@ class RpcDebugViewModel : ViewModel() {
         while (i < len) {
             val c = s[i]
             if (c == '\\' && i + 1 < len) {
-                val next = s[i + 1]
-                when (next) {
+                when (val next = s[i + 1]) {
                     '"' -> sb.append('"')
                     '\\' -> sb.append('\\')
                     'n' -> sb.append('\n')
@@ -186,19 +185,7 @@ class RpcDebugViewModel : ViewModel() {
         _data.value = unescapeString(_data.value)
         _method.value = unescapeString(_method.value)
     }
-    fun toggleZoom() { _zoomed.value = !_zoomed.value }
 
-    /**
-     * 从 JSON 文本批量导入请求
-     * 支持两种格式：
-     * 1. 现有格式：{"id":0,"title":"","method":"","data":""}
-     * 2. 新格式：{"Name":"","Description":"","methodName":"","requestData":[]}
-     *
-     * 支持批量导入：粘贴多个 JSON 对象（用逗号分隔或换行分隔）
-     *
-     * @param jsonText JSON 文本
-     * @return Pair<成功数量, 失败数量>
-     */
     /**
      * 从 JSON 文本批量导入请求
      * 支持多种格式：

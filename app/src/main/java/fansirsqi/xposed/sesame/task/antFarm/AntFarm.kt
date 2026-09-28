@@ -5322,7 +5322,7 @@ class AntFarm : ModelTask() {
     }
 
     companion object {
-        private val TAG: String = AntFarm::class.java.getSimpleName()
+        private val TAG: String = AntFarm::class.java.simpleName
         private val objectMapper = ObjectMapper()
 
         @JvmField

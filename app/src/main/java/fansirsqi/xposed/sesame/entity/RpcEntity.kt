@@ -70,7 +70,7 @@ class RpcEntity @JvmOverloads constructor(
                     if (repaired.startsWith("[")) {
                         jo.put("requestData", org.json.JSONArray(repaired))
                     } else if (repaired.startsWith("{")) {
-                        jo.put("requestData", org.json.JSONObject(repaired))
+                        jo.put("requestData", JSONObject(repaired))
                     } else {
                         jo.put("requestData", this.requestData)
                     }
@@ -89,7 +89,7 @@ class RpcEntity @JvmOverloads constructor(
         try {
             val pattern = java.util.regex.Pattern.compile("\"([^\"]+)\"\\s*:\\s*\"(\\{.*?\\})\"")
             val matcher = pattern.matcher(s)
-            val sb = java.lang.StringBuffer()
+            val sb = StringBuffer()
             while (matcher.find()) {
                 val key = matcher.group(1)
                 val inner = matcher.group(2)

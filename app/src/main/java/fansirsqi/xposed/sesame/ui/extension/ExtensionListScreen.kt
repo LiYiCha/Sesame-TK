@@ -1,6 +1,5 @@
 package fansirsqi.xposed.sesame.ui.extension
 
-import android.annotation.SuppressLint
 import android.content.Intent
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*

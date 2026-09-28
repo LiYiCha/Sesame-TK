@@ -22,8 +22,8 @@ import fansirsqi.xposed.sesame.util.TimeUtil;
  */
 
 public class TravelDeals extends BaseCommTask {
-    private String displayName = "出行特惠🚗";
-    private Set<String> skippedTasks = new HashSet<>(Arrays.asList(
+    private final String displayName = "出行特惠🚗";
+    private final Set<String> skippedTasks = new HashSet<>(Arrays.asList(
             "开会员享最高10G流量",
             "完成办流量卡月享150G",
             "充话费最高立减1元",

@@ -86,8 +86,8 @@ class HtmlViewerActivity : BaseActivity() {
                 useWideViewPort = true
                 loadWithOverviewMode = true
                 textZoom = 85
-                setAllowFileAccess(true)
-                setAllowContentAccess(true)
+                allowFileAccess = true
+                allowContentAccess = true
             }
 
             // 夜间模式支持

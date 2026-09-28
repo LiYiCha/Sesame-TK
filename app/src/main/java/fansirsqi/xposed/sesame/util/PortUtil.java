@@ -28,7 +28,7 @@ public class PortUtil {
                     Files.getDefaultConfigV2File() :
                     Files.getConfigV2File(userId);
             FileInputStream inputStream = new FileInputStream(configV2File);
-            if (Files.streamTo(inputStream, context.getContentResolver().openOutputStream(uri))) {
+            if (Files.streamTo(inputStream, Objects.requireNonNull(context.getContentResolver().openOutputStream(uri)))) {
                 ToastUtil.makeText("导出成功！", Toast.LENGTH_SHORT).show();
             } else {
                 ToastUtil.makeText("导出失败！", Toast.LENGTH_SHORT).show();

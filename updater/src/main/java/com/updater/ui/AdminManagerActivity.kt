@@ -175,7 +175,7 @@ class AdminManagerActivity : AppCompatActivity() {
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
-        if (requestCode == REQUEST_CODE_PICK_APK && resultCode == Activity.RESULT_OK && data != null) {
+        if (requestCode == REQUEST_CODE_PICK_APK && resultCode == RESULT_OK && data != null) {
             val uri = data.data ?: data.clipData?.takeIf { it.itemCount > 0 }?.getItemAt(0)?.uri ?: return
             repo.pickApk(this, uri) { result ->
                 result.onSuccess { picked ->
@@ -206,7 +206,7 @@ class AdminManagerActivity : AppCompatActivity() {
                 appJson = snap.appJson
                 packages = snap.packages
                 toast("删除成功！")
-                setResult(Activity.RESULT_OK)
+                setResult(RESULT_OK)
                 loadPackages() // 静默后台重新拉取对齐
             }.onFailure { err ->
                 dialogInfo = AdminDialogInfo("删除失败", err.message ?: "未知错误")
@@ -249,7 +249,7 @@ class AdminManagerActivity : AppCompatActivity() {
                 appJson = snap.appJson
                 packages = snap.packages
                 toast("上传并挂钩发布成功！")
-                setResult(Activity.RESULT_OK)
+                setResult(RESULT_OK)
                 // 重置上传框
                 selectedFile = null
                 pkgName = ""

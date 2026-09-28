@@ -301,7 +301,7 @@ object EnergyWaitingManager {
                     if (ForestUtil.shouldSkipWaitingDueToProtection(userHomeObj, produceTime)) {
                         val protectionEndTime = ForestUtil.getProtectionEndTime(userHomeObj)
                         val timeDifference = protectionEndTime - produceTime
-                        val formattedTimeDifference = formatTime(timeDifference)
+                        formatTime(timeDifference)
 //                        Log.runtime(
 //                            TAG,
 //                            "智能跳过蹲点：[好友|$userName]的保护罩比能量球晚到期${formattedTimeDifference}，无法收取，已跳过。"
@@ -350,12 +350,12 @@ object EnergyWaitingManager {
                 // 添加新任务
                 waitingTasks[taskId] = task
 
-                val actionText = if (existingTask != null) "更新" else "添加"
-                val waitTimeMinutes = (produceTime - currentTime) / 1000 / 60
+                if (existingTask != null) "更新" else "添加"
+                (produceTime - currentTime) / 1000 / 60
 
                 // 自己的账号：不显示保护罩信息
                 // 好友账号：如果有保护罩，显示保护罩到期时间
-                val protectionStatus = if (!task.isSelf()) {
+                if (!task.isSelf()) {
                     val protectionEndTime = task.getProtectionEndTime()
                     if (protectionEndTime > currentTime) {
                         " 保护罩到期：" + TimeUtil.getCommonDate(protectionEndTime)
@@ -393,14 +393,14 @@ object EnergyWaitingManager {
 
                 if (waitTime > 0) {
                     // 需要等待的任务
-                    val protectionInfo = if (task.isSelf()) {
+                    if (task.isSelf()) {
                         "能量成熟"
                     } else if (task.hasProtection(currentTime)) {
                         "保护结束"
                     } else {
                         "能量成熟"
                     }
-                    val waitMinutes = waitTime / 1000 / 60
+                    waitTime / 1000 / 60
 //                    Log.runtime(TAG, "🕐 蹲点[${task.getUserTypeTag()}${task.userName}]等待${waitMinutes}分钟(${protectionInfo}→${TimeUtil.getCommonDate(preciseCollectTime)})")
 
                     // 倒计时前2分钟验证策略
@@ -430,7 +430,7 @@ object EnergyWaitingManager {
                                     val shieldEnd = ForestUtil.getShieldEndTime(userHomeObj)
                                     val bombEnd = ForestUtil.getBombCardEndTime(userHomeObj)
                                     val protectionEnd = maxOf(shieldEnd, bombEnd)
-                                    val coverMinutes = (protectionEnd - task.produceTime) / 1000 / 60
+                                    (protectionEnd - task.produceTime) / 1000 / 60
 //                                    Log.runtime(TAG, "❌ 验证失败[${task.getUserTypeTag()}${task.userName}]球[${task.bubbleId}]：保护罩覆盖${coverMinutes}分钟，取消蹲点")
                                     waitingTasks.remove(task.taskId)
                                     EnergyWaitingPersistence.saveTasks(waitingTasks)
@@ -583,7 +583,7 @@ object EnergyWaitingManager {
                     }
                 } else {
                     // 简化日志：用于已成熟超过2分钟的任务
-                    val matureTime = (-energyTimeRemain) / 60 // 成熟了多少分钟
+                    (-energyTimeRemain) / 60 // 成熟了多少分钟
                     //Log.runtime(TAG, "⚡ 蹲点任务[${task.getUserTypeTag()}${task.userName}]已成熟${matureTime.toInt()}分钟，直接收取")
                 }
 
@@ -792,8 +792,8 @@ object EnergyWaitingManager {
                 }
 
                 if (expiredTasks.isNotEmpty()) {
-                    val taskNames = expiredTasks.values.map { it.userName }.take(3).joinToString(",")
-                    val moreText = if (expiredTasks.size > 3) "等${expiredTasks.size}个" else ""
+                    expiredTasks.values.map { it.userName }.take(3).joinToString(",")
+                    if (expiredTasks.size > 3) "等${expiredTasks.size}个" else ""
 
                     //Log.runtime(TAG, "🧹 清理过期蹲点：[${taskNames}${moreText}]")
 

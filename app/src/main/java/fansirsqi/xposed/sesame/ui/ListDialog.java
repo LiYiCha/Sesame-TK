@@ -41,11 +41,11 @@ public class ListDialog {
     }
     public static void show(Context c, CharSequence title, SelectOneModelField selectModelField, ListType listType) {
         // 在调用 show 方法时进行类型转换
-        show(c, title, selectModelField.getExpandValue(), (SelectModelFieldFunc) selectModelField, false, listType);
+        show(c, title, selectModelField.getExpandValue(), selectModelField, false, listType);
     }
     public static void show(Context c, CharSequence title, SelectAndCountOneModelField selectModelField, ListType listType) {
         // 在调用 show 方法时进行类型转换
-        show(c, title, selectModelField.getExpandValue(), (SelectModelFieldFunc) selectModelField, false, listType);
+        show(c, title, selectModelField.getExpandValue(), selectModelField, false, listType);
     }
     public static void show(Context c, CharSequence title, SelectModelField selectModelField) throws JSONException {
         show(c, title, selectModelField, ListDialog.ListType.CHECK);
@@ -55,7 +55,7 @@ public class ListDialog {
     }
     public static void show(Context c, CharSequence title, SelectModelField selectModelField, ListType listType) throws JSONException {
         // 在调用 show 方法时进行类型转换
-        show(c, title, selectModelField.getExpandValue(), (SelectModelFieldFunc) selectModelField, false, listType);
+        show(c, title, selectModelField.getExpandValue(), selectModelField, false, listType);
     }
     public static void show(Context c, CharSequence title, SelectAndCountModelField selectModelField, ListType listType) {
         show(c, title, selectModelField.getExpandValue(), selectModelField, true, listType);
