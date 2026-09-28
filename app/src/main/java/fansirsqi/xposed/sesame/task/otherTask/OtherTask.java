@@ -447,21 +447,21 @@ public class OtherTask extends ModelTask {
     private void executeGroup3() {
         try {
             try {
+                // 余额宝养鱼先执行：末步金币兑换会把体验金卡包券写入卡包，供紧随其后的体验金任务消费
+                if (yebSceneBff.getValue()) {
+                    new YebSceneBffish().handle();
+                }
+            } catch (Exception e) {
+                Log.error(TAG + "余额宝养鱼--error:" + e);
+            }
+
+            try {
                 // 体验金
                 if (yebExpGold.getValue()) {
                     new YebExpGold().handle(executeIntervalInt);
                 }
             } catch (Exception e) {
                 Log.error(TAG + "体验金--error:" + e);
-            }
-
-            try {
-                // 余额宝养鱼
-                if (yebSceneBff.getValue()) {
-                    new YebSceneBffish().handle();
-                }
-            } catch (Exception e) {
-                Log.error(TAG + "余额宝养鱼--error:" + e);
             }
 
             try {

@@ -141,7 +141,11 @@ class LifecycleModule : HookModule {
                     }
                 })
 
-                LifecycleManager.initHandler(true)
+                // 对齐 AG：service_onCreate 属于启动类触发，已初始化时直接跳过，
+                // 避免服务重建（进程未死）时误触发全量重载
+                if (!LifecycleManager.isInit()) {
+                    LifecycleManager.initHandler(true)
+                }
             } catch (t: Throwable) {
                 Log.printStackTrace(TAG, t)
             }
