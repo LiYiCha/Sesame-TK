@@ -3,13 +3,15 @@ package fansirsqi.xposed.sesame.task.otherTask2;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
-
+import java.util.ArrayList;
+import java.util.List;
 import fansirsqi.xposed.sesame.data.Status;
 import fansirsqi.xposed.sesame.hook.RequestManager;
 import fansirsqi.xposed.sesame.task.otherTask.BaseCommTask;
 import fansirsqi.xposed.sesame.util.Log;
 import fansirsqi.xposed.sesame.util.RandomUtil;
 import fansirsqi.xposed.sesame.util.TimeUtil;
+import fansirsqi.xposed.sesame.util.maps.UserMap;
 
 /**
  * 蚂蚁投资者教育基地--奖学金
@@ -154,28 +156,82 @@ public class Scholarship extends BaseCommTask {
         }
     }
 
+    // 按真实抓包顺序模拟用户进入小程序首页的完整浏览序列
     private void initUserInfo() {
-        //
-        String m1 = "com.alipay.promobffweb.needle.wiki.getSecuUser";
-        String r1 = RequestManager.requestString(m1, "[null]");
-        TimeUtil.sleep(RandomUtil.nextInt(3000, 5000));
-        //2
-        String m2 = "com.alipay.promobffweb.needle.wiki.invokeGzoneReact";
-        String s2 = RequestManager.requestString(m2, "[{\"jsonArgs\":{\"extInfo\":{\"mode\":\"PURE\"},\"sceneCode\":\"EDUCATION_LUCKYBOX\"},\"methodId\":\"consult\",\"source\":\"FORTUNE\"}]");
-        TimeUtil.sleep(RandomUtil.nextInt(3000, 5000));
-        //3
-        String m3 = "com.alipay.rceducenter.biz.gateway.fetchChannelEduContent";
-        String s3 = RequestManager.requestString(m3, "[{\"channelCode\":\"RECOMMEND\",\"pageNo\":1,\"pageSize\":10,\"params\":{\"needKnowledgeData\":\"true\",\"needUserData\":\"true\"},\"uid\":\"\"}]");
-        TimeUtil.sleep(RandomUtil.nextInt(3000, 5000));
-        //4
-        String m4 = "com.alipay.rceducenter.biz.gateway.queryChannelDetail";
-        String s4 = RequestManager.requestString(m4, "[{\"channelCode\":\"RECOMMEND\",\"params\":{\"needKnowledgeData\":\"true\"},\"uid\":\"\"}]");
-        TimeUtil.sleep(RandomUtil.nextInt(3000, 5000));
-        //5
-        String m5 = "com.alipay.promobffweb.needle.wiki.queryPendantList";
-        String s5 = RequestManager.requestString(m5, "[{}]");
-        TimeUtil.sleep(RandomUtil.nextInt(3000, 5000));
-        //queryAvatar();
+        try {
+            String uid = UserMap.getCurrentUid();
+            // 1. 首页奖学金余额
+            RequestManager.requestString("com.alipay.promobffweb.needle.equity.queryAccount", "[null]");
+            TimeUtil.sleep(RandomUtil.nextInt(3000, 5000));
+            // 2. 发现页内容（响应中的推荐标签用于后续频道浏览）
+            String discovery = RequestManager.requestString("com.alipay.rceducenter.biz.gateway.queryDiscoveryPage", "[{\"pageCode\":\"FIND_PAGE\"}]");
+            TimeUtil.sleep(RandomUtil.nextInt(3000, 5000));
+            // 3. 运势盒咨询（进入首页即触发）
+            RequestManager.requestString("com.alipay.promobffweb.needle.wiki.invokeGzoneReact",
+                    "[{\"jsonArgs\":{\"extInfo\":{\"mode\":\"PURE\"},\"sceneCode\":\"EDUCATION_LUCKYBOX\"},\"methodId\":\"consult\",\"source\":\"FORTUNE\"}]");
+            TimeUtil.sleep(RandomUtil.nextInt(3000, 5000));
+            // 4. 首页论坛活动
+            RequestManager.requestString("com.alipay.mfinsnsprod.service.facade.api.forumactivity.ForumActivityDetailFacade.queryForumActivityDetailBySceneCode",
+                    "[{\"sceneCode\":\"TEACHING_HOME\"}]");
+            TimeUtil.sleep(RandomUtil.nextInt(3000, 5000));
+            // 5. 用户券商信息
+            RequestManager.requestString("com.alipay.promobffweb.needle.wiki.getSecuUser", "[null]");
+            TimeUtil.sleep(RandomUtil.nextInt(3000, 5000));
+            // 6. 推荐频道标签关系
+            RequestManager.requestString("com.alipay.rceducenter.biz.gateway.queryLabelRelation",
+                    "[{\"labelCode\":\"\",\"labelCodeList\":[],\"outerCode\":\"RECOMMEND\",\"outerType\":\"CHANNEL\",\"params\":{},\"status\":\"ONLINE\",\"topFlag\":\"\",\"uid\":\"" + uid + "\"}]");
+            TimeUtil.sleep(RandomUtil.nextInt(3000, 5000));
+            // 7. 百科订阅状态
+            RequestManager.requestString("com.alipay.promobffweb.needle.wiki.querySubscribe",
+                    "[{\"bizId\":\"MYTJ_GAME_DEFAULT_BIZ\",\"bizType\":\"MYTJ_GAME_DEFAULT_SCENE\",\"tenantId\":\"BAIKE\"}]");
+            TimeUtil.sleep(RandomUtil.nextInt(3000, 5000));
+            // 8. 知识活动
+            RequestManager.requestString("com.alipay.rceducenter.biz.gateway.queryKnowledgeActivity",
+                    "[{\"metaId\":\"1\",\"userId\":\"" + uid + "\"}]");
+            TimeUtil.sleep(RandomUtil.nextInt(3000, 5000));
+            // 9. 全部任务列表（首页加载即查询）
+            RequestManager.requestString("com.alipay.promobffweb.needle.wiki.queryAllTasks", "[{}]");
+            TimeUtil.sleep(RandomUtil.nextInt(3000, 5000));
+            // 10. 推荐频道详情页：按发现页推荐标签依次浏览
+            for (String labelCode : extractLabelCodes(discovery)) {
+                RequestManager.requestString("com.alipay.rceducenter.biz.gateway.queryChannelDetailPage",
+                        "[{\"channelCode\":\"RECOMMEND\",\"labelCode\":\"" + labelCode + "\",\"pageNo\":1,\"pageSize\":10,\"uid\":\"" + uid + "\"}]");
+                TimeUtil.sleep(RandomUtil.nextInt(3000, 5000));
+            }
+        } catch (Throwable th) {
+            Log.error(TAG + "initUserInfo error: " + th);
+        }
+    }
+
+    // 从发现页响应的精选专题 tag 中提取推荐标签 code，最多 3 个（对应真实用户点选标签浏览行为）
+    private List<String> extractLabelCodes(String discoveryResponse) {
+        List<String> codes = new ArrayList<>();
+        try {
+            if (discoveryResponse == null || discoveryResponse.isEmpty()) return codes;
+            JSONObject json = new JSONObject(discoveryResponse);
+            JSONObject result = json.optJSONObject("result");
+            if (result == null) return codes;
+            JSONArray components = result.optJSONArray("componentInstanceDTOS");
+            if (components == null) return codes;
+            for (int i = 0; i < components.length() && codes.size() < 3; i++) {
+                JSONObject config = components.getJSONObject(i).optJSONObject("instanceConfig");
+                if (config == null) continue;
+                JSONArray details = config.optJSONArray("instanceDetails");
+                if (details == null) continue;
+                for (int j = 0; j < details.length() && codes.size() < 3; j++) {
+                    String tag = details.getJSONObject(j).optString("tag", "");
+                    if (tag.isEmpty()) continue;
+                    JSONArray tagArr = new JSONArray(tag);
+                    for (int k = 0; k < tagArr.length() && codes.size() < 3; k++) {
+                        String code = tagArr.getJSONObject(k).optString("code", "");
+                        if (!code.isEmpty() && !codes.contains(code)) codes.add(code);
+                    }
+                }
+            }
+        } catch (Throwable t) {
+            Log.printStackTrace(TAG, t);
+        }
+        return codes;
     }
 
 
@@ -185,7 +241,7 @@ public class Scholarship extends BaseCommTask {
     }
     //查询单个任务（进入程序后才能查询）
     private String queryTask(){
-        String params = "[{\"jsonArgs\":{\"extInfo\":{\"mode\":\"PURE\",\"source\":\"\"},\"sceneCode\":\"EDUCATION_LUCKYBOX\"},\"methodId\":\"trigger\",\"source\":\"FORTUNE\"}]";
+        String params = "[{\"jsonArgs\":{\"extInfo\":{\"mode\":\"PURE\"},\"sceneCode\":\"EDUCATION_LUCKYBOX\"},\"methodId\":\"trigger\",\"source\":\"FORTUNE\"}]";
         return RequestManager.requestString("com.alipay.promobffweb.needle.wiki.invokeGzoneReact",params);
     }
     //查询用户信息

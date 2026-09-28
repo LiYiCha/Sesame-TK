@@ -92,6 +92,9 @@ class PrivilegeTask {
 
         private fun processStudentTasks() {
             try {
+                // 模拟进入页面的初始化序列（各调用一次，与真实抓包顺序一致）
+                simulatePageInit()
+
                 // ── 1. 签到（优先于任务）───────────────────────────────────────
                 handleCheckIn()
                 waitForDuration(RandomUtil.nextLong(1000, 2000))
@@ -219,6 +222,26 @@ class PrivilegeTask {
             }
         }
 
+        // 模拟进入页面的初始化序列（与真实抓包顺序一致，各调用一次）
+        private fun simulatePageInit() {
+            val steps = arrayOf(
+                { CommonRequest().queryPrivilegeEnableInfo() },
+                { CommonRequest().queryDepositModel() },
+                { CommonRequest().queryPrivilegeDailySelectedModel() },
+                { CommonRequest().queryYouthIndex() },
+                { CommonRequest().queryPrivilegeBrandModel() },
+                { CommonRequest().queryPrivilegeFeedsInfo() }
+            )
+            for (step in steps) {
+                try {
+                    step()
+                } catch (e: Exception) {
+                    Log.runtime(TAG, "青春特权初始化请求异常: ${e.message}")
+                }
+                waitForDuration(RandomUtil.nextLong(800, 1500))
+            }
+        }
+
         // ────────────────────────────────────────────────────────────────
         //  签到流程（对齐 AG YouthPrivilege.handleCheckIn）
         // ────────────────────────────────────────────────────────────────
@@ -311,6 +334,10 @@ class PrivilegeTask {
         private fun claimTrialPrize() {
             if (Status.hasFlagToday(FLAG_TRIAL_PRIZE)) return
             try {
+                // 领取前咨询（真实流程为 prize.trigger 的前置步骤）
+                CommonRequest().consultTrialPrize()
+                Thread.sleep(1500)
+
                 // 1. 查询触发前
                 val beforeDaily = queryTrialAwards(month = false)
                 val beforeMonthly = queryTrialAwards(month = true)
@@ -374,15 +401,22 @@ class PrivilegeTask {
             if (Status.hasFlagToday(FLAG_MONTHLY_PRIVILEGE)) return
             try {
                 val response = JSONObject(CommonRequest().queryYouth100())
-                if (!isYouthSuccess(response)) {
+                // youth100.homepage.query 成功时无 resultCode 包装，直接返回页面数据
+                if (response.has("resultCode") && !isYouthSuccess(response)) {
                     val msg = response.optString("resultMessage", response.optString("resultDesc", ""))
                     if (msg.contains("授权资金信息后即可使用")) {
-                        // 未授权资金 = 青春100未开通，属正常状态：打一次运行时日志并标记当天已处理，避免重复查询报错
+                        // 服务端明确提示未授权资金 = 青春100未开通
                         Log.runtime("$STUDENT_SIGN_PREFIX 青春100未开通（$msg），跳过月权益领取")
                         Status.setFlagToday(FLAG_MONTHLY_PRIVILEGE)
                     } else {
-                        Log.error(TAG, "青春100查询失败: $response")
+                        Log.error(TAG, "青春100查询失败: code=${response.optString("resultCode")} msg=$msg")
                     }
+                    return
+                }
+                // 未开通/未达标：月转入未完成时所有权益均为 LOCKED，无可领取项
+                if (!response.optBoolean("depositQualified", false)) {
+                    Log.runtime("$STUDENT_SIGN_PREFIX 青春100未开通（未完成月转入），跳过月权益领取")
+                    Status.setFlagToday(FLAG_MONTHLY_PRIVILEGE)
                     return
                 }
                 val feeds = response.optJSONArray("feeds") ?: run {
@@ -391,24 +425,27 @@ class PrivilegeTask {
                 }
                 var claimCount = 0
                 for (i in 0 until feeds.length()) {
-                    val feed = feeds.optJSONObject(i) ?: continue
-                    val items = feed.optJSONArray("items") ?: continue
-                    for (j in 0 until items.length()) {
-                        val item = items.optJSONObject(j) ?: continue
-                        // 已领取则跳过
-                        if (item.optString("received") == "true" || item.optBoolean("received")) continue
-                        val itemId = item.optString("id")
-                        val moduleCode = item.optString("sceneCode").ifBlank { feed.optString("sceneCode") }
-                        if (itemId.isBlank() || moduleCode.isBlank()) continue
-                        val r = JSONObject(CommonRequest().receiveMonthlyPrivilege(itemId, moduleCode))
-                        if (isYouthSuccess(r)) {
-                            claimCount++
-                            Log.forest("$STUDENT_SIGN_PREFIX 青春月权益领取✅[${item.optString("itemTitle", itemId)}]")
-                        } else {
-                            val desc = r.optString("resultMessage", r.optString("resultDesc", ""))
-                            if (desc.isNotEmpty()) Log.error(TAG, "月权益领取失败: $desc")
+                    val modules = feeds.optJSONObject(i)?.optJSONArray("modules") ?: continue
+                    for (m in 0 until modules.length()) {
+                        val items = modules.optJSONObject(m)?.optJSONArray("items") ?: continue
+                        for (j in 0 until items.length()) {
+                            val item = items.optJSONObject(j) ?: continue
+                            // 未解锁（需先完成月转入）或已领取则跳过
+                            if (item.optString("cardStatus") == "LOCKED") continue
+                            if (item.optString("received") == "true" || item.optBoolean("received")) continue
+                            val itemId = item.optString("privilegeId").ifBlank { item.optString("id") }
+                            val moduleCode = item.optString("sectionCode").ifBlank { item.optString("sceneCode") }
+                            if (itemId.isBlank() || moduleCode.isBlank()) continue
+                            val r = JSONObject(CommonRequest().receiveMonthlyPrivilege(itemId, moduleCode))
+                            if (isYouthSuccess(r)) {
+                                claimCount++
+                                Log.forest("$STUDENT_SIGN_PREFIX 青春月权益领取✅[${item.optString("title", item.optString("itemTitle", itemId))}]")
+                            } else {
+                                val desc = r.optString("resultMessage", r.optString("resultDesc", ""))
+                                if (desc.isNotEmpty()) Log.error(TAG, "月权益领取失败: $desc")
+                            }
+                            Thread.sleep(500)
                         }
-                        Thread.sleep(500)
                     }
                 }
                 if (claimCount == 0) {

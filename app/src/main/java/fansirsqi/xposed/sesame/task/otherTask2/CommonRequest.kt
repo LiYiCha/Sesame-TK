@@ -338,6 +338,66 @@ class CommonRequest {
         )
     }
 
+    /** 青春特权--权益开关查询 */
+    fun queryPrivilegeEnableInfo(): String =
+        youthRequest("queryPrivilegeEnableInfo", JSONObject().apply {
+            put("sceneCode", "STUDENT_MONEY_CHECK_IN")
+        })
+
+    /** 青春特权--月转入模型查询 */
+    fun queryDepositModel(): String =
+        youthRequest("queryDepositModel", JSONObject().apply {
+            put("sceneCode", "STUDENT_MONEY_CHECK_IN")
+        })
+
+    /** 青春特权--首页主数据 */
+    fun queryYouthIndex(): String =
+        youthRequest("queryIndex", JSONObject().apply {
+            put("chInfo", YOUTH_CH_INFO)
+            put("sceneCode", "STUDENT_MONEY_CHECK_IN")
+        })
+
+    /** 青春特权--每日精选查询（定位坐标为字符串型） */
+    fun queryPrivilegeDailySelectedModel(): String =
+        youthRequest("queryPrivilegeDailySelectedModel", buildLbsPayload(false))
+
+    /** 青春特权--品牌权益查询（定位坐标为字符串型） */
+    fun queryPrivilegeBrandModel(): String =
+        youthRequest("queryPrivilegeBrandModel", buildLbsPayload(false))
+
+    /** 青春特权--权益信息流查询（定位坐标为数值型） */
+    fun queryPrivilegeFeedsInfo(): String =
+        youthRequest("queryPrivilegeFeedsInfo", buildLbsPayload(true).apply {
+            put("pageNum", 1)
+        })
+
+    // 构建带定位的通用查询参数
+    private fun buildLbsPayload(numericCoord: Boolean): JSONObject {
+        val payload = JSONObject().apply {
+            put("adCode", "")
+            put("sceneCode", "STUDENT_MONEY_CHECK_IN")
+        }
+        LocationHelper.getLocation()?.let { loc ->
+            if (numericCoord) {
+                if (loc.has("latitude")) payload.put("latitude", loc.getDouble("latitude"))
+                if (loc.has("longitude")) payload.put("longitude", loc.getDouble("longitude"))
+            } else {
+                if (loc.has("latitude")) payload.put("latitude", loc.getString("latitude"))
+                if (loc.has("longitude")) payload.put("longitude", loc.getString("longitude"))
+            }
+        }
+        return payload
+    }
+
+    /** 青春体验金--领取前咨询 */
+    fun consultTrialPrize(): String = RequestManager.requestString(
+        "com.alipay.yebpromobff.promosdk2024.prize.consult",
+        JSONArray().put(JSONObject().apply {
+            put("playActionCode", "CAMP_CONSULT")
+            put("playEntrance", "YEB_YONG_TYJ_PROMO")
+        }).toString()
+    )
+
     /** 青春体验金--触发领取 */
     fun triggerTrialPrize(): String = RequestManager.requestString(
         "com.alipay.yebpromobff.promosdk2024.prize.trigger",
