@@ -207,9 +207,13 @@ public class TaskScheduler {
             }
 
             long currentTime = System.currentTimeMillis();
-            if (lastExecTime + MIN_EXECUTION_INTERVAL > currentTime) {
-                Log.runtime("执行间隔较短，跳过执行");
-                scheduleNextExecution(currentTime);
+            long elapsedSinceLastExec = currentTime - lastExecTime;
+            if (elapsedSinceLastExec < MIN_EXECUTION_INTERVAL) {
+                // 间隔保护仅用于防抖：补足剩余间隔后立即重试，
+                // 而不是跟随执行间隔（可能长达数十分钟）续排
+                long retryDelay = MIN_EXECUTION_INTERVAL - elapsedSinceLastExec;
+                Log.runtime("间隔防抖，" + retryDelay + "ms后重试");
+                executeDelayedTask(retryDelay);
                 return;
             }
 

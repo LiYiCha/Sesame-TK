@@ -37,8 +37,9 @@ public class SesameReceiver extends BroadcastReceiver {
         /**
          * 初始化处理器
          * @param force 是否强制初始化
+         * @param reason 触发来源（broadcast_restart/broadcast_execute/wakeup_alarm）
          */
-        void onInitHandler(boolean force);
+        void onInitHandler(boolean force, String reason);
 
         /**
          * 重新登录
@@ -61,12 +62,12 @@ public class SesameReceiver extends BroadcastReceiver {
             switch (action) {
                 case "com.eg.android.AlipayGphone.sesame.restart":
                     if (callback != null) {
-                        callback.onInitHandler(true);
+                        callback.onInitHandler(true, "broadcast_restart");
                     }
                     break;
                 case "com.eg.android.AlipayGphone.sesame.execute":
                     if (callback != null) {
-                        callback.onInitHandler(false);
+                        callback.onInitHandler(false, "broadcast_execute");
                     }
                     break;
                 case "com.eg.android.AlipayGphone.sesame.reLogin":
@@ -121,7 +122,7 @@ public class SesameReceiver extends BroadcastReceiver {
                             if (taskId.startsWith("WAKEUP_")) {
                                 Log.runtime(TAG, "⏰ 检测到内置兑换任务精确唤醒，以防内存丢失启动全局任务...");
                                 if (callback != null) {
-                                    callback.onInitHandler(false);
+                                    callback.onInitHandler(false, "wakeup_alarm");
                                 }
                             }
                         }

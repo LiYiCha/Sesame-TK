@@ -191,9 +191,30 @@ public class LifecycleManager {
      */
     @SuppressLint("WakelockTimeout")
     public static synchronized Boolean initHandler(Boolean force) {
+        return initHandler(force, null);
+    }
+
+    /**
+     * 初始化处理器（带触发来源）
+     *
+     * @param force  是否强制全量重载
+     * @param reason 触发来源：onResume/service_onCreate 为启动类触发；
+     *               broadcast_restart/broadcast_execute/wakeup_alarm 为广播类触发
+     */
+    @SuppressLint("WakelockTimeout")
+    public static synchronized Boolean initHandler(Boolean force, String reason) {
         if (pendingInit) {
             Log.runtime(TAG, "初始化正在进行中，跳过本次重复触发");
             return false;
+        }
+        // 启动类触发竞态防护
+        // onResume/service_onCreate 线程在 init=false 时进入本方法等锁，获锁时首次初始化可能已完成，
+        // 若继续按 force 全量重载会 destroyHandler 杀掉刚启动的任务批次，造成二次初始化；
+        // 广播类触发（broadcast_restart 等）不受此保护，必须保持全量重载语义
+        if (Boolean.TRUE.equals(force) && init && !offline
+                && ("onResume".equals(reason) || "service_onCreate".equals(reason))) {
+            Log.runtime(TAG, "✅ 已初始化完成，忽略重复初始化触发: " + reason);
+            return true;
         }
         try {
             if (TaskScheduler.isStopped() && (force == null || !force)) {
@@ -232,7 +253,7 @@ public class LifecycleManager {
                         Log.runtime("有已保存的活跃用户(" + activeUser + ")，但当前获取为null，可能是服务未就绪，将在5秒后重试(" + retryCount + "/5)...");
                         AppContext.getMainHandler().postDelayed(() -> {
                             if (!init) {
-                                initHandler(force);
+                                initHandler(force, reason);
                             }
                         }, 5000);
                     } else {
