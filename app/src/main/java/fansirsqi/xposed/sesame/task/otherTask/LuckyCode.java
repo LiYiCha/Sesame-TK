@@ -141,40 +141,29 @@ public class LuckyCode extends BaseCommTask {
             TimeUtil.sleep(this.executeIntervalInt);
             return;
         }
-        int i = 0;
-        while (i < jSONArray.length()) {
+        for (int i = 0; i < jSONArray.length(); i++) {
             try {
                 JSONObject jSONObject = jSONArray.getJSONObject(i);
-                if (!"RECEIVE_SUCCESS".equals(jSONObject.getString("taskProcessStatus"))) {
-                    String valueByPath = JsonUtil.getValueByPath(jSONObject, "TASK_MORPHO_DETAIL.taskType");
-                    if (!"SUPER".equals(valueByPath)) {
-                        if (!"COMMON".equals(valueByPath)) {
-                            if (!"TRANSFORMER".equals(JsonUtil.getValueByPath(jSONObject, "taskExtProps.TASK_TYPE"))) {
-                                String string = jSONObject.getString("taskId");
-                                valueByPath = jSONObject.getString("appletName");
-                                String string2 = jSONObject.getString("appletId");
-                                StringBuilder stringBuilder = new StringBuilder();
-                                stringBuilder.append("\"taskCenId\": \"");
-                                stringBuilder.append(string2);
-                                stringBuilder.append("\",\"taskId\": \"");
-                                stringBuilder.append(string);
-                                stringBuilder.append("\"");
-                                if (requestString("com.alipay.finpromobff.luckycode.sendTask", stringBuilder.toString()) != null) {
-                                    String stringBuilder2 = this.displayName +
-                                            "完成[" +
-                                            valueByPath +
-                                            "]";
-                                    Log.other(stringBuilder2);
-                                    receiveNumber(string2, String.valueOf(RandomUtil.nextInt(10,15)), string, str, "LUCKY_CODE_TASK");
-                                }
-                            }
-                        }
-                    }
+                if ("RECEIVE_SUCCESS".equals(jSONObject.getString("taskProcessStatus"))) {
+                    continue;
                 }
-                i++;
+                String taskType = JsonUtil.getValueByPath(jSONObject, "TASK_MORPHO_DETAIL.taskType");
+                if ("SUPER".equals(taskType) || "COMMON".equals(taskType)
+                        || "TRANSFORMER".equals(JsonUtil.getValueByPath(jSONObject, "taskExtProps.TASK_TYPE"))) {
+                    continue;
+                }
+                String taskId = jSONObject.getString("taskId");
+                String appletName = jSONObject.getString("appletName");
+                String appletId = jSONObject.getString("appletId");
+                String postData = "\"taskCenId\": \"" + appletId + "\",\"taskId\": \"" + taskId + "\"";
+                if (requestString("com.alipay.finpromobff.luckycode.sendTask", postData) != null) {
+                    Log.other(this.displayName + "完成[" + appletName + "]");
+                    receiveNumber(appletId, String.valueOf(RandomUtil.nextInt(10, 15)), taskId, str, "LUCKY_CODE_TASK");
+                }
             } catch (Exception e) {
                 Log.printStackTrace(e);
             } catch (Throwable th) {
+                Log.printStackTrace(th);
                 TimeUtil.sleep(this.executeIntervalInt);
             }
         }

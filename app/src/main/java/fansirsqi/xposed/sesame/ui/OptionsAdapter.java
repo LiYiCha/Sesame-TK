@@ -26,7 +26,8 @@ public class OptionsAdapter extends BaseAdapter {
      */
     public static OptionsAdapter get(Context c) {
         if (adapter == null) {
-            adapter = new OptionsAdapter(c);
+            // 静态单例持有 Application Context，避免泄漏调用方的 Activity
+            adapter = new OptionsAdapter(c.getApplicationContext());
         }
         return adapter;
     }

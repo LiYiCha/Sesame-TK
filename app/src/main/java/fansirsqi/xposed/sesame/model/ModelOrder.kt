@@ -58,9 +58,6 @@ object ModelOrder {
                 GreenFinance ::class.java,
                 //绿色经营
                 AnswerAI ::class.java //AI答题
-        //            AntBookRead.class,//读书
-        //            ConsumeGold.class,//消费金
-        //            OmegakoiTown.class,//小镇,
 
 
     )

@@ -7,6 +7,8 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.util.Objects;
 import fansirsqi.xposed.sesame.data.Config;
 import fansirsqi.xposed.sesame.util.maps.CooperateMap;
@@ -27,11 +29,13 @@ public class PortUtil {
             File configV2File = StringUtil.isEmpty(userId) ?
                     Files.getDefaultConfigV2File() :
                     Files.getConfigV2File(userId);
-            FileInputStream inputStream = new FileInputStream(configV2File);
-            if (Files.streamTo(inputStream, Objects.requireNonNull(context.getContentResolver().openOutputStream(uri)))) {
-                ToastUtil.makeText("导出成功！", Toast.LENGTH_SHORT).show();
-            } else {
-                ToastUtil.makeText("导出失败！", Toast.LENGTH_SHORT).show();
+            try (FileInputStream inputStream = new FileInputStream(configV2File);
+                 OutputStream targetStream = Objects.requireNonNull(context.getContentResolver().openOutputStream(uri))) {
+                if (Files.streamTo(inputStream, targetStream)) {
+                    ToastUtil.makeText("导出成功！", Toast.LENGTH_SHORT).show();
+                } else {
+                    ToastUtil.makeText("导出失败！", Toast.LENGTH_SHORT).show();
+                }
             }
         } catch (IOException e) {
             Log.printStackTrace(e);
@@ -47,23 +51,26 @@ public class PortUtil {
             File configV2File = StringUtil.isEmpty(userId) ?
                     Files.getDefaultConfigV2File() :
                     Files.getConfigV2File(userId);
-            FileOutputStream outputStream = new FileOutputStream(configV2File);
-            if (Files.streamTo(Objects.requireNonNull(context.getContentResolver().openInputStream(uri)), outputStream)) {
-                ToastUtil.makeText("导入成功！", Toast.LENGTH_SHORT).show();
-                if (!StringUtil.isEmpty(userId)) {
-                    try {
-                        Intent intent = new Intent("com.eg.android.AlipayGphone.sesame.restart");
-                        intent.putExtra("userId", userId);
-                        context.sendBroadcast(intent);
-                    } catch (Throwable th) {
-                        Log.printStackTrace(th);
+            // 先打开源流成功后再创建目标输出流，避免源流打开失败时本地配置已被截断
+            try (InputStream sourceStream = Objects.requireNonNull(context.getContentResolver().openInputStream(uri));
+                 FileOutputStream outputStream = new FileOutputStream(configV2File)) {
+                if (Files.streamTo(sourceStream, outputStream)) {
+                    ToastUtil.makeText("导入成功！", Toast.LENGTH_SHORT).show();
+                    if (!StringUtil.isEmpty(userId)) {
+                        try {
+                            Intent intent = new Intent("com.eg.android.AlipayGphone.sesame.restart");
+                            intent.putExtra("userId", userId);
+                            context.sendBroadcast(intent);
+                        } catch (Throwable th) {
+                            Log.printStackTrace(th);
+                        }
                     }
+                    Intent intent = ((android.app.Activity) context).getIntent();
+                    ((android.app.Activity) context).finish();
+                    context.startActivity(intent);
+                } else {
+                    ToastUtil.makeText("导入失败！", Toast.LENGTH_SHORT).show();
                 }
-                Intent intent = ((android.app.Activity) context).getIntent();
-                ((android.app.Activity) context).finish();
-                context.startActivity(intent);
-            } else {
-                ToastUtil.makeText("导入失败！", Toast.LENGTH_SHORT).show();
             }
         } catch (IOException e) {
             Log.printStackTrace(e);

@@ -289,7 +289,7 @@ public class GoldTicket extends BaseCommTask {
     private void weeklyWelfare() {
         try {
             JSONObject requestString = requestString("com.alipay.finaggexpbff.needle.weeklyWelfare.index", "\"chInfo\": \"goldbill\",\"modeBitMask\": 513");
-            if (requestString == null || requestString.optBoolean("success")) {
+            if (requestString == null || !requestString.optBoolean("success")) {
                 return;
             }
             Object timelineObj = JsonUtil.getValueByPathObject(requestString, "result.upsertData.sign.timeline");
@@ -327,8 +327,17 @@ public class GoldTicket extends BaseCommTask {
             JSONObject res = new JSONObject(RequestManager.requestString(methodIndex, param));
             if (res.optBoolean("success")) {
                 JSONObject result = res.optJSONObject("result");
+                if (result == null) {
+                    return;
+                }
                 JSONObject goldbillTasks = result.optJSONObject("goldbillTasks");
+                if (goldbillTasks == null) {
+                    return;
+                }
                 JSONArray todo = goldbillTasks.optJSONArray("todo");
+                if (todo == null) {
+                    return;
+                }
                 for (int i = 0; i < todo.length(); i++) {
                     TimeUtil.sleep(RandomUtil.nextInt(15000,16000));
                     JSONObject task = todo.getJSONObject(i);
@@ -346,7 +355,7 @@ public class GoldTicket extends BaseCommTask {
                     }
                 }
             }
-        }catch (JSONException  e){
+        }catch (JSONException | NullPointerException e){
             Log.error(TAG + "[.newIndexTask]任务异常: " + e);
         }
     }
@@ -385,11 +394,9 @@ public class GoldTicket extends BaseCommTask {
                 goldIndexCollect();
                 //goldBillCollect("");
                 submit();
+                Status.setFlagToday("GoldTicket_TaskCompleted");
         } catch (Throwable th){
             Log.printStackTrace(displayName, th);
-        }finally {
-            Status.setFlagToday("GoldTicket_TaskCompleted");
-            //Log.other(displayName+"执行完毕");
         }
     }
 }

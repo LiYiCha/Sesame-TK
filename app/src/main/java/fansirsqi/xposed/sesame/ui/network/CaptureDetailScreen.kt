@@ -83,7 +83,11 @@ fun CaptureDetailScreen(
     // 情况 1: 新建请求模式 -> 返回键直接回列表首页
     if (isResendMode && isNewRequest) {
         BackHandler { onBack() }
-        CaptureResendScreen(viewModel = resendViewModel.apply { initFromRecord(CaptureRecord(id = "", url = "https://", method = "GET"), "") }, onBack = onBack)
+        // 初始化副作用只在进入分支时执行一次，避免重组时重置用户输入
+        LaunchedEffect(Unit) {
+            resendViewModel.initFromRecord(CaptureRecord(id = "", url = "https://", method = "GET"), "")
+        }
+        CaptureResendScreen(viewModel = resendViewModel, onBack = onBack)
         return
     }
 
@@ -91,7 +95,10 @@ fun CaptureDetailScreen(
     if (isResendMode && record != null) {
         BackHandler { isResendMode = false }
         val body = reqBodyRaw ?: ""
-        CaptureResendScreen(viewModel = resendViewModel.apply { initFromRecord(record!!, body) }, onBack = { isResendMode = false })
+        LaunchedEffect(record!!.id, body) {
+            resendViewModel.initFromRecord(record!!, body)
+        }
+        CaptureResendScreen(viewModel = resendViewModel, onBack = { isResendMode = false })
         return
     }
 

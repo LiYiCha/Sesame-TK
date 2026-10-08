@@ -155,6 +155,7 @@ class LifecycleModule : HookModule {
     private fun handleServiceDestroy(service: Service) {
         Log.runtime("目标应用前台服务被销毁")
         Toast.show("目标应用前台服务被销毁")
+        SesameReceiver.unregister(service)
         LifecycleManager.destroyHandler(true)
 
         try {

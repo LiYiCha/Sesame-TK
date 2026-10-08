@@ -43,6 +43,7 @@ public class ListAdapter extends BaseAdapter {
     public static ListAdapter getClear(Context c) {
         ListAdapter adapter = get(c);
         adapter.resetFindState();
+        viewHolderList.clear();
         return adapter;
     }
     /**
@@ -56,6 +57,7 @@ public class ListAdapter extends BaseAdapter {
         ListAdapter adapter = get(c);
         ListAdapter.listType = listType;
         adapter.resetFindState();
+        viewHolderList.clear();
         return adapter;
     }
     /**

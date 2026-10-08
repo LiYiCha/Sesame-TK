@@ -30,6 +30,9 @@ public class SesameReceiver extends BroadcastReceiver {
     // 回调接口
     private static BroadcastCallback callback;
 
+    // 已注册的接收器实例，与 register/unregister 配对防止服务重建时重复注册泄漏
+    private static volatile SesameReceiver registeredReceiver;
+
     /**
      * 广播回调接口
      */
@@ -147,6 +150,7 @@ public class SesameReceiver extends BroadcastReceiver {
             setCallback(callback);
             IntentFilter intentFilter = getIntentFilter();
             SesameReceiver receiver = new SesameReceiver();
+            registeredReceiver = receiver;
 
             // 根据Android SDK版本注册广播接收器
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -162,6 +166,25 @@ public class SesameReceiver extends BroadcastReceiver {
             Log.error("注册广播失败");
             Log.runtime(TAG, "hook registerBroadcastReceiver err:");
             Log.printStackTrace(TAG, th);
+        }
+    }
+
+    /**
+     * 注销广播接收器，与 register 配对调用
+     *
+     * @param context 注册时使用的上下文
+     */
+    public static synchronized void unregister(Context context) {
+        SesameReceiver receiver = registeredReceiver;
+        registeredReceiver = null;
+        if (receiver != null && context != null) {
+            try {
+                context.unregisterReceiver(receiver);
+                Log.runtime(TAG, "unregisterBroadcastReceiver successfully");
+            } catch (Throwable th) {
+                Log.runtime(TAG, "unregisterBroadcastReceiver err:");
+                Log.printStackTrace(TAG, th);
+            }
         }
     }
 

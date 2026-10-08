@@ -71,6 +71,7 @@ class MainActivity : BaseActivity() {
     private var isClick = false
     private val viewHandler = Handler(Looper.getMainLooper())
     private lateinit var titleRunner: Runnable
+    private lateinit var broadcastReceiver: BroadcastReceiver
     private var userNickName: String = ""
     
     private val mainActivityThemeObserver: () -> Unit = {
@@ -132,7 +133,7 @@ class MainActivity : BaseActivity() {
         titleRunner = Runnable { updateSubTitle(RunType.DISABLE.nickName) }
 
         // 注册广播接收器
-        val broadcastReceiver = object : BroadcastReceiver() {
+        broadcastReceiver = object : BroadcastReceiver() {
             override fun onReceive(context: Context, intent: Intent) {
                 val action = intent.action
                 Log.runtime("receive broadcast:$action intent:$intent")
@@ -544,6 +545,11 @@ class MainActivity : BaseActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
+        try {
+            unregisterReceiver(broadcastReceiver)
+        } catch (e: Exception) {
+            Log.printStackTrace(e)
+        }
         fansirsqi.xposed.sesame.ui.theme.app.HolidayTheme.themeObservers.remove(mainActivityThemeObserver)
     }
 }

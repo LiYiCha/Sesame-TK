@@ -44,7 +44,8 @@ object ForegroundHelper {
     @SuppressLint("ForegroundServiceType")
     @JvmStatic
     fun startForeground(taskName: String, targetTime: Long) {
-        if (isActive.get()) {
+        // 全程 CAS 占位，防止并发下检查-设置间隙导致先完成的任务提前解除另一任务的保活
+        if (!isActive.compareAndSet(false, true)) {
             Log.runtime(TAG, "前台服务已在运行，跳过重复启动")
             return
         }
@@ -52,6 +53,7 @@ object ForegroundHelper {
             val service = AppContext.getService()
             if (service == null) {
                 Log.error(TAG, "无法获取 Service 上下文，放弃前台保活")
+                isActive.set(false)
                 return
             }
             val context = service.applicationContext ?: service
@@ -108,9 +110,9 @@ object ForegroundHelper {
             } else {
                 service.startForeground(KEEP_ALIVE_NOTIFICATION_ID, notification)
             }
-            isActive.set(true)
             Log.other("$TAG ✅ 前台保活已启动: $taskName → $timeStr")
         } catch (e: Exception) {
+            isActive.set(false)
             Log.error(TAG, "启动前台保活失败: ${e.message}")
             Log.printStackTrace(TAG, e)
         }

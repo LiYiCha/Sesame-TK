@@ -98,4 +98,10 @@ val defaultBlacklist = setOf(
     "KTKZ_YS202511",         // 一起组团种榆树
     "mokuai_senlin_hlz",     // 去玩一玩得活力值
 
+    // 学分任务（welfareCenter/Finedu）
+    "解锁知识勋章",            // 需要完成知识勋章
+    "完成今日测一测",          // 需要答题操作
+    "邀请好友来看看",          // 需要邀请好友
+    "学习知识点30秒"          // 需要停留操作
+
 )

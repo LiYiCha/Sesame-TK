@@ -221,7 +221,7 @@ public class UserMap {
         if (userId == null || userId.isEmpty()) {
             return false;
         }
-        return Files.write2File(JsonUtil.formatJson(userMap), Files.getFriendIdMapFile(userId));
+        return Files.write2FileAtomic(JsonUtil.formatJson(userMap), Files.getFriendIdMapFile(userId));
     }
     /**
      * 加载当前用户的数据
@@ -250,7 +250,10 @@ public class UserMap {
      * @param userEntity 用户实体
      */
     public static synchronized void saveSelf(UserEntity userEntity) {
+        if (userEntity == null) {
+            return;
+        }
         String body = JsonUtil.formatJson(userEntity);
-        Files.write2File(body, Files.getSelfIdFile(userEntity.getUserId()));
+        Files.write2FileAtomic(body, Files.getSelfIdFile(userEntity.getUserId()));
     }
 }

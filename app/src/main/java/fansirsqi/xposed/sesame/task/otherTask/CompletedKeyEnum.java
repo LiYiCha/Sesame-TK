@@ -69,7 +69,6 @@ public enum CompletedKeyEnum {
     PiXiuFood,
     LuckyCode,
     DayDaySave,
-    ConsumeGold,
     AntFishpond,
     HundredTimesDiscountCard,
     WenLiBao,

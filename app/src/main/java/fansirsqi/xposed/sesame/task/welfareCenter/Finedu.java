@@ -3,18 +3,14 @@ package fansirsqi.xposed.sesame.task.welfareCenter;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
-
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
-import java.util.Arrays;
 import java.util.Date;
-import java.util.HashSet;
-import java.util.Set;
-
 import fansirsqi.xposed.sesame.data.Status;
 import fansirsqi.xposed.sesame.hook.RequestManager;
 import fansirsqi.xposed.sesame.util.Log;
 import fansirsqi.xposed.sesame.util.RandomUtil;
+import fansirsqi.xposed.sesame.util.TaskBlacklist;
 import fansirsqi.xposed.sesame.util.TimeUtil;
 import fansirsqi.xposed.sesame.util.maps.UserMap;
 
@@ -22,13 +18,6 @@ public class Finedu {
     private static final String TAG = "学分💯 ";
     private static final String TASK_ERROR_CACHE_PREFIX = "FineduTaskError_";
     private static final long TASK_ERROR_CACHE_DURATION = 12 * 60 * 60 * 1000; // 12小时缓存
-    // 黑名单任务列表
-    private static final Set<String> BLACKLISTED_TASKS = new HashSet<>(Arrays.asList(
-            "解锁知识勋章",
-            "完成今日测一测",
-            "邀请好友来看看",
-            "学习知识点30秒"
-    ));
     private String beforeCredits = "0";
 
     public void handle() {
@@ -227,8 +216,7 @@ public class Finedu {
                         }
 
                         // 检查是否为黑名单任务
-                        if (BLACKLISTED_TASKS.contains(taskName)) {
-                            //Log.runtime(TAG, "任务[" + taskName + "]已在黑名单中，跳过执行");
+                        if (TaskBlacklist.isTaskInBlacklist(taskName)) {
                             continue;
                         }
 
@@ -289,7 +277,7 @@ public class Finedu {
     private boolean handleTask(String taskId, String taskName) {
         try {
             // 检查是否为黑名单任务
-            if (BLACKLISTED_TASKS.contains(taskName)) {
+            if (TaskBlacklist.isTaskInBlacklist(taskName)) {
                 return false;
             }
 
@@ -396,12 +384,8 @@ public class Finedu {
             } else {
                 String errorMsg = result.optString("message", "未知错误");
                 Log.error(TAG, "任务[" + taskName + "]执行失败: " + errorMsg);
-
-                if (errorMsg.contains("task token analysis failed") ||
-                        errorMsg.contains("服务器异常")) {
-                    BLACKLISTED_TASKS.add(taskName);
-                    Log.runtime(TAG, "任务[" + taskName + "]已添加到黑名单");
-                }
+                // 按错误类型自动加入通用黑名单（持久化），其余失败由 12 小时错误缓存抑制重试
+                TaskBlacklist.autoAddToBlacklist(taskName, taskName, errorMsg, errorMsg);
                 return false;
             }
         } catch (JSONException e) {

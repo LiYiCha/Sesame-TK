@@ -23,6 +23,8 @@ import fansirsqi.xposed.sesame.util.TimeUtil;
 
 public class TravelDeals extends BaseCommTask {
     private final String displayName = "出行特惠🚗";
+    // 滑块验证冷却 key，检查与设置必须使用同一常量
+    private static final String SLIDER_COOLDOWN_KEY = "TravelDeals";
     private final Set<String> skippedTasks = new HashSet<>(Arrays.asList(
             "开会员享最高10G流量",
             "完成办流量卡月享150G",
@@ -40,7 +42,7 @@ public class TravelDeals extends BaseCommTask {
         // 初始化黑名单
         initBlackList();
         TimeUtil.sleep(RandomUtil.nextInt(1000, 3000)); // 暂停2到3秒
-        if (!Status.hasTemporaryStatusValid("TravelDeals")) {
+        if (!Status.hasTemporaryStatusValid(SLIDER_COOLDOWN_KEY)) {
             if (!Status.hasFlagToday(CompletedKeyEnum.TravelSign.name())) {
                 Sign();
             }
@@ -66,7 +68,7 @@ public class TravelDeals extends BaseCommTask {
             String response = queryTask(method, tab); // 查询任务列表
             if (response == null) {
                 Log.other(displayName, "查询任务列表失败: 请先过滑块验证!!!5分钟后可重新执行");
-                Status.setTemporaryStatusWithExpiry("travelDeals", 1000 * 60 * 10);
+                Status.setTemporaryStatusWithExpiry(SLIDER_COOLDOWN_KEY, 1000 * 60 * 10);
                 Notify.sendNewNotification(displayName, "请先过滑块验证!!!10分钟后可重新执行");
                 return; // 如果查询失败，跳过当前 tab
             }
@@ -80,7 +82,7 @@ public class TravelDeals extends BaseCommTask {
                 if (errorCode == 1009 || errorCode == 48 || errorCode == 6004) {
                     Log.other(displayName, " 错误 error: " + result.optString("errorMessage"));
                     TimeUtil.sleep(RandomUtil.nextInt(10000, 13000));
-                    Status.setTemporaryStatusWithExpiry("travelDeals", 1000 * 60 * 5);
+                    Status.setTemporaryStatusWithExpiry(SLIDER_COOLDOWN_KEY, 1000 * 60 * 5);
                     return;
                 }
 
@@ -167,7 +169,7 @@ public class TravelDeals extends BaseCommTask {
         String response = RequestManager.requestString(method, params);
         if (response == null || response.isEmpty()) {
             Log.error(displayName, "完成 eventPush 任务失败: 请先过滑块验证");
-            Status.setTemporaryStatusWithExpiry("travelDeals", 1000 * 60 * 5);
+            Status.setTemporaryStatusWithExpiry(SLIDER_COOLDOWN_KEY, 1000 * 60 * 5);
             Notify.sendNewNotification(displayName, "请先过滑块验证!!!5分钟后可重新执行");
             return  false;
         }
@@ -214,7 +216,7 @@ public class TravelDeals extends BaseCommTask {
         String s = RequestManager.requestString(method, params);
         if (s == null || s.isEmpty()) {
             Log.error(displayName, "完成任务失败: 请先过滑块验证!");
-            Status.setTemporaryStatusWithExpiry("traveDeals",   1000*60*5);
+            Status.setTemporaryStatusWithExpiry(SLIDER_COOLDOWN_KEY, 1000 * 60 * 5);
             Notify.sendNewNotification(displayName, "请先过滑块验证!!!5分钟后可重新执行");
             return;
         }

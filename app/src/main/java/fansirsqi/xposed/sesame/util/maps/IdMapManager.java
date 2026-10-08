@@ -119,7 +119,7 @@ public abstract class IdMapManager {
             String json = JsonUtil.formatJson(idMap);
 //             json = objectMapper.writeValueAsString(idMap);
             File file = Files.getTargetFileofUser(userId, thisFileName());
-            return Files.write2File(json, file);
+            return Files.write2FileAtomic(json, file);
         } catch (Exception e) {
             Log.printStackTrace(e);
             return false;
@@ -131,7 +131,7 @@ public abstract class IdMapManager {
             String json = JsonUtil.formatJson(idMap);
 //            String json = objectMapper.writeValueAsString(idMap);
             File file = Files.getTargetFileofDir(Files.MAIN_DIR, thisFileName());
-            return Files.write2File(json, file);
+            return Files.write2FileAtomic(json, file);
         } catch (Exception e) {
             Log.printStackTrace(e);
             return false;

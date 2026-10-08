@@ -86,6 +86,17 @@ public class ListDialog {
             layout_batch_process.setVisibility(listType == ListType.CHECK && !hasCount ? View.VISIBLE : View.GONE);
             ListAdapter.get(c).notifyDataSetChanged();
         });
+        // 关闭时清空静态 View 引用，避免持有已销毁 Activity 的视图导致泄漏
+        listDialog.setOnDismissListener(p1 -> {
+            btn_find_last = null;
+            btn_find_next = null;
+            btn_select_all = null;
+            btn_select_invert = null;
+            searchText = null;
+            lv_list = null;
+            layout_batch_process = null;
+            listDialog = null;
+        });
         listDialog.show();
         Button positiveButton = listDialog.getButton(DialogInterface.BUTTON_POSITIVE);
         if (positiveButton != null) {

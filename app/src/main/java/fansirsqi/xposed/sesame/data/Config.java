@@ -198,7 +198,7 @@ public class Config {
                 if (!configV2File.exists()) {
                     Log.runtime(TAG, "默认配置文件不存在，初始化新配置");
                     unload();
-                    Files.write2File(toSaveStr(), configV2File);
+                    Files.write2FileAtomic(toSaveStr(), configV2File);
                 }
             } else {
                 configV2File = Files.getConfigV2File(userId);
@@ -218,17 +218,17 @@ public class Config {
                 String formatted = toSaveStr();
                 if (formatted != null && !formatted.equals(json)) {
                     Log.runtime(TAG, "格式化配置: " + userName);
-                    Files.write2File(formatted, configV2File);
+                    Files.write2FileAtomic(formatted, configV2File);
                 }
             } else if (defaultConfigV2FileExists) {
                 String json = Files.readFromFile(Files.getDefaultConfigV2File());
                 JsonUtil.copyMapper().readerForUpdating(INSTANCE).readValue(json);
                 Log.runtime(TAG, "复制新配置: " + userName);
-                Files.write2File(json, configV2File);
+                Files.write2FileAtomic(json, configV2File);
             } else {
                 unload();
                 Log.runtime(TAG, "初始新配置: " + userName);
-                Files.write2File(toSaveStr(), configV2File);
+                Files.write2FileAtomic(toSaveStr(), configV2File);
             }
         } catch (Throwable t) {
             Log.printStackTrace(TAG, t);
@@ -236,7 +236,7 @@ public class Config {
             try {
                 unload();
                 if (configV2File != null) {
-                    Files.write2File(toSaveStr(), configV2File);
+                    Files.write2FileAtomic(toSaveStr(), configV2File);
                 }
             } catch (Exception e) {
                 Log.printStackTrace(TAG, "重置配置失败", e);

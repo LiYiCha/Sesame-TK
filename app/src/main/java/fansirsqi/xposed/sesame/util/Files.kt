@@ -88,7 +88,7 @@ object Files {
     @JvmStatic
     @Synchronized
     fun setDefaultConfigV2File(json: String): Boolean {
-        return write2File(json, File(CONFIG_DIR, "config_v2.json"))
+        return write2FileAtomic(json, File(CONFIG_DIR, "config_v2.json"))
     }
 
     @JvmStatic
@@ -116,7 +116,7 @@ object Files {
     @JvmStatic
     @Synchronized
     fun setConfigV2File(userId: String, json: String): Boolean {
-        return write2File(json, File(CONFIG_DIR.toString() + File.separator + userId, "config_v2.json"))
+        return write2FileAtomic(json, File(CONFIG_DIR.toString() + File.separator + userId, "config_v2.json"))
     }
 
     @JvmStatic

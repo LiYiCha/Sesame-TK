@@ -38,6 +38,9 @@ object Notify {
     @Volatile
     private var isNotificationStarted = false
 
+    @Volatile
+    private var isSendingErrorNotification = false
+
     private var lastUpdateTime: Long = 0
     private var nextExecTimeCache: Long = 0
     private var titleText: String? = ""
@@ -254,6 +257,9 @@ object Notify {
     @SuppressLint("StaticFieldLeak")
     @JvmStatic
     fun sendNewNotification(title: String?, content: String?) {
+        // 重入防护：本方法由 Log.error 触发，内部 checkPermission 失败会再调 Log.error，无防护将递归至栈溢出
+        if (isSendingErrorNotification) return
+        isSendingErrorNotification = true
         try {
             if (context == null) {
                 Log.error(TAG, "Context is null in sendErrorNotification, cannot proceed.")
@@ -284,6 +290,8 @@ object Notify {
             }
         } catch (e: Exception) {
             Log.printStackTrace(e)
+        } finally {
+            isSendingErrorNotification = false
         }
     }
 }

@@ -19,7 +19,7 @@ public class YebSceneBffish extends BaseCommTask {
         if (!Status.hasFlagToday(CompletedKeyEnum.YebSceneBff.name())) {
             sign();
             incomePlusFeedTaskList();
-            receiveFood();
+            //receiveFood();
             receiveFoodAndGold();
             index();
             queryPrizeRedemptionInfo();
