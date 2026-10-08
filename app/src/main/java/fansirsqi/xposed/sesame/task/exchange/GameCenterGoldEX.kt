@@ -1,6 +1,5 @@
 package fansirsqi.xposed.sesame.task.exchange
 
-import android.annotation.SuppressLint
 import org.json.JSONArray
 import org.json.JSONObject
 import fansirsqi.xposed.sesame.entity.MemberBenefit

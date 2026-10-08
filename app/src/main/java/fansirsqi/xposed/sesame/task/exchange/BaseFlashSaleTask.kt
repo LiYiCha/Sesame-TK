@@ -35,6 +35,9 @@ abstract class BaseFlashSaleTask : ModelTask() {
 
         @JvmField
         val waitTimeField = IntegerModelField("waitTime", "提前时间(毫秒)", 200, 1, 3000)
+
+        // 唤醒锁超时兜底：最大等待 180 分钟 + 兑换缓冲
+        private const val FLASH_SALE_WAKELOCK_MS = 4 * 60 * 60 * 1000L
     }
 
     // 唤醒锁 - 使用 AtomicReference 保证线程安全
@@ -141,10 +144,9 @@ abstract class BaseFlashSaleTask : ModelTask() {
             name?.let { ForegroundHelper.startForeground(it, targetTime) }
 
             // ── 保持唤醒锁：确保在等待和兑换期间 CPU 不休眠 ──────────────────
-            val service = AppContext.getService()
-            if (service != null) {
-                val context = service.applicationContext ?: service
-                WakeLockManager.acquire(context, "FlashSale_${javaClass.simpleName}")
+            // 独立 lease + timeout 兜底（上限 = 最大等待 180 分钟 + 兑换缓冲）
+            val wakeLease = AppContext.getService()?.applicationContext?.let {
+                WakeLockManager.acquire(it, FLASH_SALE_WAKELOCK_MS, "FlashSale_${javaClass.simpleName}")
             }
 
             try {
@@ -195,8 +197,8 @@ abstract class BaseFlashSaleTask : ModelTask() {
             } finally {
                 // ── 无论成功、失败、超时，都确保停止前台保活 ────────────
                 ForegroundHelper.stopForeground()
-                // ── 释放唤醒锁 ──────────────────────────────────
-                WakeLockManager.release()
+                // ── 释放唤醒锁（关闭本任务的 lease） ──────────────────
+                wakeLease?.close()
             }
 
         } catch (e: Exception) {

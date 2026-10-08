@@ -16,7 +16,6 @@ import fansirsqi.xposed.sesame.data.Config;
 import fansirsqi.xposed.sesame.data.DataCache;
 import fansirsqi.xposed.sesame.data.General;
 import fansirsqi.xposed.sesame.data.Status;
-import fansirsqi.xposed.sesame.hook.RpcResponseHandler;
 import fansirsqi.xposed.sesame.hook.context.AppContext;
 import fansirsqi.xposed.sesame.hook.core.modules.MiscHookModule;
 import fansirsqi.xposed.sesame.hook.network.HttpCaptureHook;
@@ -64,6 +63,9 @@ public class LifecycleManager {
     }
 
     private static PowerManager.WakeLock wakeLock;  // 保留用于兼容性，实际管理由 WakeLockManager 负责
+    // stayAwake 唤醒锁 lease；服务生命周期由 destroyHandler 显式关闭，timeout 仅作兜底
+    private static volatile WakeLockManager.WakeLockLease stayAwakeLease;
+    private static final long STAY_AWAKE_TIMEOUT_MS = 24 * 60 * 60 * 1000L;
     private static BaseTask mainTask;
     static RpcBridge rpcBridge;
     //@Getter
@@ -73,6 +75,14 @@ public class LifecycleManager {
     private static volatile Class<?> cachedFastJsonClass = null;
     private static final java.util.Map<Object, Object[]> rpcHookMap = new java.util.concurrent.ConcurrentHashMap<>();
     private static final java.util.Map<String, Long> h5BridgePending = new java.util.concurrent.ConcurrentHashMap<>();
+
+    private static void closeStayAwakeLease() {
+        WakeLockManager.WakeLockLease lease = stayAwakeLease;
+        stayAwakeLease = null;
+        if (lease != null) {
+            lease.close();
+        }
+    }
 
     private static String normalizeReqDataString(Object reqData) {
         if (reqData == null) return "";
@@ -317,9 +327,10 @@ public class LifecycleManager {
                     Notify.setStatusTextDisabled();
                     return false;
                 }
-                // 保持唤醒锁，防止设备休眠（使用 WakeLockManager 自动管理）
+                // 保持唤醒锁，防止设备休眠；先关闭旧 lease 防止重复初始化时旧锁泄漏
                 if (BaseModel.getStayAwake().getValue()) {
-                    WakeLockManager.acquire(service, service.getClass().getName());
+                    closeStayAwakeLease();
+                    stayAwakeLease = WakeLockManager.acquire(service, STAY_AWAKE_TIMEOUT_MS, "stayAwake");
                 }
                 AlarmScheduler.setWakenAtTimeAlarm();
                 // 进程重启后动态接收器与闹钟回调均已丢失，重新读取 seckill_tasks.json 排期秒杀闹钟
@@ -423,8 +434,8 @@ public class LifecycleManager {
                     }
                     rpcInvocationUnhook = null;
                 }
-                // 释放 WakeLock（使用 WakeLockManager 自动管理）
-                WakeLockManager.release();
+                // 释放 WakeLock（lease 模式，各自持有各自释放）
+                closeStayAwakeLease();
                 if (rpcBridge != null) {
                     rpcVersion = null;
                     rpcBridge.unload();
@@ -748,11 +759,6 @@ public class LifecycleManager {
 
                                 removeH5BridgePending(method, recordArray[2]);
 
-                                // 处理RPC响应数据并提取关键信息
-                                if (BaseModel.getAutoTokenEnabled().getValue()) {
-                                    RpcResponseHandler.handle(method, rawData);
-                                }
-
                                 String logMessage = "\n[H5] ========================>\n" + 
                                         "TimeStamp: " + timeStamp + "\n" + 
                                         "Method: " + method + "\n" + 
@@ -942,12 +948,6 @@ public class LifecycleManager {
                             }
                             
                             boolean isH5 = Boolean.TRUE.equals(XposedHelpers.getAdditionalInstanceField(param, "isH5Rpc"));
-                            if (isH5) {
-                                // 兜底处理未经过上层 Bridge 的底层小游戏等 RPC 请求的 Token 提取
-                                if (BaseModel.getAutoTokenEnabled().getValue()) {
-                                    RpcResponseHandler.handle(opType, responseJson);
-                                }
-                            }
 
                             String logPrefix = isH5 ? "[H5]" : "[BOTTOM]";
                             String logMessage = "\n" + logPrefix + " ========================>\n" + 

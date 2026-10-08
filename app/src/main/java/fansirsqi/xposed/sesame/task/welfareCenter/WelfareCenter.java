@@ -315,10 +315,6 @@ public class WelfareCenter extends ModelTask {
             MyBankWelfareService.doTaskCenter();
         }
 
-//        if (this.welfareCenterWSTask.getValue()) {
-//            WelfareCenterRpcCall.doTask("AP12202921", TAG, displayName);
-//        }
-
         if (this.welfareCenterWSLuckDraw.getValue()) {
             playTrigger();
         }
@@ -329,9 +325,6 @@ public class WelfareCenter extends ModelTask {
         }
         if (this.welfarefinedu.getValue()){
             new Finedu().handle();
-        }
-        if (this.wenLiBao.getValue()){
-            new WenLiBao().handle();
         }
         assignDateExpirePoint();
 

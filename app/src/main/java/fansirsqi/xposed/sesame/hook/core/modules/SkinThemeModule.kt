@@ -4,8 +4,6 @@ import android.content.Context
 import fansirsqi.xposed.sesame.hook.core.HookModule
 import fansirsqi.xposed.sesame.hook.skin.SkinHook
 import fansirsqi.xposed.sesame.hook.theme.ThemeHookV2
-import fansirsqi.xposed.sesame.hook.theme.ThemeManager
-import fansirsqi.xposed.sesame.model.BaseModel
 import fansirsqi.xposed.sesame.util.Log
 
 class SkinThemeModule : HookModule {

@@ -178,46 +178,6 @@ class CommonRequest {
         return JSONObject(requestString(method, params))
     }
 
-
-    //============天天秒杀================
-    //秒杀任务列表
-    fun ugShoopingTaskList() :JSONObject{
-        val method = "com.alipay.ugshopping.biz.rpc.promo.queryAllTaskInfo"
-        val params = "[{\"needPollingSignTask\":false}]"
-        return JSONObject(requestString(method, params))
-    }
-    //完成任务并领取奖励
-    fun ugShoopingTaskHandle(taskCode: String, subTaskCode: String): JSONObject {
-        val method = "com.alipay.ugshopping.biz.rpc.promo.finishTaskToReward"
-
-        // 根据 subTaskCode 是否为空来决定使用哪个参数格式
-        val params = if (subTaskCode.isNotEmpty()) {
-            "[{\"subTaskCode\":\"$subTaskCode\",\"taskCode\":\"$taskCode\"}]"
-        } else {
-            "[{\"taskCode\":\"$taskCode\"}]"
-        }
-        return JSONObject(requestString(method, params))
-    }
-    //签到？
-    fun ugShoopingSignIn() :JSONObject{
-        val method = "com.alipay.ugshopping.biz.rpc.promo.finishTaskToReward"
-        val params = "[{\"taskCode\":\"POLLING_SIGN\"}]"
-        return JSONObject(requestString(method, params))
-    }
-
-    //获取实验结果
-    fun getExperimentResult1() :JSONObject{
-        val method = "com.alipay.xuexiao.MgwDeliveryFacade.getExperimentResult"
-        val params = "[{\"unitCode\":\"COXY_TCEM\"}]"
-        return JSONObject(requestString(method, params))
-    }
-    fun getExperimentResult2() :JSONObject{
-        val method = "com.alipay.xuexiao.MgwDeliveryFacade.getExperimentResult"
-        val params = "[{\"unitCode\":\"ZATQ_RVSB\"}]"
-        return JSONObject(requestString(method, params))
-    }
-
-
     //多懂一点小程序|签到
     @SuppressLint("SimpleDateFormat")
     fun rceduSignIn(userCode: String) :JSONObject{
@@ -277,7 +237,7 @@ class CommonRequest {
             put("skipTaskList", skipTaskList)
         })
 
-    /** 青春特权--任务报名（AG 版本无 taskBizId 参数） */
+    /** 青春特权--任务报名 */
     fun taskSignUp(taskCode: String, taskSource: String, taskType: String): String =
         youthRequest("taskSignUp", JSONObject().apply {
             put("taskCode", taskCode)
@@ -285,7 +245,7 @@ class CommonRequest {
             put("taskType", taskType)
         })
 
-    /** 青春特权--提交任务（AG 版本无 taskBizId 参数） */
+    /** 青春特权--提交任务 */
     fun taskComplete(taskCode: String, taskSource: String, taskType: String): String =
         youthRequest("taskComplete", JSONObject().apply {
             put("taskCode", taskCode)

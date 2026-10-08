@@ -107,15 +107,4 @@ public class BaseTaskRpcCall {
             Log.printStackTrace(str2, th);
         }
     }
-
-
-
-    public static JSONObject programInvoke(Map<String, Object> map) throws JSONException {
-        JSONObject jSONObject = new JSONObject(RequestManager.requestString("alipay.imasp.program.programInvoke", StringUtil.getJsonString(map)));
-        if (jSONObject.getBoolean("isSuccess")) {
-            return jSONObject;
-        }
-        Log.error("BaseTaskRpcCall.programInvoke err " + map);
-        return null;
-    }
 }

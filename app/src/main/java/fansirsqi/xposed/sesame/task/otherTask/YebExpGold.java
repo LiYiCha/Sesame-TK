@@ -73,7 +73,7 @@ public class YebExpGold extends BaseCommTask {
             // ===== 第1轮：主查询 → 签到 → 任务处理 =====
             JSONObject mainResponse = queryMain(false, null);
             if (!isSuccess(mainResponse)) {
-                Log.system(TAG, "余额宝体验金任务查询失败: " + getErrorDesc(mainResponse));
+                Log.error(TAG, "余额宝体验金任务查询失败: " + getErrorDesc(mainResponse));
                 // 主查询也失败时尝试凭证处理（可能只有券可用）
                 handleYebExpGoldCertVouchers();
                 return;
@@ -81,7 +81,7 @@ public class YebExpGold extends BaseCommTask {
 
             JSONObject resultData = mainResponse.optJSONObject("resultData");
             if (resultData == null) {
-                Log.system(TAG, "余额宝体验金任务查询失败: resultData 缺失");
+                Log.error(TAG, "余额宝体验金任务查询失败: resultData 缺失");
                 return;
             }
 
@@ -106,7 +106,7 @@ public class YebExpGold extends BaseCommTask {
                 handledTask = handleExchange(resultData) || handledTask;
                 handledTask = handleYebExpGoldCertVouchers() || handledTask;
             } else {
-                Log.system(TAG, "余额宝体验金任务刷新失败: " + getErrorDesc(mainResponse));
+                Log.error(TAG, "余额宝体验金任务刷新失败: " + getErrorDesc(mainResponse));
             }
 
             // ===== 兜底：激活未激活的体验金 =====
@@ -151,7 +151,7 @@ public class YebExpGold extends BaseCommTask {
             }
             String title = amount.isEmpty() ? "余额宝体验金签到" : "余额宝体验金签到(" + amount + "元)";
             if (TaskBlacklist.isTaskInBlacklist(title)) {
-                Log.system(TAG, "任务在自动跳过列表(黑名单)中，跳过[" + title + "]");
+                Log.error(TAG, "任务在自动跳过列表(黑名单)中，跳过[" + title + "]");
                 Status.setFlagToday(FLAG_SIGN);
                 return false;
             }
@@ -159,7 +159,7 @@ public class YebExpGold extends BaseCommTask {
                     "com.alipay.yebscenebff.needle.yebExpGold.signIn",
                     "\"signInPlayId\":\"" + SIGN_IN_PLAY_ID + "\"");
             if (!isSuccess(signResponse)) {
-                Log.system(TAG, "余额宝体验金签到失败: " + getErrorDesc(signResponse));
+                Log.error(TAG, "余额宝体验金签到失败: " + getErrorDesc(signResponse));
                 manualTaskTitles.add(title);
                 return false;
             }
@@ -238,7 +238,7 @@ public class YebExpGold extends BaseCommTask {
                     "com.alipay.yebpromobff.promosdk2024.task.query",
                     "\"needTriggerPrize\":false,\"playActionCode\":\"TASK_LIST_CONSULT\",\"playEntrance\":\"HYQ_TASK_LIST_ENTRANCE_2\"");
             if (!isSuccess(promoResponse)) {
-                Log.system(TAG, "余额宝体验金任务列表查询失败: " + getErrorDesc(promoResponse));
+                Log.error(TAG, "余额宝体验金任务列表查询失败: " + getErrorDesc(promoResponse));
             } else {
                 JSONObject promoResult = promoResponse.optJSONObject("result");
                 JSONArray taskDetailList = promoResult == null ? null : promoResult.optJSONArray("taskDetailList");
@@ -261,7 +261,7 @@ public class YebExpGold extends BaseCommTask {
                 if (action == null || action.title.isEmpty()) continue;
                 if (isGroupHandledToday(group)) continue;
                 if (TaskBlacklist.isTaskInBlacklist(action.title)) {
-                    Log.system(TAG, "任务在自动跳过列表(黑名单)中，跳过[" + action.title + "]");
+                    Log.error(TAG, "任务在自动跳过列表(黑名单)中，跳过[" + action.title + "]");
                     markGroupHandled(group);
                     continue;
                 }
@@ -332,7 +332,7 @@ public class YebExpGold extends BaseCommTask {
                 markGroupHandled(group);
                 return true;
             }
-            Log.system(TAG, "余额宝体验金任务领取失败[" + title + "]: " + getErrorDesc(response));
+            Log.error(TAG, "余额宝体验金任务领取失败[" + title + "]: " + getErrorDesc(response));
             return false;
         } catch (Throwable th) {
             return false;
@@ -424,7 +424,7 @@ public class YebExpGold extends BaseCommTask {
 
                 if (group != null && isGroupHandledToday(group)) continue;
                 if (TaskBlacklist.isTaskInBlacklist(title)) {
-                    Log.system(TAG, "任务在自动跳过列表(黑名单)中，跳过[" + title + "]");
+                    Log.error(TAG, "任务在自动跳过列表(黑名单)中，跳过[" + title + "]");
                     continue;
                 }
 
@@ -463,7 +463,7 @@ public class YebExpGold extends BaseCommTask {
                         }
                         claimed = true;
                     } else {
-                        Log.system(TAG, "余额宝体验金任务领取失败[" + title + "]");
+                        Log.error(TAG, "余额宝体验金任务领取失败[" + title + "]");
                     }
                 }
                 TimeUtil.sleep(500L);
@@ -506,20 +506,20 @@ public class YebExpGold extends BaseCommTask {
                     "\"bizOrderNo\":\"" + bizOrderNo + "\",\"campId\":\"" + EXCHANGE_CAMP_ID
                             + "\",\"exchangeAmount\":\"" + balanceText + "\",\"prizeId\":\"" + EXCHANGE_PRIZE_ID + "\"");
             if (exchangeResponse == null) {
-                Log.system(TAG, "余额宝体验金兑换失败");
+                Log.error(TAG, "余额宝体验金兑换失败");
                 return false;
             }
             JSONObject exchangeResult = exchangeResponse.optJSONObject("result");
             String couponId = exchangeResult == null ? "" : exchangeResult.optString("equityNo");
             if (couponId.isEmpty()) {
-                Log.system(TAG, "余额宝体验金兑换成功但缺少激活凭证");
+                Log.error(TAG, "余额宝体验金兑换成功但缺少激活凭证");
                 return false;
             }
             JSONObject activeResponse = requestString(
                     "alipay.yebprod.promo.yebTrial.active",
                     "\"couponId\":\"" + couponId + "\",\"equityType\":\"voucher\",\"type\":\"YEB_TRIAL\"");
             if (activeResponse == null) {
-                Log.system(TAG, "余额宝体验金激活失败");
+                Log.error(TAG, "余额宝体验金激活失败");
                 return false;
             }
             String amountText = balanceText;
@@ -568,7 +568,7 @@ public class YebExpGold extends BaseCommTask {
                         "\"convertType\":\"all\",\"isShowExchangeModal\":true");
 
                 if (convertResponse == null) {
-                    if (!isDirectProbe) Log.system(TAG, "余额宝体验金券兑换请求失败: 返回为空");
+                    if (!isDirectProbe) Log.error(TAG, "余额宝体验金券兑换请求失败: 返回为空");
                     break;
                 }
 
@@ -582,7 +582,7 @@ public class YebExpGold extends BaseCommTask {
                         return handled;
                     }
                     if (!isDirectProbe) {
-                        Log.system(TAG, "余额宝体验金券兑换失败: " + (desc.isEmpty() ? msg : desc));
+                        Log.error(TAG, "余额宝体验金券兑换失败: " + (desc.isEmpty() ? msg : desc));
                     }
                     break;
                 }
@@ -615,7 +615,7 @@ public class YebExpGold extends BaseCommTask {
                     return handled;
                 }
                 if (countAfter >= remaining) {
-                    Log.system(TAG, "余额宝体验金券使用后库存未减少: " + remaining + "→" + countAfter + "，停止当前链路");
+                    Log.error(TAG, "余额宝体验金券使用后库存未减少: " + remaining + "→" + countAfter + "，停止当前链路");
                     Status.setFlagToday(FLAG_VOUCHER);
                     return handled;
                 }

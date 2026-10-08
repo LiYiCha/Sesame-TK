@@ -20,6 +20,9 @@ object SeckillScheduler {
     private const val TAG = "SeckillScheduler"
     private const val CONFIG_FILE_NAME = "seckill_tasks.json"
 
+    // 秒杀发包唤醒锁超时兜底
+    private const val SECKILL_RPC_WAKELOCK_MS = 10 * 60 * 1000L
+
     @JvmStatic
     fun getSeckillTasksFile(): File {
         val dir = File(Files.CONFIG_DIR, "seckill")
@@ -175,8 +178,9 @@ object SeckillScheduler {
         } else {
             // Background RPC Mode: acquire WakeLock, loop precisely, and fire concurrently
             GlobalThreadPools.execute {
+                // 独立 lease + timeout 兜底（等待发包全程通常远小于 10 分钟）
+                val wakeLease = WakeLockManager.acquire(context, SECKILL_RPC_WAKELOCK_MS, "Seckill_RPC_$itemId")
                 try {
-                    WakeLockManager.acquire(context, "Seckill_RPC_$itemId")
                     
                     // Fire 50ms early to compensate for network roundtrip delay
                     val fireTime = timeMillis - 50L
@@ -217,7 +221,7 @@ object SeckillScheduler {
                 } catch (e: Exception) {
                     Log.error(TAG, "后台 RPC 秒杀异常: ${e.message}")
                 } finally {
-                    WakeLockManager.release()
+                    wakeLease.close()
                 }
             }
         }

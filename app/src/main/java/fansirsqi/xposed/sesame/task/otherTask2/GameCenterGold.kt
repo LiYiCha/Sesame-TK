@@ -25,13 +25,6 @@ class GameCenterGold : BaseCommTask() {
         private var playJob: Job? = null
 
         /**
-         * 检查60s玩游戏后台协程是否正在运行
-         */
-        fun isPlayJobRunning(): Boolean {
-            return playJob?.isActive == true
-        }
-
-        /**
          * 停止60s玩游戏后台协程
          */
         fun stopPlayJob() {

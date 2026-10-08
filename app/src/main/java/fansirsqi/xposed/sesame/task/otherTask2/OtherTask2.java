@@ -44,62 +44,45 @@ public class OtherTask2 extends ModelTask {
     }
     protected Integer executeIntervalInt = 6000;  // 执行间隔
     private final StringModelField startTime = new StringModelField("startTime", "开始执行时间(关闭:-1)", "0700");
-   //    private final BooleanModelField payAwardProd = new BooleanModelField("payAwardProd", "支付赚红包", false);
     private BooleanModelField memberTaskNew = new BooleanModelField("memberTaskNew", "会员任务", false);
-    private BooleanModelField expressTask = new BooleanModelField("expressTask", "快递积分", false);
     private BooleanModelField privilegeTask = new BooleanModelField("privilegeTask", "青春特权", true);
-    private BooleanModelField gameCenter = new BooleanModelField("gameCenter", "游戏中心浏览任务", false);
     private BooleanModelField gameCenterGold = new BooleanModelField("gameCenterGold", "游戏中心金币任务", false);
     private BooleanModelField monthTRA = new BooleanModelField("monthTRA", "月月赚转账红包", false);
     private BooleanModelField scholarship = new BooleanModelField("scholarship", "奖学金", false);
     private BooleanModelField touchPay = new BooleanModelField("touchpay", "碰一碰街区", false);
-    //private BooleanModelField collectRedPacket = new BooleanModelField("collectRedPacket", "红包 | 集红包皮肤", false);
-    private BooleanModelField studentAnswer = new BooleanModelField("studentAnswer", "学生模式(限时)| 答题道具", false);
-    //private BooleanModelField harvestLimitedTime = new BooleanModelField("harvestLimitedTime", "丰收节(限时)", false);
     private BooleanModelField CampusPaiSign = new BooleanModelField("CampusPaiSign", "校园派|签到", false);
     private BooleanModelField CampusPaiTask = new BooleanModelField("CampusPaiTask", "校园派|任务", false);
     private BooleanModelField LifeMsgProd = new BooleanModelField("LifeMsgProd", "民生之家", false);
     private BooleanModelField baoGuo = new BooleanModelField("baoGuo", "包裹游历", false);
     private BooleanModelField SesameTree = new BooleanModelField("SesameTree", "芝麻树|任务", false);
     private BooleanModelField SesameTreeUpgrade = new BooleanModelField("SesameTreeUpgrade", "芝麻树|升级", false);
-    //private BooleanModelField UgShooping = new BooleanModelField("UgShooping", "天天秒杀|天天领现金", false);
     private BooleanModelField rceduService = new BooleanModelField("rceduService", "多懂一点小程序|学分", false);
     private BooleanModelField sesameAlchemyMy = new BooleanModelField("sesameAlchemyMy","芝麻炼金",false);
     public static final IntegerModelField alchemyGoldenBeanExchange = new IntegerModelField("alchemyGoldenBeanExchange", "芝麻炼金 | 芝麻粒换金豆(0关/-1全换)", 0);
     private BooleanModelField playConsultFacade = new BooleanModelField("playConsultFacade","会员|转盘",false);
     private IntegerModelField playConsultFacadeNum = new IntegerModelField("playConsultFacadeNum","会员|转盘-次数",10);
     private BooleanModelField topUpGoldTask = new BooleanModelField("topUpGoldTask", "充值金任务", false);
-    private BooleanModelField sesamePigeon = new BooleanModelField("sesamePigeon", "芝麻大表鸽(七日挑战)", false);
     @Override
     public ModelFields getFields() {
         ModelFields modelFields = new ModelFields();
         modelFields.addField(startTime);
         modelFields.addField(memberTaskNew);
-        modelFields.addField(expressTask );
         modelFields.addField(privilegeTask );
-        modelFields.addField(gameCenter);
         modelFields.addField(gameCenterGold);
         modelFields.addField(monthTRA);//月月赚
-//        modelFields.addField(payAwardProd);//支付赚红包
         modelFields.addField(scholarship);//奖学金
         modelFields.addField(touchPay);
-        //modelFields.addField(collectRedPacket);
-        modelFields.addField(studentAnswer);
-        //modelFields.addField(harvestLimitedTime);
         modelFields.addField(CampusPaiSign);
         modelFields.addField(CampusPaiTask);
         modelFields.addField(LifeMsgProd);
         modelFields.addField(baoGuo);
         modelFields.addField(SesameTree);
         modelFields.addField(SesameTreeUpgrade);
-        //modelFields.addField(UgShooping);
         modelFields.addField(rceduService);
         modelFields.addField(sesameAlchemyMy);
         modelFields.addField(playConsultFacade);
         modelFields.addField(playConsultFacadeNum);
         modelFields.addField(topUpGoldTask);
-        modelFields.addField(sesamePigeon);
-        //modelFields.addField(monthlyPhoneBill);
         return modelFields;
     }
 
@@ -148,11 +131,7 @@ public class OtherTask2 extends ModelTask {
                                 new SesameAlchemy().run();
                             }
                         }),
-                        new TaskWrapper("芝麻大表鸽(七日挑战)", () -> {
-                            if (sesamePigeon.getValue()) {
-                                new SesamePigeon().run();
-                            }
-                        }),
+
                         new TaskWrapper("会员转盘", () -> {
                             if (playConsultFacade.getValue()) {
                                 if (!Status.hasTemporaryStatusValid("MemberLuckyWheel_Cooldown")) {
@@ -201,20 +180,9 @@ public class OtherTask2 extends ModelTask {
                                 }
                             }
                         }),
-                        new TaskWrapper("校园派任务", () -> {
-                            if (CampusPaiTask.getValue()) {
-                                new CampusPai().campusPaiTask();
-                            }
-                        }),
                         new TaskWrapper("碰一碰街区", () -> {
                             if (touchPay.getValue()) {
                                 new TouchPay().handle();
-                            }
-                        }),
-
-                        new TaskWrapper("游戏中心", () -> {
-                            if (gameCenter.getValue()) {
-                                new GameCenter().handle();
                             }
                         }),
                         new TaskWrapper("游戏中心金币任务", () -> {
@@ -226,15 +194,9 @@ public class OtherTask2 extends ModelTask {
 
                 // 第三组：扩展任务
                 taskGroups.add(new TaskGroup("扩展任务", Arrays.asList(
-
-                        new TaskWrapper("快递积分", () -> {
-                            if (expressTask.getValue()) {
-                                new KuaiDiFuLiJia().handle();
-                            }
-                        }),
-                        new TaskWrapper("学生模式", () -> {
-                            if (studentAnswer.getValue()) {
-                                new StudentAnswer().handle();
+                        new TaskWrapper("校园派任务", () -> {
+                            if (CampusPaiTask.getValue()) {
+                                new CampusPai().campusPaiTask();
                             }
                         }),
                         new TaskWrapper("校园派签到", () -> {
