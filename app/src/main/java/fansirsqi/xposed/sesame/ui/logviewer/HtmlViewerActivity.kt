@@ -24,6 +24,7 @@ import fansirsqi.xposed.sesame.R
 import fansirsqi.xposed.sesame.newui.WatermarkView.Companion.install
 import fansirsqi.xposed.sesame.ui.BaseActivity
 import fansirsqi.xposed.sesame.util.Files
+import fansirsqi.xposed.sesame.util.FolderLauncher
 import fansirsqi.xposed.sesame.util.LanguageUtil
 import fansirsqi.xposed.sesame.util.Log
 import fansirsqi.xposed.sesame.util.ToastUtil
@@ -416,51 +417,6 @@ class HtmlViewerActivity : BaseActivity() {
      * 打开日志目录（自动唤起系统/第三方文件管理器定位目录）
      */
     private fun openLogDirectory() {
-        val logDir = Files.LOG_DIR
-        if (!logDir.exists()) {
-            try { logDir.mkdirs() } catch (_: Exception) {}
-        }
-
-        val relativePath = logDir.absolutePath.replaceFirst("^/storage/emulated/0/", "").replaceFirst("^/sdcard/", "")
-        val encodedPath = Uri.encode("primary:$relativePath")
-        val docUri = Uri.parse("content://com.android.externalstorage.documents/document/$encodedPath")
-
-        val intents = listOf(
-            Intent(Intent.ACTION_VIEW).apply {
-                setDataAndType(docUri, "vnd.android.document/directory")
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_GRANT_READ_URI_PERMISSION)
-            },
-            Intent(Intent.ACTION_OPEN_DOCUMENT_TREE).apply {
-                putExtra("android.provider.extra.INITIAL_URI", docUri)
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            },
-            Intent(Intent.ACTION_VIEW).apply {
-                setDataAndType(Uri.fromFile(logDir), "resource/folder")
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            },
-            Intent(Intent.ACTION_VIEW).apply {
-                setDataAndType(Uri.fromFile(logDir), "inode/directory")
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            }
-        )
-
-        for (intent in intents) {
-            try {
-                if (intent.resolveActivity(packageManager) != null) {
-                    startActivity(intent)
-                    return
-                }
-            } catch (e: Exception) {
-                Log.error(TAG, "尝试唤起文件管理器失败: ${e.message}")
-            }
-        }
-
-        try {
-            val chooser = Intent.createChooser(intents.last(), "选择文件管理器打开日志目录")
-            chooser.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            startActivity(chooser)
-        } catch (e: Exception) {
-            ToastUtil.showToast(this, "打开日志目录: ${logDir.absolutePath}")
-        }
+        FolderLauncher.open(this, Files.LOG_DIR.absolutePath)
     }
 }

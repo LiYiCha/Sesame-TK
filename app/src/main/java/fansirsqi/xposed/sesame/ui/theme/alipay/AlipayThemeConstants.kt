@@ -1,9 +1,9 @@
-package fansirsqi.xposed.sesame.ui.theme
+package fansirsqi.xposed.sesame.ui.theme.alipay
 
 /**
  * 主题中心常量定义
  */
-object ThemeConstants {
+object AlipayThemeConstants {
 
     // 支付宝内部存储路径
     const val INTERNAL_STORAGE_PATH = "/data/data/com.eg.android.AlipayGphone/files/skin_center_dir"
@@ -37,7 +37,7 @@ object ThemeConstants {
  * 通过 IPC 广播从 UI 进程发送到支付宝 Hook 进程执行。
  * 所有操作共用同一个广播 action，用 extra "operation" 区分具体操作。
  */
-enum class ThemeOperation(val displayName: String) {
+enum class AlipayThemeOperation(val displayName: String) {
     EXPORT("导出主题"),
     DELETE("删除主题缓存"),
     UPDATE("更新主题缓存")

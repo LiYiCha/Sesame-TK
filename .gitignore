@@ -74,3 +74,4 @@ demo/*
 build_release.bat
 temp/
 .agents/
+.trae

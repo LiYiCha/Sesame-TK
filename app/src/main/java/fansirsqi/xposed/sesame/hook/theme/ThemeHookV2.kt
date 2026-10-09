@@ -1,12 +1,20 @@
-package fansirsqi.xposed.sesame.hook.theme
+﻿package fansirsqi.xposed.sesame.hook.theme
 
+import android.content.Context
 import de.robv.android.xposed.XC_MethodHook
 import de.robv.android.xposed.XC_MethodReplacement
 import de.robv.android.xposed.XposedHelpers
-import fansirsqi.xposed.sesame.ui.theme.ThemeMetadata
+import fansirsqi.xposed.sesame.hook.context.AppContext
+import fansirsqi.xposed.sesame.ui.theme.alipay.AlipayThemeMetadata
 import fansirsqi.xposed.sesame.util.JsonUtil
 import fansirsqi.xposed.sesame.util.Log
+import fansirsqi.xposed.sesame.util.maps.UserMap
 import java.io.File
+import java.lang.reflect.Modifier
+import java.text.SimpleDateFormat
+import java.util.Calendar
+import java.util.Locale
+import java.util.concurrent.ConcurrentHashMap
 
 /**
  * 主题Hook管理器 V2 - 动态版本
@@ -33,6 +41,10 @@ object ThemeHookV2 {
     @Volatile
     private var isHooked = false
 
+    // "开关未开启"提示的进程内一次性标志，避免 boot 高频刷屏
+    @Volatile
+    private var disabledLogged = false
+
     // 保存ClassLoader
     private var savedClassLoader: ClassLoader? = null
 
@@ -51,12 +63,16 @@ object ThemeHookV2 {
     fun applyHooks(enabled: Boolean) {
         val classLoader = savedClassLoader
         if (classLoader == null) {
-            Log.error(TAG, "❌ ClassLoader未初始化")
+            Log.runtime(TAG, "❌ ClassLoader未初始化")
             return
         }
 
         if (!enabled) {
-            //Log.runtime(TAG, "⛔ 主题Hook已关闭")
+            // 进程内只提示一次：开关未开是 hooks 全部未安装的最常见原因
+            if (!disabledLogged) {
+                Log.runtime(TAG, "⛔ 主题Hook未启用（皮肤模块开关未开启），官方门检/校验不会被拦截")
+                disabledLogged = true
+            }
             isHooked = false
             return
         }
@@ -66,34 +82,15 @@ object ThemeHookV2 {
             return
         }
 
-        try {
-            //Log.runtime(TAG, "🎨 开始应用主题Hook...")
+        // 各 hook 独立安装：单个失败只记录 error，不影响其余 hook
+        hookCacheRead(classLoader)
+        hookMd5Check(classLoader)
+        hookTimeCheck(classLoader)
+        hookHasEnableSkin(classLoader)
+        hookFilePath(classLoader)
+        hookResourceLoad(classLoader)
 
-            // 1. Hook缓存读取 - 注入动态主题信息
-            hookCacheRead(classLoader)
-
-            // 2. Hook MD5校验 - 绕过MD5验证
-            hookMd5Check(classLoader)
-
-            // 3. Hook时间戳检查 - 防止缓存过期
-            hookTimeCheck(classLoader)
-
-            // 4. Hook hasEnableSkin - 强制启用主题
-            hookHasEnableSkin(classLoader)
-
-            // 5. Hook文件路径 - 指向自定义主题目录
-            hookFilePath(classLoader)
-
-            // 6. Hook资源加载 - 确保加载自定义资源
-            hookResourceLoad(classLoader)
-
-            isHooked = true
-            //Log.runtime(TAG, "✅ 主题Hook应用成功")
-
-        } catch (e: Exception) {
-            Log.runtime(TAG, "❌ 主题Hook应用失败: ${e.message}")
-            Log.printStackTrace(TAG, e)
-        }
+        isHooked = true
     }
 
     /**
@@ -109,82 +106,114 @@ object ThemeHookV2 {
                 classLoader
             )
 
-            XposedHelpers.findAndHookMethod(
-                scInnerManagerClass,
-                "K", // readSkinInfoFromLocalCache方法
-                object : XC_MethodHook() {
-                    override fun afterHookedMethod(param: MethodHookParam) {
-                        try {
-                            val manager = param.thisObject
-
-                            // 获取内存缓存Map: Map<String, SCCacheInfoModel> g
-                            val cacheMap = XposedHelpers.getObjectField(manager, "g") as? MutableMap<String, Any>
-                            if (cacheMap == null) {
-                                Log.runtime(TAG, "⚠️ 无法获取缓存Map")
-                                return
+            // 本版读缓存方法为 G()，旧版为 K()（readSkinInfoFromLocalCache），按版本探测
+            val hookedName = listOf("G", "K").firstOrNull { name ->
+                runCatching {
+                    XposedHelpers.findAndHookMethod(
+                        scInnerManagerClass,
+                        name,
+                        object : XC_MethodHook() {
+                            override fun afterHookedMethod(param: MethodHookParam) {
+                                injectCustomCache(classLoader, param.thisObject)
                             }
-
-                            // 获取当前用户ID
-                            val currentUserId = getCurrentUserId(classLoader) ?: return
-
-                            // 动态读取主题信息
-                            val themeInfo = loadThemeInfo(currentUserId)
-                            if (themeInfo == null) {
-                                Log.runtime(TAG, "⚠️ 未找到主题信息，跳过注入")
-                                return
-                            }
-
-                            // 创建自定义主题缓存信息
-                            val cacheInfoClass = XposedHelpers.findClass(
-                                "com.alipay.mobile.skincenter.model.SCCacheInfoModel",
-                                classLoader
-                            )
-
-                            val customCache = cacheInfoClass.newInstance()
-
-                            // 使用动态读取的真实数据设置字段，并手动延长缓存有效期防止过期
-                            XposedHelpers.setObjectField(customCache, "usageScene", themeInfo.usageScene)
-                            XposedHelpers.setObjectField(customCache, "skinId", themeInfo.skinId)
-                            XposedHelpers.setObjectField(customCache, "userSkinId", themeInfo.userSkinId)
-                            XposedHelpers.setObjectField(customCache, "userId", themeInfo.userId)
-                            XposedHelpers.setObjectField(customCache, "md5", themeInfo.md5)
-                            XposedHelpers.setObjectField(customCache, "appSquareMd5", themeInfo.appSquareMd5)
-                            // 加上10年的有效时间，防止缓存过期被自动清除
-                            XposedHelpers.setLongField(customCache, "cacheTime", themeInfo.cacheTime + 10L * 365 * 24 * 3600)
-                            XposedHelpers.setObjectField(customCache, "versionLimit", themeInfo.versionLimit)
-                            XposedHelpers.setBooleanField(customCache, "isDiySkin", themeInfo.isDiySkin)
-                            XposedHelpers.setObjectField(customCache, "name", themeInfo.name)
-                            XposedHelpers.setObjectField(customCache, "expireDate", themeInfo.expireDate)
-                            XposedHelpers.setObjectField(customCache, "skinType", themeInfo.skinType)
-                            XposedHelpers.setObjectField(customCache, "materialId", themeInfo.materialId)
-                            // 设置自定义过期时间为最大值
-                            XposedHelpers.setLongField(customCache, "diyExpiredTime", Long.MAX_VALUE)
-
-                            // 注入到内存缓存
-                            cacheMap["theme"] = customCache
-
-                            Log.runtime(TAG, "✅ 已注入动态主题缓存: ${themeInfo.name}")
-                            Log.runtime(TAG, "   主题ID: ${themeInfo.themeId}")
-                            Log.runtime(TAG, "   皮肤ID: ${themeInfo.skinId}")
-                            Log.runtime(TAG, "   MD5: ${themeInfo.md5}")
-
-                            // 持久化到磁盘：防止支付宝清理缓存后主题丢失需重新设置
-                            persistCacheToDisk(classLoader, cacheMap)
-
-                        } catch (e: Exception) {
-                            Log.runtime(TAG, "❌ 注入缓存失败: ${e.message}")
-                            Log.printStackTrace(TAG, e)
                         }
-                    }
-                }
+                    )
+                    true
+                }.getOrElse { false }
+            }
+            if (hookedName == null) {
+                Log.runtime(TAG, "✗ Hook缓存读取失败: 未找到 G()/K() 方法（混淆名版本漂移）")
+            } else {
+                Log.runtime(TAG, "✓ Hook缓存读取成功 ($hookedName: readSkinInfoFromLocalCache)")
+            }
+        } catch (e: Exception) {
+            Log.runtime(TAG, "✗ Hook缓存读取异常: ${e.message}")
+            Log.printStackTrace(TAG, e)
+        }
+    }
+
+    /**
+     * 在 G()/K() 读缓存后注入动态主题条目到内存缓存
+     */
+    private fun injectCustomCache(classLoader: ClassLoader, manager: Any) {
+        try {
+            // 内存缓存 Map：动态扫描 ConcurrentHashMap 实例字段（本版字段名为 e，旧版为 g，不硬编码）
+            val cacheMap = findCacheMapField(manager) ?: run {
+                Log.runtime(TAG, "⚠️ 无法定位内存缓存Map字段（ConcurrentHashMap）")
+                return
+            }
+
+            // 获取当前用户ID
+            val currentUserId = getCurrentUserId(classLoader) ?: run {
+                Log.runtime(TAG, "⚠️ 无法获取当前用户ID，跳过注入")
+                return
+            }
+
+            // 动态读取主题信息
+            val themeInfo = loadThemeInfo(currentUserId)
+            if (themeInfo == null) {
+                Log.runtime(TAG, "⚠️ 未找到主题信息，跳过注入")
+                return
+            }
+
+            // 创建自定义主题缓存信息
+            val cacheInfoClass = XposedHelpers.findClass(
+                "com.alipay.mobile.skincenter.model.SCCacheInfoModel",
+                classLoader
             )
 
-            Log.runtime(TAG, "✓ Hook缓存读取成功")
+            val customCache = cacheInfoClass.newInstance()
+
+            // 使用动态读取的真实数据设置字段，并手动延长缓存有效期防止过期
+            XposedHelpers.setObjectField(customCache, "usageScene", themeInfo.usageScene)
+            XposedHelpers.setObjectField(customCache, "skinId", themeInfo.skinId)
+            XposedHelpers.setObjectField(customCache, "userSkinId", themeInfo.userSkinId)
+            XposedHelpers.setObjectField(customCache, "userId", themeInfo.userId)
+            XposedHelpers.setObjectField(customCache, "md5", themeInfo.md5)
+            XposedHelpers.setObjectField(customCache, "appSquareMd5", themeInfo.appSquareMd5)
+            // 加上10年的有效时间，防止缓存过期被自动清除
+            XposedHelpers.setLongField(customCache, "cacheTime", themeInfo.cacheTime + 10L * 365 * 24 * 3600)
+            XposedHelpers.setObjectField(customCache, "versionLimit", themeInfo.versionLimit)
+            XposedHelpers.setBooleanField(customCache, "isDiySkin", themeInfo.isDiySkin)
+            XposedHelpers.setObjectField(customCache, "name", themeInfo.name)
+            XposedHelpers.setObjectField(customCache, "expireDate", themeInfo.expireDate)
+            XposedHelpers.setObjectField(customCache, "skinType", themeInfo.skinType)
+            XposedHelpers.setObjectField(customCache, "materialId", themeInfo.materialId)
+            // 设置自定义过期时间为最大值
+            XposedHelpers.setLongField(customCache, "diyExpiredTime", Long.MAX_VALUE)
+
+            // 注入到内存缓存
+            cacheMap["theme"] = customCache
+
+            Log.runtime(TAG, "✅ 已注入动态主题缓存: ${themeInfo.name}")
+            Log.runtime(TAG, "   主题ID: ${themeInfo.themeId}")
+            Log.runtime(TAG, "   皮肤ID: ${themeInfo.skinId}")
+            Log.runtime(TAG, "   MD5: ${themeInfo.md5}")
+
+            // 持久化到磁盘：防止支付宝清理缓存后主题丢失需重新设置
+            persistCacheToDisk(classLoader, cacheMap)
 
         } catch (e: Exception) {
-            Log.runtime(TAG, "✗ Hook缓存读取失败: ${e.message}")
-            throw e
+            Log.runtime(TAG, "❌ 注入缓存失败: ${e.message}")
+            Log.printStackTrace(TAG, e)
         }
+    }
+
+    /**
+     * 动态定位 SCInnerManager 中存放场景缓存模型的 ConcurrentHashMap 实例字段
+     * （识别依据：含 theme/ltp/aptrip 等场景键，或为空但类型唯一匹配）
+     */
+    private fun findCacheMapField(manager: Any): MutableMap<String, Any>? {
+        val candidates = mutableListOf<MutableMap<String, Any>>()
+        for (field in manager.javaClass.declaredFields) {
+            if (Modifier.isStatic(field.modifiers)) continue
+            if (field.type != ConcurrentHashMap::class.java) continue
+            field.isAccessible = true
+            val map = field.get(manager) as? MutableMap<String, Any> ?: continue
+            if (map.keys.any { it in setOf("theme", "ltp", "aptrip", "emoji", "widget") }) return map
+            candidates.add(map)
+        }
+        return candidates.firstOrNull()
     }
 
     // 缓存区
@@ -228,16 +257,35 @@ object ThemeHookV2 {
                 )
             )
 
-            val context = fansirsqi.xposed.sesame.hook.context.AppContext.getAppContext() ?: return
+            val context = AppContext.getAppContext() ?: return
             val prefs = context.getSharedPreferences(
                 "prefs_skincenter_file",
-                android.content.Context.MODE_PRIVATE
+                Context.MODE_PRIVATE
             )
+            // 官方真实 key 为 "cached_skin_info_v2" + userId 无分隔符直拼（带 # 的 key 官方不读取）
+            val cacheKey = "cached_skin_info_v2$userId"
+
+            // 合并写入：只替换 theme 场景，保留 aptrip/ltp 等其他场景
+            val themeValue = cacheInfo.getValue("theme")
+            val merged: LinkedHashMap<String, Any> = try {
+                val existing = prefs.getString(cacheKey, null)
+                if (!existing.isNullOrEmpty()) {
+                    @Suppress("UNCHECKED_CAST")
+                    LinkedHashMap(JsonUtil.parseObject(existing, Map::class.java) as Map<String, Any>)
+                } else {
+                    LinkedHashMap()
+                }
+            } catch (e: Exception) {
+                Log.runtime(TAG, "⚠️ 解析旧缓存失败，将只写入 theme 场景: ${e.message}")
+                LinkedHashMap()
+            }
+            merged["theme"] = themeValue
+
             prefs.edit()
-                .putString("cached_skin_info_v2#$userId", JsonUtil.formatJson(cacheInfo))
+                .putString(cacheKey, JsonUtil.formatJson(merged))
                 .apply()
 
-            Log.runtime(TAG, "💾 已持久化主题缓存到 SharedPreferences")
+            Log.runtime(TAG, "💾 已持久化主题缓存到 SharedPreferences (key=$cacheKey, 场景: ${merged.keys.joinToString("/")})")
         } catch (e: Exception) {
             Log.runtime(TAG, "⚠️ 持久化主题缓存失败: ${e.message}")
         }
@@ -254,6 +302,7 @@ object ThemeHookV2 {
             // 1. 寻找主题目录
             val themeDirs = themeBaseDir.listFiles { it.isDirectory }
             if (themeDirs.isNullOrEmpty()) {
+                Log.runtime(TAG, "✗ theme 目录下无任何主题目录: ${themeBaseDir.absolutePath}，尝试恢复后跳过注入")
                 ThemeManager.restoreThemeIfMissing(userId)
                 return null
             }
@@ -303,7 +352,7 @@ object ThemeHookV2 {
             val metaFile = File(themeDir, "meta.json")
             val metadata = if (metaFile.exists()) {
                 try {
-                    JsonUtil.parseObject(metaFile.readText(), ThemeMetadata::class.java)
+                    JsonUtil.parseObject(metaFile.readText(), AlipayThemeMetadata::class.java)
                 } catch (e: Exception) {
                     null
                 }
@@ -315,9 +364,9 @@ object ThemeHookV2 {
             val cacheTime = System.currentTimeMillis() / 1000
 
             // 生成过期日期（100年后）
-            val calendar = java.util.Calendar.getInstance()
-            calendar.add(java.util.Calendar.YEAR, 100)
-            val expireDate = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault())
+            val calendar = Calendar.getInstance()
+            calendar.add(Calendar.YEAR, 100)
+            val expireDate = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
                 .format(calendar.time)
 
             return ThemeInfo(
@@ -347,6 +396,25 @@ object ThemeHookV2 {
      * Hook 2: MD5校验
      */
     private fun hookMd5Check(classLoader: ClassLoader) {
+        // 回滚门拦截（关键）：SCConfigUtil.i()=isThemeSkinRollBack，读服务端 skin_center_theme_rollbackV2 配置，
+        // 返回 true 时 hasEnableSkin 直接拒绝主题——本地数据再正确也会被否决，必须恒 false
+        try {
+            XposedHelpers.findAndHookMethod(
+                "com.alipay.mobile.skincenter.util.SCConfigUtil",
+                classLoader,
+                "i",
+                object : XC_MethodReplacement() {
+                    override fun replaceHookedMethod(param: MethodHookParam): Any {
+                        return false
+                    }
+                }
+            )
+            Log.runtime(TAG, "✓ Hook回滚门成功 (SCConfigUtil.i: isThemeSkinRollBack→false)")
+        } catch (e: Exception) {
+            Log.runtime(TAG, "✗ Hook回滚门失败: ${e.message}")
+        }
+
+        // MD5 校验方法（本版签名未知，按旧版 m(String,long) 探测，失败不阻塞其他 hook）
         try {
             XposedHelpers.findAndHookMethod(
                 "com.alipay.mobile.skincenter.util.SCConfigUtil",
@@ -360,10 +428,9 @@ object ThemeHookV2 {
                     }
                 }
             )
-            Log.runtime(TAG, "✓ Hook MD5校验成功")
+            Log.runtime(TAG, "✓ Hook MD5校验成功 (SCConfigUtil.m)")
         } catch (e: Exception) {
-            Log.runtime(TAG, "✗ Hook MD5校验失败: ${e.message}")
-            throw e
+            Log.runtime(TAG, "✗ Hook MD5校验失败（本版可能无此签名，md5 校验需靠数据侧对齐）: ${e.message}")
         }
     }
 
@@ -384,7 +451,7 @@ object ThemeHookV2 {
             )
             Log.runtime(TAG, "✓ Hook时间戳检查成功")
         } catch (e: Exception) {
-            Log.runtime(TAG, "⚠️ Hook时间戳检查失败（可能不影响功能）: ${e.message}")
+            Log.runtime(TAG, "✗ Hook时间戳检查失败（本版可能无此签名）: ${e.message}")
         }
     }
 
@@ -398,24 +465,34 @@ object ThemeHookV2 {
                 classLoader
             )
 
-            XposedHelpers.findAndHookMethod(
-                scInnerManagerClass,
-                "y",
-                String::class.java,
-                Map::class.java,
-                object : XC_MethodHook() {
-                    override fun beforeHookedMethod(param: MethodHookParam) {
-                        val scene = param.args[0] as? String
-                        if (scene == "theme") {
-                            param.result = true
+            // 本版 hasEnableSkin 为 v(String, Map)，旧版为 y(String, Map)，按版本探测
+            val hookedName = listOf("v", "y").firstOrNull { name ->
+                runCatching {
+                    XposedHelpers.findAndHookMethod(
+                        scInnerManagerClass,
+                        name,
+                        String::class.java,
+                        Map::class.java,
+                        object : XC_MethodHook() {
+                            override fun beforeHookedMethod(param: MethodHookParam) {
+                                val scene = param.args[0] as? String
+                                if (scene == "theme") {
+                                    param.result = true
+                                }
+                            }
                         }
-                    }
-                }
-            )
-            Log.runtime(TAG, "✓ Hook hasEnableSkin成功")
+                    )
+                    true
+                }.getOrElse { false }
+            }
+            if (hookedName == null) {
+                Log.runtime(TAG, "✗ Hook hasEnableSkin失败: 未找到 v()/y() 方法（混淆名版本漂移）")
+            } else {
+                Log.runtime(TAG, "✓ Hook hasEnableSkin成功 ($hookedName: theme 场景恒 true)")
+            }
         } catch (e: Exception) {
-            Log.runtime(TAG, "✗ Hook hasEnableSkin失败: ${e.message}")
-            throw e
+            Log.runtime(TAG, "✗ Hook hasEnableSkin异常: ${e.message}")
+            Log.printStackTrace(TAG, e)
         }
     }
 
@@ -457,8 +534,7 @@ object ThemeHookV2 {
             )
             Log.runtime(TAG, "✓ Hook文件路径成功")
         } catch (e: Exception) {
-            Log.runtime(TAG, "✗ Hook文件路径失败: ${e.message}")
-            throw e
+            Log.runtime(TAG, "✗ Hook文件路径失败（本版方法名可能已漂移，渲染层将按官方路径规则解析）: ${e.message}")
         }
     }
 
@@ -504,7 +580,7 @@ object ThemeHookV2 {
             )
             Log.runtime(TAG, "✓ Hook资源加载成功")
         } catch (e: Exception) {
-            Log.runtime(TAG, "⚠️ Hook资源加载失败（可能不影响功能）: ${e.message}")
+            Log.runtime(TAG, "✗ Hook资源加载失败（本版可能无此签名）: ${e.message}")
         }
     }
 
@@ -520,7 +596,7 @@ object ThemeHookV2 {
         try {
             // 2. 方案1：从 UserMap 获取
             try {
-                val currentUid = fansirsqi.xposed.sesame.util.maps.UserMap.currentUid
+                val currentUid = UserMap.currentUid
                 if (!currentUid.isNullOrEmpty()) {
                     cachedUserId = currentUid
                     return currentUid

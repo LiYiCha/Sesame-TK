@@ -1,7 +1,6 @@
-package fansirsqi.xposed.sesame.hook.theme
+﻿package fansirsqi.xposed.sesame.hook.theme
 
 import fansirsqi.xposed.sesame.hook.context.AppContext
-import fansirsqi.xposed.sesame.ui.theme.ThemeMetadata
 import fansirsqi.xposed.sesame.util.JsonUtil
 import fansirsqi.xposed.sesame.util.Log
 import fansirsqi.xposed.sesame.util.maps.UserMap
@@ -307,19 +306,17 @@ object ThemeManager {
                 themeBaseDir.mkdirs()
             }
 
-            // 步骤1: 删除旧的自定义主题（有 theme_info.json 的主题）
+            // 步骤1: 清空 theme 目录下除目标主题外的所有目录（含官方残留目录），
+            // 避免多主题共存触发官方缓存校验清理，导致目录被删或主题回退
             try {
-                val existingCustomThemes = themeBaseDir.listFiles { file ->
-                    file.isDirectory && File(file, "theme_info.json").exists()
-                }
-                existingCustomThemes?.forEach { oldTheme ->
+                themeBaseDir.listFiles { file -> file.isDirectory }?.forEach { oldTheme ->
                     if (oldTheme.name != selectedThemeId) {
                         oldTheme.deleteRecursively()
-                        Log.runtime(TAG, "✓ 已删除旧的自定义主题: ${oldTheme.name}")
+                        Log.runtime(TAG, "✓ 已清理其他主题目录: ${oldTheme.name}")
                     }
                 }
             } catch (e: Exception) {
-                Log.runtime(TAG, "⚠️ 删除旧主题失败: ${e.message}")
+                Log.runtime(TAG, "⚠️ 清理其他主题目录失败: ${e.message}")
             }
 
             //*** *** 步骤2: 导入新主题文件
@@ -335,7 +332,7 @@ object ThemeManager {
                 // 读取并更新 theme_info.json
                 val themeInfoFile = File(targetThemeDir, "theme_info.json")
                 if (!themeInfoFile.exists()) {
-                    Log.runtime(TAG, "✗ theme_info.json 不存在")
+                    Log.runtime(TAG, "✗ theme_info.json 不存在，无法构建缓存条目")
                     if (!quiet) showToast("主题更新失败: theme_info.json 不存在")
                     return
                 }
@@ -551,7 +548,7 @@ object ThemeManager {
         // 1. 定位单例
         val instance = findSingletonInstance(managerClass)
         if (instance == null) {
-            Log.runtime(TAG, "✗ 无法定位 SCInnerManager 单例")
+            Log.runtime(TAG, "✗ 无法定位 SCInnerManager 单例，内存注入与 notifyThemeSkin 均无法执行")
             notifySkinChanged()
             return
         }
@@ -592,14 +589,46 @@ object ThemeManager {
             }.getOrElse { false }
         }
         if (!notified) {
-            Log.runtime(TAG, "⚠️ 未找到 notifyThemeSkin 入口，降级为 notifySkinChanged")
+            Log.runtime(TAG, "✗ 未找到 notifyThemeSkin 入口（C/G 均失败），主题无法触发官方应用链路")
         }
+
+        // 4.5 门检探针：反射调 v("theme", 空Map) 实测官方门检结果。
+        // v() 被我们 hook 恒 true 时必然返回 true；返回 false 说明 hooks 未安装且官方门检拒绝了当前缓存——
+        // 此时 C() 虽然调用成功，官方内部会静默放弃应用主题
+        checkEnableSkinGate(managerClass, instance)
 
         // 5. 兜底：notifySkinChanged 名称未被混淆，刷新已注册的渲染视图
         notifySkinChanged()
 
         // 6. 兜底：手动发送 skinUpdated.theme 本地广播（官方 UI 换肤的最终触发器，C() 链路静默失败时由它驱动刷新）
         sendThemeUpdatedBroadcast(mergedJson)
+    }
+
+    /**
+     * 门检探针：调用官方 v("theme", map)=hasEnableSkin 实测门检结果
+     *
+     * - 返回 true：hooks 已安装（恒 true）或官方门检真实通过，C() 链路能走通
+     * - 返回 false：hooks 未安装（开关未开/安装失败），官方门检拒绝当前缓存，
+     *   C() 内部会静默放弃应用主题——只有广播兜底能驱动 UI 刷新
+     * - 反射失败：本版方法名漂移（v/y 均不存在），同样意味着门检未被接管
+     */
+    private fun checkEnableSkinGate(managerClass: Class<*>, instance: Any) {
+        val gateResult = runCatching {
+            val method = managerClass.getDeclaredMethod("v", String::class.java, Map::class.java)
+            method.isAccessible = true
+            method.invoke(instance, "theme", HashMap<String, Any>()) as? Boolean
+        }.getOrElse {
+            runCatching {
+                val method = managerClass.getDeclaredMethod("y", String::class.java, Map::class.java)
+                method.isAccessible = true
+                method.invoke(instance, "theme", HashMap<String, Any>()) as? Boolean
+            }.getOrNull()
+        }
+        when (gateResult) {
+            true -> Log.runtime(TAG, "✓ 门检探针: hasEnableSkin(theme)=true，官方链路可应用主题")
+            false -> Log.runtime(TAG, "✗ 门检探针: hasEnableSkin(theme)=false，官方门检拒绝当前缓存（hooks 未安装或被绕过）")
+            null -> Log.runtime(TAG, "✗ 门检探针: 未找到 hasEnableSkin 方法（v/y 均失败），门检状态未知")
+        }
     }
 
     /**
@@ -620,7 +649,7 @@ object ThemeManager {
                 return false
             }
             val mMethod = managerClass.getDeclaredMethod(
-                "m", String::class.java, themeModel.javaClass, java.lang.Boolean.TYPE
+                "m", String::class.java, themeModel.javaClass, Boolean::class.javaPrimitiveType
             )
             mMethod.isAccessible = true
             mMethod.invoke(instance, "theme", themeModel, true)
@@ -679,11 +708,17 @@ object ThemeManager {
         try {
             val root = mergedJson?.let {
                 JsonUtil.parseObject(it, Map::class.java) as? Map<*, *>
-            }?.get("theme") as? Map<*, *> ?: return
+            }?.get("theme") as? Map<*, *> ?: run {
+                Log.runtime(TAG, "✗ 广播兜底失败: 合并缓存 JSON 中无 theme 场景数据")
+                return
+            }
 
             val context = AppContext.getAppContext()
             val classLoader = AppContext.getClassLoader()
-            if (context == null || classLoader == null) return
+            if (context == null || classLoader == null) {
+                Log.runtime(TAG, "✗ 广播兜底失败: context=${context != null}, classLoader=${classLoader != null}")
+                return
+            }
 
             val intent = android.content.Intent(ACTION_SKIN_THEME_UPDATED).apply {
                 putExtra("skinId", root["skinId"] as? String ?: "")
@@ -695,7 +730,7 @@ object ThemeManager {
             val lbmClass = runCatching {
                 classLoader.loadClass("android.support.v4.content.LocalBroadcastManager")
             }.getOrNull() ?: run {
-                Log.runtime(TAG, "⚠️ 未找到 LocalBroadcastManager，跳过广播兜底")
+                Log.runtime(TAG, "✗ 未找到 LocalBroadcastManager，广播兜底无法执行")
                 return
             }
             val lbm = lbmClass.getMethod("getInstance", android.content.Context::class.java)

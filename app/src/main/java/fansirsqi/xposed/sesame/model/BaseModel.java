@@ -1,6 +1,9 @@
 package fansirsqi.xposed.sesame.model;
 
 
+import fansirsqi.xposed.sesame.hook.CaptchaHook;
+import fansirsqi.xposed.sesame.hook.skin.SkinHook;
+import fansirsqi.xposed.sesame.hook.theme.ThemeHookV2;
 import fansirsqi.xposed.sesame.hook.theme.ThemeManager;
 import fansirsqi.xposed.sesame.model.modelFieldExt.BooleanModelField;
 import fansirsqi.xposed.sesame.model.modelFieldExt.ChoiceModelField;
@@ -179,7 +182,7 @@ public class BaseModel extends Model {
     public void boot(ClassLoader classLoader) {
         // 配置已加载，更新验证码Hook状态
         try {
-            fansirsqi.xposed.sesame.hook.CaptchaHook.INSTANCE.updateHooks(
+            CaptchaHook.INSTANCE.updateHooks(
                     enableCaptchaUIHook.value
             );
         } catch (Throwable t) {
@@ -189,7 +192,7 @@ public class BaseModel extends Model {
 
         // 配置已加载，更新皮肤模块Hook状态
         try {
-            fansirsqi.xposed.sesame.hook.skin.SkinHook.updateHooks(
+            SkinHook.updateHooks(
                     enableSkinModule.value
             );
         } catch (Throwable t) {
@@ -199,7 +202,7 @@ public class BaseModel extends Model {
 
         // 应用主题Hook模块（动态版本）
         try {
-            fansirsqi.xposed.sesame.hook.theme.ThemeHookV2.applyHooks(
+            ThemeHookV2.applyHooks(
                     enableSkinModule.value  // 复用皮肤模块的开关
             );
         } catch (Throwable t) {

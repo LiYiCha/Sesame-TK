@@ -24,7 +24,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.core.net.toUri
+import fansirsqi.xposed.sesame.util.FolderLauncher
 
 /**
  * 皮肤设置主屏幕（精简版）
@@ -67,19 +67,7 @@ fun SkinScreen(
 
     // 打开资源文件夹
     fun openFolder() {
-        val file = java.io.File(viewModel.getResourceFolderPath())
-        if (file.exists()) {
-            val intent = Intent(Intent.ACTION_VIEW).apply {
-                setDataAndType(file.absolutePath.toUri(), "*/*")
-            }
-            try {
-                context.startActivity(Intent.createChooser(intent, "选择文件浏览器"))
-            } catch (e: Exception) {
-                // 忽略
-            }
-        } else {
-            Toast.makeText(context, "资源文件夹不存在，请先导入皮肤", Toast.LENGTH_SHORT).show()
-        }
+        FolderLauncher.open(context, viewModel.getResourceFolderPath())
     }
 
     Scaffold(

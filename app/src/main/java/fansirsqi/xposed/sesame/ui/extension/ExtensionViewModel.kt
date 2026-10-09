@@ -5,7 +5,7 @@ import androidx.lifecycle.viewModelScope
 import fansirsqi.xposed.sesame.data.Config
 import fansirsqi.xposed.sesame.model.BaseModel
 import fansirsqi.xposed.sesame.ui.skin.SkinActivity
-import fansirsqi.xposed.sesame.ui.theme.ThemeActivity
+import fansirsqi.xposed.sesame.ui.theme.alipay.AlipayThemeActivity
 import fansirsqi.xposed.sesame.util.Log
 import fansirsqi.xposed.sesame.util.maps.UserMap
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -59,7 +59,7 @@ class ExtensionViewModel : ViewModel() {
                 name = "主题中心",
                 description = "自定义支付宝整体外观主题",
                 prefKey = null,  // 无开关，仅提供入口
-                activityClass = ThemeActivity::class.java
+                activityClass = AlipayThemeActivity::class.java
             ),
             // 会员抢兑直链模块
             ExtensionModule(

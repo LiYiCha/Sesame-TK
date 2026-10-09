@@ -119,7 +119,7 @@
             android:resizeableActivity="true" />
         <activity
             android:configChanges="uiMode|screenSize"
-            android:name="fansirsqi.xposed.sesame.ui.theme.ThemeActivity"
+            android:name="fansirsqi.xposed.sesame.ui.theme.alipay.AlipayThemeActivity"
             android:exported="true"
             android:resizeableActivity="true" />
 

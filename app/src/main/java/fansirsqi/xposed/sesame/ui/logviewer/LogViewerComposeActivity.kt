@@ -20,6 +20,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import fansirsqi.xposed.sesame.util.Files
+import fansirsqi.xposed.sesame.util.FolderLauncher
 import fansirsqi.xposed.sesame.util.LanguageUtil
 import fansirsqi.xposed.sesame.util.Log
 import fansirsqi.xposed.sesame.util.ToastUtil
@@ -200,33 +201,7 @@ class LogViewerComposeActivity : ComponentActivity() {
      * 选择其他应用打开日志目录（弹出系统应用选择面板）
      */
     private fun openLogDirectory() {
-        val logDir = Files.LOG_DIR
-        if (!logDir.exists()) {
-            try { logDir.mkdirs() } catch (_: Exception) {}
-        }
-
-        // FileProvider 只能针对实际文件生成 valid content URI，因此优先选中目录下包含的日志文件
-        val targetFile = logDir.listFiles()?.firstOrNull { it.isFile } ?: File(logDir, "app.log").apply {
-            if (!exists()) try { createNewFile() } catch (_: Exception) {}
-        }
-
-        try {
-            val contentUri = androidx.core.content.FileProvider.getUriForFile(
-                this,
-                "$packageName.provider",
-                targetFile
-            )
-            val intent = Intent(Intent.ACTION_VIEW).apply {
-                setDataAndType(contentUri, "text/*")
-                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
-            }
-            val chooser = Intent.createChooser(intent, "选择其他应用打开日志文件/目录")
-            chooser.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
-            startActivity(chooser)
-        } catch (e: Exception) {
-            Log.error(TAG, "选择应用打开失败: ${e.message}")
-            ToastUtil.showToast(this, "日志目录: ${logDir.absolutePath}")
-        }
+        FolderLauncher.open(this, Files.LOG_DIR.absolutePath)
     }
 
     override fun onDestroy() {
