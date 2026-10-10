@@ -83,14 +83,51 @@ object ThemeHookV2 {
         }
 
         // 各 hook 独立安装：单个失败只记录 error，不影响其余 hook
-        hookCacheRead(classLoader)
-        hookMd5Check(classLoader)
-        hookTimeCheck(classLoader)
-        hookHasEnableSkin(classLoader)
-        hookFilePath(classLoader)
-        hookResourceLoad(classLoader)
+        val critical = linkedMapOf(
+            "缓存读取" to runCatching { hookCacheRead(classLoader) }.getOrDefault(false),
+            "回滚门" to runCatching { hookMd5Check(classLoader) }.getOrDefault(false),
+            "hasEnableSkin" to runCatching { hookHasEnableSkin(classLoader) }.getOrDefault(false),
+            "文件路径" to runCatching { hookFilePath(classLoader) }.getOrDefault(false),
+            "资源加载" to runCatching { hookResourceLoad(classLoader) }.getOrDefault(false)
+        )
+        // 时间检查整体是旧版探测，非关键项，失败仅打日志
+        runCatching { hookTimeCheck(classLoader) }
 
-        isHooked = true
+        val failed = critical.filterValues { !it }
+        if (failed.isEmpty()) {
+            isHooked = true
+        } else {
+            Log.runtime(TAG, "❌ 主题Hook关键项${failed.size}/${critical.size}失败: ${failed.keys.joinToString("/")}")
+            // 保险：打印官方类的真实方法清单到 debug 日志，便于比对混淆名漂移
+            dumpSkinCenterMethods(classLoader)
+            // 关键项全灭时保持未挂钩状态，允许下次配置同步时重试
+            isHooked = failed.size != critical.size
+        }
+    }
+
+    /**
+     * 打印 skincenter 关键类的全部方法签名到 debug 日志（混淆名漂移排查用）
+     */
+    private fun dumpSkinCenterMethods(classLoader: ClassLoader) {
+        val classNames = listOf(
+            "com.alipay.mobile.skincenter.manage.SCInnerManager",
+            "com.alipay.mobile.skincenter.util.SCConfigUtil",
+            "com.alipay.mobile.skincenter.model.SCMetaModel"
+        )
+        for (className in classNames) {
+            try {
+                val clazz = classLoader.loadClass(className)
+                val signatures = clazz.declaredMethods.map { m ->
+                    val params = m.parameterTypes.joinToString(", ") { it.simpleName }
+                    val staticMark = if (Modifier.isStatic(m.modifiers)) "static " else ""
+                    "${staticMark}${m.name}($params): ${m.returnType.simpleName}"
+                }.sorted()
+                Log.debug(TAG, "📋 方法清单 $className (${signatures.size} 个):")
+                Log.debug(TAG, signatures.joinToString("\n"))
+            } catch (t: Throwable) {
+                Log.debug(TAG, "📋 方法清单 $className 加载失败: ${t.message}")
+            }
+        }
     }
 
     /**
@@ -99,7 +136,7 @@ object ThemeHookV2 {
      * Hook: SCInnerManager.K() - readSkinInfoFromLocalCache
      * 目的：在读取缓存后，注入动态主题信息到内存缓存
      */
-    private fun hookCacheRead(classLoader: ClassLoader) {
+    private fun hookCacheRead(classLoader: ClassLoader): Boolean {
         try {
             val scInnerManagerClass = XposedHelpers.findClass(
                 "com.alipay.mobile.skincenter.manage.SCInnerManager",
@@ -126,9 +163,11 @@ object ThemeHookV2 {
             } else {
                 Log.runtime(TAG, "✓ Hook缓存读取成功 ($hookedName: readSkinInfoFromLocalCache)")
             }
+            return hookedName != null
         } catch (e: Exception) {
             Log.runtime(TAG, "✗ Hook缓存读取异常: ${e.message}")
             Log.printStackTrace(TAG, e)
+            return false
         }
     }
 
@@ -395,9 +434,10 @@ object ThemeHookV2 {
     /**
      * Hook 2: MD5校验
      */
-    private fun hookMd5Check(classLoader: ClassLoader) {
+    private fun hookMd5Check(classLoader: ClassLoader): Boolean {
         // 回滚门拦截（关键）：SCConfigUtil.i()=isThemeSkinRollBack，读服务端 skin_center_theme_rollbackV2 配置，
         // 返回 true 时 hasEnableSkin 直接拒绝主题——本地数据再正确也会被否决，必须恒 false
+        var rollbackGateOk = false
         try {
             XposedHelpers.findAndHookMethod(
                 "com.alipay.mobile.skincenter.util.SCConfigUtil",
@@ -409,9 +449,11 @@ object ThemeHookV2 {
                     }
                 }
             )
+            rollbackGateOk = true
             Log.runtime(TAG, "✓ Hook回滚门成功 (SCConfigUtil.i: isThemeSkinRollBack→false)")
-        } catch (e: Exception) {
-            Log.runtime(TAG, "✗ Hook回滚门失败: ${e.message}")
+        } catch (t: Throwable) {
+            // findAndHookMethod 抛的是 NoSuchMethodError（Error 不是 Exception），必须接 Throwable 才不会中断 applyHooks
+            Log.runtime(TAG, "✗ Hook回滚门失败: ${t.message}")
         }
 
         // MD5 校验方法（本版签名未知，按旧版 m(String,long) 探测，失败不阻塞其他 hook）
@@ -429,9 +471,12 @@ object ThemeHookV2 {
                 }
             )
             Log.runtime(TAG, "✓ Hook MD5校验成功 (SCConfigUtil.m)")
-        } catch (e: Exception) {
-            Log.runtime(TAG, "✗ Hook MD5校验失败（本版可能无此签名，md5 校验需靠数据侧对齐）: ${e.message}")
+        } catch (t: Throwable) {
+            // 方法不存在时抛 NoSuchMethodError（Error），必须接 Throwable
+            Log.runtime(TAG, "✗ Hook MD5校验失败（本版可能无此签名，md5 校验需靠数据侧对齐）: ${t.message}")
         }
+        // 关键项是回滚门 i，m 探测成败不影响
+        return rollbackGateOk
     }
 
     /**
@@ -450,15 +495,16 @@ object ThemeHookV2 {
                 }
             )
             Log.runtime(TAG, "✓ Hook时间戳检查成功")
-        } catch (e: Exception) {
-            Log.runtime(TAG, "✗ Hook时间戳检查失败（本版可能无此签名）: ${e.message}")
+        } catch (t: Throwable) {
+            // 方法不存在时抛 NoSuchMethodError（Error），必须接 Throwable
+            Log.runtime(TAG, "✗ Hook时间戳检查失败（本版可能无此签名）: ${t.message}")
         }
     }
 
     /**
      * Hook 4: hasEnableSkin检查
      */
-    private fun hookHasEnableSkin(classLoader: ClassLoader) {
+    private fun hookHasEnableSkin(classLoader: ClassLoader): Boolean {
         try {
             val scInnerManagerClass = XposedHelpers.findClass(
                 "com.alipay.mobile.skincenter.manage.SCInnerManager",
@@ -490,25 +536,28 @@ object ThemeHookV2 {
             } else {
                 Log.runtime(TAG, "✓ Hook hasEnableSkin成功 ($hookedName: theme 场景恒 true)")
             }
-        } catch (e: Exception) {
-            Log.runtime(TAG, "✗ Hook hasEnableSkin异常: ${e.message}")
-            Log.printStackTrace(TAG, e)
+            return hookedName != null
+        } catch (t: Throwable) {
+            Log.runtime(TAG, "✗ Hook hasEnableSkin异常: ${t.message}")
+            Log.printStackTrace(TAG, t)
+            return false
         }
     }
 
     /**
      * Hook 5: 文件路径
      */
-    private fun hookFilePath(classLoader: ClassLoader) {
+    private fun hookFilePath(classLoader: ClassLoader): Boolean {
         try {
             val scInnerManagerClass = XposedHelpers.findClass(
                 "com.alipay.mobile.skincenter.manage.SCInnerManager",
                 classLoader
             )
 
+            // 本版路径解析方法为 o(File, String, String)，旧版为 q（q 现为 (String,String,J)V 签名，不可用）
             XposedHelpers.findAndHookMethod(
                 scInnerManagerClass,
-                "q",
+                "o",
                 File::class.java,
                 String::class.java,
                 String::class.java,
@@ -532,16 +581,19 @@ object ThemeHookV2 {
                     }
                 }
             )
-            Log.runtime(TAG, "✓ Hook文件路径成功")
-        } catch (e: Exception) {
-            Log.runtime(TAG, "✗ Hook文件路径失败（本版方法名可能已漂移，渲染层将按官方路径规则解析）: ${e.message}")
+            Log.runtime(TAG, "✓ Hook文件路径成功 (o: getSkinDir)")
+            return true
+        } catch (t: Throwable) {
+            // 方法不存在时抛 NoSuchMethodError（Error），必须接 Throwable
+            Log.runtime(TAG, "✗ Hook文件路径失败（本版方法名可能已漂移，渲染层将按官方路径规则解析）: ${t.message}")
+            return false
         }
     }
 
     /**
      * Hook 6: 资源加载
      */
-    private fun hookResourceLoad(classLoader: ClassLoader) {
+    private fun hookResourceLoad(classLoader: ClassLoader): Boolean {
         try {
             val scMetaModelClass = XposedHelpers.findClass(
                 "com.alipay.mobile.skincenter.model.SCMetaModel",
@@ -579,8 +631,11 @@ object ThemeHookV2 {
                 }
             )
             Log.runtime(TAG, "✓ Hook资源加载成功")
-        } catch (e: Exception) {
-            Log.runtime(TAG, "✗ Hook资源加载失败（本版可能无此签名）: ${e.message}")
+            return true
+        } catch (t: Throwable) {
+            // 方法不存在时抛 NoSuchMethodError（Error），必须接 Throwable
+            Log.runtime(TAG, "✗ Hook资源加载失败（本版可能无此签名）: ${t.message}")
+            return false
         }
     }
 
