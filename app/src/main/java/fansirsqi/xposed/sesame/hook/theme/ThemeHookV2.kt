@@ -96,6 +96,8 @@ object ThemeHookV2 {
         val failed = critical.filterValues { !it }
         if (failed.isEmpty()) {
             isHooked = true
+            // hooks 就绪即补发一次重绘，不依赖支付宝是否会再次调用 G()/K()
+            scheduleBootRenderNotify()
         } else {
             Log.runtime(TAG, "❌ 主题Hook关键项${failed.size}/${critical.size}失败: ${failed.keys.joinToString("/")}")
             // 保险：打印官方类的真实方法清单到 debug 日志，便于比对混淆名漂移
@@ -232,10 +234,36 @@ object ThemeHookV2 {
             // 持久化到磁盘：防止支付宝清理缓存后主题丢失需重新设置
             persistCacheToDisk(classLoader, cacheMap)
 
+            // 冷启动/注入后首帧可能已按默认皮肤绘好，补发一次官方重绘通知把主题刷成可见
+            scheduleBootRenderNotify()
+
         } catch (e: Exception) {
             Log.runtime(TAG, "❌ 注入缓存失败: ${e.message}")
             Log.printStackTrace(TAG, e)
         }
+    }
+
+    // 进程内仅补发一次冷启动重绘通知，避免每次 G()/K() 注入都触发 reloadAndNotify
+    @Volatile
+    private var bootRenderNotified = false
+
+    /**
+     * 注入成功后延时补发一次重绘通知。
+     *
+     * 延时是为等首页完成首帧渲染；走后台线程避免在主线程做 reload 的文件 IO。
+     */
+    private fun scheduleBootRenderNotify() {
+        if (bootRenderNotified) return
+        bootRenderNotified = true
+        Thread {
+            try {
+                Thread.sleep(2000L)
+                ThemeManager.notifyAppliedThemeForRender()
+                Log.runtime(TAG, "✓ 冷启动已补发主题重绘通知")
+            } catch (t: Throwable) {
+                Log.runtime(TAG, "⚠️ 冷启动补发主题重绘通知失败: ${t.message}")
+            }
+        }.start()
     }
 
     /**

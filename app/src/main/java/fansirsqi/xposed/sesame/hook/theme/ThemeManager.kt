@@ -167,6 +167,32 @@ object ThemeManager {
     }
 
     /**
+     * 冷启动注入后补发一次主题重绘通知。
+     *
+     * UI 首帧在 hooks 安装前已按官方门检渲染成默认皮肤，此时 theme 数据与文件均已就位
+     * （G() 已从 cached_skin_info_v2 读回内存），缺的只是官方那次 notify 重绘。
+     * 这里只读持久层 JSON 走 reloadAndNotifySkinCenter，不复制文件。
+     */
+    fun notifyAppliedThemeForRender() {
+        val context = AppContext.getAppContext() ?: run {
+            Log.runtime(TAG, "✗ 补发重绘失败: 无 Context")
+            return
+        }
+        val userId = getRuntimeUserId() ?: getCurrentUserId() ?: run {
+            Log.runtime(TAG, "✗ 补发重绘失败: 无用户ID")
+            return
+        }
+        val mergedJson = try {
+            context.getSharedPreferences("prefs_skincenter_file", android.content.Context.MODE_PRIVATE)
+                .getString("cached_skin_info_v2$userId", null)
+        } catch (e: Exception) {
+            Log.runtime(TAG, "⚠️ 读取持久层主题缓存失败: ${e.message}")
+            null
+        }
+        reloadAndNotifySkinCenter(mergedJson)
+    }
+
+    /**
      * 执行导出操作
      *
      * 将支付宝内部的主题导出到SD卡（追加模式）
