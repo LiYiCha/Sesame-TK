@@ -91,19 +91,13 @@ public class BaseModel extends Model {
      * 是否开启抓包调试模式
      */
     @Getter
-    public static final BooleanModelField debugMode = new BooleanModelField("debugMode", "开启抓包(基于新接口)", false);
+    public static final BooleanModelField debugMode = new BooleanModelField("debugMode", "开启抓包", false);
 
     /**
      * 是否开启网络抓包 (HTTP/HTTPS)
      */
     @Getter
     public static final BooleanModelField enableHttpCapture = new BooleanModelField("enableHttpCapture", "开启网络抓包(HTTP/HTTPS)", false);
-
-    /**
-     * 是否自动获取token
-     */
-    @Getter
-    public static final BooleanModelField autoTokenEnabled = new BooleanModelField("autoTokenEnabled", "鱼塘自动获取token", false);
     /**
      * 是否申请支付宝的后台运行权限
      */
@@ -115,11 +109,6 @@ public class BaseModel extends Model {
      */
     @Getter
     public static final BooleanModelField enableCaptchaUIHook = new BooleanModelField("enableCaptchaUIHook", "🛡️拒绝访问VPN弹窗拦截", false);
-    /**
-     * 验证码RPC层拦截（跳过验证处理）
-     */
-    @Getter
-    public static final BooleanModelField enableCaptchaRPCHook = new BooleanModelField("enableCaptchaRPCHook", "🔓滑块RPC层拦截", false);
 
     /**
      * 皮肤模块开关
@@ -225,7 +214,6 @@ public class BaseModel extends Model {
         modelFields.addField(errNotify);//异常通知开关
 //        modelFields.addField(setMaxErrorCount);//异常次数阈值
         modelFields.addField(debugMode);//是否开启抓包调试模式
-        modelFields.addField(autoTokenEnabled);//是否自动获取token
         modelFields.addField(enableSkinModule);//是否启用皮肤模块
         modelFields.addField(enableHttpCapture);//是否启用http网络请求抓包
         modelFields.addField(sendHookData);//启用Hook数据转发
