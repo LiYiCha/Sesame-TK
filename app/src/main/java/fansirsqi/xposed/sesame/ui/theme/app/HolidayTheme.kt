@@ -1,11 +1,13 @@
 package fansirsqi.xposed.sesame.ui.theme.app
 
+import android.content.res.Configuration
 import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.compositeOver
 import java.util.Calendar
+import fansirsqi.xposed.sesame.data.ViewAppInfo
 import fansirsqi.xposed.sesame.util.DataStore
 import androidx.appcompat.app.AppCompatDelegate
 import androidx.compose.runtime.mutableIntStateOf
@@ -23,18 +25,6 @@ object HolidayTheme {
         }
     }
 
-    data class SkyColors(val top: Color, val bottom: Color, val surfaceAlpha: Float = 0.8f)
-    
-    fun getSkyColors(): SkyColors {
-        return when (getCurrentTimePhase()) {
-            "dawn" -> SkyColors(Color(0xFFB3E5FC), Color(0xFFFFAB91), 0.8f)
-            "day" -> SkyColors(Color(0xFF81D4FA), Color(0xFFE1F5FE), 0.85f)
-            "sunset" -> SkyColors(Color(0xFF7E57C2), Color(0xFFFF7043), 0.75f)
-            "dusk" -> SkyColors(Color(0xFF37474F), Color(0xFFFF5722), 0.7f)
-            else -> SkyColors(Color(0xFF1A237E), Color(0xFF0D0D2B), 0.7f)
-        }
-    }
-
     val themeVersion = mutableIntStateOf(0)
     val themeObservers = mutableListOf<() -> Unit>()
 
@@ -47,9 +37,6 @@ object HolidayTheme {
         val nightMode = when {
             mode == "light" -> AppCompatDelegate.MODE_NIGHT_NO
             mode == "dark" -> AppCompatDelegate.MODE_NIGHT_YES
-            mode == "schedule" -> {
-                if (shouldUseDarkTheme()) AppCompatDelegate.MODE_NIGHT_YES else AppCompatDelegate.MODE_NIGHT_NO
-            }
             else -> AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM
         }
         AppCompatDelegate.setDefaultNightMode(nightMode)
@@ -260,63 +247,16 @@ object HolidayTheme {
         } catch (_: Exception) {}
     }
 
-    /** 判断当前是否需要深色模式（含时间调度逻辑） */
+    /** 判断当前是否需要深色模式（auto 时跟随系统深色配置） */
     fun shouldUseDarkTheme(): Boolean {
         return when (getDarkMode()) {
             "light" -> false
             "dark" -> true
-            "schedule" -> {
-                val hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
-                hour in 18..23 || hour in 0..5
+            else -> {
+                val ctx = ViewAppInfo.context
+                ctx != null && (ctx.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) ==
+                    Configuration.UI_MODE_NIGHT_YES
             }
-            else -> false
-        }
-    }
-
-    /** 随一天时间变换的主题色 */
-    val TIME_THEMES = mapOf(
-        "dawn" to ThemeColors(      // 5:00-8:00 黎明·暖橙
-            mainColor = Color(0xFFFF7043), bgColor = Color(0xFFFFF3E0),
-            cardBgColor = Color(0xFFFFFBF5), textColor = Color(0xFF3E2723),
-            activeColor = Color(0xFFE64A19), title = "黎明", story = "一日之计在于晨"
-        ),
-        "morning" to ThemeColors(    // 8:00-12:00 上午·青绿
-            mainColor = Color(0xFF66BB6A), bgColor = Color(0xFFE8F5E9),
-            cardBgColor = Color(0xFFF5FFF5), textColor = Color(0xFF1B5E20),
-            activeColor = Color(0xFF43A047), title = "上午", story = "盛年不重来，一日难再晨"
-        ),
-        "noon" to ThemeColors(       // 12:00-14:00 正午·明蓝
-            mainColor = Color(0xFF42A5F5), bgColor = Color(0xFFE3F2FD),
-            cardBgColor = Color(0xFFF5FBFF), textColor = Color(0xFF0D47A1),
-            activeColor = Color(0xFF1E88E5), title = "正午", story = "午安，注意休息"
-        ),
-        "afternoon" to ThemeColors(  // 14:00-18:00 午后·暖金
-            mainColor = Color(0xFFFFA726), bgColor = Color(0xFFFFF8E1),
-            cardBgColor = Color(0xFFFFFDF5), textColor = Color(0xFF4E342E),
-            activeColor = Color(0xFFF57C00), title = "午后", story = "午后时光，悠闲自在"
-        ),
-        "dusk" to ThemeColors(       // 18:00-20:00 黄昏·橘红
-            mainColor = Color(0xFFEF5350), bgColor = Color(0xFFFFF0F0),
-            cardBgColor = Color(0xFFFFF5F5), textColor = Color(0xFF3E1010),
-            activeColor = Color(0xFFC62828), title = "黄昏", story = "夕阳无限好，只是近黄昏"
-        ),
-        "night" to ThemeColors(      // 20:00-5:00 夜晚·深紫
-            mainColor = Color(0xFF7E57C2), bgColor = Color(0xFF1A1025),
-            cardBgColor = Color(0xFF241535), textColor = Color(0xFFE1BEE7),
-            activeColor = Color(0xFFB388FF), title = "夜晚", story = "月落乌啼霜满天，江枫渔火对愁眠"
-        )
-    )
-
-    /** 根据当前时间返回对应的时段主题 */
-    fun getTimeTheme(): ThemeColors? {
-        val hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
-        return when (hour) {
-            in 5..7 -> TIME_THEMES["dawn"]
-            in 8..11 -> TIME_THEMES["morning"]
-            in 12..13 -> TIME_THEMES["noon"]
-            in 14..17 -> TIME_THEMES["afternoon"]
-            in 18..19 -> TIME_THEMES["dusk"]
-            else -> TIME_THEMES["night"]
         }
     }
 
@@ -437,13 +377,9 @@ object HolidayTheme {
         }
     }
 
-    /** 获取当前生效的主题色（时段 or 节日 or 自定义），永不返回 null */
+    /** 获取当前生效的主题色（节日 or 自定义），永不返回 null */
     fun getActiveThemeColors(): ThemeColors {
-        return if (getDarkMode() == "schedule") {
-            getTimeTheme() ?: HOLIDAY_THEMES["default"]!!
-        } else {
-            getHolidayColors() ?: HOLIDAY_THEMES["default"]!!
-        }
+        return getHolidayColors() ?: HOLIDAY_THEMES["default"]!!
     }
 
     /** 单一数据源：根据系统深色标志解析完整调色板，浅色/深色统一 */
@@ -451,7 +387,6 @@ object HolidayTheme {
         val dark = when (getDarkMode()) {
             "light" -> false
             "dark" -> true
-            "schedule" -> shouldUseDarkTheme()
             else -> isSystemDark
         }
         val colors = getActiveThemeColors()

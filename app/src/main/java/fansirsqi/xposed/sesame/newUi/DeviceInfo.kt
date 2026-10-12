@@ -98,7 +98,6 @@ fun DeviceInfoCard(info: Map<String, String>, oneWord: String? = null) {
         when (mode) {
             "light" -> false
             "dark" -> true
-            "schedule" -> HolidayTheme.shouldUseDarkTheme()
             else -> isSystemInDarkTheme()
         }
     }
@@ -793,8 +792,7 @@ fun DeviceInfoCard(info: Map<String, String>, oneWord: String? = null) {
                             listOf(
                                 "auto" to "跟随系统",
                                 "light" to "浅色",
-                                "dark" to "深色",
-                                "schedule" to "日出日落"
+                                "dark" to "深色"
                             ).forEach { (mode, label) ->
                                 val selected = darkMode == mode
                                 Surface(
@@ -815,23 +813,6 @@ fun DeviceInfoCard(info: Map<String, String>, oneWord: String? = null) {
                                     )
                                 }
                             }
-                        }
-
-                        if (darkMode == "schedule" || (darkMode == "auto" && themeMode == "auto")) {
-                            val timePhase = HolidayTheme.getCurrentTimePhase()
-                            val phaseName = when (timePhase) {
-                                "dawn" -> "晨曦"
-                                "day" -> "白昼"
-                                "sunset" -> "晚霞"
-                                "midnight" -> "子夜"
-                                else -> "自动"
-                            }
-                            Text(
-                                "当前时段: $phaseName", 
-                                style = MaterialTheme.typography.labelSmall, 
-                                color = brandColor,
-                                modifier = Modifier.padding(start = 4.dp)
-                            )
                         }
 
                         Spacer(modifier = Modifier.height(4.dp))
