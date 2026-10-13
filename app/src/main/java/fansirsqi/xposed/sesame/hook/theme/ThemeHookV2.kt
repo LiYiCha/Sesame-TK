@@ -37,6 +37,14 @@ object ThemeHookV2 {
 
     private const val TAG = "ThemeHookV2"
 
+    // 支付宝皮肤中心根目录名（SCInnerManager.s()：filesDir/skin_center_dir/<userId>）
+    private const val SKIN_CENTER_DIR = "skin_center_dir"
+
+    // SCInnerManager 中存放 SCCacheInfoModel 的实例字段名（本版 e，旧版 g）。
+    // 注意：该类有 b/e/f/g 四个 ConcurrentHashMap，其中 b 是 SCMetaModel Map、key 同样是场景名，
+    // 不能靠「含 theme 键」来猜，否则会把缓存写进 meta map。
+    private val CACHE_MAP_FIELD_NAMES = listOf("e", "g")
+
     // Hook状态
     @Volatile
     private var isHooked = false
@@ -87,6 +95,7 @@ object ThemeHookV2 {
             "缓存读取" to runCatching { hookCacheRead(classLoader) }.getOrDefault(false),
             "回滚门" to runCatching { hookMd5Check(classLoader) }.getOrDefault(false),
             "hasEnableSkin" to runCatching { hookHasEnableSkin(classLoader) }.getOrDefault(false),
+            "文件保护" to runCatching { hookProtectThemeFiles(classLoader) }.getOrDefault(false),
             "文件路径" to runCatching { hookFilePath(classLoader) }.getOrDefault(false),
             "资源加载" to runCatching { hookResourceLoad(classLoader) }.getOrDefault(false)
         )
@@ -206,10 +215,12 @@ object ThemeHookV2 {
             val customCache = cacheInfoClass.newInstance()
 
             // 使用动态读取的真实数据设置字段，并手动延长缓存有效期防止过期
+            // userId 统一取运行时账号，避免与 persistCacheToDisk 写入持久层的值不一致
+            val effectiveUserId = ThemeManager.resolveEffectiveUserId(themeInfo.userId)
             XposedHelpers.setObjectField(customCache, "usageScene", themeInfo.usageScene)
             XposedHelpers.setObjectField(customCache, "skinId", themeInfo.skinId)
             XposedHelpers.setObjectField(customCache, "userSkinId", themeInfo.userSkinId)
-            XposedHelpers.setObjectField(customCache, "userId", themeInfo.userId)
+            XposedHelpers.setObjectField(customCache, "userId", effectiveUserId)
             XposedHelpers.setObjectField(customCache, "md5", themeInfo.md5)
             XposedHelpers.setObjectField(customCache, "appSquareMd5", themeInfo.appSquareMd5)
             // 加上10年的有效时间，防止缓存过期被自动清除
@@ -247,40 +258,72 @@ object ThemeHookV2 {
     @Volatile
     private var bootRenderNotified = false
 
+    @Volatile
+    private var bootNotifyRunning = false
+
     /**
      * 注入成功后延时补发一次重绘通知。
      *
      * 延时是为等首页完成首帧渲染；走后台线程避免在主线程做 reload 的文件 IO。
+     *
+     * 注意：必须等主题缓存真正就位才置位 bootRenderNotified。
+     * 冷启动时 applyHooks 后 2s 可能早于登录/读缓存完成，若此时就置位，
+     * 真正注入内存缓存后就再也不会补发重绘，表现为「每次重启都得手动重新应用一次」。
      */
     private fun scheduleBootRenderNotify() {
-        if (bootRenderNotified) return
-        bootRenderNotified = true
+        if (bootRenderNotified || bootNotifyRunning) return
+        bootNotifyRunning = true
         Thread {
             try {
                 Thread.sleep(2000L)
-                ThemeManager.notifyAppliedThemeForRender()
-                Log.runtime(TAG, "✓ 冷启动已补发主题重绘通知")
+                if (ThemeManager.hasPersistedTheme()) {
+                    ThemeManager.notifyAppliedThemeForRender()
+                    bootRenderNotified = true
+                    Log.runtime(TAG, "✓ 冷启动已补发主题重绘通知")
+                } else {
+                    // 主题缓存尚未就绪，本次放弃且不置位，等下次注入成功后重新补发
+                    Log.runtime(TAG, "⏳ 冷启动补发重绘延后: 主题缓存尚未就绪")
+                }
             } catch (t: Throwable) {
                 Log.runtime(TAG, "⚠️ 冷启动补发主题重绘通知失败: ${t.message}")
+            } finally {
+                bootNotifyRunning = false
             }
         }.start()
     }
 
     /**
-     * 动态定位 SCInnerManager 中存放场景缓存模型的 ConcurrentHashMap 实例字段
-     * （识别依据：含 theme/ltp/aptrip 等场景键，或为空但类型唯一匹配）
+     * 动态定位 SCInnerManager 中存放场景缓存模型（SCCacheInfoModel）的 ConcurrentHashMap 实例字段
+     *
+     * 优先按已确认的字段名取（本版 e / 旧版 g）；字段名漂移时按 value 类型兜底，
+     * 绝不能按「key 是否为场景名」判断——SCMetaModel 缓存 Map(b) 的 key 同样是场景名。
      */
     private fun findCacheMapField(manager: Any): MutableMap<String, Any>? {
-        val candidates = mutableListOf<MutableMap<String, Any>>()
-        for (field in manager.javaClass.declaredFields) {
-            if (Modifier.isStatic(field.modifiers)) continue
-            if (field.type != ConcurrentHashMap::class.java) continue
+        val fields = manager.javaClass.declaredFields
+
+        for (name in CACHE_MAP_FIELD_NAMES) {
+            val field = fields.firstOrNull {
+                it.name == name && !Modifier.isStatic(it.modifiers) &&
+                        it.type == ConcurrentHashMap::class.java
+            } ?: continue
+            field.isAccessible = true
+            val map = field.get(manager) as? MutableMap<String, Any>
+            if (map != null) return map
+        }
+
+        // 兜底：value 全部是 SCCacheInfoModel 的那个才是缓存 Map
+        val cacheInfoClass = runCatching {
+            manager.javaClass.classLoader
+                .loadClass("com.alipay.mobile.skincenter.model.SCCacheInfoModel")
+        }.getOrNull() ?: return null
+        for (field in fields) {
+            if (Modifier.isStatic(field.modifiers) || field.type != ConcurrentHashMap::class.java) continue
             field.isAccessible = true
             val map = field.get(manager) as? MutableMap<String, Any> ?: continue
-            if (map.keys.any { it in setOf("theme", "ltp", "aptrip", "emoji", "widget") }) return map
-            candidates.add(map)
+            val values = map.values
+            if (values.isNotEmpty() && values.all { cacheInfoClass.isInstance(it) }) return map
         }
-        return candidates.firstOrNull()
+        return null
     }
 
     // 缓存区
@@ -358,6 +401,30 @@ object ThemeHookV2 {
         }
     }
 
+    @Volatile
+    private var restoring = false
+
+    /**
+     * 异步触发主题文件恢复
+     *
+     * 恢复要拷贝整个主题包（几十 MB），而 loadThemeInfo 会在渲染路径
+     * （SCInnerManager.o 解析资源目录）上被调用，同步执行会阻塞主线程。
+     * applyTheme 内部已带 @Synchronized，这里再加单次触发保护，避免多个渲染回调重复拷贝。
+     */
+    private fun requestThemeRestore(userId: String) {
+        if (restoring) return
+        restoring = true
+        Thread {
+            try {
+                ThemeManager.restoreThemeIfMissing(userId)
+            } catch (t: Throwable) {
+                Log.runtime(TAG, "⚠️ 自动恢复主题失败: ${t.message}")
+            } finally {
+                restoring = false
+            }
+        }.start()
+    }
+
     /**
      * 动态读取主题信息 - 增加内存缓存优化
      */
@@ -369,8 +436,12 @@ object ThemeHookV2 {
             // 1. 寻找主题目录
             val themeDirs = themeBaseDir.listFiles { it.isDirectory }
             if (themeDirs.isNullOrEmpty()) {
+                // 目录被清空时必须让内存缓存失效，否则下面会返回指向已删目录的旧主题信息，
+                // 注入一个空壳缓存条目，官方链路照样渲染不出主题
+                cachedThemeInfo = null
+                lastThemeFileModified = 0L
                 Log.runtime(TAG, "✗ theme 目录下无任何主题目录: ${themeBaseDir.absolutePath}，尝试恢复后跳过注入")
-                ThemeManager.restoreThemeIfMissing(userId)
+                requestThemeRestore(userId)
                 return null
             }
 
@@ -379,10 +450,15 @@ object ThemeHookV2 {
 
             val themeInfoFile = File(themeDir, "theme_info.json")
 
-            // 2. 检查内存缓存是否有效 (根据文件修改时间判断)
+            // 2. 检查内存缓存是否有效 (根据文件修改时间 + 目录是否仍存在判断)
             val currentModified = if (themeInfoFile.exists()) themeInfoFile.lastModified() else 0
             if (cachedThemeInfo != null && lastThemeFileModified == currentModified && currentModified != 0L) {
-                return cachedThemeInfo
+                // 缓存指向的主题目录可能已被官方删除，命中前先确认它还在
+                if (themeDirs.any { it.name == cachedThemeInfo!!.themeId }) {
+                    return cachedThemeInfo
+                }
+                cachedThemeInfo = null
+                lastThemeFileModified = 0L
             }
 
             // 3. 缓存失效，重新读取
@@ -446,7 +522,8 @@ object ThemeHookV2 {
                 cacheTime = cacheTime,
                 expireDate = expireDate,
                 diyExpiredTime = 0,
-                versionLimit = "10.8.20.0000",
+                // versionLimit 参与官方版本闸门校验，必须对齐运行时支付宝版本
+                versionLimit = ThemeManager.currentWalletVersion() ?: "10.8.20.0000",
                 skinType = "INST_UNLIMITED",
                 name = metadata?.description ?: themeId,
                 materialId = "",
@@ -573,7 +650,87 @@ object ThemeHookV2 {
     }
 
     /**
-     * Hook 5: 文件路径
+     * Hook 5: 主题目录保护（关键）
+     *
+     * 官方删除皮肤资源的唯一入口：SCFileHelper.a(File) 递归删除。
+     * SCInnerManager.unzipScenesRes(I) 在处理资源更新时，会对「本次服务端下发场景列表里没有」的场景
+     * 执行 SCFileHelper.a(new File(skin_center_dir/<uid>, usageScene))，把整个场景目录连根删掉，
+     * 随后再调 b(scene) 清空 SCMetaModel 缓存。
+     * 伪造的主题服务端永远不会下发，因此每次 ltp/aptrip 等场景更新都会把 theme 目录删干净。
+     *
+     * 这里在删除入口做短路：路径命中 skin_center_dir/<uid>/theme 且选中主题仍完整时跳过删除。
+     * 其它删除（zip 临时文件、残留资源文件、其它场景）一律放行。
+     */
+    private fun hookProtectThemeFiles(classLoader: ClassLoader): Boolean {
+        try {
+            val scFileHelperClass = XposedHelpers.findClass(
+                "com.alipay.mobile.skincenter.util.SCFileHelper",
+                classLoader
+            )
+            // a(File)：未混淆的稳定方法名，整个 skincenter 的删除都收敛到这里
+            XposedHelpers.findAndHookMethod(
+                scFileHelperClass,
+                "a",
+                File::class.java,
+                object : XC_MethodHook() {
+                    override fun beforeHookedMethod(param: MethodHookParam) {
+                        val target = param.args[0] as? File ?: return
+                        if (!isSkinCenterThemeDir(target)) return
+                        val userId = target.parentFile?.name
+                        if (ThemeManager.isSelectedThemeIntact(userId)) {
+                            // void 方法置 null 结果即短路，不再执行官方删除
+                            param.result = null
+                            Log.runtime(TAG, "🛡 已阻止官方删除主题目录: ${target.absolutePath}")
+                        }
+                    }
+                }
+            )
+
+            // b(String)=removeMetaCache：目录删不掉时，也不能让它清空 theme 的 SCMetaModel。
+            // 重建 meta 的官方入口 m() 只在 unzipScenesRes 的场景循环里被调用，
+            // 而那个循环不含 theme（服务端不下发），清空后没有任何官方代码会为 theme 重建。
+            val scInnerManagerClass = XposedHelpers.findClass(
+                "com.alipay.mobile.skincenter.manage.SCInnerManager",
+                classLoader
+            )
+            val metaHooked = runCatching {
+                XposedHelpers.findAndHookMethod(
+                    scInnerManagerClass,
+                    "b",
+                    String::class.java,
+                    object : XC_MethodHook() {
+                        override fun beforeHookedMethod(param: MethodHookParam) {
+                            val scene = param.args[0] as? String ?: return
+                            if (scene != "theme") return
+                            if (!ThemeManager.isSelectedThemeIntact()) return
+                            param.result = null
+                            Log.runtime(TAG, "🛡 已阻止官方清空 theme 的 SCMetaModel 缓存")
+                        }
+                    }
+                )
+                true
+            }.getOrElse { false }
+
+            Log.runtime(TAG, "✓ Hook文件保护成功 (SCFileHelper.a 拦截, metaCache拦截=$metaHooked)")
+            return true
+        } catch (t: Throwable) {
+            Log.runtime(TAG, "✗ Hook文件保护失败（主题目录可能被官方清理）: ${t.message}")
+            return false
+        }
+    }
+
+    /**
+     * 是否是 skin_center_dir/<userId>/theme 这一层场景目录
+     * （只拦这一层，其内部的单资源文件删除仍放行）
+     */
+    private fun isSkinCenterThemeDir(file: File): Boolean {
+        if (file.name != "theme") return false
+        val userDir = file.parentFile ?: return false
+        return userDir.parentFile?.name == SKIN_CENTER_DIR
+    }
+
+    /**
+     * Hook 6: 文件路径
      */
     private fun hookFilePath(classLoader: ClassLoader): Boolean {
         try {

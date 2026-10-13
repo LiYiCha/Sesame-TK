@@ -39,8 +39,9 @@ object ThemeManager {
         "com.alipay.mobile.skincenter.manage.SCCacheInfoModel"
     )
 
-    // 缓存 Map 识别用的场景键（与 cached_skin_info_v2 的 JSON 键一致）
-    private val SCENE_KEYS = setOf("theme", "ltp", "aptrip", "widget", "emoji", "atmospheric_aptrip")
+    // SCInnerManager 中存放 SCCacheInfoModel 的实例字段名（本版 e，旧版 g）。
+    // 该类还有 b(SCMetaModel Map)/f/g 等 ConcurrentHashMap，key 同为场景名，不能靠 key 猜
+    private val CACHE_MAP_FIELD_NAMES = listOf("e", "g")
 
     // 官方换肤广播（SCConstants.SKIN_THEME_UPDATED），UI 层接收后走 SkinStyleHelper 应用新皮肤
     private const val ACTION_SKIN_THEME_UPDATED = "com.alipay.skincenter.skinUpdated.theme"
@@ -297,12 +298,52 @@ object ThemeManager {
     }
 
     /**
+     * 选中主题文件是否完整存在于支付宝内部目录
+     *
+     * 供 ThemeHookV2 的删除拦截使用：只有我们的主题确实还在时才阻止官方清理，
+     * 避免主题已丢失时官方清理被拦住而永远无法重新下载/恢复。
+     */
+    fun isSelectedThemeIntact(targetUserId: String? = null): Boolean {
+        return try {
+            val uid = targetUserId?.takeIf { it.isNotEmpty() } ?: getCurrentUserId() ?: return false
+            val selectedThemeId = File(EXTERNAL_STORAGE_PATH, SELECTED_THEME_FILE)
+                .takeIf { it.exists() }?.readText()?.trim().orEmpty()
+            if (selectedThemeId.isEmpty()) return false
+            val themeDir = File(File(File(INTERNAL_STORAGE_PATH, uid), "theme"), selectedThemeId)
+            themeDir.isDirectory &&
+                    File(themeDir, "theme_info.json").exists() &&
+                    !themeDir.listFiles().isNullOrEmpty()
+        } catch (e: Exception) {
+            Log.runtime(TAG, "⚠️ 检查选中主题完整性失败: ${e.message}")
+            false
+        }
+    }
+
+    /**
+     * 持久层是否已有主题场景缓存（用于判断冷启动补发重绘的时机）
+     */
+    fun hasPersistedTheme(): Boolean {
+        return try {
+            val context = AppContext.getAppContext() ?: return false
+            val userId = getRuntimeUserId() ?: getCurrentUserId() ?: return false
+            val json = context.getSharedPreferences(
+                "prefs_skincenter_file", android.content.Context.MODE_PRIVATE
+            ).getString("cached_skin_info_v2$userId", null)
+            !json.isNullOrEmpty() &&
+                    (JsonUtil.parseObject(json, Map::class.java) as? Map<*, *>)?.containsKey("theme") == true
+        } catch (e: Exception) {
+            false
+        }
+    }
+
+    /**
      * 执行更新/应用操作
      *
      * @param userId 用户ID
      * @param userThemeDir 用户主题基础目录
      * @param quiet 是否静默模式（不显示 Toast）
      */
+    @Synchronized
     fun applyTheme(userId: String, userThemeDir: File, quiet: Boolean = false) {
         try {
             val selectedThemeFile = File(EXTERNAL_STORAGE_PATH, SELECTED_THEME_FILE)
@@ -332,28 +373,42 @@ object ThemeManager {
                 themeBaseDir.mkdirs()
             }
 
-            // 步骤1: 清空 theme 目录下除目标主题外的所有目录（含官方残留目录），
-            // 避免多主题共存触发官方缓存校验清理，导致目录被删或主题回退
-            try {
-                themeBaseDir.listFiles { file -> file.isDirectory }?.forEach { oldTheme ->
-                    if (oldTheme.name != selectedThemeId) {
-                        oldTheme.deleteRecursively()
-                        Log.runtime(TAG, "✓ 已清理其他主题目录: ${oldTheme.name}")
+            // 步骤0: 目标目录已完整时跳过「先删后拷」。
+            // 自动恢复路径与 UI 的 UPDATE 广播可能并发进入本方法，
+            // 无脑 deleteRecursively + copyDirectory 会互相删除，把目录再次清空。
+            val targetThemeDir = File(themeBaseDir, selectedThemeId)
+            if (isThemeDirComplete(targetThemeDir)) {
+                Log.runtime(TAG, "✓ 主题文件已完整存在，跳过重复拷贝: ${targetThemeDir.absolutePath}")
+            } else {
+                // 步骤1: 清空 theme 目录下除目标主题外的所有目录（含官方残留目录），
+                // 避免多主题共存触发官方缓存校验清理，导致目录被删或主题回退
+                try {
+                    themeBaseDir.listFiles { file -> file.isDirectory }?.forEach { oldTheme ->
+                        if (oldTheme.name != selectedThemeId) {
+                            oldTheme.deleteRecursively()
+                            Log.runtime(TAG, "✓ 已清理其他主题目录: ${oldTheme.name}")
+                        }
                     }
+                } catch (e: Exception) {
+                    Log.runtime(TAG, "⚠️ 清理其他主题目录失败: ${e.message}")
                 }
-            } catch (e: Exception) {
-                Log.runtime(TAG, "⚠️ 清理其他主题目录失败: ${e.message}")
+
+                //*** *** 步骤2: 导入新主题文件
+                try {
+                    if (targetThemeDir.exists()) {
+                        targetThemeDir.deleteRecursively()
+                    }
+
+                    copyDirectory(sourceThemeDir, targetThemeDir)
+                    Log.runtime(TAG, "✓ 已复制主题文件到: ${targetThemeDir.absolutePath}")
+                } catch (e: Exception) {
+                    Log.runtime(TAG, "✗ 复制主题文件失败: ${e.message}")
+                    if (!quiet) showToast("主题更新失败: ${e.message}")
+                    return
+                }
             }
 
-            //*** *** 步骤2: 导入新主题文件
-            val targetThemeDir = File(themeBaseDir, selectedThemeId)
             try {
-                if (targetThemeDir.exists()) {
-                    targetThemeDir.deleteRecursively()
-                }
-
-                copyDirectory(sourceThemeDir, targetThemeDir)
-                Log.runtime(TAG, "✓ 已复制主题文件到: ${targetThemeDir.absolutePath}")
 
                 // 读取并更新 theme_info.json
                 val themeInfoFile = File(targetThemeDir, "theme_info.json")
@@ -366,9 +421,13 @@ object ThemeManager {
                 // 手动解析 JSON，避免 Jackson 反序列化 Kotlin data class 的问题
                 val json = JsonUtil.parseObject(themeInfoFile.readText(), Map::class.java) as Map<String, Any>
                 val themeInfo = ThemeInfo.fromMap(json)
+                // versionLimit 是官方 downloadScenesRes 的准入闸门：
+                // compareWalletVersion(currentVersionName, versionLimit) < 0 直接 return false。
+                // 固化的版本号在支付宝升级后必然失配，这里按运行时版本对齐。
                 val updatedThemeInfo = themeInfo.copy(
                     userId = userId,
-                    cacheTime = System.currentTimeMillis() / 1000
+                    cacheTime = System.currentTimeMillis() / 1000,
+                    versionLimit = currentWalletVersion() ?: themeInfo.versionLimit
                 )
                 themeInfoFile.writeText(JsonUtil.formatJson(updatedThemeInfo))
 
@@ -390,7 +449,7 @@ object ThemeManager {
                 reloadAndNotifySkinCenter(mergedJson)
 
                 Log.runtime(TAG, "✅ 主题切换成功: ${updatedThemeInfo.name}")
-                showToast("主题已切换:${updatedThemeInfo.name}")
+                if (!quiet) showToast("主题已切换:${updatedThemeInfo.name}")
 
             } catch (e: Exception) {
                 Log.runtime(TAG, "✗ 主题更新失败: ${e.message}")
@@ -405,6 +464,15 @@ object ThemeManager {
     }
 
     /**
+     * 主题目录是否完整（目录存在 + theme_info.json + 至少一个资源文件）
+     */
+    private fun isThemeDirComplete(themeDir: File): Boolean {
+        if (!themeDir.isDirectory) return false
+        if (!File(themeDir, "theme_info.json").exists()) return false
+        return themeDir.listFiles { file -> file.name != "theme_info.json" }?.isNotEmpty() == true
+    }
+
+/**
      * 复制目录
      *
      * 递归复制整个目录及其内容
@@ -710,14 +778,31 @@ object ThemeManager {
 
     /**
      * 识别 SCInnerManager 中按场景存放缓存模型的 Map
-     * （含 theme/ltp/aptrip 等场景键的 ConcurrentHashMap 实例字段）
+     *
+     * 优先按已确认的字段名取（本版 e，旧版 g）；字段名漂移时按 value 类型兜底。
+     * 不能按「key 是否为场景名」判断——SCMetaModel 缓存 Map(b) 的 key 同样是场景名。
      */
     private fun findCacheMap(managerClass: Class<*>, instance: Any): MutableMap<Any?, Any?>? {
-        for (field in managerClass.declaredFields) {
-            if (Modifier.isStatic(field.modifiers) || field.type != ConcurrentHashMap::class.java) continue
+        val instanceFields = managerClass.declaredFields
+            .filter { !Modifier.isStatic(it.modifiers) && it.type == ConcurrentHashMap::class.java }
+
+        for (name in CACHE_MAP_FIELD_NAMES) {
+            val field = instanceFields.firstOrNull { it.name == name } ?: continue
+            field.isAccessible = true
+            val map = field.get(instance) as? MutableMap<Any?, Any?>
+            if (map != null) return map
+        }
+
+        val cacheInfoClass = AppContext.getClassLoader()?.let { cl ->
+            SC_CACHE_MODEL_CLASSES.firstNotNullOfOrNull { runCatching { cl.loadClass(it) }.getOrNull() }
+        }
+        for (field in instanceFields) {
             field.isAccessible = true
             val map = field.get(instance) as? MutableMap<Any?, Any?> ?: continue
-            if (map.keys.any { it is String && it in SCENE_KEYS }) return map
+            val values = map.values
+            if (cacheInfoClass != null && values.isNotEmpty() && values.all { cacheInfoClass.isInstance(it) }) {
+                return map
+            }
         }
         return null
     }
@@ -789,6 +874,49 @@ object ThemeManager {
     }
 
     /**
+     * 写入缓存的 userId 必须与官方运行时取值一致
+     *
+     * 官方 hasEnableSkin 会比对缓存 model.userId 与 SCCommonUtil.getCurrentUserId()，
+     * 多账号下 skin_center_dir 扫描到的目录未必是当前登录账号。
+     * 取不到运行时 uid 时退回调用方传入的值。
+     */
+    fun resolveEffectiveUserId(fallback: String): String =
+        getRuntimeUserId()?.takeIf { it.isNotEmpty() } ?: fallback
+
+    /**
+     * 当前支付宝版本号
+     *
+     * 取值方式与官方 SCCommonUtil.currentVersionName() 一致（PackageManager.versionName）。
+     * 仅接受纯数字分段的形式：官方 compareWalletVersion 逐段 Integer.parseInt，
+     * 出现非数字段会抛 NumberFormatException。
+     *
+     * 必须在支付宝进程内调用，模块 UI 进程读到的是模块自身版本，会返回 null。
+     */
+    fun currentWalletVersion(): String? {
+        cachedWalletVersion?.let { return it }
+        val version = try {
+            val context = AppContext.getAppContext()
+            @Suppress("DEPRECATION")
+            context?.packageManager
+                ?.getPackageInfo(context.packageName, 0)
+                ?.versionName
+        } catch (t: Throwable) {
+            Log.runtime(TAG, "⚠️ 读取支付宝版本号失败: ${t.message}")
+            null
+        }?.takeIf { name ->
+            name.isNotBlank() && name.split(".").all { it.toIntOrNull() != null }
+        }
+        if (version != null) {
+            cachedWalletVersion = version
+            Log.runtime(TAG, "✓ 支付宝版本号: $version")
+        }
+        return version
+    }
+
+    @Volatile
+    private var cachedWalletVersion: String? = null
+
+    /**
      * 按类型定位 SCInnerManager 单例
      *
      * 优先扫静态字段（类型为自身），其次扫无参静态方法（返回类型为自身）
@@ -816,7 +944,7 @@ object ThemeManager {
      * 手动填充内存缓存（读缓存方法调用失败时的兜底）
      *
      * 1. 用宿主 fastjson 把各场景 JSON 解析为 SCCacheInfoModel
-     * 2. 写入缓存 Map（识别依据：当前含 theme/ltp/aptrip 等场景键的 ConcurrentHashMap 实例字段）
+     * 2. 写入缓存 Map（识别依据见 findCacheMap：按字段名/值类型定位，不靠 key 猜）
      * 3. 置位"缓存已加载" AtomicBoolean 标记
      */
     private fun manualPopulateCache(managerClass: Class<*>, instance: Any, mergedJson: String): Boolean {
@@ -841,22 +969,11 @@ object ThemeManager {
             }
             if (sceneModels.isEmpty()) return false
 
-            // 识别缓存 Map：含场景键的 ConcurrentHashMap 实例字段
-            val mapField = managerClass.declaredFields
-                .filter { !Modifier.isStatic(it.modifiers) && it.type == ConcurrentHashMap::class.java }
-                .firstOrNull { field ->
-                    field.isAccessible = true
-                    val map = field.get(instance) as? Map<*, *>
-                    map != null && map.keys.any { it is String && it in SCENE_KEYS }
-                } ?: managerClass.declaredFields.firstOrNull {
-                    !Modifier.isStatic(it.modifiers) && it.type == ConcurrentHashMap::class.java
-                }
-            if (mapField == null) {
+            val cacheMap = findCacheMap(managerClass, instance)
+            if (cacheMap == null) {
                 Log.runtime(TAG, "✗ 未找到缓存 Map 字段")
                 return false
             }
-            mapField.isAccessible = true
-            val cacheMap = mapField.get(instance) as? MutableMap<Any?, Any?> ?: return false
             sceneModels.forEach { (scene, model) -> cacheMap[scene] = model }
 
             // 置位"缓存已加载"标记
