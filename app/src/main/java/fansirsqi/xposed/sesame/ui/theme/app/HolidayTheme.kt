@@ -289,39 +289,10 @@ object HolidayTheme {
         }
     }
 
-    fun getUseHolidayIcons(): Boolean {
-        return try {
-            DataStore.get("custom_theme_use_holiday_icons", java.lang.Boolean::class.java) as? Boolean ?: true
-        } catch (e: Exception) {
-            true
-        }
-    }
-
-    fun getUseAnimalIcons(): Boolean {
-        return try {
-            DataStore.get("custom_theme_use_animal_icons", java.lang.Boolean::class.java) as? Boolean ?: false
-        } catch (e: Exception) {
-            false
-        }
-    }
-
     fun saveThemeConfig(mode: String, color: String) {
         try {
             DataStore.put("custom_theme_mode", mode)
             DataStore.put("custom_theme_color", color)
-            themeVersion.intValue++
-            notifyThemeChanged()
-        } catch (e: Exception) {
-            // ignore
-        }
-    }
-
-    fun saveThemeConfigEx(mode: String, color: String, useHoliday: Boolean, useAnimal: Boolean) {
-        try {
-            DataStore.put("custom_theme_mode", mode)
-            DataStore.put("custom_theme_color", color)
-            DataStore.put("custom_theme_use_holiday_icons", useHoliday)
-            DataStore.put("custom_theme_use_animal_icons", useAnimal)
             themeVersion.intValue++
             notifyThemeChanged()
         } catch (e: Exception) {

@@ -21,7 +21,6 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.webkit.WebSettingsCompat
 import androidx.webkit.WebViewFeature
 import fansirsqi.xposed.sesame.R
-import fansirsqi.xposed.sesame.newui.WatermarkView.Companion.install
 import fansirsqi.xposed.sesame.ui.BaseActivity
 import fansirsqi.xposed.sesame.util.Files
 import fansirsqi.xposed.sesame.util.FolderLauncher
@@ -53,7 +52,6 @@ class HtmlViewerActivity : BaseActivity() {
         super.onCreate(savedInstanceState)
         LanguageUtil.setLocale(this)
         setContentView(R.layout.activity_html_viewer)
-        install(this)
 
         // 初始化视图
         mWebView = findViewById(R.id.mwv_webview)

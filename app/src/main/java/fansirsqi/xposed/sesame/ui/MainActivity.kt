@@ -38,7 +38,6 @@ import fansirsqi.xposed.sesame.data.ViewAppInfo.verifyId
 import fansirsqi.xposed.sesame.entity.UserEntity
 import fansirsqi.xposed.sesame.newui.DeviceInfoCard
 import fansirsqi.xposed.sesame.newui.DeviceInfoUtil
-import fansirsqi.xposed.sesame.newui.WatermarkView
 import fansirsqi.xposed.sesame.ui.extension.ExtensionListActivity
 import fansirsqi.xposed.sesame.ui.extra.activity.HelpActivity
 import fansirsqi.xposed.sesame.ui.extra.activity.RpcDebugActivity
@@ -114,7 +113,7 @@ class MainActivity : BaseActivity() {
         fansirsqi.xposed.sesame.ui.theme.app.HolidayTheme.themeObservers.add(mainActivityThemeObserver)
         mainActivityThemeObserver.invoke()
         val deviceInfo: ComposeView = findViewById(R.id.device_info)
-        //val v = WatermarkView.install(this)
+
         deviceInfoState.value = DeviceInfoUtil.showInfo(verifyId, "未登录")
         deviceInfo.setContent {
             SesameTheme {

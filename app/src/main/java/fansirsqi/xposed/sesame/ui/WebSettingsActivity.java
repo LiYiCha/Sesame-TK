@@ -48,7 +48,6 @@ import fansirsqi.xposed.sesame.model.ModelField;
 import fansirsqi.xposed.sesame.model.ModelFields;
 import fansirsqi.xposed.sesame.model.ModelGroup;
 import fansirsqi.xposed.sesame.model.SelectModelFieldFunc;
-import fansirsqi.xposed.sesame.newui.WatermarkView;
 import fansirsqi.xposed.sesame.task.ModelTask;
 import fansirsqi.xposed.sesame.ui.dto.ModelDto;
 import fansirsqi.xposed.sesame.ui.dto.ModelFieldInfoDto;
@@ -399,54 +398,6 @@ public class WebSettingsActivity extends BaseActivity {
         @JavascriptInterface
         public boolean isDark() {
             return fansirsqi.xposed.sesame.ui.theme.app.HolidayTheme.INSTANCE.shouldUseDarkTheme();
-        }
-
-        @JavascriptInterface
-        public String getThemeConfig() {
-            try {
-                String mode = fansirsqi.xposed.sesame.ui.theme.app.HolidayTheme.INSTANCE.getThemeMode();
-                String color = fansirsqi.xposed.sesame.ui.theme.app.HolidayTheme.INSTANCE.getCustomColor();
-                boolean useHolidayIcons = fansirsqi.xposed.sesame.ui.theme.app.HolidayTheme.INSTANCE.getUseHolidayIcons();
-                boolean useAnimalIcons = fansirsqi.xposed.sesame.ui.theme.app.HolidayTheme.INSTANCE.getUseAnimalIcons();
-                org.json.JSONObject obj = new org.json.JSONObject();
-                obj.put("mode", mode);
-                obj.put("customColor", color);
-                obj.put("useHolidayIcons", useHolidayIcons);
-                obj.put("useAnimalIcons", useAnimalIcons);
-                return obj.toString();
-            } catch (Exception e) {
-                Log.printStackTrace(e);
-                return "{\"mode\":\"auto\",\"customColor\":\"#E64000\",\"useHolidayIcons\":true,\"useAnimalIcons\":false}";
-            }
-        }
-
-        @JavascriptInterface
-        public void setThemeConfig(String mode, String color) {
-            try {
-                fansirsqi.xposed.sesame.ui.theme.app.HolidayTheme.INSTANCE.saveThemeConfig(mode, color);
-                runOnUiThread(() -> {
-                    onContentChanged();
-                });
-            } catch (Exception e) {
-                Log.printStackTrace(e);
-            }
-        }
-
-        @JavascriptInterface
-        public void setThemeConfigJson(String json) {
-            try {
-                org.json.JSONObject obj = new org.json.JSONObject(json);
-                String mode = obj.optString("mode", "auto");
-                String color = obj.optString("customColor", "#E64000");
-                boolean useHoliday = obj.optBoolean("useHolidayIcons", true);
-                boolean useAnimal = obj.optBoolean("useAnimalIcons", false);
-                fansirsqi.xposed.sesame.ui.theme.app.HolidayTheme.INSTANCE.saveThemeConfigEx(mode, color, useHoliday, useAnimal);
-                runOnUiThread(() -> {
-                    onContentChanged();
-                });
-            } catch (Exception e) {
-                Log.printStackTrace(e);
-            }
         }
 
         @JavascriptInterface

@@ -8,10 +8,17 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.PathOperation
+import androidx.compose.ui.graphics.drawscope.withTransform
+import androidx.compose.ui.graphics.drawscope.withTransform
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.delay
 
@@ -105,14 +112,10 @@ fun SesameTheme(
         content = {
             Box(modifier = Modifier.fillMaxSize()) {
                 content()
-                // 全局生态陪伴水印
-                if (HolidayTheme.getUseAnimalIcons()) {
-                    EcosystemWatermark()
-                }
-                
+
                 // 夜晚散星动画（仅深色模式）
                 if (resolvedDark) {
-                    TwinklingStars(tint = colorScheme.primary.copy(alpha = 0.15f))
+                    TwinklingStars(tint = colorScheme.primary)
                 }
 
                 if (fansirsqi.xposed.sesame.BuildConfig.DEBUG) {
@@ -123,17 +126,34 @@ fun SesameTheme(
     )
 }
 
-/** 夜晚散星 — Canvas 绘制随机闪烁星点 */
+/** 夜晚散星 — Canvas 绘制随机闪烁星点与一枚缓慢漂移的新月 */
 @Composable
 private fun TwinklingStars(tint: Color) {
-    data class Star(val x: Float, val y: Float, val period: Float, val radius: Float)
+    data class Star(val x: Float, val y: Float, val radius: Float, val minAlpha: Float)
     val stars = remember {
-        List(12) {
+        List(40) {
+            val radius = 2f + (it % 4)
             Star(
                 x = kotlin.random.Random.nextFloat(),
                 y = kotlin.random.Random.nextFloat(),
-                period = kotlin.random.Random.nextInt(500, 3000).toFloat(),
-                radius = (2f + (it % 4)).coerceAtMost(5f)
+                radius = radius,
+                // 小星保底可见，大星大幅呼吸闪烁
+                minAlpha = if (radius <= 3f) 0.28f else 0.10f
+            )
+        }
+    }
+    // 新月锚点（随机，每次进入页面不同）+ 以原点为中心的路径（仅构建一次）
+    val moonAnchor = remember { kotlin.random.Random.nextFloat() to kotlin.random.Random.nextFloat() }
+    val density = LocalDensity.current
+    val moonRadius = remember(density) { with(density) { 26.dp.toPx() } }
+    val moonPath = remember(moonRadius) {
+        Path().apply {
+            op(
+                Path().apply { addOval(Rect(Offset.Zero, moonRadius)) },
+                Path().apply {
+                    addOval(Rect(Offset(moonRadius * 0.45f, -moonRadius * 0.15f), moonRadius * 0.88f))
+                },
+                PathOperation.Difference
             )
         }
     }
@@ -146,10 +166,22 @@ private fun TwinklingStars(tint: Color) {
         }
     }
     Canvas(modifier = Modifier.fillMaxSize()) {
+        // 新月随 time 极慢正弦漂移（水平 ±15%、垂直 ±8% 屏幅），每帧仅一次 translate
+        val driftX = kotlin.math.sin(time.floatValue * 0.05f) * 0.15f
+        val driftY = kotlin.math.cos(time.floatValue * 0.033f) * 0.08f
+        withTransform({
+            translate(
+                left = (moonAnchor.first + driftX).coerceIn(0f, 1f) * size.width - moonRadius,
+                top = (moonAnchor.second + driftY).coerceIn(0f, 1f) * size.height - moonRadius
+            )
+        }) {
+            drawPath(path = moonPath, color = tint.copy(alpha = 0.10f))
+        }
+
         stars.forEachIndexed { i, star ->
-            val a = (kotlin.math.sin(time.floatValue * 3f + i * 1.7f).toFloat() * 0.5f + 0.5f) * 0.4f
+            val a = (kotlin.math.sin(time.floatValue * 3f + i * 1.7f) * 0.5f + 0.5f) * 0.7f + 0.1f
             drawCircle(
-                color = tint.copy(alpha = a.coerceIn(0.02f, 0.40f)),
+                color = tint.copy(alpha = a.coerceIn(star.minAlpha, 0.80f)),
                 radius = star.radius,
                 center = Offset(star.x * size.width, star.y * size.height)
             )

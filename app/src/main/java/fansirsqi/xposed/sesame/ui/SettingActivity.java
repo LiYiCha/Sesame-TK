@@ -30,7 +30,6 @@ import fansirsqi.xposed.sesame.entity.AlipayUser;
 import fansirsqi.xposed.sesame.model.Model;
 import fansirsqi.xposed.sesame.model.ModelConfig;
 import fansirsqi.xposed.sesame.model.SelectModelFieldFunc;
-import fansirsqi.xposed.sesame.newui.WatermarkView;
 import fansirsqi.xposed.sesame.task.ModelTask;
 import fansirsqi.xposed.sesame.ui.widget.ContentPagerAdapter;
 import fansirsqi.xposed.sesame.ui.widget.ListDialog;

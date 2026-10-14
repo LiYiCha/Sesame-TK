@@ -76,8 +76,6 @@ fun DeviceInfoCard(info: Map<String, String>, oneWord: String? = null) {
     val currentThemeVersion = HolidayTheme.themeVersion.intValue
     var themeMode by rememberSaveable(currentThemeVersion) { mutableStateOf(HolidayTheme.getThemeMode()) }
     var customColor by rememberSaveable(currentThemeVersion) { mutableStateOf(HolidayTheme.getCustomColor()) }
-    var useHolidayIcons by rememberSaveable(currentThemeVersion) { mutableStateOf(HolidayTheme.getUseHolidayIcons()) }
-    var useAnimalIcons by rememberSaveable(currentThemeVersion) { mutableStateOf(HolidayTheme.getUseAnimalIcons()) }
     var darkMode by rememberSaveable(currentThemeVersion) { mutableStateOf(HolidayTheme.getDarkMode()) }
     var showDialog by rememberSaveable { mutableStateOf(false) }
     var showLinePicker by rememberSaveable { mutableStateOf(false) }
@@ -85,7 +83,7 @@ fun DeviceInfoCard(info: Map<String, String>, oneWord: String? = null) {
     var showPlantPicker by rememberSaveable { mutableStateOf(false) }
     
     val context = LocalContext.current
-    LaunchedEffect(themeMode, customColor, useHolidayIcons, useAnimalIcons, darkMode) {
+    LaunchedEffect(themeMode, customColor, darkMode) {
         val activity = context as? BaseActivity
         activity?.updateToolbarTheme()
     }
@@ -776,7 +774,7 @@ fun DeviceInfoCard(info: Map<String, String>, oneWord: String? = null) {
                             themeMode = themeMode,
                             onSelect = { code ->
                                 themeMode = code
-                                HolidayTheme.saveThemeConfigEx(code, customColor, useHolidayIcons, useAnimalIcons)
+                                HolidayTheme.saveThemeConfig(code, customColor)
                             }
                         )
 
@@ -819,56 +817,6 @@ fun DeviceInfoCard(info: Map<String, String>, oneWord: String? = null) {
                         HorizontalDivider()
                         Spacer(modifier = Modifier.height(4.dp))
 
-                        // Switch Options
-                        Text("功能开关：", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        Column(
-                            verticalArrangement = Arrangement.spacedBy(8.dp),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(10.dp))
-                                .padding(8.dp)
-                        ) {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clickable {
-                                        useHolidayIcons = !useHolidayIcons
-                                        HolidayTheme.saveThemeConfigEx(themeMode, customColor, useHolidayIcons, useAnimalIcons)
-                                    },
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Checkbox(
-                                    checked = useHolidayIcons,
-                                    onCheckedChange = {
-                                        useHolidayIcons = it ?: true
-                                        HolidayTheme.saveThemeConfigEx(themeMode, customColor, useHolidayIcons, useAnimalIcons)
-                                    }
-                                )
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text("启用节日限定任务图标", fontSize = 13.sp, fontWeight = FontWeight.Medium)
-                            }
-                            
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clickable {
-                                        useAnimalIcons = !useAnimalIcons
-                                        HolidayTheme.saveThemeConfigEx(themeMode, customColor, useHolidayIcons, useAnimalIcons)
-                                    },
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Checkbox(
-                                    checked = useAnimalIcons,
-                                    onCheckedChange = {
-                                        useAnimalIcons = it ?: false
-                                        HolidayTheme.saveThemeConfigEx(themeMode, customColor, useHolidayIcons, useAnimalIcons)
-                                    }
-                                )
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text("启用萌宠主题图标 (WebView)", fontSize = 13.sp, fontWeight = FontWeight.Medium)
-                            }
-                        }
-
                         // ========== 自定义色彩（折叠） ==========
                         var showCustom by remember { mutableStateOf(false) }
                         Surface(
@@ -888,7 +836,7 @@ fun DeviceInfoCard(info: Map<String, String>, oneWord: String? = null) {
                             ) {
                                 RadioButton(selected = themeMode == "custom", onClick = {
                                     themeMode = "custom"
-                                    HolidayTheme.saveThemeConfigEx("custom", customColor, useHolidayIcons, useAnimalIcons)
+                                    HolidayTheme.saveThemeConfig("custom", customColor)
                                     showCustom = true
                                 })
                                 Spacer(modifier = Modifier.width(8.dp))
@@ -921,7 +869,7 @@ fun DeviceInfoCard(info: Map<String, String>, oneWord: String? = null) {
                                                 val randomHex = String.format("#FF%06X", 0xFFFFFF and r.nextInt())
                                                 customColor = randomHex
                                                 themeMode = "custom"
-                                                HolidayTheme.saveThemeConfigEx("custom", randomHex, useHolidayIcons, useAnimalIcons)
+                                                HolidayTheme.saveThemeConfig("custom", randomHex)
                                             }
                                         ) {
                                             Row(
@@ -962,7 +910,7 @@ fun DeviceInfoCard(info: Map<String, String>, oneWord: String? = null) {
                                                         .clickable {
                                                             themeMode = "custom"
                                                             customColor = hex
-                                                            HolidayTheme.saveThemeConfigEx("custom", hex, useHolidayIcons, useAnimalIcons)
+                                                            HolidayTheme.saveThemeConfig("custom", hex)
                                                         }
                                                         .let {
                                                             if (isCurrentColor && themeMode == "custom") {

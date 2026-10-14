@@ -4,7 +4,6 @@ import android.content.Context
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.graphicsLayer
@@ -77,33 +76,6 @@ object EcosystemManager {
 }
 
 /**
- * 全局背景底纹 (用于注入到 SesameTheme 根部)
- */
-@Composable
-fun EcosystemWatermark() {
-    val context = LocalContext.current
-    LaunchedEffect(Unit) { EcosystemManager.initAssets(context) }
-    
-    val watermarkAsset = EcosystemManager.currentAnimal ?: return
-    
-    // 全局只画一个低透明度的植物，极简高级
-    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.BottomEnd) {
-        AsyncImage(
-            model = ImageRequest.Builder(context)
-                .data(watermarkAsset)
-                .decoderFactory(SvgDecoder.Factory())
-                .build(),
-            contentDescription = "Global Ecosystem Watermark",
-            modifier = Modifier
-                .size(400.dp)
-                .offset(x = 50.dp, y = 50.dp)
-                .alpha(0.04f)
-                .graphicsLayer { rotationZ = -15f }
-        )
-    }
-}
-
-/**
  * 组件级装饰 (用于放置在卡片、按钮旁边的微缩精灵)
  */
 @Composable
@@ -140,43 +112,6 @@ fun EcosystemCardDecorator(
             .graphicsLayer {
                 scaleX = scale
                 scaleY = scale
-                transformOrigin = androidx.compose.ui.graphics.TransformOrigin(0.5f, 1f)
-            }
-    )
-}
-
-/**
- * 空状态伴随大图 (用于列表为空时的背景伴随)
- */
-@Composable
-fun EcosystemEmptyState(modifier: Modifier = Modifier) {
-    val context = LocalContext.current
-    LaunchedEffect(Unit) { EcosystemManager.initAssets(context) }
-    
-    val animal = EcosystemManager.currentAnimal ?: return
-    
-    // 慵懒轻微摇摆
-    val rotation by rememberInfiniteTransition(label = "sway").animateFloat(
-        initialValue = -3f,
-        targetValue = 3f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(6000, easing = EaseInOutSine),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "rotation"
-    )
-
-    AsyncImage(
-        model = ImageRequest.Builder(context)
-            .data(animal)
-            .apply { if (animal.endsWith(".svg", ignoreCase = true)) decoderFactory(SvgDecoder.Factory()) }
-            .build(),
-        contentDescription = "Empty State Companion",
-        modifier = modifier
-            .size(140.dp)
-            .alpha(0.6f)
-            .graphicsLayer {
-                rotationZ = rotation
                 transformOrigin = androidx.compose.ui.graphics.TransformOrigin(0.5f, 1f)
             }
     )
