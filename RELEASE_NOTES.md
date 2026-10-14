@@ -1,53 +1,52 @@
-# Sesame-TK v0.6.0 更新日志
+# Sesame-TK v0.6.2 更新日志
 
-### 🚀 冷启动性能与稳定性重构
-* **宿主冷启动零阻塞放行**：
-  * 彻底移除 `handleLoadPackage` 阶段的类检查死循环轮询（`ClassChecker.waitForClasses`），杜绝启动阶段由于高频轮询争抢 `ClassLoader` 监视器锁导致的卡死；
-  * 将 `Application.attach` 中的跨进程 IPC 版本查询（`getPackageInfo`）移至后台异步线程执行，主线程耗时降为 0 毫秒，极大降低因启动耗时触发宿主启动看门狗（`StartupSafeguard`）强制杀进程退出的概率。
-* **精简冗余与高风险挂钩**：
-  * 彻底移除对系统级 `android.webkit.WebViewClient` 和 UC `WebViewClient` 的全局 Hook，移除废弃的天猫提单注入脚本，杜绝免 Root 环境下与 Native 渲染引擎冲突引发的闪退；
-  * 移除已废弃类 `H5AppRpcUpdate` 的延迟 Hook，全面对齐现代 Ariver 架构。
+### 🎨 主题系统重构（支付宝专用架构）
+* **主题模块收敛为支付宝专用实现**：
+  * 下线旧通用主题界面与仓库层，统一收敛至 `ui/theme/alipay/`，管理列表、详情页、预览、槽位模型与导入导出仓库各自独立成文件；
+  * 槽位按导航栏/标签页/首页快捷/收款码分组，标签直接取 `meta.json` 的 description。
+* **换肤 Hook 适配当前支付宝混淆名**：
+  * 读缓存 `G`（旧 `K`）、内存缓存字段 `e`（旧 `g`）、门检 `v(String,Map)`（旧 `y`）均改为按版本探测，不再硬编码；
+  * 内存缓存 key 改用官方无分隔符格式（`cached_skin_info_v2` + userId），仅替换 theme 场景，保留 `aptrip`/`ltp` 等其他场景数据。
+* **新增主题回滚门拦截**：`isThemeSkinRollBack` 恒 false，避免服务端回滚配置否决本地主题导致应用链路中断；各 Hook 独立安装互不影响，开关未开时进程内仅提示一次防刷屏。
+* **主题文件保护机制**：新增 `hookProtectThemeFiles` 拦截官方删除主题目录的操作，防止自定义主题被误删；新增 `isSelectedThemeIntact` 检测选中主题完整性以避免拦截误判；`requestThemeRestore` 异步恢复缺失主题，不阻塞主线程。
+* **冷启动主题重绘补发**：在 `applyHooks` 关键项装配成功及自定义缓存注入成功后，进程内一次性延时补发 `reloadAndNotifySkinCenter`，修复重启后主题数据仍在却不生效的问题。
+* **其他主题优化**：
+  * 主题更新前清空 theme 目录下其他主题目录（含官方残留），避免多主题共存触发官方缓存校验清理导致主题回退；
+  * 新增门检探针实测 `hasEnableSkin` 结果，单例定位失败、`notifyThemeSkin` 入口缺失等关键失败点补充明确日志；
+  * 移除定时主题与时段深色模式逻辑，删除 schedule 模式时段切换、`TIME_THEMES` 配置与 `getTimeTheme`，深色 auto 模式改为跟随系统；
+  * 修复 `userId` 取值不一致（统一使用运行时账号）、`versionLimit` 固化（改为适配运行时支付宝版本）、缓存 Map 识别误匹配（改用字段名与值类型定位）。
 
 ### ✨ 功能新增与优化
-* **蚂蚁庄园爱心鸡结号**：
-  * 新增蚂蚁庄园爱心鸡结号功能与调度支持；
-  * 优化主题皮肤加载与存储路径逻辑。
-* **RPC 调试与协议兼容增强**：
-  * 修复 RPC 调试入参解析异常，支持多种入参格式导入兼容；
-  * 优化余额宝体验金卡包兑换容错，增加无有效权益场景的静默与异常处理，避免空结果导致流程中断。
+* **青春特权与奖学金**：
+  * 新增青春特权权益开关查询、月转入模型查询、首页数据查询等请求方法，并新增页面初始化序列模拟；
+  * 奖学金模块按真实抓包顺序模拟进入小程序后的完整浏览序列，月权益领取逻辑适配新的接口数据结构。
+* **更新模块**：修复更新下载中心代理误用问题，完善本地正式签名配置。
 
----
+### 🛡️ 稳定性与健壮性修复
+* **主题 Hook 安装失败根因修复**：
+  * `hookFilePath` 目标从旧版混淆名 `q` 修正为本版真实签名 `o(File,String,String)`，原写法必然安装失败；
+  * `hookMd5Check`/`hookTimeCheck`/`hookFilePath`/`hookResourceLoad` 等 5 处 `catch (Exception)` 改为 `catch (Throwable)`：`findAndHookMethod` 找不到方法抛 `NoSuchMethodError`（属 Error）此前逃逸导致 `applyHooks` 中断，是"主题Hook模块配置同步失败"且主题不生效的根因；
+  * `applyHooks` 汇总关键项成败并输出汇总日志，任一关键项失败时 dump `SCInnerManager`/`SCConfigUtil`/`SCMetaModel` 全部方法签名（含参数、返回类型、static 标记）便于比对混淆名漂移；关键项全失败时保持未挂钩状态，允许下次配置同步自动重试。
+* **异常与并发防护**：
+  * `Notify` 异常通知增加重入防护，阻断 `Log.error` 递归导致的栈溢出；
+  * `PortUtil` 导入改为先开输入流再建输出流，双流 try-with-resources 托管；
+  * `LuckyCode.sendTask` 重写为 for 循环，异常不再导致死循环。
+* **生命周期与初始化**：
+  * `LifecycleManager.initHandler` 新增触发来源参数，启动类触发场景增加竞态防护，避免重复初始化导致任务中断；`LifecycleModule`、`SesameReceiver` 同步传入触发来源；
+  * 修复服务重建时误触发全量重载，修正余额宝体验金与养鱼任务的执行顺序；
+  * `TaskScheduler` 间隔防抖逻辑改为延迟重试而非续排。
+* **资源与持久化**：
+  * `SesameReceiver` 广播接收器配对注册注销，修复服务重建重复注册泄漏；`ForegroundHelper` 前台保活全程 CAS 占位并在异常路径回滚；
+  * 配置持久化 10 处统一切换 `write2FileAtomic`（Config/Files/UserMap/IdMapManager），`UserMap.saveSelf` 补判空保护。
+* **任务细节修复**：`AntForest` 浇水 3000 错误独立重试上限 3 次；`TravelDeals` 滑块冷却 key 统一为常量；`GoldTicket` 修复 weeklyWelfare 成功/失败分支颠倒并为 `newIndexTask` 补三级判空；`Finedu` 私有黑名单迁移至通用 `TaskBlacklist`。
+* **UI 生命周期与资源泄漏**：`MainActivity` 广播在 `onDestroy` 注销；`OptionsAdapter` 改用 applicationContext；`ListDialog` 关闭时清静态引用；`ListAdapter` 清理 viewHolderList；`CaptureDetailScreen` 初始化副作用移入 `LaunchedEffect`。
 
-# Sesame-TK v0.5.10 更新日志
+### ♻️ 架构与代码清理
+* **唤醒锁改为 lease 模式**：`WakeLockManager` 由 Java 静态 `acquire/release` 重写为 Kotlin lease 模式，调用方各自持有并释放，服务重复初始化时先关闭旧 lease 以防锁泄漏；`LifecycleManager`、`BaseFlashSaleTask`、`SeckillScheduler` 适配 timeout 兜底。
+* **下线废弃模块**：移除 20 个废弃任务模块（AntFishpond、ContentDayTask、ContentInteract、DayDaySave、FundApplication、GoldBean、HundredTimesDiscountCard、Salaryday、CollectRedPacket、GameCenter、HarvestLimitedTime、KuaiDiFuLiJia、SesamePigeon、StudentAnswer、UgShooping、ZhimaTree、WenLiBao 等）及 `hook/RpcResponseHandler`、`exception/SesameException`，并清理各注册与调用点。
+* **冗余代码与文档清理**：移除废弃类与文件（`RpcRequest`、`HttpHandler`、`RequestStorage` 等），简化条件判断、字符串拼接与协程延迟调用，修复导入与引用错误；清理已下载的皮肤资源与过期分析文档，累计 129 个文件、净减少约 3800 行。
+* **废弃开关字段下线**：移除已停用的 `autoTokenEnabled`、`enableCaptchaRPCHook` 字段及注册，并移除 `AnswerAI` 硬编码的内置 API 令牌。
 
-### 🔄 v0.5.9 补充记录（随 v0.5.9 发布但未写入日志，此处一并补记）
-* **秒杀与会员商品功能完善**：
-  * 新增进程重启后秒杀任务同步逻辑，自动恢复闹钟调度；统一秒杀闹钟提前唤醒时间为 10 秒；
-  * 重构秒杀任务文件存储路径，统一使用 `seckill` 目录；
-  * 优化会员商品分类请求参数，按场景配置过滤与置顶规则（含万分好物 `topIds` 置顶）；
-  * 新增 RPC 请求重试机制，减少翻页空结果导致的商品丢失；完善商品同步失败的广播通知与 UI 提示；
-  * 新增商品直达结算功能：无 `skuId` 商品自动查询规格并跳转收银台，无规格时回退详情页；
-  * 新增商品开抢时间显示与排期预填逻辑；移除旧的会员商品单文件迁移逻辑。
-* **授权码助手重构**：
-  * 重写 `AuthCodeHelper` 反射调用逻辑，替换 `XposedHelpers` 为原生反射，简化线程与同步结构；
-  * 新增授权码服务未就绪异常判断，减少错误日志输出；
-  * `ResChecker` 失败日志增加调用者类名与方法名，便于快速定位检查失败位置；
-  * 调整 `PrivilegeTask` 月权益与试用权益领取顺序，优化青春 100 接口失败处理，区分未开通状态避免误报。
-* **初始化逻辑优化（实验性）**：
-  * 新增 `pendingInit` 标记防止重复触发全量初始化；
-  * 将 `Launcher.onResume` 与 `Service.onCreate` 的初始化操作移至后台线程，避免主线程阻塞；
-  * 移除 Service 销毁后的自动重启逻辑，避免重启风暴；优化子进程初始化的磁盘 IO 与 hook 执行线程。
-* **界面与冗余功能精简**：
-  * 移除更新源切换功能，简化帮助页设置模块；
-  * 删除不再使用的运行状态检查功能（按钮、监听、广播处理与实现逻辑）。
-
-### ✨ v0.5.10 新增与优化
-* **后台版本管理与主题模块优化**：
-  * 上传 APK 时自动解析版本号与包名并展示，后台自动对比更新最新版本号至发布清单；
-  * 重构主题管理模块，修复缓存逻辑以适配多版本支付宝；
-  * 优化主题删除逻辑，仅清理自定义导入主题。
-* **任务停止与资源清理优化（实验性）**：
-  * 任务停止期间的异常降级为 runtime 日志，避免刷屏与通知轰炸；
-  * 重构协程作用域管理，支持动态重建并正确取消；
-  * 优化 `sleep` 方法中断处理，区分正常中断与任务停止场景；
-  * 调整任务停止流程与调用顺序，增加等待时间与异常保护，避免清理过程竞态问题。
+### 🗑️ 功能下线
+* 下线消费金（ConsumeGold）与 AntBookRead 读书功能，`YebSceneBffish` 停用空方法调用。
+* `FolderLauncher` 打开目录不再创建占位文件：改为只对目录内已存在的文件生成 `content:// URI`（目录无文件则取子目录内最新文件，全空时提示路径返回），对齐 `UpdatePathManager.openApkWithOtherApp` 的通配 MIME + ClipData 方案，不再 `mkdirs`/`createNewFile` 污染目标目录。

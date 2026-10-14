@@ -171,6 +171,9 @@ public class ApplicationHook implements IXposedHookLoadPackage {
             if (hooked) return;
             AppContext.setClassLoader(lpparam.classLoader);
 
+            // 最早期安装宿主崩溃记录器，覆盖启动窗口（早于任何模块 hook 与配置加载）
+            CrashRecorder.install();
+
             // 1. 立即分发模块 LoadPackage 与 Hook Application.attach，确保 AppContext 与生命周期在启动时 100% 挂载成功
             HookModuleManager.INSTANCE.dispatchHandleLoadPackage(lpparam);
             performAlipayHook(lpparam);
@@ -193,6 +196,8 @@ public class ApplicationHook implements IXposedHookLoadPackage {
                         @Override
                         protected void afterHookedMethod(MethodHookParam param) throws Throwable {
                             Context context = (Context) param.args[0];
+                            // 框架可能在 install 后设置默认 handler 顶掉记录器，此处补检重装
+                            CrashRecorder.ensureInstalled();
                             AppContext.setContext(context);
                             AppContext.setMainHandler(new Handler(Looper.getMainLooper()));
 

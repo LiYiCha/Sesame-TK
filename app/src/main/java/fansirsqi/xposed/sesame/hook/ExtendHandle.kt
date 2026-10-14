@@ -45,7 +45,7 @@ class ExtendHandle {
         /**
          * 处理统一的主题操作广播
          *
-         * 用 extra "operation" 区分具体操作（EXPORT/DELETE/UPDATE），
+         * 用 extra "operation" 区分具体操作（EXPORT/DELETE/UPDATE/NOTIFY），
          * 根据操作类型调用 ThemeManager 对应的直接执行方法。
          */
         @JvmStatic
@@ -61,6 +61,7 @@ class ExtendHandle {
                     "EXPORT" -> ThemeManager.exportThemesDirectly(userId)
                     "DELETE" -> ThemeManager.deleteThemeCacheDirectly(userId)
                     "UPDATE" -> ThemeManager.applyThemeDirectly(userId)
+                    "NOTIFY" -> ThemeManager.notifyAppliedThemeForRender()
                     else -> {
                         Log.runtime("ThemeManager", "未知的主题操作: $operation")
                         return

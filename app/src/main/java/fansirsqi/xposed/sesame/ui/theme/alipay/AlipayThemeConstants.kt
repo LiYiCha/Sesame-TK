@@ -40,5 +40,6 @@ object AlipayThemeConstants {
 enum class AlipayThemeOperation(val displayName: String) {
     EXPORT("导出主题"),
     DELETE("删除主题缓存"),
-    UPDATE("更新主题缓存")
+    UPDATE("更新主题缓存"),
+    NOTIFY("通知UI刷新")
 }

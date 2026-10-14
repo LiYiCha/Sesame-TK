@@ -128,6 +128,7 @@ class AlipayThemeRepository(private val context: Context) {
                 AlipayThemeOperation.EXPORT -> fansirsqi.xposed.sesame.hook.theme.ThemeManager.exportThemesDirectly()
                 AlipayThemeOperation.DELETE -> fansirsqi.xposed.sesame.hook.theme.ThemeManager.deleteThemeCacheDirectly()
                 AlipayThemeOperation.UPDATE -> fansirsqi.xposed.sesame.hook.theme.ThemeManager.applyThemeDirectly()
+                AlipayThemeOperation.NOTIFY -> fansirsqi.xposed.sesame.hook.theme.ThemeManager.notifyAppliedThemeForRender()
             }
 
             if (directResult.first) {

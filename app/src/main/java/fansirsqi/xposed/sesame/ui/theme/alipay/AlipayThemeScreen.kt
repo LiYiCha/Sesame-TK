@@ -71,7 +71,6 @@ fun AlipayThemeScreen(viewModel: AlipayThemeViewModel, onBack: () -> Unit) {
     val context = LocalContext.current
 
     var openedPackId by rememberSaveable { mutableStateOf<String?>(null) }
-    var showImportMenu by remember { mutableStateOf(false) }
     var showMoreMenu by remember { mutableStateOf(false) }
     var pendingDeletePackId by rememberSaveable { mutableStateOf<String?>(null) }
 
@@ -132,6 +131,27 @@ fun AlipayThemeScreen(viewModel: AlipayThemeViewModel, onBack: () -> Unit) {
                                     }
                                 )
                                 DropdownMenuItem(
+                                    text = { Text("导入 ZIP") },
+                                    onClick = {
+                                        showMoreMenu = false
+                                        zipPicker.launch("application/zip")
+                                    }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("导入目录") },
+                                    onClick = {
+                                        showMoreMenu = false
+                                        treePicker.launch(null)
+                                    }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text(AlipayThemeOperation.NOTIFY.displayName) },
+                                    onClick = {
+                                        showMoreMenu = false
+                                        viewModel.execute(AlipayThemeOperation.NOTIFY)
+                                    }
+                                )
+                                DropdownMenuItem(
                                     text = { Text(AlipayThemeOperation.UPDATE.displayName) },
                                     onClick = {
                                         showMoreMenu = false
@@ -179,36 +199,9 @@ fun AlipayThemeScreen(viewModel: AlipayThemeViewModel, onBack: () -> Unit) {
                     if (inList) {
                         OutlinedButton(
                             onClick = { viewModel.execute(AlipayThemeOperation.EXPORT) },
-                            modifier = Modifier.weight(1f)
+                            modifier = Modifier.fillMaxWidth()
                         ) {
                             Text(AlipayThemeOperation.EXPORT.displayName)
-                        }
-                        Box(modifier = Modifier.weight(1f)) {
-                            Button(
-                                onClick = { showImportMenu = true },
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Text("导入")
-                            }
-                            DropdownMenu(
-                                expanded = showImportMenu,
-                                onDismissRequest = { showImportMenu = false }
-                            ) {
-                                DropdownMenuItem(
-                                    text = { Text("导入 ZIP") },
-                                    onClick = {
-                                        showImportMenu = false
-                                        zipPicker.launch("application/zip")
-                                    }
-                                )
-                                DropdownMenuItem(
-                                    text = { Text("导入目录") },
-                                    onClick = {
-                                        showImportMenu = false
-                                        treePicker.launch(null)
-                                    }
-                                )
-                            }
                         }
                     } else {
                         Button(

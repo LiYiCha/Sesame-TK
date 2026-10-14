@@ -93,20 +93,19 @@ object ThemeHookV2 {
         // 各 hook 独立安装：单个失败只记录 error，不影响其余 hook
         val critical = linkedMapOf(
             "缓存读取" to runCatching { hookCacheRead(classLoader) }.getOrDefault(false),
-            "回滚门" to runCatching { hookMd5Check(classLoader) }.getOrDefault(false),
+            "回滚门" to runCatching { hookRollbackGate(classLoader) }.getOrDefault(false),
             "hasEnableSkin" to runCatching { hookHasEnableSkin(classLoader) }.getOrDefault(false),
             "文件保护" to runCatching { hookProtectThemeFiles(classLoader) }.getOrDefault(false),
             "文件路径" to runCatching { hookFilePath(classLoader) }.getOrDefault(false),
             "资源加载" to runCatching { hookResourceLoad(classLoader) }.getOrDefault(false)
         )
-        // 时间检查整体是旧版探测，非关键项，失败仅打日志
-        runCatching { hookTimeCheck(classLoader) }
 
         val failed = critical.filterValues { !it }
         if (failed.isEmpty()) {
             isHooked = true
-            // hooks 就绪即补发一次重绘，不依赖支付宝是否会再次调用 G()/K()
-            scheduleBootRenderNotify()
+            // 成功只打一行汇总，各 hook 内部成功日志降级 debug
+            Log.runtime(TAG, "✓ 主题Hook安装完成: 缓存读取/回滚门/hasEnableSkin/文件保护/文件路径/资源加载")
+            // 重绘通知不在这里调度：只有真正注入主题缓存后才补发（见 injectCustomCache）
         } else {
             Log.runtime(TAG, "❌ 主题Hook关键项${failed.size}/${critical.size}失败: ${failed.keys.joinToString("/")}")
             // 保险：打印官方类的真实方法清单到 debug 日志，便于比对混淆名漂移
@@ -171,8 +170,6 @@ object ThemeHookV2 {
             }
             if (hookedName == null) {
                 Log.runtime(TAG, "✗ Hook缓存读取失败: 未找到 G()/K() 方法（混淆名版本漂移）")
-            } else {
-                Log.runtime(TAG, "✓ Hook缓存读取成功 ($hookedName: readSkinInfoFromLocalCache)")
             }
             return hookedName != null
         } catch (e: Exception) {
@@ -206,6 +203,19 @@ object ThemeHookV2 {
                 return
             }
 
+            // 注入内容与内存中现有条目一致时跳过整个注入块（含 SP 重写），
+            // 避免官方每次调 G() 都刷屏
+            val effectiveUserId = ThemeManager.resolveEffectiveUserId(themeInfo.userId)
+            val existing = cacheMap["theme"]
+            if (existing != null && runCatching {
+                    XposedHelpers.getObjectField(existing, "skinId") == themeInfo.skinId &&
+                            XposedHelpers.getObjectField(existing, "userSkinId") == themeInfo.userSkinId &&
+                            XposedHelpers.getObjectField(existing, "md5") == themeInfo.md5 &&
+                            XposedHelpers.getObjectField(existing, "userId") == effectiveUserId
+                }.getOrDefault(false)) {
+                return
+            }
+
             // 创建自定义主题缓存信息
             val cacheInfoClass = XposedHelpers.findClass(
                 "com.alipay.mobile.skincenter.model.SCCacheInfoModel",
@@ -216,7 +226,6 @@ object ThemeHookV2 {
 
             // 使用动态读取的真实数据设置字段，并手动延长缓存有效期防止过期
             // userId 统一取运行时账号，避免与 persistCacheToDisk 写入持久层的值不一致
-            val effectiveUserId = ThemeManager.resolveEffectiveUserId(themeInfo.userId)
             XposedHelpers.setObjectField(customCache, "usageScene", themeInfo.usageScene)
             XposedHelpers.setObjectField(customCache, "skinId", themeInfo.skinId)
             XposedHelpers.setObjectField(customCache, "userSkinId", themeInfo.userSkinId)
@@ -237,15 +246,13 @@ object ThemeHookV2 {
             // 注入到内存缓存
             cacheMap["theme"] = customCache
 
-            Log.runtime(TAG, "✅ 已注入动态主题缓存: ${themeInfo.name}")
-            Log.runtime(TAG, "   主题ID: ${themeInfo.themeId}")
-            Log.runtime(TAG, "   皮肤ID: ${themeInfo.skinId}")
-            Log.runtime(TAG, "   MD5: ${themeInfo.md5}")
+            Log.runtime(TAG, "✅ 已注入动态主题缓存: ${themeInfo.name} (skinId=${themeInfo.skinId}, md5=${themeInfo.md5})")
 
             // 持久化到磁盘：防止支付宝清理缓存后主题丢失需重新设置
             persistCacheToDisk(classLoader, cacheMap)
 
-            // 冷启动/注入后首帧可能已按默认皮肤绘好，补发一次官方重绘通知把主题刷成可见
+            // 数据原本不存在（冷启动首次注入/SP被清后自愈），补发一次官方重绘通知
+            // 去重命中时不会走到这里——此时缓存数据早已就位，视图拉样式自然可见主题，无需通知
             scheduleBootRenderNotify()
 
         } catch (e: Exception) {
@@ -254,7 +261,7 @@ object ThemeHookV2 {
         }
     }
 
-    // 进程内仅补发一次冷启动重绘通知，避免每次 G()/K() 注入都触发 reloadAndNotify
+    // 进程内仅补发一次重绘通知：仅真实注入成功后调度（去重命中不调度），双闸保证只执行一次
     @Volatile
     private var bootRenderNotified = false
 
@@ -262,13 +269,14 @@ object ThemeHookV2 {
     private var bootNotifyRunning = false
 
     /**
-     * 注入成功后延时补发一次重绘通知。
+     * 真实注入主题缓存后补发一次官方重绘通知。
      *
-     * 延时是为等首页完成首帧渲染；走后台线程避免在主线程做 reload 的文件 IO。
+     * 官方皮肤解析是拉模式（SkinStyleHelper 视图查询时实时读缓存），冷启动数据就位后
+     * 首次查询即见主题，因此通知只在「数据原本不存在、本次真实注入」时需要——
+     * 补发 C() + notifySkinChanged + skinUpdated 广播，让缓存注入在首帧之后的场景也能刷新。
      *
-     * 注意：必须等主题缓存真正就位才置位 bootRenderNotified。
-     * 冷启动时 applyHooks 后 2s 可能早于登录/读缓存完成，若此时就置位，
-     * 真正注入内存缓存后就再也不会补发重绘，表现为「每次重启都得手动重新应用一次」。
+     * 延时 2s 是为等首页完成首帧渲染；走后台线程避免在主线程做 reload 的文件 IO。
+     * bootRenderNotified/bootNotifyRunning 双闸保证进程内仅执行一次，重复调用为零成本 no-op。
      */
     private fun scheduleBootRenderNotify() {
         if (bootRenderNotified || bootNotifyRunning) return
@@ -276,14 +284,8 @@ object ThemeHookV2 {
         Thread {
             try {
                 Thread.sleep(2000L)
-                if (ThemeManager.hasPersistedTheme()) {
-                    ThemeManager.notifyAppliedThemeForRender()
-                    bootRenderNotified = true
-                    Log.runtime(TAG, "✓ 冷启动已补发主题重绘通知")
-                } else {
-                    // 主题缓存尚未就绪，本次放弃且不置位，等下次注入成功后重新补发
-                    Log.runtime(TAG, "⏳ 冷启动补发重绘延后: 主题缓存尚未就绪")
-                }
+                ThemeManager.notifyAppliedThemeForRender()
+                bootRenderNotified = true
             } catch (t: Throwable) {
                 Log.runtime(TAG, "⚠️ 冷启动补发主题重绘通知失败: ${t.message}")
             } finally {
@@ -391,11 +393,13 @@ object ThemeHookV2 {
             }
             merged["theme"] = themeValue
 
-            prefs.edit()
-                .putString(cacheKey, JsonUtil.formatJson(merged))
-                .apply()
+            // 内容无变化时跳过写入，避免每次 G() 都触发磁盘 IO
+            val json = JsonUtil.formatJson(merged)
+            if (prefs.getString(cacheKey, null) == json) return
 
-            Log.runtime(TAG, "💾 已持久化主题缓存到 SharedPreferences (key=$cacheKey, 场景: ${merged.keys.joinToString("/")})")
+            prefs.edit()
+                .putString(cacheKey, json)
+                .apply()
         } catch (e: Exception) {
             Log.runtime(TAG, "⚠️ 持久化主题缓存失败: ${e.message}")
         }
@@ -470,8 +474,7 @@ object ThemeHookV2 {
                     // 更新缓存
                     cachedThemeInfo = themeInfo
                     lastThemeFileModified = currentModified
-                    
-                    Log.runtime(TAG, "⚡ 主题配置已更新 (I/O): ${themeInfo.name}")
+
                     return themeInfo
                 } catch (e: Exception) {
                     Log.runtime(TAG, "⚠️ 解析theme_info.json失败: ${e.message}")
@@ -537,13 +540,17 @@ object ThemeHookV2 {
     }
 
     /**
-     * Hook 2: MD5校验
+     * Hook 2: 回滚门拦截（关键）
+     *
+     * SCConfigUtil.i()=isThemeSkinRollBack，读服务端 skin_center_theme_rollbackV2 配置，
+     * 返回 true 时 hasEnableSkin 直接拒绝主题——本地数据再正确也会被否决，必须恒 false。
+     *
+     * 注：旧版探测的 SCConfigUtil.m(String,long)/l() 在本版已不存在（md5 比对内联到
+     * SCInnerManager 更新逻辑、时间戳检查仅 DIY 皮肤路径），已移除，md5 校验靠数据侧对齐。
      */
-    private fun hookMd5Check(classLoader: ClassLoader): Boolean {
-        // 回滚门拦截（关键）：SCConfigUtil.i()=isThemeSkinRollBack，读服务端 skin_center_theme_rollbackV2 配置，
-        // 返回 true 时 hasEnableSkin 直接拒绝主题——本地数据再正确也会被否决，必须恒 false
-        var rollbackGateOk = false
-        try {
+    private fun hookRollbackGate(classLoader: ClassLoader): Boolean {
+        // findAndHookMethod 抛的是 NoSuchMethodError（Error 不是 Exception），必须接 Throwable
+        return try {
             XposedHelpers.findAndHookMethod(
                 "com.alipay.mobile.skincenter.util.SCConfigUtil",
                 classLoader,
@@ -554,60 +561,15 @@ object ThemeHookV2 {
                     }
                 }
             )
-            rollbackGateOk = true
-            Log.runtime(TAG, "✓ Hook回滚门成功 (SCConfigUtil.i: isThemeSkinRollBack→false)")
+            true
         } catch (t: Throwable) {
-            // findAndHookMethod 抛的是 NoSuchMethodError（Error 不是 Exception），必须接 Throwable 才不会中断 applyHooks
             Log.runtime(TAG, "✗ Hook回滚门失败: ${t.message}")
-        }
-
-        // MD5 校验方法（本版签名未知，按旧版 m(String,long) 探测，失败不阻塞其他 hook）
-        try {
-            XposedHelpers.findAndHookMethod(
-                "com.alipay.mobile.skincenter.util.SCConfigUtil",
-                classLoader,
-                "m",
-                String::class.java,
-                Long::class.javaPrimitiveType,
-                object : XC_MethodReplacement() {
-                    override fun replaceHookedMethod(param: MethodHookParam): Any {
-                        return false
-                    }
-                }
-            )
-            Log.runtime(TAG, "✓ Hook MD5校验成功 (SCConfigUtil.m)")
-        } catch (t: Throwable) {
-            // 方法不存在时抛 NoSuchMethodError（Error），必须接 Throwable
-            Log.runtime(TAG, "✗ Hook MD5校验失败（本版可能无此签名，md5 校验需靠数据侧对齐）: ${t.message}")
-        }
-        // 关键项是回滚门 i，m 探测成败不影响
-        return rollbackGateOk
-    }
-
-    /**
-     * Hook 3: 时间戳检查
-     */
-    private fun hookTimeCheck(classLoader: ClassLoader) {
-        try {
-            XposedHelpers.findAndHookMethod(
-                "com.alipay.mobile.skincenter.util.SCConfigUtil",
-                classLoader,
-                "l",
-                object : XC_MethodReplacement() {
-                    override fun replaceHookedMethod(param: MethodHookParam): Any {
-                        return false
-                    }
-                }
-            )
-            Log.runtime(TAG, "✓ Hook时间戳检查成功")
-        } catch (t: Throwable) {
-            // 方法不存在时抛 NoSuchMethodError（Error），必须接 Throwable
-            Log.runtime(TAG, "✗ Hook时间戳检查失败（本版可能无此签名）: ${t.message}")
+            false
         }
     }
 
     /**
-     * Hook 4: hasEnableSkin检查
+     * Hook 3: hasEnableSkin检查
      */
     private fun hookHasEnableSkin(classLoader: ClassLoader): Boolean {
         try {
@@ -638,8 +600,6 @@ object ThemeHookV2 {
             }
             if (hookedName == null) {
                 Log.runtime(TAG, "✗ Hook hasEnableSkin失败: 未找到 v()/y() 方法（混淆名版本漂移）")
-            } else {
-                Log.runtime(TAG, "✓ Hook hasEnableSkin成功 ($hookedName: theme 场景恒 true)")
             }
             return hookedName != null
         } catch (t: Throwable) {
@@ -650,7 +610,7 @@ object ThemeHookV2 {
     }
 
     /**
-     * Hook 5: 主题目录保护（关键）
+     * Hook 4: 主题目录保护（关键）
      *
      * 官方删除皮肤资源的唯一入口：SCFileHelper.a(File) 递归删除。
      * SCInnerManager.unzipScenesRes(I) 在处理资源更新时，会对「本次服务端下发场景列表里没有」的场景
@@ -693,7 +653,7 @@ object ThemeHookV2 {
                 "com.alipay.mobile.skincenter.manage.SCInnerManager",
                 classLoader
             )
-            val metaHooked = runCatching {
+            runCatching {
                 XposedHelpers.findAndHookMethod(
                     scInnerManagerClass,
                     "b",
@@ -709,9 +669,12 @@ object ThemeHookV2 {
                     }
                 )
                 true
-            }.getOrElse { false }
+            }.getOrElse {
+                // 非关键项：旧版为 b(String)，本版可能漂移，清空 meta 影响小于整个目录被删
+                Log.runtime(TAG, "⚠️ theme 的 SCMetaModel 清空拦截未挂上: ${it.message}")
+                false
+            }
 
-            Log.runtime(TAG, "✓ Hook文件保护成功 (SCFileHelper.a 拦截, metaCache拦截=$metaHooked)")
             return true
         } catch (t: Throwable) {
             Log.runtime(TAG, "✗ Hook文件保护失败（主题目录可能被官方清理）: ${t.message}")
@@ -730,7 +693,7 @@ object ThemeHookV2 {
     }
 
     /**
-     * Hook 6: 文件路径
+     * Hook 5: 文件路径
      */
     private fun hookFilePath(classLoader: ClassLoader): Boolean {
         try {
@@ -766,7 +729,6 @@ object ThemeHookV2 {
                     }
                 }
             )
-            Log.runtime(TAG, "✓ Hook文件路径成功 (o: getSkinDir)")
             return true
         } catch (t: Throwable) {
             // 方法不存在时抛 NoSuchMethodError（Error），必须接 Throwable
@@ -815,7 +777,6 @@ object ThemeHookV2 {
                     }
                 }
             )
-            Log.runtime(TAG, "✓ Hook资源加载成功")
             return true
         } catch (t: Throwable) {
             // 方法不存在时抛 NoSuchMethodError（Error），必须接 Throwable

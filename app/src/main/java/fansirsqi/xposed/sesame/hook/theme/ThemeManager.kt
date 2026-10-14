@@ -1,4 +1,4 @@
-﻿package fansirsqi.xposed.sesame.hook.theme
+package fansirsqi.xposed.sesame.hook.theme
 
 import fansirsqi.xposed.sesame.hook.context.AppContext
 import fansirsqi.xposed.sesame.util.JsonUtil
@@ -168,20 +168,22 @@ object ThemeManager {
     }
 
     /**
-     * 冷启动注入后补发一次主题重绘通知。
+     * 补发一次主题重绘通知。
      *
-     * UI 首帧在 hooks 安装前已按官方门检渲染成默认皮肤，此时 theme 数据与文件均已就位
-     * （G() 已从 cached_skin_info_v2 读回内存），缺的只是官方那次 notify 重绘。
+     * 两个调用场景：冷启动真实注入后补发（ThemeHookV2），以及 UI 手动「通知UI刷新」。
+     * 无 Context 说明当前进程不是支付宝进程（UI 进程主动操作时），返回失败让调用方走广播兜底。
      * 这里只读持久层 JSON 走 reloadAndNotifySkinCenter，不复制文件。
      */
-    fun notifyAppliedThemeForRender() {
-        val context = AppContext.getAppContext() ?: run {
-            Log.runtime(TAG, "✗ 补发重绘失败: 无 Context")
-            return
+    fun notifyAppliedThemeForRender(): Pair<Boolean, String> {
+        val context = AppContext.getAppContext()
+        // AppContext 只在支付宝进程内被 hook 填充，UI 进程为 null，返回失败让调用方走广播
+        if (context == null) {
+            Log.runtime(TAG, "✗ 通知UI刷新失败: 当前进程无 AppContext")
+            return Pair(false, "当前进程无法直接执行")
         }
         val userId = getRuntimeUserId() ?: getCurrentUserId() ?: run {
-            Log.runtime(TAG, "✗ 补发重绘失败: 无用户ID")
-            return
+            Log.runtime(TAG, "✗ 通知UI刷新失败: 无用户ID")
+            return Pair(false, "通知UI刷新失败: 无用户ID")
         }
         val mergedJson = try {
             context.getSharedPreferences("prefs_skincenter_file", android.content.Context.MODE_PRIVATE)
@@ -191,6 +193,7 @@ object ThemeManager {
             null
         }
         reloadAndNotifySkinCenter(mergedJson)
+        return Pair(true, "已通知UI刷新")
     }
 
     /**
@@ -320,23 +323,6 @@ object ThemeManager {
     }
 
     /**
-     * 持久层是否已有主题场景缓存（用于判断冷启动补发重绘的时机）
-     */
-    fun hasPersistedTheme(): Boolean {
-        return try {
-            val context = AppContext.getAppContext() ?: return false
-            val userId = getRuntimeUserId() ?: getCurrentUserId() ?: return false
-            val json = context.getSharedPreferences(
-                "prefs_skincenter_file", android.content.Context.MODE_PRIVATE
-            ).getString("cached_skin_info_v2$userId", null)
-            !json.isNullOrEmpty() &&
-                    (JsonUtil.parseObject(json, Map::class.java) as? Map<*, *>)?.containsKey("theme") == true
-        } catch (e: Exception) {
-            false
-        }
-    }
-
-    /**
      * 执行更新/应用操作
      *
      * @param userId 用户ID
@@ -431,11 +417,6 @@ object ThemeManager {
                 )
                 themeInfoFile.writeText(JsonUtil.formatJson(updatedThemeInfo))
 
-                Log.runtime(TAG, "✓ 主题信息:")
-                Log.runtime(TAG, "   名称: ${updatedThemeInfo.name}")
-                Log.runtime(TAG, "   主题ID: $selectedThemeId")
-                Log.runtime(TAG, "   MD5: ${updatedThemeInfo.md5}")
-
                 //*** *** 步骤3: 更新 SharedPreferences（key 为 cached_skin_info_v2<userId>，与 SCInnerManager 读取格式一致）
                 val mergedJson = updateSharedPreferences(userId, selectedThemeId, updatedThemeInfo)
 
@@ -448,7 +429,7 @@ object ThemeManager {
                 // 步骤4: 重载 SkinCenter 内存缓存并通知 UI 应用主题
                 reloadAndNotifySkinCenter(mergedJson)
 
-                Log.runtime(TAG, "✅ 主题切换成功: ${updatedThemeInfo.name}")
+                Log.runtime(TAG, "✅ 主题切换成功: ${updatedThemeInfo.name} (主题ID=$selectedThemeId, MD5=${updatedThemeInfo.md5})")
                 if (!quiet) showToast("主题已切换:${updatedThemeInfo.name}")
 
             } catch (e: Exception) {
@@ -601,10 +582,6 @@ object ThemeManager {
                 .putString("cached_skin_theme$effectiveUserId", themeInfo.skinId)
                 .apply()
 
-            Log.runtime(TAG, "✓ 已更新 SharedPreferences")
-            Log.runtime(TAG, "   userSkinId: $themeId")
-            Log.runtime(TAG, "   key: $cacheKey (场景: ${merged.keys.joinToString("/")})")
-            Log.runtime(TAG, "   cached_skin_theme: ${themeInfo.skinId}")
             return json
         } catch (e: Exception) {
             Log.runtime(TAG, "✗ 更新 SharedPreferences 失败: ${e.message}")
@@ -653,16 +630,13 @@ object ThemeManager {
                 val method = managerClass.getDeclaredMethod(name)
                 method.isAccessible = true
                 method.invoke(instance)
-                Log.runtime(TAG, "✓ 已重载内存缓存 ($name: readSkinInfoFromLocalCache)")
                 true
             }.getOrElse { false }
         }
 
         // 3. 重载失败时手动填充缓存 Map（等价实现：解析 JSON 为 SCCacheInfoModel 后按场景写入）
         if (!reloaded && mergedJson != null) {
-            if (manualPopulateCache(managerClass, instance, mergedJson)) {
-                Log.runtime(TAG, "✓ 已手动填充内存缓存")
-            } else {
+            if (!manualPopulateCache(managerClass, instance, mergedJson)) {
                 Log.runtime(TAG, "✗ 手动填充内存缓存失败")
             }
         } else if (!reloaded) {
@@ -678,7 +652,6 @@ object ThemeManager {
                 val method = managerClass.getDeclaredMethod(name, String::class.java)
                 method.isAccessible = true
                 method.invoke(instance, null as Any?)
-                Log.runtime(TAG, "✓ 已触发 notifyThemeSkin ($name)")
                 true
             }.getOrElse { false }
         }
@@ -689,13 +662,16 @@ object ThemeManager {
         // 4.5 门检探针：反射调 v("theme", 空Map) 实测官方门检结果。
         // v() 被我们 hook 恒 true 时必然返回 true；返回 false 说明 hooks 未安装且官方门检拒绝了当前缓存——
         // 此时 C() 虽然调用成功，官方内部会静默放弃应用主题
-        checkEnableSkinGate(managerClass, instance)
+        val gateOk = checkEnableSkinGate(managerClass, instance)
 
-        // 5. 兜底：notifySkinChanged 名称未被混淆，刷新已注册的渲染视图
+        // 5. 兜底：notifySkinChanged 名称未混淆，刷新已注册的渲染视图
         notifySkinChanged()
 
         // 6. 兜底：手动发送 skinUpdated.theme 本地广播（官方 UI 换肤的最终触发器，C() 链路静默失败时由它驱动刷新）
         sendThemeUpdatedBroadcast(mergedJson)
+
+        // 成功链路合并为一行，失败分支各自单独报错
+        Log.runtime(TAG, "✅ 已应用主题到官方链路 (重载=$reloaded, notify=$notified, 门检=$gateOk)")
     }
 
     /**
@@ -705,8 +681,10 @@ object ThemeManager {
      * - 返回 false：hooks 未安装（开关未开/安装失败），官方门检拒绝当前缓存，
      *   C() 内部会静默放弃应用主题——只有广播兜底能驱动 UI 刷新
      * - 反射失败：本版方法名漂移（v/y 均不存在），同样意味着门检未被接管
+     *
+     * @return 门检是否通过（false/null 会单独打日志）
      */
-    private fun checkEnableSkinGate(managerClass: Class<*>, instance: Any) {
+    private fun checkEnableSkinGate(managerClass: Class<*>, instance: Any): Boolean {
         val gateResult = runCatching {
             val method = managerClass.getDeclaredMethod("v", String::class.java, Map::class.java)
             method.isAccessible = true
@@ -718,10 +696,16 @@ object ThemeManager {
                 method.invoke(instance, "theme", HashMap<String, Any>()) as? Boolean
             }.getOrNull()
         }
-        when (gateResult) {
-            true -> Log.runtime(TAG, "✓ 门检探针: hasEnableSkin(theme)=true，官方链路可应用主题")
-            false -> Log.runtime(TAG, "✗ 门检探针: hasEnableSkin(theme)=false，官方门检拒绝当前缓存（hooks 未安装或被绕过）")
-            null -> Log.runtime(TAG, "✗ 门检探针: 未找到 hasEnableSkin 方法（v/y 均失败），门检状态未知")
+        return when (gateResult) {
+            true -> true
+            false -> {
+                Log.runtime(TAG, "✗ 门检探针: hasEnableSkin(theme)=false，官方门检拒绝当前缓存（hooks 未安装或被绕过）")
+                false
+            }
+            else -> {
+                Log.runtime(TAG, "✗ 门检探针: 未找到 hasEnableSkin 方法（v/y 均失败），门检状态未知")
+                false
+            }
         }
     }
 
@@ -747,7 +731,6 @@ object ThemeManager {
             )
             mMethod.isAccessible = true
             mMethod.invoke(instance, "theme", themeModel, true)
-            Log.runtime(TAG, "✓ 已构建 SCMetaModel (m: theme)")
             true
         } catch (e: Exception) {
             Log.runtime(TAG, "⚠️ 构建 SCMetaModel 失败（版本签名可能不同）: ${e.message}")
@@ -848,7 +831,6 @@ object ThemeManager {
                 .invoke(null, context)
             lbmClass.getMethod("sendBroadcast", android.content.Intent::class.java)
                 .invoke(lbm, intent)
-            Log.runtime(TAG, "✓ 已发送 skinUpdated.theme 广播 (skinId=${root["skinId"]})")
         } catch (e: Exception) {
             Log.runtime(TAG, "✗ 发送 skinUpdated.theme 广播失败: ${e.message}")
         }
@@ -1007,8 +989,6 @@ object ThemeManager {
             val antSkinRenderManagerClass = classLoader.loadClass("com.alipay.mobile.skincenter.manage.AntSkinRenderManager")
             val notifySkinChangedMethod = antSkinRenderManagerClass.getDeclaredMethod("notifySkinChanged")
             notifySkinChangedMethod.invoke(null)
-
-            Log.runtime(TAG, "✓ 已通知 UI 刷新")
         } catch (e: Exception) {
             Log.runtime(TAG, "✗ 通知 UI 刷新失败: ${e.message}")
             Log.printStackTrace(TAG, e)
