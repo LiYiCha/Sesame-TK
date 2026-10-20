@@ -42,7 +42,7 @@ import fansirsqi.xposed.sesame.ui.extension.ExtensionListActivity
 import fansirsqi.xposed.sesame.ui.extra.activity.HelpActivity
 import fansirsqi.xposed.sesame.ui.extra.activity.RpcDebugActivity
 import fansirsqi.xposed.sesame.ui.logviewer.LogViewerComposeActivity
-import fansirsqi.xposed.sesame.ui.network.CaptureListActivity
+import fansirsqi.xposed.sesame.ui.network.CaptureSettingsActivity
 import fansirsqi.xposed.sesame.util.FansirsqiUtil
 import fansirsqi.xposed.sesame.util.Files
 import fansirsqi.xposed.sesame.util.Log
@@ -340,7 +340,7 @@ class MainActivity : BaseActivity() {
             menu.add(0, 6, 6, R.string.extend)                 // 扩展功能
             menu.add(0, 7, 7, R.string.settings)               // 设置
             menu.add(0, 8, 8, R.string.test_post)              // 模拟请求(RpcDebugActivity)
-            menu.add(0, 9, 9, "流量抓包日志")                   // 新版抓包浏览器
+            menu.add(0, 9, 9, R.string.capture_settings)       // 抓包来源开关/黑名单/日志入口
             if (BuildConfig.DEBUG) {
                 menu.add(0, 10, 10, R.string.clearn)           // 清空配置
             }
@@ -411,9 +411,9 @@ class MainActivity : BaseActivity() {
                 val rpcDebugIntent = Intent(this, RpcDebugActivity::class.java)
                 startActivity(rpcDebugIntent)
             }
-            // 流量抓包查看
+            // 抓包设置
             9 -> {
-                startActivity(Intent(this, CaptureListActivity::class.java))
+                startActivity(Intent(this, CaptureSettingsActivity::class.java))
             }
             //清空配置
             10 -> AlertDialog.Builder(this).setTitle("⚠️ 警告").setMessage("🤔 确认清除所有模块配置？").setPositiveButton(R.string.ok) { _: DialogInterface?, _: Int ->

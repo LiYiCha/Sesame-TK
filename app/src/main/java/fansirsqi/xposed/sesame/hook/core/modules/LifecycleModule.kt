@@ -21,7 +21,6 @@ import fansirsqi.xposed.sesame.hook.internal.LocationHelper
 import fansirsqi.xposed.sesame.hook.internal.SecurityBodyHelper
 import fansirsqi.xposed.sesame.hook.keepalive.SmartSchedulerManager
 import fansirsqi.xposed.sesame.hook.lifecycle.LifecycleManager
-import fansirsqi.xposed.sesame.hook.network.HttpCaptureHook
 import fansirsqi.xposed.sesame.hook.scheduler.TaskScheduler
 import fansirsqi.xposed.sesame.util.Log
 import fansirsqi.xposed.sesame.util.GlobalThreadPools

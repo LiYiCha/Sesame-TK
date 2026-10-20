@@ -18,8 +18,7 @@ import fansirsqi.xposed.sesame.data.General;
 import fansirsqi.xposed.sesame.data.Status;
 import fansirsqi.xposed.sesame.hook.context.AppContext;
 import fansirsqi.xposed.sesame.hook.core.modules.MiscHookModule;
-import fansirsqi.xposed.sesame.hook.network.HttpCaptureHook;
-import fansirsqi.xposed.sesame.hook.network.NetworkHook;
+import fansirsqi.xposed.sesame.hook.network.capture.RpcTrafficCapture;
 import fansirsqi.xposed.sesame.hook.resource.WakeLockManager;
 import fansirsqi.xposed.sesame.hook.rpc.bridge.NewRpcBridge;
 import fansirsqi.xposed.sesame.hook.rpc.bridge.RpcBridge;
@@ -344,10 +343,9 @@ public class LifecycleManager {
                     setupRpcDebugHooks();
                 }
                 
-                // 全面网络捕获与拦截 (HttpCaptureHook & NetworkHook)
+                // 抓包引擎（hook 封装层，请求响应对天然存在；记录经 Log.capture 写入 capture 日志）
                 if (BaseModel.enableHttpCapture.getValue()) {
-                    HttpCaptureHook.setup(AppContext.getClassLoader());
-                    NetworkHook.setupHooks(AppContext.getClassLoader());
+                    RpcTrafficCapture.INSTANCE.install(AppContext.getClassLoader());
                 }
                 // 延迟注册动态 bundle 及登录界面 Hook
                 try {

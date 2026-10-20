@@ -83,6 +83,7 @@
     <string name="view_runtim_log_file">查看运行日志</string>
     <string name="view_capture">抓包记录</string>
     <string name="test_post">模拟请求</string>
+    <string name="capture_settings">抓包设置</string>
     <string name="settings">设  置</string>
     <string name="extend">扩展功能</string>
     <string name="limit_collect">限制收取</string>

@@ -23,12 +23,9 @@ import fansirsqi.xposed.sesame.hook.core.HookModuleManager;
 import fansirsqi.xposed.sesame.hook.core.modules.AlipayCoreModule;
 import fansirsqi.xposed.sesame.hook.core.modules.CaptchaModule;
 import fansirsqi.xposed.sesame.hook.core.modules.SkinThemeModule;
-import fansirsqi.xposed.sesame.hook.core.modules.NetworkModule;
 import fansirsqi.xposed.sesame.hook.core.modules.MiscHookModule;
 import fansirsqi.xposed.sesame.hook.core.modules.LifecycleModule;
 import fansirsqi.xposed.sesame.hook.lifecycle.LifecycleManager;
-import fansirsqi.xposed.sesame.hook.network.HttpCaptureHook;
-import fansirsqi.xposed.sesame.hook.network.NetworkHook;
 import fansirsqi.xposed.sesame.hook.rpc.bridge.RpcVersion;
 import fansirsqi.xposed.sesame.hook.scheduler.AlarmScheduler;
 import fansirsqi.xposed.sesame.model.BaseModel;
@@ -123,7 +120,6 @@ public class ApplicationHook implements IXposedHookLoadPackage {
         HookModuleManager.INSTANCE.registerModule(new AlipayCoreModule());
         HookModuleManager.INSTANCE.registerModule(new CaptchaModule());
         HookModuleManager.INSTANCE.registerModule(new SkinThemeModule());
-        HookModuleManager.INSTANCE.registerModule(new NetworkModule());
         HookModuleManager.INSTANCE.registerModule(new MiscHookModule());
         HookModuleManager.INSTANCE.registerModule(new LifecycleModule());
         modulesRegistered = true;
@@ -231,16 +227,6 @@ public class ApplicationHook implements IXposedHookLoadPackage {
                                             Log.runtime(TAG, "Subprocess setupRpcDebugHooks success");
                                         } catch (Throwable t) {
                                             Log.runtime(TAG, "Subprocess setupRpcDebugHooks err: " + t.getMessage());
-                                        }
-                                    }
-
-                                    if (BaseModel.enableHttpCapture.getValue()) {
-                                        try {
-                                            HttpCaptureHook.setup(lpparam.classLoader);
-                                            NetworkHook.setupHooks(lpparam.classLoader);
-                                            Log.runtime(TAG, "Subprocess HttpCaptureHook setup success");
-                                        } catch (Throwable t) {
-                                            Log.runtime(TAG, "Subprocess HttpCaptureHook setup err: " + t.getMessage());
                                         }
                                     }
                                 });

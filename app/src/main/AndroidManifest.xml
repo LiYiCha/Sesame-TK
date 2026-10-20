@@ -125,12 +125,7 @@
 
         <activity
             android:configChanges="uiMode|screenSize"
-            android:name="fansirsqi.xposed.sesame.ui.network.CaptureListActivity"
-            android:exported="true"
-            android:resizeableActivity="true" />
-        <activity
-            android:configChanges="uiMode|screenSize"
-            android:name="fansirsqi.xposed.sesame.ui.network.CaptureDetailActivity"
+            android:name="fansirsqi.xposed.sesame.ui.network.CaptureSettingsActivity"
             android:exported="true"
             android:resizeableActivity="true" />
 
