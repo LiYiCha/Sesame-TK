@@ -79,11 +79,15 @@ public class AntMemberRpcCall {
     }
 
     public static String signPageTaskList(int pageNo) {
+        return signPageTaskList(pageNo, UUID.randomUUID().toString());
+    }
+
+    public static String signPageTaskList(int pageNo, String session) {
         try {
             JSONObject args = new JSONObject();
             args.put("pageNo", pageNo);
             args.put("pageSize", 8);
-            args.put("session", UUID.randomUUID().toString());
+            args.put("session", session);
             args.put("source", "antmember");
             args.put("sourcePassMap", buildSourcePassMap());
             args.put("spaceCode", "ant_member_xlight_task");
@@ -95,6 +99,15 @@ public class AntMemberRpcCall {
         } catch (Exception e) {
             return "";
         }
+    }
+
+    public static String queryBillCoinShop() {
+        return RequestManager.requestString("alipay.memberasset.sticker.prize.coin.shop.home", "[{}]");
+    }
+
+    public static String queryBillCoinProducts(int pageNo) {
+        return RequestManager.requestString("alipay.memberasset.sticker.prize.query.product.list",
+                "[{\"pageNo\":" + pageNo + ",\"pageSize\":20,\"queryType\":\"COIN\"}]");
     }
 
     public static String transcodeCheck() {

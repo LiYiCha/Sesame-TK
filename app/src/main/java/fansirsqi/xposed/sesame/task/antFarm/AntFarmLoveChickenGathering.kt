@@ -1,6 +1,7 @@
 package fansirsqi.xposed.sesame.task.antFarm
 
 import fansirsqi.xposed.sesame.data.Config
+import fansirsqi.xposed.sesame.util.DataStore
 import fansirsqi.xposed.sesame.util.Log
 import fansirsqi.xposed.sesame.util.ResChecker
 import fansirsqi.xposed.sesame.util.maps.UserMap
@@ -481,8 +482,8 @@ object AntFarmLoveChickenGathering {
     /** 全球一等奖门槛样本（滚动记录最近两次，用于增速外推），按账号隔离 */
     private fun loadRankSamples(): Map<String, Any> {
         return try {
-            fansirsqi.xposed.sesame.util.DataStore.INSTANCE.getOrCreate(
-                "loveChickenRankSamples:" + UserMap.getCurrentUid(),
+            DataStore.getOrCreate(
+                "loveChickenRankSamples:" + UserMap.currentUid,
                 object : com.fasterxml.jackson.core.type.TypeReference<Map<String, Any>>() {})
         } catch (t: Throwable) {
             HashMap()
@@ -491,8 +492,7 @@ object AntFarmLoveChickenGathering {
 
     private fun saveRankSamples(samples: Map<String, Any>) {
         try {
-            fansirsqi.xposed.sesame.util.DataStore.INSTANCE.put(
-                "loveChickenRankSamples:" + UserMap.getCurrentUid(), samples)
+            DataStore.put("loveChickenRankSamples:" + UserMap.currentUid, samples)
         } catch (_: Throwable) {
         }
     }
