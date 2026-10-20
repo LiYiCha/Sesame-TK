@@ -243,7 +243,7 @@ class PrivilegeTask {
         }
 
         // ────────────────────────────────────────────────────────────────
-        //  签到流程（对齐 AG YouthPrivilege.handleCheckIn）
+        //  签到流程
         // ────────────────────────────────────────────────────────────────
         private fun handleCheckIn() {
             if (Status.hasFlagToday(FLAG_CHECK_IN)) return
@@ -258,8 +258,6 @@ class PrivilegeTask {
                     return
                 }
                 val action = checkInInfo.optString("action")
-                checkInInfo.optString("checkInDate")
-                val checkInSumDays = checkInInfo.optInt("checkInSumDays", 0)
 
                 when (action) {
                     "CHECK_IN" -> {
@@ -268,14 +266,13 @@ class PrivilegeTask {
                             Log.error(TAG, "青春特权签到执行失败:$result")
                             return
                         }
-                        Log.forest("$STUDENT_SIGN_PREFIX 签到✅第${checkInSumDays + 1}天")
                         // 回查确认
                         Thread.sleep(800)
                         confirmCheckInAfterAction()
                     }
-                    "CHECKED_IN" -> {
+                    "DO_TASK" -> {
                         Status.setFlagToday(FLAG_CHECK_IN)
-                        Log.forest("$STUDENT_SIGN_PREFIX 今日已签到#已签${checkInSumDays}天")
+                        Log.forest("$STUDENT_SIGN_PREFIX 今日已签到")
                     }
                     else -> {
                         Log.runtime("$TAG 签到状态未知 action=$action")
@@ -291,8 +288,9 @@ class PrivilegeTask {
                 val confirmation = JSONObject(CommonRequest().queryCheckInModel())
                 if (!isYouthSuccess(confirmation)) return
                 val action = confirmation.optJSONObject("studentCheckInInfo")?.optString("action").orEmpty()
-                if (action == "CHECKED_IN") {
+                if (action == "DO_TASK") {
                     Status.setFlagToday(FLAG_CHECK_IN)
+                    Log.forest("$STUDENT_SIGN_PREFIX 签到✅")
                 } else {
                     Log.runtime("$TAG 签到回查未确认 action=$action")
                 }
@@ -329,7 +327,7 @@ class PrivilegeTask {
         }
 
         // ────────────────────────────────────────────────────────────────
-        //  青春体验金（对齐 AG YouthPrivilege.claimTrialPrize）
+        //  青春体验金
         // ────────────────────────────────────────────────────────────────
         private fun claimTrialPrize() {
             if (Status.hasFlagToday(FLAG_TRIAL_PRIZE)) return
@@ -395,7 +393,7 @@ class PrivilegeTask {
         }
 
         // ────────────────────────────────────────────────────────────────
-        //  青春100 月权益（对齐 AG MonthlyPrivilegeAdapter）
+        //  青春100 月权益
         // ────────────────────────────────────────────────────────────────
         private fun claimMonthlyPrivilege() {
             if (Status.hasFlagToday(FLAG_MONTHLY_PRIVILEGE)) return

@@ -259,7 +259,7 @@ public class MemberNew extends BaseCommTask {
     private void handleTaskListsSafe() {
         try {
             // 签到页任务列表
-            //signPageTaskListSafe();
+            signPageTaskListSafe();
             
             if (hasError1009) return;
             
@@ -276,8 +276,56 @@ public class MemberNew extends BaseCommTask {
             if (!Status.hasFlagToday("memTaskListQueryFacade")) {
                 memTaskListQueryFacadeSafe();
             }
+
+            // // 贴贴币权益目录（只读浏览，每日一次）
+            // if (!Status.hasFlagToday("memberBillCoinBrowse")) {
+            //     billCoinBrowseSafe();
+            // }
         } catch (Exception e) {
             Log.error(TAG, "任务列表处理异常: " + e.getMessage());
+        }
+    }
+
+    /**
+     * 只读浏览贴贴币权益目录（不自动兑换）
+     */
+    private void billCoinBrowseSafe() {
+        try {
+            JSONObject shop = new JSONObject(AntMemberRpcCall.queryBillCoinShop());
+            if (!"200".equals(shop.optString("resultCode"))) {
+                Log.error(TAG, "贴贴币目录查询失败: " + shop);
+                return;
+            }
+            java.util.Set<String> seen = new java.util.HashSet<>();
+            StringBuilder names = new StringBuilder();
+            int pageNo = 1;
+            while (pageNo <= 50) {
+                TimeUtil.sleep(RandomUtil.nextInt(2000, 4000));
+                JSONObject resp = new JSONObject(AntMemberRpcCall.queryBillCoinProducts(pageNo));
+                if (!resp.optBoolean("success")) {
+                    Log.error(TAG, "贴贴币商品列表查询失败: " + resp);
+                    return;
+                }
+                JSONObject data = resp.optJSONObject("data");
+                JSONArray productList = data == null ? null : data.optJSONArray("productList");
+                if (productList != null) {
+                    for (int i = 0; i < productList.length(); i++) {
+                        JSONObject product = productList.optJSONObject(i);
+                        if (product == null) continue;
+                        String prizeId = product.optString("prizeId");
+                        if (prizeId.isEmpty() || !seen.add(prizeId)) continue;
+                        String name = product.optString("productName", product.optString("name", prizeId));
+                        if (names.length() > 0) names.append("、");
+                        if (names.length() < 120) names.append(name);
+                    }
+                }
+                if (data == null || !data.optBoolean("hasNextPage")) break;
+                pageNo++;
+            }
+            Status.setFlagToday("memberBillCoinBrowse");
+            Log.other(TAG, "贴贴币权益目录✅[" + seen.size() + "件] " + names);
+        } catch (Exception e) {
+            Log.error(TAG, "贴贴币目录浏览异常: " + e.getMessage());
         }
     }
     
@@ -438,6 +486,7 @@ public class MemberNew extends BaseCommTask {
         int currentCount;
         int targetCount;
         boolean isHybrid;
+        int browseSeconds;
     }
     
     /**
@@ -482,7 +531,9 @@ public class MemberNew extends BaseCommTask {
             } else {
                 info.retryCount = 1;
             }
-            
+
+            info.browseSeconds = readBrowseSeconds(taskItem);
+
             return info;
         } catch (Exception e) {
             Log.error(TAG, "提取任务信息异常: " + e.getMessage());
@@ -490,6 +541,19 @@ public class MemberNew extends BaseCommTask {
         }
     }
     
+    /**
+     * 读取浏览类任务要求时长（单次封顶120秒）
+     */
+    private int readBrowseSeconds(JSONObject taskItem) {
+        try {
+            JSONObject config = taskItem.optJSONObject("taskConfigInfo");
+            int s = config != null ? config.optInt("browseSeconds", 0) : 0;
+            return Math.max(0, Math.min(s, 120));
+        } catch (Exception e) {
+            return 0;
+        }
+    }
+
     /**
      * 安全执行单个任务
      */
@@ -513,6 +577,18 @@ public class MemberNew extends BaseCommTask {
                 Log.error(TAG, "申请任务失败: " + applyResult.optString("resultDesc"));
                 TimeUtil.sleep(RandomUtil.nextInt(5000, 7000));
                 return false;
+            }
+
+            // 浏览类任务等待服务端要求时长（分段，单段不超过30秒）
+            if (taskInfo.browseSeconds > 0) {
+                Log.runtime(TAG, "浏览等待[" + taskInfo.taskName + "]#" + taskInfo.browseSeconds + "秒");
+                int waited = 0;
+                while (waited < taskInfo.browseSeconds) {
+                    if (hasError1009) return false;
+                    int chunk = Math.min(30, taskInfo.browseSeconds - waited);
+                    TimeUtil.sleep(chunk * 1000);
+                    waited += chunk;
+                }
             }
 
             // 执行任务
@@ -708,39 +784,45 @@ public class MemberNew extends BaseCommTask {
 
 
     /**
-     * 安全查询签到页任务列表并执行
+     * 安全查询签到页任务列表并执行（分页拉全，同一轮共用一个 session）
      */
     private void signPageTaskListSafe() {
+        java.util.Set<Long> seenIds = new java.util.HashSet<>();
+        String session = java.util.UUID.randomUUID().toString();
+        int pageNo = 1;
         int retryCount = 0;
-        while (retryCount < MAX_RETRY_TIMES) {
+        while (retryCount < MAX_RETRY_TIMES && pageNo <= 64) {
             try {
                 TimeUtil.sleep(RandomUtil.nextInt(5000, 7000));
-                JSONObject response = new JSONObject(AntMemberRpcCall.signPageTaskList());
+                JSONObject response = new JSONObject(AntMemberRpcCall.signPageTaskList(pageNo, session));
                 TimeUtil.sleep(RandomUtil.nextInt(3000, 5000));
-                
+
                 if (response.optBoolean("success")) {
                     JSONObject resultData = response.optJSONObject("resultData");
                     if (resultData == null) {
                         retryCount++;
                         continue;
                     }
-                    
+
                     JSONArray categoryTaskList = resultData.optJSONArray("categoryTaskList");
                     if (categoryTaskList == null) {
                         retryCount++;
                         continue;
                     }
-                    
+
+                    int beforeCount = seenIds.size();
                     for (int i = 0; i < categoryTaskList.length(); i++) {
                         try {
                             JSONObject category = categoryTaskList.getJSONObject(i);
                             JSONArray taskArray = category.optJSONArray("taskProcessVOList");
                             String type = category.optString("type");
-                            
+
                             if (taskArray == null || taskArray.length() == 0) {
                                 continue;
                             }
-                            
+
+                            collectTaskIds(taskArray, seenIds);
+
                             if ("OTHERS".equalsIgnoreCase(type)) {
                                 doOtherTaskSafe(taskArray);
                             } else if ("BROWSE".equalsIgnoreCase(type)) {
@@ -750,10 +832,13 @@ public class MemberNew extends BaseCommTask {
                             Log.error(TAG, "处理任务分类异常: " + e.getMessage());
                         }
                     }
-                    
+
                     TimeUtil.sleep(RandomUtil.nextInt(1000, 2000));
-                    return; // 成功处理完一次任务，退出循环
-                    
+                    // 本页没有新任务，说明已拉全
+                    if (seenIds.size() == beforeCount) {
+                        break;
+                    }
+                    pageNo++;
                 } else {
                     Log.error(TAG, "签到页任务列表请求失败: " + response);
                     if (checkResponseError1009(response)) {
@@ -761,22 +846,35 @@ public class MemberNew extends BaseCommTask {
                     }
                     retryCount++;
                 }
-                
+
             } catch (Exception e) {
                 Log.error(TAG, "签到页任务列表处理异常: " + e.getMessage());
                 retryCount++;
             }
-            
+
             if (retryCount < MAX_RETRY_TIMES) {
                 TimeUtil.sleep(this.executeIntervalInt);
             }
         }
-        
+
         if (retryCount >= MAX_RETRY_TIMES) {
             Log.error(TAG, "签到页任务列表处理重试次数已达上限");
         }
-        
+
         sleepRandomTime();
+    }
+
+    /**
+     * 收集任务id用于分页去重
+     */
+    private void collectTaskIds(JSONArray taskArray, java.util.Set<Long> seenIds) {
+        for (int i = 0; i < taskArray.length(); i++) {
+            JSONObject taskItem = taskArray.optJSONObject(i);
+            if (taskItem == null) continue;
+            JSONObject config = taskItem.optJSONObject("taskConfigInfo");
+            long id = config != null ? config.optLong("id", -1L) : -1L;
+            if (id > 0) seenIds.add(id);
+        }
     }
 
 

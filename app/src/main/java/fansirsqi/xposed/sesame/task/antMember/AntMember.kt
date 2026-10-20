@@ -2049,7 +2049,7 @@ class AntMember : ModelTask() {
         } catch (_: Exception) {}
     }
 
-    // 安心豆浏览任务订单缓存（进程内 store，对齐 AG 的 store.getOrCreate）
+    // 安心豆浏览任务订单缓存（进程内 store）
     private val beanBrowseOrders = mutableMapOf<String, String>()
 
     /**
@@ -2159,24 +2159,68 @@ class AntMember : ModelTask() {
      */
     private suspend fun doSignFloatingBall() = CoroutineUtils.run {
         try {
+            if (hasFlagToday(StatusFlags.FLAG_ANTMEMBER_MEMBER_FLOATING_BALL_FAILED_TODAY)) {
+                Log.runtime(TAG, "会员浮球今日已停止请求")
+                return@run
+            }
             val resp = AntMemberRpcCall.querySignFloatingBall()
             val jo = JSONObject(resp)
-            if (!ResChecker.checkRes(TAG, jo)) return@run
-            val templateId = jo.optJSONObject("data")?.optString("templateId", "") ?: ""
-            if (templateId.isNotEmpty()) {
-                delay(500)
-                val triggerResp = AntMemberRpcCall.triggerSignFloatingBall("signInBall", templateId)
-                val triggerJo = JSONObject(triggerResp)
-                if (ResChecker.checkRes(TAG, triggerJo)) {
-                    Log.runtime(TAG, "会员签到🎖️V2浮窗触发成功")
-                    // 浮窗广告任务
-                    delay(500)
-                    val adResp = AntMemberRpcCall.querySignFloatingBallAdTask(templateId)
-                    val adJo = JSONObject(adResp)
-                    if (ResChecker.checkRes(TAG, adJo)) {
-                        Log.runtime(TAG, "会员签到🎖️V2浮窗广告任务已查询")
+            if (!ResChecker.checkRes(TAG, jo)) {
+                setFlagToday(StatusFlags.FLAG_ANTMEMBER_MEMBER_FLOATING_BALL_FAILED_TODAY)
+                return@run
+            }
+            val data = jo.optJSONObject("data")
+            val templateId = data?.optString("templateId", "") ?: ""
+            if (templateId.isEmpty()) return@run
+            delay(500)
+            if (data?.optString("playType", "").equals("video", ignoreCase = true)) {
+                // 视频类浮球先完成广告任务
+                var handled = false
+                val adJo = JSONObject(AntMemberRpcCall.querySignFloatingBallAdTask(templateId))
+                if (ResChecker.checkRes(TAG, adJo)) {
+                    // 广告任务对象与 bizId 取法：taskInfo/currentTaskInfo/nextTaskInfo/videoTaskInfo → adBizId/logExtMap.bizId/extInfo
+                    val taskObject = adJo.optJSONObject("taskInfo")
+                        ?: adJo.optJSONObject("currentTaskInfo")
+                        ?: adJo.optJSONObject("nextTaskInfo")
+                        ?: adJo.optJSONObject("videoTaskInfo")
+                        ?: adJo
+                    val bizId = sequenceOf(
+                        taskObject.optString("adBizId"),
+                        taskObject.optJSONObject("logExtMap")?.optString("bizId"),
+                        taskObject.optJSONObject("extInfo")?.optString("adBizId"),
+                        taskObject.optJSONObject("extInfo")?.optString("bizId")
+                    ).firstOrNull { !it.isNullOrBlank() }.orEmpty()
+                    if (bizId.isNotEmpty()) {
+                        delay(500)
+                        val finishJo = JSONObject(AntMemberRpcCall.adTaskFinish(bizId))
+                        if (ResChecker.checkRes(TAG, finishJo) &&
+                            (finishJo.optBoolean("success") || finishJo.optString("errCode") == "0")
+                        ) {
+                            Log.other(TAG, "会员签到🎖️V2视频浮球广告任务完成")
+                            handled = true
+                        }
                     }
                 }
+                if (!handled) {
+                    setFlagToday(StatusFlags.FLAG_ANTMEMBER_MEMBER_FLOATING_BALL_FAILED_TODAY)
+                    Log.error(TAG, "会员视频浮球广告任务处理失败，今日停止重试")
+                }
+                return@run
+            }
+            val triggerResp = AntMemberRpcCall.triggerSignFloatingBall("signInBall", templateId)
+            val triggerJo = JSONObject(triggerResp)
+            if (ResChecker.checkRes(TAG, triggerJo)) {
+                Log.runtime(TAG, "会员签到🎖️V2浮窗触发成功")
+                // 浮窗广告任务
+                delay(500)
+                val adResp = AntMemberRpcCall.querySignFloatingBallAdTask(templateId)
+                val adJo = JSONObject(adResp)
+                if (ResChecker.checkRes(TAG, adJo)) {
+                    Log.runtime(TAG, "会员签到🎖️V2浮窗广告任务已查询")
+                }
+            } else {
+                setFlagToday(StatusFlags.FLAG_ANTMEMBER_MEMBER_FLOATING_BALL_FAILED_TODAY)
+                Log.error(TAG, "会员浮窗触发失败，今日停止重试")
             }
         } catch (t: Throwable) {
             Log.printStackTrace(TAG, "doSignFloatingBall err:", t)

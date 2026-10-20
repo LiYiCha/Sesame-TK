@@ -548,6 +548,22 @@ object AntSportsRpcCall {
     }
 
     /**
+     * @brief 完成好友训练关联的广告任务
+     *
+     * @param taskId 关联任务ID（queryTrainItem.taskDetail.taskId）
+     * @param bizNo 训练业务号
+     * @param chInfo 来源渠道
+     *
+     * @remark 对应API：com.alipay.sportshealth.biz.rpc.SportsHealthCoinTaskRpc.completeTask
+     */
+    fun completeAdTask(taskId: String, bizNo: String, chInfo: String = "healthstep"): String {
+        return RequestManager.requestString(
+            "com.alipay.sportshealth.biz.rpc.SportsHealthCoinTaskRpc.completeTask",
+            """[{"apiVersion":"energy","bizNo":"$bizNo","chInfo":"$chInfo","clientOS":"android","features":$FEATURES,"taskAction":"SHOW_AD","taskId":"$taskId","taskType":"AD_TASK"}]"""
+        )
+    }
+
+    /**
      * @brief 查询世界地图 - 新版
      *
      * @param themeId 主题ID
@@ -1231,6 +1247,31 @@ object AntSportsRpcCall {
             return RequestManager.requestString(
                 "com.alipay.neverland.biz.rpc.queryBaseinfo",
                 """[{"source":"jkdsportcard"}]"""
+            )
+        }
+
+        /**
+         * @brief 领取离线奖励
+         *
+         * @remark 对应API：com.alipay.neverland.biz.rpc.offlineAward
+         */
+        fun offlineAward(): String {
+            return RequestManager.requestString(
+                "com.alipay.neverland.biz.rpc.offlineAward",
+                """[{"isAdvertisement":true}]"""
+            )
+        }
+
+        /**
+         * @brief 领取特殊奖励（策略气泡等）
+         *
+         * @param sceneType 奖励场景类型（策略气泡固定为 STRATEGY_BALL_ACTIVITY）
+         * @remark 对应API：com.alipay.neverland.biz.rpc.receiveSpecialPrize
+         */
+        fun receiveSpecialPrize(sceneType: String): String {
+            return RequestManager.requestString(
+                "com.alipay.neverland.biz.rpc.receiveSpecialPrize",
+                """[{"sceneType":"$sceneType"}]"""
             )
         }
 

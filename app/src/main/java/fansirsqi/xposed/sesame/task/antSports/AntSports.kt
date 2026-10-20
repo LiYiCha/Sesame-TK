@@ -839,8 +839,12 @@ class AntSports : ModelTask() {
             //如果是 JOIN 则还没走完
             if ("COMPLETED" == userPathStep.getString("pathCompleteStatus")) {
                 Log.runtime(TAG, "行走路线🚶🏻‍♂️路线[${userPathStep.getString("pathName")}]已完成")
-                // 获取新路线 ID
-                val newPathId = queryJoinPath(walkPathThemeId)    //walkPathThemeId 在进入walk()之前已经获取了
+                // 获取新路线 ID：自动选线模式（themeId 为空）扫描全主题取完成次数最少，否则按配置主题
+                val newPathId = if (walkPathThemeId.isNullOrBlank()) {
+                    selectLeastCompletedRoutePathId(userPathStep.optString("pathId"))
+                } else {
+                    queryJoinPath(walkPathThemeId)    //walkPathThemeId 在进入walk()之前已经获取了
+                }
                 if (!newPathId.isNullOrEmpty()) {
                     Log.runtime(TAG, "发现新路线，准备加入: $newPathId")
                     joinPath(newPathId)
@@ -1040,6 +1044,54 @@ class AntSports : ModelTask() {
             Log.printStackTrace(TAG, "queryJoinPath err:", t)
         }
         return pathId
+    }
+
+    /**
+     * 自动选线：扫描全部主题，优先返回今日完成次数最少的未完成路线
+     *
+     * @param excludePathId 需要排除的路线（一般是刚走完的当前路线）
+     */
+    private fun selectLeastCompletedRoutePathId(excludePathId: String?): String? {
+        var bestPathId: String? = null
+        var bestCount = Int.MAX_VALUE
+        try {
+            val themeResp = JSONObject(AntSportsRpcCall.queryThemeList())
+            val themeList = themeResp.optJSONArray("themeList")
+                ?: themeResp.optJSONObject("data")?.optJSONArray("themeList")
+                ?: return null
+            for (i in 0 until themeList.length()) {
+                val themeId = themeList.optJSONObject(i)?.optString("themeId") ?: continue
+                if (themeId.isBlank()) continue
+                val world = queryWorldMap(themeId) ?: continue
+                val cityList = world.optJSONArray("cityList") ?: continue
+                for (j in 0 until cityList.length()) {
+                    val cityId = cityList.optJSONObject(j)?.optString("cityId") ?: continue
+                    if (cityId.isBlank()) continue
+                    val city = queryCityPath(cityId) ?: continue
+                    val cityPathList = city.optJSONArray("cityPathList") ?: continue
+                    for (k in 0 until cityPathList.length()) {
+                        val cityPath = cityPathList.optJSONObject(k) ?: continue
+                        val pathId = cityPath.optString("pathId")
+                        if (pathId.isBlank() || pathId == excludePathId) continue
+                        if ("COMPLETED" == cityPath.optString("pathCompleteStatus")) continue
+                        if (cityPath.optBoolean("locked", false)) continue
+                        val count = cityPath.optInt("completeCount", 0)
+                        if (count < bestCount) {
+                            bestCount = count
+                            bestPathId = pathId
+                        }
+                    }
+                }
+            }
+            if (bestPathId != null) {
+                Log.runtime(TAG, "自动选线🚶🏻‍♂️完成次数最少($bestCount 次)：$bestPathId")
+            } else {
+                Log.error(TAG, "自动选线未找到可加入的路线")
+            }
+        } catch (t: Throwable) {
+            Log.printStackTrace(TAG, "selectLeastCompletedRoutePathId err:", t)
+        }
+        return bestPathId
     }
 
     /**
@@ -1777,9 +1829,8 @@ class AntSports : ModelTask() {
                     }
 
                     var bizId = responseJson.optString("bizId", "")
-                    if (bizId.isEmpty() && responseJson.has("taskDetail")) {
-                        bizId = responseJson.getJSONObject("taskDetail").optString("taskId", "")
-                    }
+                    // 关联广告任务ID与训练业务号分离，上报 completeAdTask 时使用
+                    val relatedTaskId = responseJson.optJSONObject("taskDetail")?.optString("taskId", "") ?: ""
 
                     val trainItemList = responseJson.optJSONArray("trainItemList")
                     if (bizId.isEmpty() || trainItemList == null || trainItemList.length() == 0) {
@@ -1819,7 +1870,46 @@ class AntSports : ModelTask() {
                     }
 
                     Log.other("训练好友🥋[训练:$userName $trainItemName]")
+
+                    // 上报关联广告任务
+                    if (relatedTaskId.isNotEmpty()) {
+                        GlobalThreadPools.sleepCompat(800)
+                        try {
+                            val adJo = JSONObject(AntSportsRpcCall.completeAdTask(relatedTaskId, bizId))
+                            if (ResChecker.checkRes(TAG, adJo)) {
+                                Log.runtime(TAG, "好友训练关联广告任务已上报")
+                            } else {
+                                Log.error(TAG, "好友训练关联广告任务上报失败: ${adJo.optString("resultDesc")}")
+                            }
+                        } catch (t: Throwable) {
+                            Log.printStackTrace(TAG, "completeAdTask err:", t)
+                        }
+                    }
+
+                    // 回查确认训练已开始，未确认则本轮停止
                     GlobalThreadPools.sleepCompat(1000)
+                    try {
+                        val refreshedHome = JSONObject(AntSportsRpcCall.queryClubHome())
+                        var confirmed = false
+                        val refreshedRooms = refreshedHome.optJSONArray("roomList")
+                        for (ri in 0 until (refreshedRooms?.length() ?: 0)) {
+                            val refreshedMembers = refreshedRooms?.optJSONObject(ri)?.optJSONArray("memberList") ?: continue
+                            for (mi in 0 until refreshedMembers.length()) {
+                                val m = refreshedMembers.optJSONObject(mi) ?: continue
+                                if (m.optString("memberId") == memberId && m.optString("originBossId") == originBossId) {
+                                    confirmed = m.optJSONObject("trainInfo")?.optBoolean("training", false) == true
+                                }
+                            }
+                        }
+                        if (confirmed) {
+                            Log.runtime(TAG, "训练回查确认：$userName 已进入训练")
+                        } else {
+                            Log.error(TAG, "训练回查未确认 $userName 进入训练，本轮停止")
+                            return
+                        }
+                    } catch (t: Throwable) {
+                        Log.printStackTrace(TAG, "训练回查 err:", t)
+                    }
                     return
                 }
             }
@@ -2387,6 +2477,19 @@ class AntSports : ModelTask() {
                     val energyNum = item.optInt("energyNum", 0)
                     val viewSec = item.optInt("viewSec", 15)
 
+                    if ("INIT" == bubbleTaskStatus && item.optString("taskId") == "STRATEGY_BALL") {
+                        // 策略气泡：领取特殊奖励而非浏览
+                        val prizeRes = JSONObject(
+                            AntSportsRpcCall.NeverlandRpcCall.receiveSpecialPrize("STRATEGY_BALL_ACTIVITY")
+                        )
+                        if (ResChecker.checkRes(TAG + " 领取策略气泡失败:", prizeRes)) {
+                            Log.other("健康岛策略气泡✅已领取")
+                        } else {
+                            Log.error(TAG, "策略气泡领取失败 raw=$prizeRes")
+                        }
+                        continue
+                    }
+
                     if ("INIT" == bubbleTaskStatus && encryptValue.isNotEmpty()) {
                         encryptValues.add(encryptValue)
                         Log.runtime(
@@ -2529,6 +2632,7 @@ class AntSports : ModelTask() {
                 }
 
                 val baseData = baseInfo.getJSONObject("data")
+                receiveNeverlandOfflineAwards(baseData)
                 val isNewGame = baseData.optBoolean("newGame", false)
                 var branchId = baseData.optString("branchId", "MASTER")
                 var mapId = baseData.optString("mapId", "")
@@ -2565,6 +2669,41 @@ class AntSports : ModelTask() {
                 Log.runtime(TAG, "健康岛自动走路建造执行完成 ✓")
             } catch (t: Throwable) {
                 Log.printStackTrace(TAG, "neverlandAutoTask 发生异常$t", t)
+            }
+        }
+
+        /**
+         * @brief 健康岛离线奖励领取（服务端 offlineAwards 非空才发起）
+         */
+        private fun receiveNeverlandOfflineAwards(baseData: JSONObject) {
+            try {
+                val awards = baseData.optJSONArray("offlineAwards")
+                if (awards == null || awards.length() == 0) {
+                    Log.runtime(TAG, "健康岛 · 无离线奖励可领取")
+                    return
+                }
+                val res = JSONObject(AntSportsRpcCall.NeverlandRpcCall.offlineAward())
+                if (!ResChecker.checkRes(TAG + " 领取离线奖励失败:", res)) return
+                val items = res.optJSONObject("data")?.optJSONArray("userItems")
+                if (items != null) {
+                    for (i in 0 until items.length()) {
+                        val item = items.optJSONObject(i) ?: continue
+                        val count = item.optInt("modifyCount", 0)
+                        if (count > 0) {
+                            val name = item.optString("itemName", item.optString("itemId", "未知"))
+                            Log.other("健康岛离线奖励✅[$name]+$count")
+                        }
+                    }
+                }
+                TimeUtil.sleep(1000)
+                // 回查确认清空
+                val again = JSONObject(AntSportsRpcCall.NeverlandRpcCall.queryBaseinfo())
+                val left = again.optJSONObject("data")?.optJSONArray("offlineAwards")
+                if (left != null && left.length() > 0) {
+                    Log.error(TAG, "健康岛离线奖励领取后仍有残留，下轮重试")
+                }
+            } catch (t: Throwable) {
+                Log.printStackTrace(TAG, "receiveNeverlandOfflineAwards err:", t)
             }
         }
 
@@ -3053,6 +3192,7 @@ class AntSports : ModelTask() {
             const val WEI_C_DA_TIAO_ZHAN = 3  ///< 维C大挑战
             const val LONG_NIAN_QI_FU = 4  ///< 龙年祈福
             const val SHOU_HU_TI_YU_MENG = 5  ///< 守护体育梦
+            const val LOWEST_COMPLETION = 6  ///< 自动（全主题完成次数最少）
 
             /** @brief 界面显示的名称列表 */
             val nickNames = arrayOf(
@@ -3061,7 +3201,8 @@ class AntSports : ModelTask() {
                 "登顶芝麻山",
                 "维C大挑战",
                 "龙年祈福",
-                "守护体育梦"
+                "守护体育梦",
+                "自动（完成次数最少）"
             )
 
             /**
@@ -3074,7 +3215,8 @@ class AntSports : ModelTask() {
                 "V202405271625",  ///< [2] 登顶芝麻山
                 "202404221422",   ///< [3] 维C大挑战
                 "WF202312050200", ///< [4] 龙年祈福
-                "V202409061650"   ///< [5] 守护体育梦
+                "V202409061650",  ///< [5] 守护体育梦
+                ""                ///< [6] 自动选线（空 = 扫描全主题取完成次数最少）
             )
         }
     }

@@ -12,33 +12,55 @@ object TaskBlacklist {
     private const val TAG = "TaskBlacklist"
     private const val BLACKLIST_KEY = "task_blacklist"
 
+    /** 当日日期串，用于自动黑名单的当日有效性判断 */
+    private fun today(): String =
+        java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.CHINA).format(java.util.Date())
+
     /**
-     * 获取黑名单列表
+     * 读取当日自动黑名单；旧格式或非当日数据一律视为空（自动黑名单仅当日有效）
+     */
+    private fun loadDaily(): MutableSet<String> {
+        return try {
+            val raw = DataStore.getOrCreate(BLACKLIST_KEY, object : TypeReference<Any>() {})
+            if (raw is Map<*, *>) {
+                val date = raw["date"]?.toString() ?: return mutableSetOf()
+                if (date != today()) {
+                    Log.runtime(TAG, "清理过期自动黑名单（$date）")
+                    return mutableSetOf()
+                }
+                when (val entries = raw["entries"]) {
+                    is Set<*> -> entries.map { it.toString() }.toMutableSet()
+                    is List<*> -> entries.map { it.toString() }.toMutableSet()
+                    else -> mutableSetOf()
+                }
+            } else {
+                mutableSetOf()
+            }
+        } catch (e: Exception) {
+            Log.printStackTrace(TAG, "读取自动黑名单失败，视为空", e)
+            mutableSetOf()
+        }
+    }
+
+    private fun saveDaily(entries: Set<String>) {
+        try {
+            DataStore.put(BLACKLIST_KEY, mapOf("date" to today(), "entries" to entries))
+        } catch (e: Exception) {
+            Log.printStackTrace(TAG, "保存自动黑名单失败", e)
+        }
+    }
+
+    /**
+     * 获取黑名单列表（当日自动黑名单 + 默认黑名单）
      * @return 黑名单任务集合
      */
     @JvmStatic
     fun getBlacklist(): Set<String> {
         return try {
-            val storedBlacklist = DataStore.getOrCreate(BLACKLIST_KEY, object : TypeReference<Set<String>>() {})
-            // 合并存储的黑名单和默认黑名单
-            (storedBlacklist + defaultBlacklist).toSet()
+            (loadDaily() + defaultBlacklist).toSet()
         } catch (e: Exception) {
             Log.printStackTrace(TAG, "获取黑名单失败，使用默认黑名单", e)
             defaultBlacklist
-        }
-    }
-
-
-
-    /**
-     * 保存黑名单列表
-     * @param blacklist 要保存的黑名单集合
-     */
-    private fun saveBlacklist(blacklist: Set<String>) {
-        try {
-            DataStore.put(BLACKLIST_KEY, blacklist)
-        } catch (e: Exception) {
-            Log.printStackTrace(TAG, "保存黑名单失败", e)
         }
     }
 
@@ -86,9 +108,9 @@ object TaskBlacklist {
         if (taskId.isBlank()) return
         // 如果提供了任务标题，则将ID和标题组合后添加，支持模糊匹配
         val blacklistItem = if (taskTitle.isNotBlank()) "$taskId$taskTitle" else taskId
-        val currentBlacklist = getBlacklist().toMutableSet()
+        val currentBlacklist = loadDaily()
         if (currentBlacklist.add(blacklistItem)) {
-            saveBlacklist(currentBlacklist)
+            saveDaily(currentBlacklist)
         }
     }
 
@@ -105,9 +127,9 @@ object TaskBlacklist {
         // 如果提供了任务标题，则将ID和标题组合后移除，支持模糊匹配
         val blacklistItem = if (taskTitle.isNotBlank()) "$taskId$taskTitle" else taskId
 
-        val currentBlacklist = getBlacklist().toMutableSet()
+        val currentBlacklist = loadDaily()
         if (currentBlacklist.remove(blacklistItem)) {
-            saveBlacklist(currentBlacklist)
+            saveDaily(currentBlacklist)
             val displayInfo = if (taskTitle.isNotBlank()) "$taskId - $taskTitle" else taskId
             Log.runtime(TAG, "任务[$displayInfo]已从黑名单移除")
         }
@@ -119,7 +141,7 @@ object TaskBlacklist {
     @JvmStatic
     fun clearBlacklist() {
         try {
-            saveBlacklist(emptySet())
+            saveDaily(emptySet())
             Log.runtime(TAG, "黑名单已清空")
         } catch (e: Exception) {
             Log.printStackTrace(TAG, "清空黑名单失败", e)

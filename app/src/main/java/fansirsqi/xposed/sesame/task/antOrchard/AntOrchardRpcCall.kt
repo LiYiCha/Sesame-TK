@@ -302,6 +302,34 @@ object AntOrchardRpcCall {
         )
     }
 
+    /** 施肥账户同步：主账户信息查询兜底（happyPoint/wateringCost 取不到时使用） */
+    fun orchardSyncIndexMainAccount(Wua: String): String {
+        val jsonArgs = """
+         [{
+             "requestType": "NORMAL",
+             "sceneCode": "ORCHARD",
+             "source": "ch_appcenter__chsub_commonapp",
+             "syncIndexTypes": "QUERY_MAIN_ACCOUNT_INFO",
+             "useWua": true,
+             "version": "$VERSION",
+             "wua": "$Wua"
+         }]
+    """.trimIndent()
+
+        return RequestManager.requestString(
+            "com.alipay.antorchard.orchardSyncIndex",
+            jsonArgs
+        )
+    }
+
+    /** 营地接管：选择肥料奖励 */
+    fun choosePrize(sendOrderId: String): String {
+        return RequestManager.requestString(
+            "com.alipay.antfarmlite.choosePrize",
+            "[{\"requestType\":\"NORMAL\",\"sceneCode\":\"ORCHARD\",\"sendOrderId\":\"$sendOrderId\",\"source\":\"ANTFARM_ORCHARD\"}]"
+        )
+    }
+
     /**
      * 限时挑战同步索引（commonapp 渠道版，供限时挑战含 GAME_CENTER 玩游戏子任务使用）。
      * 参数对齐支付宝 H5 页面实际请求（含 appMode，不含 useWua）。

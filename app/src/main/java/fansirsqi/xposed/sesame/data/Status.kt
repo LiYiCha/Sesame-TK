@@ -147,6 +147,12 @@ class Status {
         }
 
         @JvmStatic
+        fun getWaterFriendTodayCount(id: String): Int? {
+            val key = "${UserMap.currentUid}-$id"
+            return INSTANCE.waterFriendLogList[key]
+        }
+
+        @JvmStatic
         fun waterFriendToday(id: String, count: Int) {
             val key = "${UserMap.currentUid}-$id"
             INSTANCE.waterFriendLogList[key] = count

@@ -55,6 +55,10 @@ public final class StatusFlags {
     public static final String FLAG_ANTMEMBER_MERCHANT_MORE_TASK_DONE =
             "AntMember::merchantMoreTaskDone";
 
+    /** 会员浮球：当日失败后停止重试 */
+    public static final String FLAG_ANTMEMBER_MEMBER_FLOATING_BALL_FAILED_TODAY =
+            "AntMember::memberFloatingBallFailedToday";
+
 
     // ============================================================
     // 芝麻信用 / 芝麻粒
@@ -63,10 +67,6 @@ public final class StatusFlags {
     /** 芝麻粒炼金：次日奖励是否已领取 */
     public static final String FLAG_ZMXY_ALCHEMY_NEXT_DAY_AWARD =
             "zmxy::alchemy::nextDayAward";
-
-    /** 信用 2101：图鉴章节任务是否全部完成 */
-    public static final String FLAG_CREDIT2101_CHAPTER_TASK_DONE =
-            "FLAG_Credit2101_ChapterTask_Done";
 
 
     // ============================================================

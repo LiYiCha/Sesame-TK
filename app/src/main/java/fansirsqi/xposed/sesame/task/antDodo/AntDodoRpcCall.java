@@ -18,6 +18,12 @@ public class AntDodoRpcCall {
                 "[{}]");
     }
 
+    /** 刮卡 */
+    public static String scratchCard(String animalId, String bookId, String cardInstanceId) {
+        return RequestManager.requestString("alipay.antdodo.rpc.h5.scratchCard",
+                "[{\"animalId\":\"" + animalId + "\",\"bookId\":\"" + bookId + "\",\"cardInstanceId\":\"" + cardInstanceId + "\"}]");
+    }
+
     public static String collect() {
         return RequestManager.requestString("alipay.antdodo.rpc.h5.collect",
                 "[{}]");

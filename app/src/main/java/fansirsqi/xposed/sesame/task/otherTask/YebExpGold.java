@@ -41,6 +41,8 @@ public class YebExpGold extends BaseCommTask {
 
     private static final String FLAG_SIGN = "yebExpGold::sign";
     private static final String FLAG_EXCHANGE = "yebExpGold::exchange";
+    /** 存在未确认的子动作时，当日完成标记延后置位，允许当天稍后重试 */
+    private boolean pendingConfirmation = false;
     private static final String FLAG_VOUCHER = "yebExpGold::voucherConvertDone";
     private static final String FLAG_TASK_PREFIX = "yebExpGold::task:";
 
@@ -66,6 +68,7 @@ public class YebExpGold extends BaseCommTask {
         if (Status.hasFlagToday(CompletedKeyEnum.YebExpGold.name())) {
             return;
         }
+        pendingConfirmation = false;
         try {
             boolean handledTask = false;
             List<String> manualTaskTitles = new ArrayList<>();
@@ -119,8 +122,10 @@ public class YebExpGold extends BaseCommTask {
                 Log.other("余额宝体验金任务待手动完成: " + String.join("、", manualTaskTitles));
             }
 
-            // 流程正常走完后标记今日完成，避免白天轮询重复空跑与刷屏
-            Status.setFlagToday(CompletedKeyEnum.YebExpGold.name());
+            // 流程正常走完后标记今日完成，避免白天轮询重复空跑与刷屏；存在未确认子动作时延后
+            if (!pendingConfirmation) {
+                Status.setFlagToday(CompletedKeyEnum.YebExpGold.name());
+            }
         } catch (Throwable th) {
             Log.printStackTrace(TAG, "余额宝体验金运行异常:", th);
             TimeUtil.sleep(this.executeIntervalInt);
@@ -164,8 +169,34 @@ public class YebExpGold extends BaseCommTask {
                 return false;
             }
             logSignInRewards(amount, signResponse);
-            Status.setFlagToday(FLAG_SIGN);
-            return true;
+            // 回查签到状态：SIGNED 或签到奖励订单 sendStatus=SUCCESS 才确认
+            boolean confirmed = false;
+            JSONObject refreshed = queryMain(false, null);
+            if (isSuccess(refreshed)) {
+                JSONObject refreshedData = refreshed.optJSONObject("resultData");
+                JSONObject refreshedItem = refreshedData == null ? null : findTodaySignItem(refreshedData);
+                JSONObject refreshedSignInfo = refreshedItem == null ? null : refreshedItem.optJSONObject("signInfo");
+                String refreshedStatus = refreshedSignInfo == null ? "" : refreshedSignInfo.optString("signStatus").toUpperCase();
+                if ("SIGNED".equals(refreshedStatus)) {
+                    confirmed = true;
+                } else {
+                    JSONArray orders = signItem.optJSONArray("prizeOrderDTOList");
+                    for (int i = 0; orders != null && i < orders.length(); i++) {
+                        JSONObject order = orders.optJSONObject(i);
+                        if (order != null && "SUCCESS".equalsIgnoreCase(order.optString("sendStatus"))) {
+                            confirmed = true;
+                            break;
+                        }
+                    }
+                }
+            }
+            if (confirmed) {
+                Status.setFlagToday(FLAG_SIGN);
+            } else {
+                pendingConfirmation = true;
+                Log.error(TAG, "余额宝体验金签到推送成功但未回查确认，稍后重试");
+            }
+            return confirmed;
         } catch (Throwable th) {
             TimeUtil.sleep(this.executeIntervalInt);
             return false;

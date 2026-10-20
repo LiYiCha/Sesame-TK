@@ -619,6 +619,29 @@ public class AntForestRpcCall {
         return RequestManager.requestString("alipay.bizfmcg.greenlife.consultForSendEnergyByAction", "[{\"sourceType\":\"" + sourceType + "\"}]");
     }
 
+    /** 绿色知识打卡：查询当前集市活动 */
+    public static String retrieveCurrentMarketActivity() {
+        return RequestManager.requestString("alipay.bizfmcg.greenlife.retrieveCurrentActivity", "[{}]");
+    }
+
+    /** 绿色知识打卡：完成当前打卡任务 */
+    public static String finishCurrentMarketTask(String taskTemplateId) {
+        return RequestManager.requestString("alipay.bizfmcg.greenlife.finishCurrentTask",
+                "[{\"taskTemplateId\":\"" + taskTemplateId + "\"}]");
+    }
+
+    /** 绿色租赁：查询浏览奖励资格 */
+    public static String checkUserSecondSceneChance() {
+        return RequestManager.requestString("com.alipay.creditapollon.biz.rpc.api.rent.green.checkUserSecondSceneChance",
+                "[{\"requestSceneCode\":\"rentBrowse\"}]");
+    }
+
+    /** 绿色租赁：领取浏览能量 */
+    public static String generateRentEnergy() {
+        return RequestManager.requestString("com.alipay.creditapollon.biz.rpc.api.rent.green.generateEnergy",
+                "[{\"requestSceneCode\":\"rentBrowse\"}]");
+    }
+
     /** 森林集市 */
     public static String sendEnergyByAction(String sourceType) {
         return RequestManager.requestString(

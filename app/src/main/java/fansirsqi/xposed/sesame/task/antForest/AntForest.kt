@@ -192,6 +192,7 @@ class AntForest : ModelTask(), EnergyCollectCallback {
     private var collectGiftBox: BooleanModelField? = null
     private var medicalHealth: BooleanModelField? = null //医疗健康开关
     private var forestMarket: BooleanModelField? = null
+    private var greenRent: BooleanModelField? = null
     private var combineAnimalPiece: BooleanModelField? = null
     private var consumeAnimalProp: BooleanModelField? = null
     private var whoYouWantToGiveTo: SelectModelField? = null
@@ -631,6 +632,7 @@ class AntForest : ModelTask(), EnergyCollectCallback {
             ).also { medicalHealthOption = it })
 
         modelFields.addField(BooleanModelField("forestMarket", "森林集市", false).also { forestMarket = it })
+        modelFields.addField(BooleanModelField("greenRent", "绿色租赁 | 浏览能量", false).also { greenRent = it })
         modelFields.addField(BooleanModelField("youthPrivilege", "青春特权 | 森林道具", false).also { youthPrivilege = it })
         modelFields.addField(BooleanModelField("studentCheckIn", "青春特权 | 签到红包", false).also { dailyCheckIn = it })
         modelFields.addField(BooleanModelField("ecoLife", "绿色行动 | 开关", false).also { ecoLife = it })
@@ -958,6 +960,11 @@ class AntForest : ModelTask(), EnergyCollectCallback {
                     GreenLife.ForestMarket("GREEN_LIFE")
                     //  GreenLife.ForestMarket("ANTFOREST")  二级条目暂时关闭
                     tc.countDebug("森林集市")
+                    GreenLife.checkIn()
+                }
+
+                if (greenRent?.value == true) {
+                    GreenLife.collectRentEnergy()
                 }
 
                 if (medicalHealth!!.value) {
@@ -1371,7 +1378,10 @@ class AntForest : ModelTask(), EnergyCollectCallback {
                 }
                 waterCount = min(waterCount, 3)
 
-                if (Status.canWaterFriendToday(uid, waterCount)) {
+                // 按服务端进度补足：目标次数减去今日已浇次数
+                val completedCount = Status.getWaterFriendTodayCount(uid)
+                val remainingCount = waterCount - (completedCount ?: 0)
+                if (remainingCount > 0) {
                     try {
                         val response = AntForestRpcCall.queryFriendHomePage(uid, null)
                         val jo = JSONObject(response)
@@ -1380,12 +1390,12 @@ class AntForest : ModelTask(), EnergyCollectCallback {
 
                             // ✅ 关键改动：传入通知开关
                             val waterCountKVNode = returnFriendWater(
-                                uid, bizNo, waterCount, waterFriendCount!!.value, notify
+                                uid, bizNo, remainingCount, waterFriendCount!!.value, notify
                             )
 
                             val actualWaterCount: Int = waterCountKVNode.key!!
                             if (actualWaterCount > 0) {
-                                Status.waterFriendToday(uid, actualWaterCount)
+                                Status.waterFriendToday(uid, (completedCount ?: 0) + actualWaterCount)
                             }
                             if (java.lang.Boolean.FALSE == waterCountKVNode.value) {
                                 break

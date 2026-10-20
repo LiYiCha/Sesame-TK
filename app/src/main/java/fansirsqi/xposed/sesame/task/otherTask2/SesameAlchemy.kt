@@ -699,7 +699,24 @@ class SesameAlchemy {
                             feedbackTask(templateId)
                             sleepCompat(6000 + (Math.random() * 1000).toLong())
                             val (pushSuccess, pushErr) = pushActivity(recordId, title)
-                            if (pushSuccess) handleTaskSuccess(title) else handleTaskFailure(title, pushErr)
+                            if (pushSuccess) {
+                                // 回查服务端上次操作任务，确认已记账
+                                sleepCompat(2000)
+                                var confirmed = false
+                                try {
+                                    val last = JSONObject(AntMemberRpcCall.Zmxy.Alchemy.queryLastOperateTask())
+                                    val vo = last.optJSONObject("data")?.optJSONObject("lastOperateTaskVO")
+                                    confirmed = vo != null && vo.optString("templateId") == templateId &&
+                                            vo.optString("recordId") == recordId && vo.optBoolean("finishFlag")
+                                } catch (e: Exception) {
+                                    Log.error(TAG, "生活记录回查异常: $e")
+                                }
+                                if (confirmed) {
+                                    handleTaskSuccess(title)
+                                } else {
+                                    Log.runtime("$TAG 生活记录[$title]推送成功但服务端未确认记账，下轮复查")
+                                }
+                            } else handleTaskFailure(title, pushErr)
 
                             processedTasks.add(templateId)
                             hasNewTasks = true

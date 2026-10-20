@@ -63,6 +63,7 @@ public class AntDodo extends ModelTask {
     private ChoiceModelField usePropUNIVERSALCARDType;         //万能卡使用方法
 
     private BooleanModelField autoGenerateBook;
+    private BooleanModelField scratchCard;
     @Override
     public ModelFields getFields() {
         ModelFields modelFields = new ModelFields();
@@ -76,6 +77,7 @@ public class AntDodo extends ModelTask {
 
         modelFields.addField(usePropUNIVERSALCARDType = new ChoiceModelField("usePropUNIVERSALCARDType", "万能卡 | 使用方式", UniversalCardUseType.EXCLUDE_CURRENT, UniversalCardUseType.nickNames));
         modelFields.addField(autoGenerateBook = new BooleanModelField("autoGenerateBook", "自动合成图鉴", false));
+        modelFields.addField(scratchCard = new BooleanModelField("scratchCard", "自动刮卡", false));
         return modelFields;
     }
     @Override
@@ -120,11 +122,123 @@ public class AntDodo extends ModelTask {
                 } else {
                     collectAnimalCard();
                 }
+                scratchAllCards();
             } else {
                 Log.runtime(TAG, "collect错误"+jo.getString("resultDesc"));
             }
         } catch (Throwable t) {
             Log.printStackTrace(TAG, "AntDodo Collect err:",t);
+        }
+    }
+
+    /** 全量处理图鉴中可刮的卡（先落盘待确认表再请求，回查确认后移除） */
+    private void scratchAllCards() {
+        if (scratchCard == null || !scratchCard.value) return;
+        try {
+            JSONObject jo = new JSONObject(AntDodoRpcCall.homePage());
+            if (!ResChecker.checkRes(TAG, jo)) return;
+            JSONArray collections = jo.getJSONObject("data").optJSONArray("curCollection");
+            if (collections == null) return;
+            for (int i = 0; i < collections.length(); i++) {
+                JSONObject collection = collections.optJSONObject(i);
+                if (collection != null) scratchAnimalCards(collection);
+            }
+        } catch (Throwable t) {
+            Log.printStackTrace(TAG, "AntDodo ScratchAllCards err:", t);
+        }
+    }
+
+    /** 刮单个图鉴的待刮卡；返回 false 表示本轮未全部完成，待确认表跨轮保留 */
+    private boolean scratchAnimalCards(JSONObject collection) {
+        if (scratchCard == null || !scratchCard.value) return true;
+        try {
+            JSONObject collectDetail = collection.optJSONObject("collectDetail");
+            JSONArray cards = collectDetail == null ? new JSONArray() : collectDetail.optJSONArray("cardList");
+            JSONObject animal = collection.optJSONObject("animal");
+            if (animal == null) return cards == null || cards.length() == 0;
+            String animalId = animal.optString("animalId");
+            String bookId = animal.optString("bookId");
+            if (animalId.isEmpty() || bookId.isEmpty()) {
+                Log.error(TAG, "神奇物种刮卡缺少动物或图鉴标识");
+                return false;
+            }
+            String pendingKey = "antDodoScratchPending:" + UserMap.getCurrentUid();
+            java.util.Map<String, Integer> rewards = fansirsqi.xposed.sesame.util.DataStore.INSTANCE.getOrCreate(
+                    pendingKey, new com.fasterxml.jackson.core.type.TypeReference<java.util.Map<String, Integer>>() {});
+            String prefix = animalId + ":";
+            java.util.List<JSONObject> pending = new java.util.ArrayList<>();
+            for (int i = 0; i < (cards == null ? 0 : cards.length()); i++) {
+                JSONObject card = cards.optJSONObject(i);
+                if (card != null && card.optBoolean("scratchable") && !card.optBoolean("scratched")) pending.add(card);
+            }
+            boolean hasPendingForAnimal = false;
+            for (String key : rewards.keySet()) {
+                if (key.startsWith(prefix)) { hasPendingForAnimal = true; break; }
+            }
+            if (pending.isEmpty() && !hasPendingForAnimal) return true;
+            for (JSONObject card : pending) {
+                String instanceId = card.optString("cardInstanceId");
+                if (instanceId.isEmpty()) {
+                    Log.error(TAG, "神奇物种刮卡缺少卡片实例：" + animalId);
+                    return false;
+                }
+                String key = prefix + instanceId;
+                if (rewards.containsKey(key)) continue;
+                rewards.put(key, -1);
+                fansirsqi.xposed.sesame.util.DataStore.INSTANCE.put(pendingKey, rewards);
+                JSONObject result = new JSONObject(AntDodoRpcCall.scratchCard(animalId, bookId, instanceId));
+                if (!ResChecker.checkRes(TAG, result)) {
+                    if (result.has("success") && !result.optBoolean("success")) {
+                        rewards.remove(key);
+                        fansirsqi.xposed.sesame.util.DataStore.INSTANCE.put(pendingKey, rewards);
+                    }
+                    return false;
+                }
+                JSONObject data = result.optJSONObject("data");
+                rewards.put(key, data != null ? data.optInt("energyGram", -1) : -1);
+                fansirsqi.xposed.sesame.util.DataStore.INSTANCE.put(pendingKey, rewards);
+                fansirsqi.xposed.sesame.util.GlobalThreadPools.sleepCompat(500L);
+            }
+            // 回查确认：重查主页，已 scratched 的卡与待确认表求交集
+            JSONObject refreshed = new JSONObject(AntDodoRpcCall.homePage());
+            if (!ResChecker.checkRes(TAG, refreshed)) return false;
+            JSONArray animals = refreshed.getJSONObject("data").getJSONArray("curCollection");
+            JSONArray refreshedCards = null;
+            for (int i = 0; i < animals.length(); i++) {
+                JSONObject a = animals.optJSONObject(i);
+                if (a != null && a.optJSONObject("animal") != null
+                        && animalId.equals(a.getJSONObject("animal").optString("animalId"))) {
+                    JSONObject detail = a.optJSONObject("collectDetail");
+                    refreshedCards = detail == null ? null : detail.optJSONArray("cardList");
+                    break;
+                }
+            }
+            java.util.Set<String> scratchedIds = new java.util.HashSet<>();
+            for (int i = 0; i < (refreshedCards == null ? 0 : refreshedCards.length()); i++) {
+                JSONObject card = refreshedCards.optJSONObject(i);
+                if (card != null && card.optBoolean("scratched")) scratchedIds.add(card.optString("cardInstanceId"));
+            }
+            int total = 0;
+            int confirmedCount = 0;
+            java.util.Iterator<String> it = rewards.keySet().iterator();
+            while (it.hasNext()) {
+                String key = it.next();
+                if (!key.startsWith(prefix)) continue;
+                if (scratchedIds.contains(key.substring(prefix.length()))) {
+                    int gram = rewards.get(key);
+                    if (gram > 0) total += gram;
+                    confirmedCount++;
+                    it.remove();
+                }
+            }
+            if (confirmedCount > 0) {
+                fansirsqi.xposed.sesame.util.DataStore.INSTANCE.put(pendingKey, rewards);
+                Log.forest("神奇物种🎫[刮卡" + confirmedCount + "张]#获得能量" + total + "g");
+            }
+            return true;
+        } catch (Throwable t) {
+            Log.printStackTrace(TAG, "AntDodo scratchAnimalCards err:", t);
+            return false;
         }
     }
     private void collectAnimalCard() {

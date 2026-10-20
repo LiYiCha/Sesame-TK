@@ -439,7 +439,7 @@ public class AntMemberRpcCall {
     /**
      * 查询安心豆/积分账户信息
      * 对应: com.alipay.insmarketingbff.bean.queryAccountSummaryPoint
-     * AG 版硬编码 bizScene=POSITION, entrance=insplatform_mine_anxindou
+     * 固定参数: bizScene=POSITION, entrance=insplatform_mine_anxindou
      */
     public static String queryUserAccountInfo() {
         try {
@@ -1546,11 +1546,21 @@ public class AntMemberRpcCall {
      * 签到页任务列表
      * 对应: com.alipay.amic.memtask.h5.MemTaskListQueryFacade.signPageTaskList
      */
+    public static String signPageTaskList() {
+        return signPageTaskList(1, java.util.UUID.randomUUID().toString());
+    }
+
     public static String signPageTaskList(int pageNo) {
+        return signPageTaskList(pageNo, java.util.UUID.randomUUID().toString());
+    }
+
+    public static String signPageTaskList(int pageNo, String session) {
         try {
             JSONObject args = new JSONObject();
             args.put("pageNo", pageNo);
             args.put("pageSize", 8);
+            args.put("session", session);
+            args.put("switchNormal", true);
             args.put("previewTime", "");
             args.put("source", "antmember");
             args.put("sourcePassMap", buildMemberSourcePassMap());
@@ -1890,15 +1900,26 @@ public class AntMemberRpcCall {
     }
 
     /**
-     * MemberNew 用的 ngfeUpdate — AG 版已废弃，返回空
+     * MemberNew 用的 ngfeUpdate 占位，返回空
      */
     public static String ngfeUpdate(String ngfeKey) {
         return "";
     }
 
+    /** 贴贴币商城首页 */
+    public static String queryBillCoinShop() {
+        return RequestManager.requestString("alipay.memberasset.sticker.prize.coin.shop.home", "[{}]");
+    }
+
+    /** 贴贴币权益商品分页列表（只读浏览，不自动兑换） */
+    public static String queryBillCoinProducts(int pageNo) {
+        return RequestManager.requestString("alipay.memberasset.sticker.prize.query.product.list",
+                "[{\"pageNo\":" + pageNo + ",\"pageSize\":20,\"queryType\":\"COIN\"}]");
+    }
+
     /**
      * MemberNew 硬编码的 com.alipay.adtask.biz.mobilegw.service.task.finish
-     * AG 版已废弃，对齐游戏中心 V3: doTaskSend
+     * 对齐游戏中心 V3: doTaskSend
      */
     public static String adTaskFinish(String bizId) {
         try {

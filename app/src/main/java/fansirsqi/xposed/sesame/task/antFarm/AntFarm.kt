@@ -204,6 +204,7 @@ class AntFarm : ModelTask() {
     internal var loveChickenGathering: BooleanModelField? = null
     internal var loveChickenMode: ChoiceModelField? = null
     internal var loveChickenOvertakeAmount: IntegerModelField? = null
+    internal var loveChickenContributionMargin: IntegerModelField? = null
 
     /**
      * 饲料任务
@@ -597,6 +598,14 @@ class AntFarm : ModelTask() {
                 1,
                 10000
             ).also { loveChickenOvertakeAmount = it })
+        modelFields.addField(
+            IntegerModelField(
+                "loveChickenContributionMargin",
+                "爱心鸡结号 | 一等奖爱心值余量",
+                10,
+                1,
+                10000
+            ).also { loveChickenContributionMargin = it })
         modelFields.addField(
             BooleanModelField(
                 "useSpecialFood",

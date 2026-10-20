@@ -461,6 +461,17 @@ public class AntFarmRpcCall {
     }
 
     /**
+     * 场景任务完成（RPC 直调，供"不支持 RPC"类任务改走农场接口兜底）
+     * @param bizKey 任务标识
+     * @param taskSceneCode 场景码
+     */
+    public static String doSceneTask(String bizKey, String taskSceneCode) {
+        return RequestManager.requestString("com.alipay.antfarm.doFarmTask",
+                "[{\"bizKey\":\"" + bizKey + "\",\"requestType\":\"RPC\",\"sceneCode\":\"ANTFARM\",\"source\":\"H5\",\"taskSceneCode\":\""
+                        + taskSceneCode + "\",\"version\":\"" + VERSION + "\"}]");
+    }
+
+    /**
      * Npc小鸡通用完成任务
      * @param taskId
      * @param taskSceneCode

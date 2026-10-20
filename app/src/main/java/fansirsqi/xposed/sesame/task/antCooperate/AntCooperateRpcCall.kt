@@ -121,13 +121,18 @@ object AntCooperateRpcCall {
 
     @JvmStatic
     fun queryLoveHome(): String {
-        val start = "20251022"
-        val end = "20251217"
-        val args = "[{\"calenderEnd\":\"" + end +
-                "\",\"calenderStart\":\"" + start +
-                "\",\"source\":\"chInfo_ch_appcenter__chsub_9patch\"}]"
+        val args = "[{\"source\":\"chInfo_ch_appcenter__chsub_9patch\"}]"
         return RequestManager.requestString(
             "alipay.greenmatrix.rpc.h5.love.loveHome",
+            args
+        )
+    }
+
+    @JvmStatic
+    fun queryTeamMemberList(teamId: String): String {
+        val args = "[{\"source\":\"chInfo_ch_appcenter__chsub_9patch\",\"teamId\":\"" + teamId + "\"}]"
+        return RequestManager.requestString(
+            "alipay.antforest.forest.h5.queryTeamMemberList",
             args
         )
     }

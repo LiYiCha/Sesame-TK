@@ -175,6 +175,7 @@ class AntOrchard : ModelTask() {
                 doOrchardDailyTask(userId!!)
                 triggerTbTask()
                 handleLeyuanDailyTasks()
+                runCampTakeover()
             }
 
             // 农场抽抽乐
@@ -1090,6 +1091,75 @@ class AntOrchard : ModelTask() {
             }
         } catch (t: Throwable) {
             Log.printStackTrace(TAG, "querySubplotsActivity err:", t)
+        }
+    }
+
+    // 农场营地接管：活动处于待选奖状态时选择肥料奖励
+    private suspend fun runCampTakeover() {
+        val level = treeLevel?.takeIf { it.isNotBlank() && it != "0" } ?: return
+        try {
+            val resp = JSONObject(AntOrchardRpcCall.querySubplotsActivity(level))
+            if (!ResChecker.checkRes(TAG, resp)) return
+            val activities = resp.optJSONArray("subplotsActivityList") ?: return
+            for (i in 0 until activities.length()) {
+                val activity = activities.optJSONObject(i) ?: continue
+                if (activity.optString("activityType") != "CAMP_TAKEOVER") continue
+                var extend = activity.optJSONObject("extend")
+                if (extend == null || extend.length() == 0) {
+                    val extStr = activity.optString("extend")
+                    if (extStr.isNotBlank()) {
+                        runCatching { JSONObject(extStr) }.getOrNull()?.let { extend = it }
+                    }
+                }
+                val current = extend?.optJSONObject("currentActivityInfo") ?: continue
+                if (current.optString("activityStatus") != "TO_DO_TASK") {
+                    chooseCampTakeoverPrize(current, level)
+                }
+            }
+        } catch (t: Throwable) {
+            Log.printStackTrace(TAG, "农场营地接管失败", t)
+        }
+    }
+
+    private suspend fun chooseCampTakeoverPrize(current: JSONObject, level: String) {
+        try {
+            val prizes = current.optJSONArray("recommendPrizeList") ?: return
+            for (i in 0 until prizes.length()) {
+                val prize = prizes.optJSONObject(i) ?: continue
+                if (prize.optString("prizeType") != "FEILIAO") continue
+                val sendOrderId = prize.optString("sendOrderId")
+                if (sendOrderId.isBlank()) return
+                val resp = JSONObject(AntOrchardRpcCall.choosePrize(sendOrderId))
+                if (ResChecker.checkRes(TAG, resp)) {
+                    Log.farm("农场营地接管🎁[已选择肥料奖励]")
+                    GlobalThreadPools.sleepCompat(1500)
+                    val again = JSONObject(AntOrchardRpcCall.querySubplotsActivity(level))
+                    val activities = again.optJSONArray("subplotsActivityList")
+                    var confirmed = false
+                    for (j in 0 until (activities?.length() ?: 0)) {
+                        val a = activities?.optJSONObject(j) ?: continue
+                        if (a.optString("activityType") != "CAMP_TAKEOVER") continue
+                        var ext = a.optJSONObject("extend")
+                        if (ext == null) {
+                            val extStr = a.optString("extend")
+                            if (extStr.isNotBlank()) {
+                                runCatching { JSONObject(extStr) }.getOrNull()?.let { ext = it }
+                            }
+                        }
+                        val cur = ext?.optJSONObject("currentActivityInfo") ?: continue
+                        val list = cur.optJSONArray("recommendPrizeList")
+                        var stillPending = false
+                        for (k in 0 until (list?.length() ?: 0)) {
+                            if (list?.optJSONObject(k)?.optString("sendOrderId") == sendOrderId) stillPending = true
+                        }
+                        if (!stillPending) confirmed = true
+                    }
+                    if (!confirmed) Log.runtime(TAG, "营地接管选肥回查未确认，下轮重试")
+                }
+                return
+            }
+        } catch (t: Throwable) {
+            Log.printStackTrace(TAG, "营地接管选肥失败", t)
         }
     }
 
