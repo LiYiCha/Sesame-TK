@@ -2468,7 +2468,7 @@ class AntForest : ModelTask(), EnergyCollectCallback {
             // 等待所有好友处理完成
             friendJobs.awaitAll()
             val elapsed = System.currentTimeMillis() - startTime
-            Log.runtime(TAG, "✅ ${sourceName}处理完成，耗时${elapsed}ms，平均${elapsed / friendList.length()}ms/人")
+            //Log.runtime(TAG, "✅ ${sourceName}处理完成，耗时${elapsed}ms，平均${elapsed / friendList.length()}ms/人")
 
         } catch (e: CancellationException) {
             // 协程被取消是正常行为，不记录错误日志

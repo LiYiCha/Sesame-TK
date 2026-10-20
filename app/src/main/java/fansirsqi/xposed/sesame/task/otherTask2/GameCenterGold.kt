@@ -623,8 +623,6 @@ class GameCenterGold : BaseCommTask() {
                         Log.error(TAG, "金币抽奖失败: $res")
                     }
                 }
-            } else {
-                Log.runtime(TAG, "金币抽奖跳过，当前状态为: $status")
             }
         } catch (e: Exception) {
             Log.error(TAG, "金币抽奖异常: ${e.message}")
