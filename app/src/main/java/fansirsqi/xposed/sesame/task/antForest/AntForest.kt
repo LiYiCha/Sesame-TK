@@ -1013,19 +1013,19 @@ class AntForest : ModelTask(), EnergyCollectCallback {
             // 蹲点任务会在后台独立协程中继续运行，不影响其他模块
             val waitingTaskCount = EnergyWaitingManager.getWaitingTaskCount()
 
-            Log.runtime(TAG, "=".repeat(50))
-            Log.runtime(TAG, "🌲🌲🌲 森林主任务执行完毕 🌲🌲🌲")
-            Log.runtime(TAG, "⏱️ 主任务耗时: ${timeInSeconds}秒 (${totalTime}ms)")
-            Log.runtime(TAG, "📊 收取统计: 收${totalCollected}g 帮${TOTAL_HELP_COLLECTED}g 浇${TOTAL_WATERED}g")
+//            Log.runtime(TAG, "=".repeat(50))
+//            Log.runtime(TAG, "🌲🌲🌲 森林主任务执行完毕 🌲🌲🌲")
+//            Log.runtime(TAG, "⏱️ 主任务耗时: ${timeInSeconds}秒 (${totalTime}ms)")
+//            Log.runtime(TAG, "📊 收取统计: 收${totalCollected}g 帮${TOTAL_HELP_COLLECTED}g 浇${TOTAL_WATERED}g")
             if (waitingTaskCount > 0) {
 //                Log.runtime(TAG, "⏰ 后台蹲点任务: $waitingTaskCount 个 (将在指定时间自动收取)")
                 // 输出详细的蹲点任务状态，帮助调试
                 val taskStatus = EnergyWaitingManager.getWaitingTasksStatus()
-                Log.runtime(TAG, "📋 $taskStatus")
+                //Log.runtime(TAG, "📋 $taskStatus")
             } else {
 //                Log.runtime(TAG, "✅ 无后台蹲点任务")
             }
-            Log.runtime(TAG, "=".repeat(50))
+//            Log.runtime(TAG, "=".repeat(50))
 
             userNameCache.clear()
             processedUsersCache.clear()

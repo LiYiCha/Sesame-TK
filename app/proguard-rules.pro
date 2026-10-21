@@ -5,6 +5,9 @@
 -keep class de.robv.android.xposed.** { *; }
 -keep class io.github.libxposed.service.** { *; }
 -dontwarn io.github.libxposed.service.**
+-keep,allowoptimization,allowobfuscation public class * extends io.github.libxposed.api.XposedModule { *; }
+-dontwarn io.github.libxposed.api.**
+-dontwarn io.github.libxposed.annotation.**
 
 
 # ---------- 日志 ----------

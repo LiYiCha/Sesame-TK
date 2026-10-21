@@ -33,15 +33,15 @@ public class TimeCounter {
     public void stop() {
         Instant end = Instant.now();
         long durationMs = Duration.between(start, end).toMillis();
-        Log.runtime(name,String.format("========================\n%s 耗时: %d ms (%s)",
-                name, durationMs, resultMsg));
+//        Log.runtime(name,String.format("========================\n%s 耗时: %d ms (%s)",
+//                name, durationMs, resultMsg));
         stopped = true;
     }
 
     public void countDebug(String msg) {
         Instant now = Instant.now();
         long durationMs = Duration.between(lastCheckpoint, now).toMillis();
-        Log.runtime(name,String.format("========================\n%s 耗时: %d ms", msg, durationMs));
+//        Log.runtime(name,String.format("========================\n%s 耗时: %d ms", msg, durationMs));
         lastCheckpoint = now;
     }
 

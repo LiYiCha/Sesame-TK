@@ -22,6 +22,7 @@ jackson = "2.16.2"
 webkit = "1.17.0"
 core-ktx = "1.17.0"
 dexkit = "2.2.0"
+xposed-api = "102.0.0"
 desugar = "2.1.5"
 documentfile = "1.0.1"
 
@@ -40,6 +41,7 @@ jackson-kotlin = { module = "com.fasterxml.jackson.module:jackson-module-kotlin"
 kotlin-stdlib = { module = "org.jetbrains.kotlin:kotlin-stdlib", version.ref = "kotlin-stdlib" }
 activity-compose = { module = "androidx.activity:activity-compose", version.ref = "activity-compose" }
 rikka-shizuku-api = { module = "dev.rikka.shizuku:api", version.ref = "shizukuVersion" }
+libxposed-api = { module = "io.github.libxposed:api", version.ref = "xposed-api" }
 
 slf4j-api = { module = "org.slf4j:slf4j-api", version.ref = "slf4j" }
 logback-android = { module = "com.github.tony19:logback-android", version.ref = "logback-android" }

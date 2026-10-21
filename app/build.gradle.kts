@@ -175,6 +175,9 @@ dependencies {
     // Updater 模块接入
     implementation(project(":updater"))
 
+    // libxposed 现代入口（仅编译期生命周期接口，运行期由框架提供；module.prop target=101 保留 de.robv 可用性）
+    compileOnly(libs.libxposed.api)
+
     // Shizuku
     implementation(libs.rikka.shizuku.api)
 

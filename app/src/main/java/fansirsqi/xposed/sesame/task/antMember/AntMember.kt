@@ -2821,8 +2821,6 @@ class AntMember : ModelTask() {
                     } else {
                         Log.runtime(TAG, "芝麻炼金⚗️[一键收取失败]#" + collectJo.optString("resultView"))
                     }
-                } else {
-                    Log.runtime(TAG, "芝麻炼金⚗️[当前无待收取芝麻粒]")
                 }
             }
         } catch (t: Throwable) {

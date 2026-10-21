@@ -267,12 +267,12 @@ class AntFarm : ModelTask() {
     // 雇佣NPC
     private var npcAnimalType: ChoiceModelField? = null
     private var npcAnimalTypeMulti: SelectModelField? = null  // NPC多选（智能调度）
-    // NPC配置定义
-    private enum class NpcConfig(val animalId: String, val source: String, val nickName: String) {
-        NONE("", "", "关闭"),
-        ZHIMA_PIGEON("20250901105101013088000000000006", "zhimaxiaoji_lianjin", "芝麻大表鸽"),
-        GOLD_CHICKEN("20250725105101013088000000000004", "licaixiaoji_2025_1", "黄金鸡"),
-        FARM_CHICKEN("20250613105101013088000000000002", "feiliaoji_202507", "农场小鸡");
+    // NPC配置定义（仅负责单选选项顺序与任务分发；animalId/source 以服务端同步结果为准）
+    private enum class NpcConfig(val nickName: String) {
+        NONE("关闭"),
+        ZHIMA_PIGEON("芝麻大表鸽"),
+        GOLD_CHICKEN("黄金鸡"),
+        FARM_CHICKEN("农场小鸡");
 
         companion object {
             val nickNames: Array<String> by lazy {
@@ -284,8 +284,23 @@ class AntFarm : ModelTask() {
             }
 
             fun getNpcOptionList(): List<MapperEntity> {
-                val dynamicNames = NpcChicken.NpcRepository.getAvailableNpcNames()
-                return dynamicNames.map { SimpleNpcEntity(it, it) }
+                val configMap = NpcChicken.NpcRepository.getMergedNpcConfigs()
+                return NpcChicken.NpcRepository.getAvailableNpcNames().map { name ->
+                    val config = configMap[name]
+                    val info = mutableListOf<String>()
+                    if (config != null) {
+                        if (config.rewardThreshold > 0) {
+                            val threshold = config.rewardThreshold
+                            info.add("满奖" + (if (threshold % 1 == 0.0) threshold.toLong() else threshold))
+                        }
+                        if (config.coolDownDays > 0) {
+                            info.add("冷${config.coolDownDays}天")
+                        }
+                    }
+                    // id 保持纯名称（勾选值），name 带奖励信息用于展示
+                    val label = if (info.isEmpty()) name else "$name(${info.joinToString("·")})"
+                    SimpleNpcEntity(name, label)
+                }
             }
         }
     }
@@ -1215,6 +1230,8 @@ class AntFarm : ModelTask() {
             val userId = UserMap.currentUid
             val jo = JSONObject(AntFarmRpcCall.enterFarm(userId, userId))
             if (ResChecker.checkRes("$TAG[enterFarm]", jo)) {
+                // 以服务端为准同步 NPC 配置（单选/多选共用同一数据源）
+                NpcChicken.NpcRepository.syncNpcConfigsWithRemote(jo.optJSONArray("hireNPCAnimalConfigInfoList"))
                 rewardProductNum =
                     jo.getJSONObject("dynamicGlobalConfig").getString("rewardProductNum")
                 val joFarmVO = jo.getJSONObject("farmVO")
@@ -2316,7 +2333,7 @@ class AntFarm : ModelTask() {
     private fun handleChouChouLeLogic() {
         // 1. 检查抽抽乐是否已完成
         if (Status.hasFlagToday("farm::chouChouLeFinished")) {
-            Log.runtime("今日抽抽乐已完成")
+            //Log.runtime("今日抽抽乐已完成")
             return
         }
         val isGameFinished = Status.hasFlagToday("farm::farmGameFinished")
@@ -4057,6 +4074,16 @@ class AntFarm : ModelTask() {
             val targetConfig = NpcConfig.getByIndex(selectedIndex)
             if (targetConfig == NpcConfig.NONE) return
 
+            // 以服务端同步结果为准：服务端未下发该 NPC 配置则不可使用
+            val remoteConfig = NpcChicken.NpcRepository.getMergedNpcConfigs()[targetConfig.nickName]
+            if (remoteConfig == null) {
+                if (!Status.hasFlagToday("NpcSingle_NoRemote_Logged")) {
+                    Log.runtime(TAG, "NPC小鸡🤖[服务端无${targetConfig.nickName}配置，跳过单选雇佣]")
+                    Status.setFlagToday("NpcSingle_NoRemote_Logged")
+                }
+                return
+            }
+
             // 1. 同步最新状态以获取准确的 NPC 信息
             val syncRes = AntFarmRpcCall.syncAnimalStatus(ownerFarmId, "SYNC_NPC", "QUERY_FARM_INFO")
             val joSync = JSONObject(syncRes)
@@ -4092,14 +4119,14 @@ class AntFarm : ModelTask() {
             if (currentNpcAnimal == null) {
                 // 场景A: 当前没有NPC -> 直接雇佣目标NPC
                 Log.runtime(TAG, "NPC小鸡🤖[当前未雇佣，准备雇佣${targetConfig.nickName}]")
-                hireNpc(targetConfig)
+                hireNpc(remoteConfig)
             } else {
                 // 场景B: 当前有NPC
                 val currentId = currentNpcAnimal.animalId
-                // 注意：这里比较 ID 需要确保 targetConfig.animalId 是准确的静态配置
-                if (currentId == targetConfig.animalId) {
+                // animalId 取自服务端同步的配置
+                if (currentId == remoteConfig.animalId) {
                     // B1: 正是选中的这只 -> 检查奖励是否已满及任务
-                    checkRewardAndTask(currentNpcAnimal, currentNpcJson, targetConfig)
+                    checkRewardAndTask(currentNpcAnimal, currentNpcJson, targetConfig, remoteConfig)
                 } else {
                     // B2: 是其他类型的NPC -> 遣返旧的，雇佣新的
                     val currentName = currentNpcAnimal.masterUserInfoVO?.get("nickName") as? String ?: "未知NPC"
@@ -4115,7 +4142,7 @@ class AntFarm : ModelTask() {
                         Log.farm("NPC小鸡🤖[已遣返${currentName}]")
                         delay(1500)
                         // 雇佣新的
-                        hireNpc(targetConfig)
+                        hireNpc(remoteConfig)
                     } else {
                         Log.runtime(TAG, "NPC小鸡🤖[遣返失败，暂停切换]")
                     }
@@ -4126,7 +4153,7 @@ class AntFarm : ModelTask() {
         }
     }
 
-    private fun hireNpc(config: NpcConfig): Boolean {
+    private fun hireNpc(config: NpcChicken.NpcSmartConfig): Boolean {
         try {
             val s = AntFarmRpcCall.hireNpcAnimal(config.animalId, config.source)
             val jo = JSONObject(s)
@@ -4143,7 +4170,12 @@ class AntFarm : ModelTask() {
         return false
     }
 
-    private suspend fun checkRewardAndTask(animal: Animal, animalJson: JSONObject?, config: NpcConfig) {
+    private suspend fun checkRewardAndTask(
+        animal: Animal,
+        animalJson: JSONObject?,
+        config: NpcConfig,
+        remoteConfig: NpcChicken.NpcSmartConfig
+    ) {
         // 1. 优先处理加速任务/领取任务奖励 (防止满产遣返后漏领任务)
         when (config) {
             NpcConfig.ZHIMA_PIGEON -> handleZhimaPigeonTasks()
@@ -4156,8 +4188,8 @@ class AntFarm : ModelTask() {
         val currentReward = animalJson?.optDouble("npcBizReward", 0.0) ?: 0.0
         val isLimit = animalJson?.optBoolean("reachNpcBizRewardLimit", false) ?: false
         // 判定满额逻辑：优先信任服务端标记 reachNpcBizRewardLimit；
-        // 阈值兜底读取动态配置，避免硬编码阈值过时导致误判（0 阈值视为无阈值）
-        val dynamicThreshold = NpcChicken.NpcRepository.getMergedNpcConfigs()[config.nickName]?.rewardThreshold ?: 0.0
+        // 阈值取服务端同步配置兜底（0 阈值视为无阈值）
+        val dynamicThreshold = remoteConfig.rewardThreshold
         val isFull = isLimit || (dynamicThreshold > 0.0 && currentReward >= dynamicThreshold)
 
         if (isFull) {
@@ -4171,7 +4203,7 @@ class AntFarm : ModelTask() {
             if (ResChecker.checkRes("$TAG[sendBackNpcReward]", joSendBack)) {
                 Log.farm("NPC小鸡🤖[产出奖励领取成功]")
                 delay(2000)
-                if (!hireNpc(config)) {
+                if (!hireNpc(remoteConfig)) {
                     Log.runtime(TAG, "NPC小鸡🤖[重雇失败，请检查状态]")
                 }
             } else {

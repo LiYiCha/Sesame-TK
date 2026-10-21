@@ -146,11 +146,19 @@ public class ApplicationHook implements IXposedHookLoadPackage {
 
     @Override
     public void handleLoadPackage(XC_LoadPackage.LoadPackageParam lpparam) {
+        startHook(lpparam.packageName, lpparam.processName, lpparam.classLoader);
+    }
+
+    /**
+     * 两个入口（传统 xposed_init 与 libxposed 现代管线）共用的启动路径。
+     * 现代入口由 LibXposedRuntime 合成参数后调用；静态 hooked 旗标防止双入口重复安装。
+     */
+    public void startHook(String packageName, String processName, ClassLoader classLoader) {
         registerModules();
-        if ("fansirsqi.xposed.sesame".equals(lpparam.packageName)) {
+        if ("fansirsqi.xposed.sesame".equals(packageName)) {
             try {
                 // 首先尝试使用目标应用的ClassLoader加载
-                Class<?> viewAppInfoClass = lpparam.classLoader.loadClass("fansirsqi.xposed.sesame.data.ViewAppInfo");
+                Class<?> viewAppInfoClass = classLoader.loadClass("fansirsqi.xposed.sesame.data.ViewAppInfo");
                 // 注意：ViewAppInfo.kt 中的方法是 setRunType，而不是 setRunTypeByCode
                 XposedHelpers.callStaticMethod(viewAppInfoClass, "setRunType", fansirsqi.xposed.sesame.data.RunType.ACTIVE);
             } catch (ClassNotFoundException e) {
@@ -163,18 +171,35 @@ public class ApplicationHook implements IXposedHookLoadPackage {
             } catch (Exception e) {
                 Log.printStackTrace(e);
             }
-        } else if (General.PACKAGE_NAME.equals(lpparam.packageName) && General.PACKAGE_NAME.equals(lpparam.processName)) {
+        } else if (General.PACKAGE_NAME.equals(packageName) && General.PACKAGE_NAME.equals(processName)) {
             if (hooked) return;
-            AppContext.setClassLoader(lpparam.classLoader);
+            AppContext.setClassLoader(classLoader);
 
             // 最早期安装宿主崩溃记录器，覆盖启动窗口（早于任何模块 hook 与配置加载）
             CrashRecorder.install();
 
             // 1. 立即分发模块 LoadPackage 与 Hook Application.attach，确保 AppContext 与生命周期在启动时 100% 挂载成功
+            XC_LoadPackage.LoadPackageParam lpparam = newLoadPackageParam(packageName, processName, classLoader);
             HookModuleManager.INSTANCE.dispatchHandleLoadPackage(lpparam);
             performAlipayHook(lpparam);
 
             // 移除 ClassChecker.waitForClasses 轮询死循环，避免冷启动类加载锁争用与超时自杀
+        }
+    }
+
+    private XC_LoadPackage.LoadPackageParam newLoadPackageParam(String packageName, String processName, ClassLoader classLoader) {
+        try {
+            // api-82 的 LoadPackageParam 构造器为包私有，需放开可见性；字段公开，下游仅消费这三个字段
+            java.lang.reflect.Constructor<XC_LoadPackage.LoadPackageParam> ctor =
+                    XC_LoadPackage.LoadPackageParam.class.getDeclaredConstructor();
+            ctor.setAccessible(true);
+            XC_LoadPackage.LoadPackageParam param = ctor.newInstance();
+            param.packageName = packageName;
+            param.processName = processName;
+            param.classLoader = classLoader;
+            return param;
+        } catch (ReflectiveOperationException e) {
+            throw new IllegalStateException("create LoadPackageParam failed", e);
         }
     }
 
