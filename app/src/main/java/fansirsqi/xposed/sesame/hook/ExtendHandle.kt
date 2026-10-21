@@ -9,7 +9,6 @@ import fansirsqi.xposed.sesame.hook.scheduler.TaskScheduler
 import fansirsqi.xposed.sesame.hook.theme.ThemeManager
 import fansirsqi.xposed.sesame.task.ModelTask
 import fansirsqi.xposed.sesame.task.antForest.EnergyWaitingManager
-import fansirsqi.xposed.sesame.task.exchange.ThreadPoolManager
 import fansirsqi.xposed.sesame.task.otherTask2.PrivilegeTask
 import fansirsqi.xposed.sesame.task.otherTask2.SeckillScheduler
 import fansirsqi.xposed.sesame.util.Files
@@ -169,7 +168,6 @@ class ExtendHandle {
                         // 第五层：停止脱离统一生命周期的独立任务资源
                         // 每一步独立 try-catch，避免某个资源清理异常阻塞后续清理
                         try { PrivilegeTask.stopTask() } catch (_: Throwable) {}
-                        try { ThreadPoolManager.shutdownNow() } catch (_: Throwable) {}
                         try { EnergyWaitingManager.clearAllWaitingTasks() } catch (_: Throwable) {}
                         try { SmartSchedulerManager.cancelAll() } catch (_: Throwable) {}
                         try { SmartSchedulerManager.cleanup() } catch (_: Throwable) {}

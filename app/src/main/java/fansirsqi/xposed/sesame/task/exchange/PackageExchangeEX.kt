@@ -101,16 +101,11 @@ class PackageExchangeEX : BaseFlashSaleTask() {
 
     // 由外部注入的字段
     var enablePackageExchange: BooleanModelField? = null
-    var wakeUpMinuteBefore: IntegerModelField? = null
     var packageExchangeList: SelectModelField? = null
-
-    override fun isConcurrentMode(): Boolean = true
 
     override fun getName(): String = "包裹兑换EX🎁"
     override fun getGroup(): ModelGroup = ModelGroup.EXCHANGE
     override fun getIcon(): String = "AntSports.png"
-
-    override fun getWakeUpConfigField(): IntegerModelField? = wakeUpMinuteBefore
 
     override fun buildExchangeItems(): List<ExchangeItem> {
         try {
@@ -245,11 +240,6 @@ class PackageExchangeEX : BaseFlashSaleTask() {
             Log.error(TAG, "发送包裹兑换请求异常: ${e.message}")
             false
         }
-    }
-
-    @SuppressLint("NewApi")
-    override fun sendExchangeRequestAsync(params: JSONArray, item: ExchangeItem): Boolean {
-        return sendExchangeRequest(params, item) // 并发异步流程也使用相同的发送逻辑
     }
 
     override val exchangeMode: ExchangeMode get() = ExchangeMode.SINGLE

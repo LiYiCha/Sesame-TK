@@ -21,14 +21,14 @@ enum class GameTask(
     val requestsPerEgg: Int, //完成1个🥚要多少次 为了防止网络崩溃 多加1次
     val pf: String = "zfb"
 ) {
-    Orchard_ncscc("农场上车车", "2060170000356601", "zfb_ncscc", "ncscc_game_kaiche_every_10", "nongchangleyuan", "1.0.2", 2),
-    Farm_ddply("对对碰乐园", "2021004149679303", "zfb_ddply", "ddply_game_xiaochu_every_5", "zhuangyuan", "1.0.14", 2),
+    Orchard_ncscc("农场-上车车", "2060170000356601", "zfb_ncscc", "ncscc_game_kaiche_every_10", "nongchangleyuan", "1.0.2", 2),
+    Farm_ddply("农场-对对碰乐园", "2021004149679303", "zfb_ddply", "ddply_game_xiaochu_every_5", "zhuangyuan", "1.0.14", 2),
 
-    Forest_slxcc("森林小车车","2060170000363691","zfb_slxcc","slxcc_game_kaiche_every_10","lianyun_senlin_leyuan","1.0.1",3),
-    Forest_sljyd("森林救援队(能量雨)", "2021005113684028", "zfb_sljydx", "sljyd_game_xiaochu_every_10", "lianyun_senlin_leyuan", "1.0.1", 3),
-    GoldenBean_ddply("金豆对对碰", "2021004149679303", "zfb_ddply", "ddply_game_xiaochu_every_5", "goldenbean", "1.0.15", 3, "alipay"),
-    Member_ddply("会员对对碰", "2021004149679303", "zfb_ddply", "ddply_game_xiaochu_every_5", "xlyy_WJCNJT", "1.0.15", 3, "alipay"),
-    GoldenBean_nccmx("金豆吃草草", "2060170000355266", "zfb_nccmx", "nccmx_game_xiaochu_every_20", "goldenbean", "1.0.0", 2, "alipay");
+    Forest_slxcc("森林-小车车","2060170000363691","zfb_slxcc","slxcc_game_kaiche_every_10","lianyun_senlin_leyuan","1.0.1",3),
+    Forest_sljyd("森林-救援队(能量雨)", "2021005113684028", "zfb_sljydx", "sljyd_game_xiaochu_every_10", "lianyun_senlin_leyuan", "1.0.1", 3),
+    GoldenBean_ddply("金豆-对对碰", "2021004149679303", "zfb_ddply", "ddply_game_xiaochu_every_5", "goldenbean", "1.0.15", 3, "alipay"),
+    Member_ddply("会员-对对碰", "2021004149679303", "zfb_ddply", "ddply_game_xiaochu_every_5", "xlyy_WJCNJT", "1.0.15", 3, "alipay"),
+    GoldenBean_nccmx("金豆-吃草草", "2060170000355266", "zfb_nccmx", "nccmx_game_xiaochu_every_20", "goldenbean", "1.0.0", 2, "alipay");
 
     private var cachedToken: String? = null
 

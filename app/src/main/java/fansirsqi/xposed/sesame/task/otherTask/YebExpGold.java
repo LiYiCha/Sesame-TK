@@ -160,9 +160,9 @@ public class YebExpGold extends BaseCommTask {
                 Status.setFlagToday(FLAG_SIGN);
                 return false;
             }
-            JSONObject signResponse = requestString(
+            JSONObject signResponse = new JSONObject(RequestManager.requestString(
                     "com.alipay.yebscenebff.needle.yebExpGold.signIn",
-                    "\"signInPlayId\":\"" + SIGN_IN_PLAY_ID + "\"");
+                    "[{\"signInPlayId\":\"" + SIGN_IN_PLAY_ID + "\"}]"));
             if (!isSuccess(signResponse)) {
                 Log.error(TAG, "余额宝体验金签到失败: " + getErrorDesc(signResponse));
                 manualTaskTitles.add(title);
@@ -265,9 +265,9 @@ public class YebExpGold extends BaseCommTask {
             Map<String, List<TaskEntry>> groups = new LinkedHashMap<>();
 
             // PROMO 源：promosdk2024.task.query
-            JSONObject promoResponse = requestString(
+            JSONObject promoResponse = new JSONObject(RequestManager.requestString(
                     "com.alipay.yebpromobff.promosdk2024.task.query",
-                    "\"needTriggerPrize\":false,\"playActionCode\":\"TASK_LIST_CONSULT\",\"playEntrance\":\"HYQ_TASK_LIST_ENTRANCE_2\"");
+                    "[{\"needTriggerPrize\":false,\"playActionCode\":\"TASK_LIST_CONSULT\",\"playEntrance\":\"HYQ_TASK_LIST_ENTRANCE_2\"}]"));
             if (!isSuccess(promoResponse)) {
                 Log.error(TAG, "余额宝体验金任务列表查询失败: " + getErrorDesc(promoResponse));
             } else {
@@ -373,11 +373,11 @@ public class YebExpGold extends BaseCommTask {
     /** 按源分发执行：PROMO → promosdk2024.task.complete；MAIN → promosdk.index.forward（固定 appletId） */
     private JSONObject executeTask(TaskEntry entry, String status) {
         if (SOURCE_PROMO.equals(entry.source)) {
-            return requestString(
+            return new JSONObject(RequestManager.requestString(
                     "com.alipay.yebpromobff.promosdk2024.task.complete",
-                    "\"appName\":\"yebpromobff\",\"outBizNo\":\"" + entry.taskId + "-" + System.currentTimeMillis()
+                    "[{\"appName\":\"yebpromobff\",\"outBizNo\":\"" + entry.taskId + "-" + System.currentTimeMillis()
                             + "-\",\"playActionCode\":\"TASK_COMPLETE\",\"playEntrance\":\"HYQ_TASK_LIST_ENTRANCE_2\",\"taskId\":\""
-                            + entry.taskId + "\"");
+                            + entry.taskId + "\"}]"));
         }
         // MAIN 源：not_sign/sign → task.trigger，其余 → task.complete
         String path = ("not_sign".equals(status) || "sign".equals(status)) ? "task.trigger" : "task.complete";
@@ -391,8 +391,8 @@ public class YebExpGold extends BaseCommTask {
             params.put("appletId", MAIN_QUERY_APPLET_ID);
             params.put("taskId", taskId);
             params.put("version", MAIN_QUERY_TASK_VERSION);
-            return requestString("com.alipay.yebscenebff.promosdk.index.forward",
-                    "\"params\":" + params + ",\"path\":\"" + path + "\"");
+            return new JSONObject(RequestManager.requestString("com.alipay.yebscenebff.promosdk.index.forward",
+                    "[{\"params\":" + params + ",\"path\":\"" + path + "\"}]"));
         } catch (JSONException e) {
             return null;
         }
@@ -402,10 +402,10 @@ public class YebExpGold extends BaseCommTask {
     private JSONObject queryTaskByEntry(TaskEntry entry) {
         try {
             if (SOURCE_PROMO.equals(entry.source)) {
-                JSONObject response = requestString(
+                JSONObject response = new JSONObject(RequestManager.requestString(
                         "com.alipay.yebpromobff.promosdk2024.task.queryTaskByTaskId",
-                        "\"appName\":\"yebpromobff\",\"playActionCode\":\"TASK_STATUS_QUERY\",\"playEntrance\":\"HYQ_TASK_LIST_ENTRANCE_2\",\"taskId\":\""
-                                + entry.taskId + "\"");
+                        "[{\"appName\":\"yebpromobff\",\"playActionCode\":\"TASK_STATUS_QUERY\",\"playEntrance\":\"HYQ_TASK_LIST_ENTRANCE_2\",\"taskId\":\""
+                                + entry.taskId + "\"}]"));
                 if (!isSuccess(response)) return null;
                 JSONObject result = response.optJSONObject("result");
                 JSONArray taskDetailList = result == null ? null : result.optJSONArray("taskDetailList");
@@ -465,11 +465,11 @@ public class YebExpGold extends BaseCommTask {
                 // 已完成待领奖：PROMO → task.complete；MAIN → task.trigger
                 JSONObject response;
                 if (action != null && SOURCE_PROMO.equals(action.source)) {
-                    response = requestString(
+                    response = new JSONObject(RequestManager.requestString(
                             "com.alipay.yebpromobff.promosdk2024.task.complete",
-                            "\"appName\":\"yebpromobff\",\"outBizNo\":\"" + actionTaskId + "-" + System.currentTimeMillis()
+                            "[{\"appName\":\"yebpromobff\",\"outBizNo\":\"" + actionTaskId + "-" + System.currentTimeMillis()
                                     + "-\",\"playActionCode\":\"TASK_COMPLETE\",\"playEntrance\":\"HYQ_TASK_LIST_ENTRANCE_2\",\"taskId\":\""
-                                    + actionTaskId + "\"");
+                                    + actionTaskId + "\"}]"));
                 } else {
                     response = forwardTask(actionTaskId, "task.trigger");
                 }
@@ -532,27 +532,19 @@ public class YebExpGold extends BaseCommTask {
             }
 
             String bizOrderNo = UserMap.getCurrentUid() + System.currentTimeMillis();
-            JSONObject exchangeResponse = requestString(
+            JSONObject exchangeResponse = new JSONObject(RequestManager.requestString(
                     "com.alipay.yebscenebff.expgold.index.exchange",
-                    "\"bizOrderNo\":\"" + bizOrderNo + "\",\"campId\":\"" + EXCHANGE_CAMP_ID
-                            + "\",\"exchangeAmount\":\"" + balanceText + "\",\"prizeId\":\"" + EXCHANGE_PRIZE_ID + "\"");
-            if (exchangeResponse == null) {
-                Log.error(TAG, "余额宝体验金兑换失败");
-                return false;
-            }
+                    "[{\"bizOrderNo\":\"" + bizOrderNo + "\",\"campId\":\"" + EXCHANGE_CAMP_ID
+                            + "\",\"exchangeAmount\":\"" + balanceText + "\",\"prizeId\":\"" + EXCHANGE_PRIZE_ID + "\"}]"));
             JSONObject exchangeResult = exchangeResponse.optJSONObject("result");
             String couponId = exchangeResult == null ? "" : exchangeResult.optString("equityNo");
             if (couponId.isEmpty()) {
                 Log.error(TAG, "余额宝体验金兑换成功但缺少激活凭证");
                 return false;
             }
-            JSONObject activeResponse = requestString(
+            JSONObject activeResponse = new JSONObject(RequestManager.requestString(
                     "alipay.yebprod.promo.yebTrial.active",
-                    "\"couponId\":\"" + couponId + "\",\"equityType\":\"voucher\",\"type\":\"YEB_TRIAL\"");
-            if (activeResponse == null) {
-                Log.error(TAG, "余额宝体验金激活失败");
-                return false;
-            }
+                    "[{\"couponId\":\"" + couponId + "\",\"equityType\":\"voucher\",\"type\":\"YEB_TRIAL\"}]"));
             String amountText = balanceText;
             JSONObject amountObj = activeResponse.optJSONObject("amount");
             if (amountObj != null && amountObj.opt("amount") != null) {
@@ -581,10 +573,10 @@ public class YebExpGold extends BaseCommTask {
             if (Status.hasFlagToday(FLAG_VOUCHER)) return false;
 
             // 1. 查询当前可用凭证数量
-            JSONObject queryResponse = requestString(
+            JSONObject queryResponse = new JSONObject(RequestManager.requestString(
                     "alipay.yebprod.query.queryYebTrialCertVoucher",
-                    "\"component\":\"PROMO_ACTIVITY\",\"sortType\":\"drawTime\",\"source\":\"QIANAPP\"," +
-                            "\"voucherTemplateIdList\":[\"202312260007300180780087H5IR\",\"2026011300073001807800H1558H\"]");
+                    "[{\"component\":\"PROMO_ACTIVITY\",\"sortType\":\"drawTime\",\"source\":\"QIANAPP\"," +
+                            "\"voucherTemplateIdList\":[\"202312260007300180780087H5IR\",\"2026011300073001807800H1558H\"]}]"));
             
             Integer pendingCount = (isSuccess(queryResponse)) ? getVoucherCount(queryResponse) : null;
             // 若查询返回数量为0或查询未匹配模板，执行一次兑换探测，避免漏领新模板卡包券
@@ -594,14 +586,9 @@ public class YebExpGold extends BaseCommTask {
 
             // 2. while 循环：不断转换直到没有待使用券
             while (remaining > 0) {
-                JSONObject convertResponse = requestString(
+                JSONObject convertResponse = new JSONObject(RequestManager.requestString(
                         "com.alipay.yebscenebff.needle.yebExpGoldVoucherConvert",
-                        "\"convertType\":\"all\",\"isShowExchangeModal\":true");
-
-                if (convertResponse == null) {
-                    if (!isDirectProbe) Log.error(TAG, "余额宝体验金券兑换请求失败: 返回为空");
-                    break;
-                }
+                        "[{\"convertType\":\"all\",\"isShowExchangeModal\":true}]"));
 
                 // 判断 convertResults 中是否有 fulfilled + value.success 的结果
                 if (!isVoucherConvertSuccess(convertResponse)) {
@@ -633,10 +620,10 @@ public class YebExpGold extends BaseCommTask {
                 }
 
                 // 4. 回查验证：再次查询确认库存真的减少
-                queryResponse = requestString(
+                queryResponse = new JSONObject(RequestManager.requestString(
                         "alipay.yebprod.query.queryYebTrialCertVoucher",
-                        "\"component\":\"PROMO_ACTIVITY\",\"sortType\":\"drawTime\",\"source\":\"QIANAPP\"," +
-                                "\"voucherTemplateIdList\":[\"202312260007300180780087H5IR\",\"2026011300073001807800H1558H\"]");
+                        "[{\"component\":\"PROMO_ACTIVITY\",\"sortType\":\"drawTime\",\"source\":\"QIANAPP\"," +
+                                "\"voucherTemplateIdList\":[\"202312260007300180780087H5IR\",\"2026011300073001807800H1558H\"]}]"));
                 if (!isSuccess(queryResponse)) {
                     break;
                 }
@@ -717,11 +704,7 @@ public class YebExpGold extends BaseCommTask {
 
     private void yebTrialAsset() {
         try {
-            JSONObject response = requestString("alipay.yebprod.promo.yebTrialAsset", "");
-            if (response == null) {
-                TimeUtil.sleep(this.executeIntervalInt);
-                return;
-            }
+            JSONObject response = new JSONObject(RequestManager.requestString("alipay.yebprod.promo.yebTrialAsset", "[{}]"));
             JSONArray trialInfoList = response.optJSONArray("trialInfoList");
             if (trialInfoList == null) {
                 TimeUtil.sleep(this.executeIntervalInt);
@@ -745,13 +728,12 @@ public class YebExpGold extends BaseCommTask {
             StringBuilder sb = new StringBuilder();
             sb.append("\"couponId\":\"").append(couponId).append("\",\"type\":\"YEB_TRIAL\"");
             if (withVoucherType) sb.append(",\"equityType\":\"voucher\"");
-            JSONObject response = requestString("alipay.yebprod.promo.yebTrial.active", sb.toString());
-            if (response != null) {
-                StringBuilder logText = new StringBuilder("余额宝体验金🌭成功使用[");
-                JSONObject amountObj = response.optJSONObject("amount");
-                logText.append(amountObj == null ? "" : amountObj.optString("amount")).append("元]");
-                Log.other(logText.toString());
-            }
+            JSONObject response = new JSONObject(RequestManager.requestString("alipay.yebprod.promo.yebTrial.active",
+                    "[{" + sb + "}]"));
+            StringBuilder logText = new StringBuilder("余额宝体验金🌭成功使用[");
+            JSONObject amountObj = response.optJSONObject("amount");
+            logText.append(amountObj == null ? "" : amountObj.optString("amount")).append("元]");
+            Log.other(logText.toString());
         } catch (Throwable ignored) {
         }
     }
@@ -770,24 +752,11 @@ public class YebExpGold extends BaseCommTask {
                         + ",\"startTime\":" + System.currentTimeMillis()
                         + ",\"strategyCode\":\"" + TASK_STRATEGY_CODE + "\",\"taskId\":\"" + taskId + "\"}";
             }
-            return requestString(
+            return new JSONObject(RequestManager.requestString(
                     "com.alipay.yebscenebff.needle.yebExpGold.queryMain",
-                    "\"chInfo\":\"" + CH_INFO + "\",\"signIn\":{\"daysOfQuerySignInData\":21,\"displaySignInTextList\":"
+                    "[{\"chInfo\":\"" + CH_INFO + "\",\"signIn\":{\"daysOfQuerySignInData\":21,\"displaySignInTextList\":"
                             + "[{\"value\":\"持\"},{\"value\":\"续\"},{\"value\":\"签\"},{\"value\":\"到\"},{\"value\":\"可\"},{\"value\":\"领\"},{\"value\":\"\"}],"
-                            + "\"downgrade\":false,\"todayRedDotText\":\"戳这里\",\"tomorrowRedDotText\":\"\"},\"task\":" + taskPayload);
-        } catch (Throwable th) {
-            return null;
-        }
-    }
-
-    public JSONObject requestString(String method, String params) {
-        try {
-            String response = RequestManager.requestString(method, "[{" + params + "}]");
-            if (response == null) {
-                return null;
-            }
-            JSONObject jo = new JSONObject(response);
-            return jo;
+                            + "\"downgrade\":false,\"todayRedDotText\":\"戳这里\",\"tomorrowRedDotText\":\"\"},\"task\":" + taskPayload + "}]"));
         } catch (Throwable th) {
             return null;
         }

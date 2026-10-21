@@ -1,7 +1,6 @@
 package fansirsqi.xposed.sesame.task.otherTask;
 
 import org.json.JSONException;
-import org.json.JSONObject;
 
 import java.util.HashMap;
 import java.util.HashSet;
@@ -9,9 +8,6 @@ import java.util.Map;
 import java.util.Set;
 
 import fansirsqi.xposed.sesame.data.Status;
-import fansirsqi.xposed.sesame.hook.ApplicationHook;
-import fansirsqi.xposed.sesame.hook.RequestManager;
-import fansirsqi.xposed.sesame.util.Log;
 
 public abstract class BaseCommTask {
     protected String displayName;
@@ -70,40 +66,6 @@ public abstract class BaseCommTask {
 
 
 
-
-
-    protected JSONObject requestString(String str, String str2) throws JSONException {
-        return requestString(str, str2, true);
-    }
-    protected JSONObject requestStringFalse(String str, String str2) throws JSONException {
-        return requestString(str, str2, false);
-    }
-
-    protected JSONObject requestString(String str, String str2, boolean z) throws JSONException {
-        JSONObject requestStringAll = requestStringAll(str, str2);
-        if (1009 == requestStringAll.optInt("error")) {
-            throw new IllegalStateException(requestStringAll.optString("errorMessage"));
-        }
-        if (requestStringAll.optString("memo").equals("钓鱼次数已达上限") ){
-            Log.other(this.displayName + "钓鱼次数已达上限");
-            Status.setFlagToday("antFishpondAngle::FishingLimit");
-        }
-        if (requestStringAll.optBoolean("success", false)) {
-            return requestStringAll;
-        }
-//        if (z) {
-//            Log.error("["+this.TAG + ".requestString err ]方法" + str + "\r\n参数：" + (str2 == null ? null : "[{" + str2 + "}]") + "\r\n结果：" + requestStringAll);
-//        }
-        return requestStringAll;
-    }
-
-    protected JSONObject requestStringAll(String str, String str2) throws JSONException {
-        return new JSONObject(RequestManager.requestString(str, str2 == null ? null : "[{" + str2 + "}]"));
-    }
-
-    protected JSONObject requestStringAllNew(String str, String str2) throws JSONException {
-        return new JSONObject(RequestManager.requestString(str, str2));
-    }
 
 
 }

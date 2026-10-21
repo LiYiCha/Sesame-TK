@@ -42,7 +42,7 @@ public class YebSceneBffish extends BaseCommTask {
     }
     private void incomePlusFeedTaskList() {
         try {
-            JSONObject response = requestString("com.alipay.yebscenebff.needle.incomePlusFeedTaskList", "");
+            JSONObject response = new JSONObject(RequestManager.requestString("com.alipay.yebscenebff.needle.incomePlusFeedTaskList", "[{}]"));
             if (response != null && response.optBoolean("success")) {
                 Object uncompletedTasksObj = JsonUtil.getValueByPathObject(response, "result.taskListInfo.uncompletedList");
                 if (uncompletedTasksObj != null) {
@@ -63,14 +63,14 @@ public class YebSceneBffish extends BaseCommTask {
                         // 根据任务状态执行不同操作
                         if ("NONE_SIGNUP".equals(taskProcessStatus)) {
                             // 触发任务
-                            requestString(method, taskParams + "trigger\",\"extParams\": {\"appletId\": \"" + appletId + extParams);
+                            new JSONObject(RequestManager.requestString(method, "[{" + taskParams + "trigger\",\"extParams\": {\"appletId\": \"" + appletId + extParams + "}]"));
                         } else {
                             // 完成任务
-                            requestString(method, taskParams + "complete\",\"extParams\": {\"appletId\": \"" + appletId + "\",\"expectSendStatus\": \"RECOMMEND\",\"taskId\": \"" + taskId + extParams);
+                            new JSONObject(RequestManager.requestString(method, "[{" + taskParams + "complete\",\"extParams\": {\"appletId\": \"" + appletId + "\",\"expectSendStatus\": \"RECOMMEND\",\"taskId\": \"" + taskId + extParams + "}]"));
                         }
 
                         // 领取任务奖励
-                        JSONObject receiveResult = requestString(method, taskParams + "receive\",\"extParams\": {\"appletId\": \"" + appletId + extParams);
+                        JSONObject receiveResult = new JSONObject(RequestManager.requestString(method, "[{" + taskParams + "receive\",\"extParams\": {\"appletId\": \"" + appletId + extParams + "}]"));
                         if (receiveResult.optBoolean("success")) {
                             Object taskDetailObj = JsonUtil.getValueByPathObject(task, "taskExtProps.TASK_MORPHO_DETAIL");
                             if (taskDetailObj != null) {
@@ -93,7 +93,7 @@ public class YebSceneBffish extends BaseCommTask {
 
     private void queryPrizeRedemptionInfo() {
         try {
-            JSONObject response = requestStringAllNew("com.alipay.yebscenebff.needle.incomePlus.queryPrizeRedemptionInfo", "[null]");
+            JSONObject response = new JSONObject(RequestManager.requestString("com.alipay.yebscenebff.needle.incomePlus.queryPrizeRedemptionInfo", "[null]"));
             if (response != null && response.getBoolean("success")) {
                 JSONObject result = response.getJSONObject("result");
                 int currentGoldAmount = Integer.parseInt(result.getString("currentGoldAmount"));
@@ -110,7 +110,7 @@ public class YebSceneBffish extends BaseCommTask {
                             int prizeValue = prize.getInt("prizeValue");
 
                             String redeemParams = "\"amount\": " + prizeAmount + ",\"campId\": \"" + campId + "\",\"prizeId\": \"" + prizeId + "\"";
-                            JSONObject redeemResult = requestString("com.alipay.yebscenebff.needle.incomePlus.redeemPrize", redeemParams);
+                            JSONObject redeemResult = new JSONObject(RequestManager.requestString("com.alipay.yebscenebff.needle.incomePlus.redeemPrize", "[{" + redeemParams + "}]"));
                             if (redeemResult != null) {
                                 Log.other(this.displayName + "金币兑换[" + prizeValue + title + "]");
                             }
@@ -130,7 +130,7 @@ public class YebSceneBffish extends BaseCommTask {
         try {
             String entrance = "INCOME_PLUS_SIGN_IN_AWARD";
             String signParams = "\"playActionCode\":\"SIGN_IN_CALENDAR_RECALL\",\"playEntrance\":\"" + entrance + "\"";
-            JSONObject response = requestString("com.alipay.yebscenebff.needle.registration.query", signParams);
+            JSONObject response = new JSONObject(RequestManager.requestString("com.alipay.yebscenebff.needle.registration.query", "[{" + signParams + "}]"));
 
             if (response != null) {
                 Object prizeDetailListObj = JsonUtil.getValueByPathObject(response, "result.prizeDetailList");
@@ -152,7 +152,7 @@ public class YebSceneBffish extends BaseCommTask {
                         String prizeId = prizeDetail.getString("prizeId");
 
                         String triggerParams = "\"playActionCode\": \"SIGNIN_TRIGGER\",\"playEntrance\": \"" + entrance + "\",\"prizeId\": \"" + prizeId + "\"";
-                        JSONObject triggerResult = requestString("com.alipay.yebscenebff.needle.registration.trigger", triggerParams);
+                        JSONObject triggerResult = new JSONObject(RequestManager.requestString("com.alipay.yebscenebff.needle.registration.trigger", "[{" + triggerParams + "}]"));
                         if (triggerResult != null) {
                             Log.other(this.displayName + "签到成功[" + prizeDayText + "]获得[" + prizeName + prizeAmountText + "]");
                         }
@@ -170,7 +170,7 @@ public class YebSceneBffish extends BaseCommTask {
     private void index() {
         try {
             String indexParams = "\"bizScenario\":\"YEB_HOME\",\"newScene\":\"otherTask\",\"version\":\"V1\"";
-            JSONObject response = requestString("com.alipay.yebscenebff.needle.incomePlus.index", indexParams);
+            JSONObject response = new JSONObject(RequestManager.requestString("com.alipay.yebscenebff.needle.incomePlus.index", "[{" + indexParams + "}]"));
 
             if (response != null && response.optBoolean("success")) {
                 JSONObject result = response.getJSONObject("result");
@@ -184,7 +184,7 @@ public class YebSceneBffish extends BaseCommTask {
                 String foodAmount = JsonUtil.getValueByPath(result, "foodAmount.amount");
                 if (!foodAmount.isEmpty() && !"0".equals(foodAmount)) {
                     String feedParams = "\"amount\":\"" + foodAmount + "\",\"contractId\": \"" + contractId + "\"";
-                    JSONObject feedResult = requestString("com.alipay.yebscenebff.needle.incomePlus.feedingFish", feedParams);
+                    JSONObject feedResult = new JSONObject(RequestManager.requestString("com.alipay.yebscenebff.needle.incomePlus.feedingFish", "[{" + feedParams + "}]"));
                     if (feedResult != null) {
                         Log.other(this.displayName + "喂鱼成功[" + foodAmount + "]");
                         Status.setFlagToday(CompletedKeyEnum.YebSceneBff.name());
@@ -274,7 +274,7 @@ public class YebSceneBffish extends BaseCommTask {
                         String orderId = order.getString("orderId");
 
                         String receiveParams = "\"contractId\": \"" + contractId + "\",\"orderId\": \"" + orderId + "\"";
-                        JSONObject receiveResult = requestString("com.alipay.yebscenebff.needle.incomePlus.receiveGold", receiveParams);
+                        JSONObject receiveResult = new JSONObject(RequestManager.requestString("com.alipay.yebscenebff.needle.incomePlus.receiveGold", "[{" + receiveParams + "}]"));
                         if (receiveResult != null) {
                             Log.other(this.displayName + "领取[" + amount + "个金泡泡]");
                         }

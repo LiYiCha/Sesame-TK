@@ -132,14 +132,6 @@ public class OtherTask2 extends ModelTask {
                             }
                         }),
 
-                        new TaskWrapper("会员转盘", () -> {
-                            if (playConsultFacade.getValue()) {
-                                if (!Status.hasTemporaryStatusValid("MemberLuckyWheel_Cooldown")) {
-                                    int num = playConsultFacadeNum.getValue();
-                                    new PlayConsultFacade().handleAsync(num);
-                                }
-                            }
-                        }),
                     new TaskWrapper("青春特权任务", () -> {
                         //青春特权任务
                         if (privilegeTask.getValue()) {

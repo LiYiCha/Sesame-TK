@@ -106,6 +106,10 @@ public final class StatusFlags {
     public static final String FLAG_ANTORCHARD_CHOUCHOULE_DONE =
             "Flag_AntOrchard_ChouChouLe_Done";
 
+    /** 农场抽抽乐：今日已确认活动失效，不再探测 */
+    public static final String FLAG_ANTORCHARD_DRAW_ACTIVITY_PROBED =
+            "Flag_AntOrchard_DrawActivity_Probed";
+
     /** 蚂蚁新村：今日丢肥料是否达到上限 */
     public static final String FLAG_ANTSTALL_THROW_MANURE_LIMIT =
             "Flag_AntStall_Throw_Manure_Limit";

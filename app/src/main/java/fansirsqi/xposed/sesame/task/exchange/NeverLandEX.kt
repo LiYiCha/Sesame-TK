@@ -1,6 +1,5 @@
 package fansirsqi.xposed.sesame.task.exchange
 
-import android.annotation.SuppressLint
 import org.json.JSONArray
 import org.json.JSONObject
 import fansirsqi.xposed.sesame.entity.MemberBenefit
@@ -8,7 +7,6 @@ import fansirsqi.xposed.sesame.hook.RequestManager
 import fansirsqi.xposed.sesame.model.ModelFields
 import fansirsqi.xposed.sesame.model.ModelGroup
 import fansirsqi.xposed.sesame.model.modelFieldExt.BooleanModelField
-import fansirsqi.xposed.sesame.model.modelFieldExt.IntegerModelField
 import fansirsqi.xposed.sesame.model.modelFieldExt.SelectModelField
 import fansirsqi.xposed.sesame.task.otherTask.CompletedKeyEnum
 import fansirsqi.xposed.sesame.util.DataStore
@@ -19,7 +17,6 @@ class NeverLandEX : BaseFlashSaleTask() {
 
     companion object {
         private const val TAG = "健康岛EX🍰"
-        private const val PAY_COUPON_KEYWORD = "支付通用红包"
         private const val CACHE_KEY_NEVERLAND_ITEMS = "neverland_exchange_items_cache"
         private const val QUERY_METHOD = "com.alipay.neverland.biz.rpc.queryFlashSaleItemList"
         private const val ORDER_METHOD = "com.alipay.neverland.biz.rpc.createOrder"
@@ -139,11 +136,8 @@ class NeverLandEX : BaseFlashSaleTask() {
 
     // 由外部（FlashSaleModule）注入的字段
     var enableNeverLandEX: BooleanModelField? = null
-    var wakeUpMinuteBefore: IntegerModelField? = null
     /** 用户在 UI 中选择要兑换的商品 itemId 集合 */
     var neverLandList: SelectModelField? = null
-
-    override fun isConcurrentMode(): Boolean = true
 
     override fun getName(): String = "健康岛EX🍰"
     override fun getGroup(): ModelGroup = ModelGroup.EXCHANGE
@@ -280,14 +274,8 @@ class NeverLandEX : BaseFlashSaleTask() {
         }
     }
 
-    @SuppressLint("NewApi")
-    override fun sendExchangeRequestAsync(params: JSONArray, item: ExchangeItem): Boolean {
-        return sendExchangeRequest(params, item) // 逻辑完全相同，复用
-    }
-
     override val exchangeMode: ExchangeMode get() = ExchangeMode.MULTI
     override val completedKey: String get() = CompletedKeyEnum.neverLandEX.name
-    override fun getWakeUpConfigField(): IntegerModelField? = wakeUpMinuteBefore
     override fun check(): Boolean {
         // enableNeverLandEX 未启用时直接跳过，防止单独调用时缺少保护
         if (enableNeverLandEX?.value == false) return false

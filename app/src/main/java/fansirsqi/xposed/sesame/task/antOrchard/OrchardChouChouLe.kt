@@ -34,24 +34,36 @@ class OrchardChouChouLe(private val executeIntervalInt: Int) {
                 Log.error(TAG, "农场抽抽乐缺少 userId")
                 return
             }
+            if (Status.hasFlagToday(StatusFlags.FLAG_ANTORCHARD_DRAW_ACTIVITY_PROBED)) return
 
             // 1. 进入活动，获取 activityId
             val entry = JSONObject(AntOrchardRpcCall.enterDrawActivity())
+            if (markActivityClosed(entry)) return
             if (!ResChecker.checkRes(TAG, entry)) {
                 Log.error(TAG, "农场抽抽乐活动查询失败 raw=$entry")
                 return
             }
-            val activityId = entry.optJSONObject("drawActivity")?.optString("activityId").orEmpty()
+            val activity = entry.optJSONObject("drawActivity") ?: JSONObject()
+            val activityId = activity.optString("activityId")
             if (activityId.isBlank()) {
                 Log.error(TAG, "农场抽抽乐缺少 activityId")
                 return
             }
+            val now = System.currentTimeMillis()
+            if (activity.optLong("endTime") > 0 && now >= activity.optLong("endTime")) {
+                Status.setFlagToday(StatusFlags.FLAG_ANTORCHARD_DRAW_ACTIVITY_PROBED)
+                Log.farm("农场抽抽乐活动已到结束时间，今日不再探测")
+                return
+            }
+            if (activity.optLong("startTime") > now) return
 
             // 2. 任务流：完成 TODO 任务、领取 FINISHED 任务奖励，循环直到无进展
             runTaskFlow()
+            if (Status.hasFlagToday(StatusFlags.FLAG_ANTORCHARD_DRAW_ACTIVITY_PROBED)) return
 
             // 3. 同步抽奖余额
             val synced = JSONObject(AntOrchardRpcCall.syncDrawBalance(activityId))
+            if (markActivityClosed(synced)) return
             if (!ResChecker.checkRes(TAG, synced)) {
                 Log.error(TAG, "农场抽抽乐余额同步失败 raw=$synced")
                 return
@@ -69,7 +81,9 @@ class OrchardChouChouLe(private val executeIntervalInt: Int) {
             var drawRounds = 0
             while (balance > 0 && drawRounds < MAX_DRAW_ROUNDS) {
                 drawRounds++
+                val previousBalance = balance
                 val response = JSONObject(AntOrchardRpcCall.batchDraw(activityId, balance, userId))
+                if (markActivityClosed(response)) return
                 if (!ResChecker.checkRes(TAG, response)) {
                     Log.error(TAG, "农场抽抽乐抽奖失败 activityId=$activityId times=$balance raw=$response")
                     return
@@ -87,6 +101,10 @@ class OrchardChouChouLe(private val executeIntervalInt: Int) {
                     return
                 }
                 Log.farm("农场抽抽乐剩余次数: $balance")
+                if (balance >= previousBalance) {
+                    Log.error(TAG, "农场抽抽乐余额未推进，保留后续回查 raw=$response")
+                    return
+                }
                 if (balance > 0) CoroutineUtils.sleepCompat(executeIntervalInt.toLong())
             }
 
@@ -103,6 +121,18 @@ class OrchardChouChouLe(private val executeIntervalInt: Int) {
         }
     }
 
+    /** 活动失效信号（到期或不可重试的停止码）：置当日旗标，当天不再探测 */
+    private fun markActivityClosed(response: JSONObject): Boolean {
+        if (response.optBoolean("activityExpire") ||
+            (response.optString("code") == "2600000010" && !response.optBoolean("retriable", true))
+        ) {
+            Status.setFlagToday(StatusFlags.FLAG_ANTORCHARD_DRAW_ACTIVITY_PROBED)
+            Log.farm("农场抽抽乐活动已失效，今日不再探测")
+            return true
+        }
+        return false
+    }
+
     /**
      * 任务流：TODO → finishDrawTask；FINISHED → receiveDrawTaskAward；RECEIVED → 跳过
      * 每轮处理后重新查询，直到无进展或达到轮次上限
@@ -113,6 +143,7 @@ class OrchardChouChouLe(private val executeIntervalInt: Int) {
         while (round < MAX_TASK_ROUNDS) {
             round++
             val response = JSONObject(AntOrchardRpcCall.listDrawTasks())
+            if (markActivityClosed(response)) return
             if (!ResChecker.checkRes(TAG, response)) {
                 Log.error(TAG, "农场抽抽乐任务查询失败 raw=$response")
                 return
@@ -152,6 +183,7 @@ class OrchardChouChouLe(private val executeIntervalInt: Int) {
                             if (seconds > 0) CoroutineUtils.sleepCompat(seconds * 1000)
                         }
                         val finishRes = JSONObject(AntOrchardRpcCall.finishDrawTask(sceneCode, taskType))
+                        if (markActivityClosed(finishRes)) return
                         if (ResChecker.checkRes(TAG, finishRes)) {
                             Log.farm("农场抽抽乐🧾[任务: $title]")
                             progressed = true
@@ -164,6 +196,7 @@ class OrchardChouChouLe(private val executeIntervalInt: Int) {
 
                     "FINISHED" -> {
                         val awardRes = JSONObject(AntOrchardRpcCall.receiveDrawTaskAward(sceneCode, taskType))
+                        if (markActivityClosed(awardRes)) return
                         if (ResChecker.checkRes(TAG, awardRes)) {
                             val count = awardRes.optInt("incAwardCount")
                             Log.farm("农场抽抽乐🎁[领取任务奖励: $title] 增加${count}次机会")

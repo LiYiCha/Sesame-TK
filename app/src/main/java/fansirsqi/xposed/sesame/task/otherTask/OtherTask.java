@@ -1,31 +1,22 @@
 package fansirsqi.xposed.sesame.task.otherTask;
 
-import org.json.JSONArray;
-import org.json.JSONException;
-import org.json.JSONObject;
-
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
-
 import fansirsqi.xposed.sesame.data.Status;
-import fansirsqi.xposed.sesame.entity.AlipayUser;
 import fansirsqi.xposed.sesame.model.BaseModel;
 import fansirsqi.xposed.sesame.model.ModelFields;
 import fansirsqi.xposed.sesame.model.ModelGroup;
 import fansirsqi.xposed.sesame.model.modelFieldExt.BooleanModelField;
 import fansirsqi.xposed.sesame.model.modelFieldExt.IntegerModelField;
-import fansirsqi.xposed.sesame.model.modelFieldExt.SelectModelField;
 import fansirsqi.xposed.sesame.model.modelFieldExt.StringModelField;
 import fansirsqi.xposed.sesame.task.ModelTask;
 import fansirsqi.xposed.sesame.task.TaskCommon;
-import fansirsqi.xposed.sesame.util.JsonUtil;
 import fansirsqi.xposed.sesame.util.Log;
 import fansirsqi.xposed.sesame.util.RandomUtil;
 import fansirsqi.xposed.sesame.util.TimeUtil;
@@ -33,49 +24,6 @@ import lombok.Getter;
 
 public class OtherTask extends ModelTask {
     private static final String TAG = "🔥其他任务🔥";
-    /**
-     * 🎉 💼 🏆 🔥 ⭐ 💡 🎯 🚀 🧠  ✅  ❌  ⚠️ 👈
-     * 📈 🧾 💵 🏦 💰 🧧 🎁 💸 🌦️  👑 💎 🛡️ 🔑
-     * 🌟👑✨💎 🛡️⚔️🔥🎯🌈💫🎵🎶🌠🌞🌙
-     * 🌌🎇🎆🪐☄️🌊🏔️🌄🌲🍃🦋🌸🐾🐉🔥🦅 Peak 😎
-     * 🎓 毕业帽 - 最直接关联学习和教育
-     * 📚 书籍 - 代表知识和学习
-     * 📖 打开的书 - 学习和阅读
-     * 📝 笔记本 - 学习记录
-     * ✏️ 铅笔 - 学习工具
-     * 🖊️ 钢笔 - 学习工具
-     * 📓 笔记本 - 学习记录
-     * 📔 笔记本 - 学习资料
-     * 📕 书本 - 知识来源
-     * 成就/奖励类符号：
-     * 🏅 奖牌 - 成就和荣誉
-     * 🏆 奖杯 - 获得的成就
-     * 🥇 金牌 - 第一和优秀
-     * 🥈 银牌 - 第二名
-     * 🥉 铜牌 - 第三名
-     * 🏅 军功章 - 成就表彰
-     * 🎖️ 勋章 - 荣誉和成就
-     * 星级/评分类符号：
-     * 📍 标记 - 重点和关注
-     * 其他相关符号：
-     * 💯 百分 - 满分成绩
-     * ✅ 对勾 - 完成和通过
-     * 📊 图表 - 成绩和统计
-     * 📈 上升图表 - 进步和提升
-     * 🏃‍♂️ 跑步的人 - 表示运动、跑步锻炼
-     * 🚶‍♂️ 走路的人 - 表示步行、行走运动
-     * 🏋️ 举重 - 表示健身锻炼
-     * 🚴‍♂️ 骑自行车 - 表示骑行运动
-     * 能量相关图标：
-     * ⚡ 闪电 - 表示能量、电力
-     * 🔋 电池 - 表示能量储存
-     * 💪 肌肉 - 表示力量、能量
-     * ✨ 闪亮星星 - 表示能量、光芒
-     * 结合运动和能量的推荐组合：
-     * 🏃‍♂️⚡ - 跑步+闪电（运动产生能量）
-     * 🚶‍♂️💪 - 步行+肌肉（运动增强力量）
-     * 🏋️✨ - 举重+星星（锻炼释放能量）
-     */
     // 固定大小线程池（根据设备CPU核心数调整，懒创建，stopTask 时销毁）
     private static final int CORE_POOL_SIZE = Math.max(2, Runtime.getRuntime().availableProcessors() - 1);
     private ExecutorService executor;

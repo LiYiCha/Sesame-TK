@@ -121,17 +121,12 @@ class GameCenterGoldEX : BaseFlashSaleTask() {
 
     // 由外部注入的配置字段
     var enableGameCenterGold: BooleanModelField? = null
-    var wakeUpMinuteBefore: IntegerModelField? = null
     var gameCenterGoldList: SelectModelField? = null
     var targetHourField: IntegerModelField? = null
-
-    override fun isConcurrentMode(): Boolean = true
 
     override fun getName(): String = "游戏金币EX🎮"
     override fun getGroup(): ModelGroup = ModelGroup.EXCHANGE
     override fun getIcon(): String = "AntSports.png"
-
-    override fun getWakeUpConfigField(): IntegerModelField? = wakeUpMinuteBefore
 
     /** 目标开抢整点：读取 UI 设置的整点（0-23点，默认20点） */
     override fun getTargetHour(): Long {
@@ -268,9 +263,5 @@ class GameCenterGoldEX : BaseFlashSaleTask() {
             Log.error(TAG, "兑换请求异常 [${item.name}]: ${e.message}")
             false
         }
-    }
-
-    override fun sendExchangeRequestAsync(params: JSONArray, item: ExchangeItem): Boolean {
-        return sendExchangeRequest(params, item)
     }
 }

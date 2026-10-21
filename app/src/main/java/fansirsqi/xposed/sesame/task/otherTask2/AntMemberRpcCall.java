@@ -258,6 +258,42 @@ public class AntMemberRpcCall {
                 "[{\"bizNo\":\""+bizNo+"\",\"extMap\":{},\"sourcePassMap\":{\"innerSource\":\"\",\"source\":\"myTab\",\"unid\":\"\"},\"taskType\":\"AD_VIDEO_TASK\"}]");
     }
 
+    // ================= 游戏中心 60 秒召回任务 =================
+    private static final String GAME60S_SCENE_ID = "xlyy_WJCNJT";
+    static final String GAME60S_SOURCE = "zfbhy_mc_wkenoz66";
+    private static final String GAME60S_GIT = "9e159d58cce04c13a";
+
+    // 游戏中心 60 秒召回任务首页（浏览任务 sceneExtInfo 下发入口）
+    public static String externalGameHomePage() {
+        return RequestManager.requestString(
+                "com.alipay.gamecenteruprod.biz.rpc.external.gamecenter.queryHomePage",
+                "[{\"__git\":\"" + GAME60S_GIT + "\",\"channelTaskPassThrough\":\"\",\"deviceLevel\":\"high\"," +
+                        "\"guideType\":\"\",\"moduleId\":\"\",\"sceneId\":\"" + GAME60S_SCENE_ID + "\"," +
+                        "\"source\":\"" + GAME60S_SOURCE + "\",\"unityDeviceLevel\":\"high\"}]");
+    }
+
+    // 游戏中心 60 秒召回任务-完成浏览（sceneExtInfo 原样回传）
+    public static String externalCompleteBrowseTask(String sceneExtInfo) {
+        try {
+            JSONObject args = new JSONObject();
+            args.put("sceneExtInfo", sceneExtInfo);
+            args.put("sceneId", GAME60S_SCENE_ID);
+            return RequestManager.requestString(
+                    "com.alipay.gamecenteruprod.biz.rpc.external.gamecenter.completeBrowseTask",
+                    "[" + args + "]");
+        } catch (Exception e) {
+            return "";
+        }
+    }
+
+    // 游戏中心 60 秒召回任务-领取奖励
+    public static String externalBatchReceiveTaskPrize() {
+        return RequestManager.requestString(
+                "com.alipay.gamecenteruprod.biz.rpc.external.gamecenter.batchReceiveTaskPrize",
+                "[{\"__git\":\"" + GAME60S_GIT + "\",\"deviceLevel\":\"high\",\"sceneId\":\"" + GAME60S_SCENE_ID + "\"," +
+                        "\"source\":\"" + GAME60S_SOURCE + "\",\"unityDeviceLevel\":\"high\"}]");
+    }
+
     // ================= 芝麻信用 Zmxy =================
     public static class Zmxy {
         private static final String VERSION = "2025-10-22";

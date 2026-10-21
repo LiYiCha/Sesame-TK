@@ -3,11 +3,9 @@ package fansirsqi.xposed.sesame.task.otherTask;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
-
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.Set;
-
 import fansirsqi.xposed.sesame.data.Status;
 import fansirsqi.xposed.sesame.hook.RequestManager;
 import fansirsqi.xposed.sesame.util.JsonUtil;

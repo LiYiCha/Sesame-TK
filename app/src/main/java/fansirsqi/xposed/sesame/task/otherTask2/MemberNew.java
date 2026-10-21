@@ -12,6 +12,7 @@ import java.util.concurrent.locks.ReentrantLock;
 import fansirsqi.xposed.sesame.data.Status;
 import fansirsqi.xposed.sesame.task.otherTask.BaseCommTask;
 import fansirsqi.xposed.sesame.task.otherTask.CompletedKeyEnum;
+import fansirsqi.xposed.sesame.task.common.GameCenterPlayRpcCall;
 import fansirsqi.xposed.sesame.util.GlobalThreadPools;
 import fansirsqi.xposed.sesame.util.JsonUtil;
 import fansirsqi.xposed.sesame.util.Log;
@@ -27,6 +28,7 @@ public class MemberNew extends BaseCommTask {
     private static final long COOLDOWN_ERROR_MS = 3 * 60 * 60 * 1000; // 3小时冷却（任务为空或1009错误）
     private static final long COOLDOWN_SUCCESS_MS =  2 * 60 * 60 * 1000; // 2小时冷却（有任务完成）
     private static final String MEMBER_EXECUTION_COOLDOWN_FLAG = "MemberNew_LastExecution";
+    private static final String GAME60S_FLAG = "MemberNew_Game60s_Completed";
     
     // 任务执行状态标记
     private boolean hasCompletedTask = false;
@@ -120,6 +122,8 @@ public class MemberNew extends BaseCommTask {
                 if (handleSignInSafe() && !hasError1009) {
                     // 3. 处理任务列表
                     handleTaskListsSafe();
+                    // 4. 游戏中心 60 秒召回任务
+                    handleGame60sSafe();
                 }
             }
             
@@ -283,6 +287,86 @@ public class MemberNew extends BaseCommTask {
             // }
         } catch (Exception e) {
             Log.error(TAG, "任务列表处理异常: " + e.getMessage());
+        }
+    }
+
+    /**
+     * 游戏中心 60 秒召回任务（久不访问用户才下发，无任务属正常）
+     * queryHomePage 取 sceneExtInfo → 真实游玩 60 秒分两报时长 → 完成浏览 → 领奖
+     */
+    private void handleGame60sSafe() {
+        if (hasError1009 || Status.hasFlagToday(GAME60S_FLAG)) return;
+        // 每天仅尝试一次，成败均置旗标
+        Status.setFlagToday(GAME60S_FLAG);
+        try {
+            String res = AntMemberRpcCall.externalGameHomePage();
+            JSONObject response;
+            try {
+                response = new JSONObject(res);
+            } catch (Exception e) {
+                Log.error(TAG, "60秒游戏任务首页响应解析失败");
+                return;
+            }
+            if (!response.optBoolean("success")) {
+                Log.error(TAG, "60秒游戏任务首页查询失败 code=" + response.optString("code")
+                        + " desc=" + response.optString("desc"));
+                return;
+            }
+            JSONObject browseTask = response.optJSONObject("data") == null
+                    ? null : response.optJSONObject("data").optJSONObject("browseTaskVO");
+            if (browseTask == null) {
+                Log.other(TAG, "60秒游戏任务未下发，跳过");
+                return;
+            }
+            String appId = browseTask.optString("appId");
+            String sceneExtInfo = browseTask.optString("sceneExtInfo");
+            if (appId.isEmpty() || sceneExtInfo.isEmpty()) {
+                Log.error(TAG, "60秒游戏任务字段缺失 appId=" + (appId.isEmpty() ? "空" : "有")
+                        + " sceneExtInfo=" + (sceneExtInfo.isEmpty() ? "空" : "有"));
+                return;
+            }
+
+            TimeUtil.sleep(RandomUtil.nextInt(1500, 3000));
+            Log.other(TAG, "开始执行60秒游戏任务#" + browseTask.optString("taskTitle"));
+            // 真实游玩 60 秒，分两报（30 + 31）
+            TimeUtil.sleep(30000);
+            GameCenterPlayRpcCall.INSTANCE.submit(new GameCenterPlayRpcCall.Contract(appId, 30, AntMemberRpcCall.GAME60S_SOURCE));
+            TimeUtil.sleep(RandomUtil.nextInt(1500, 3000));
+            TimeUtil.sleep(30000);
+            GameCenterPlayRpcCall.INSTANCE.submit(new GameCenterPlayRpcCall.Contract(appId, 31, AntMemberRpcCall.GAME60S_SOURCE));
+
+            TimeUtil.sleep(RandomUtil.nextInt(1500, 3000));
+            String completeRes = AntMemberRpcCall.externalCompleteBrowseTask(sceneExtInfo);
+            JSONObject completeResponse;
+            try {
+                completeResponse = new JSONObject(completeRes);
+            } catch (Exception e) {
+                Log.error(TAG, "60秒游戏任务完成响应解析失败");
+                return;
+            }
+            if (!completeResponse.optBoolean("success")) {
+                Log.error(TAG, "60秒游戏任务完成失败 code=" + completeResponse.optString("code")
+                        + " desc=" + completeResponse.optString("desc"));
+                return;
+            }
+
+            TimeUtil.sleep(RandomUtil.nextInt(1500, 3000));
+            String prizeRes = AntMemberRpcCall.externalBatchReceiveTaskPrize();
+            JSONObject prizeResponse;
+            try {
+                prizeResponse = new JSONObject(prizeRes);
+            } catch (Exception e) {
+                Log.error(TAG, "60秒游戏任务领奖响应解析失败");
+                return;
+            }
+            if (!prizeResponse.optBoolean("success")) {
+                Log.error(TAG, "60秒游戏任务领奖失败 code=" + prizeResponse.optString("code")
+                        + " desc=" + prizeResponse.optString("desc"));
+                return;
+            }
+            Log.other(TAG, "60秒游戏任务完成✅#" + browseTask.optString("taskTitle"));
+        } catch (Exception e) {
+            Log.error(TAG, "60秒游戏任务异常: " + e.getMessage());
         }
     }
 

@@ -29,7 +29,6 @@ public class HuaHuaKa extends BaseCommTask {
         this.productCode = "HUA_HUA_CARD_NORMAL_23Y06";
         this.sceneCode = "HUA_HUA_CARD";
         this.displayName = "花花卡💴";
-        //this.hoursKeyEnum = CompletedKeyEnum.HuaHuaKa;
     }
     private Set<String> blackList = new HashSet<>(Arrays.asList("去定制专属logo","去设计品牌logo"
     ,"去设计logo购买")); //黑名单
@@ -89,8 +88,8 @@ public class HuaHuaKa extends BaseCommTask {
 
     private void queryV2() {
         try {
-            JSONObject requestString = requestString("com.alipay.pcreditbfweb.sdk.task.queryV2", "\"requestFrom\": \"pccp\",\"scene\":\"HUA_HUA_CARD\"");
-            if (requestString != null && requestString.getBoolean("success")) {
+            JSONObject requestString = new JSONObject(RequestManager.requestString("com.alipay.pcreditbfweb.sdk.task.queryV2", "[{\"requestFrom\": \"pccp\",\"scene\":\"HUA_HUA_CARD\"}]"));
+            if (requestString.getBoolean("success")) {
                 JSONArray taskList = requestString.getJSONArray("data");
 
                 for (int i = 0; i < taskList.length(); i++) {
@@ -203,16 +202,14 @@ public class HuaHuaKa extends BaseCommTask {
             taskCenIds.put(taskCenId);
             taskIds.put(taskId);
 
-            JSONObject awardResponse = requestString("com.alipay.pcreditbfweb.sdk.task.award",
-                    "\"taskCenIds\":" + taskCenIds + ",\"taskIds\":" + taskIds);
-            if (awardResponse != null) {
-                JSONArray resultData = (JSONArray) JsonUtil.getValueByPathObject(awardResponse, "data.resultData");
-                if (resultData != null) {
-                    for (int i = 0; i < resultData.length(); i++) {
-                        JSONObject prizeObj = resultData.getJSONObject(i);
-                        String prizeName = JsonUtil.getValueByPath(prizeObj, "prizeSendOrderList.[0].prizeName");
-                        Log.other(this.displayName + "获得[" + prizeName + "]");
-                    }
+            JSONObject awardResponse = new JSONObject(RequestManager.requestString("com.alipay.pcreditbfweb.sdk.task.award",
+                    "[{\"taskCenIds\":" + taskCenIds + ",\"taskIds\":" + taskIds + "}]"));
+            JSONArray resultData = (JSONArray) JsonUtil.getValueByPathObject(awardResponse, "data.resultData");
+            if (resultData != null) {
+                for (int i = 0; i < resultData.length(); i++) {
+                    JSONObject prizeObj = resultData.getJSONObject(i);
+                    String prizeName = JsonUtil.getValueByPath(prizeObj, "prizeSendOrderList.[0].prizeName");
+                    Log.other(this.displayName + "获得[" + prizeName + "]");
                 }
             }
         } catch (Exception e) {
@@ -238,86 +235,15 @@ public class HuaHuaKa extends BaseCommTask {
         }
     }
 
-    private void queryApplayer(){
-        String method = "com.alipay.adtask.biz.mobilegw.service.applayer.query";
-        String params = "[{\"spaceCode\":\"42_2024021924200082660\"}]";
-    }
-    public static long convertToTimestamp(String isoTime) {
-        SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'");
-        sdf.setTimeZone(TimeZone.getTimeZone("UTC")); // 设置为 UTC 时区
-        try {
-            Date date = sdf.parse(isoTime);
-            return date.getTime(); // 得到 13 位时间戳
-        } catch (ParseException e) {
-            e.printStackTrace();
-            return -1; // 出错返回 -1
-        }
-    }
-    private void campConsult(String startTime,String endTime) {
-        long startTimestamp = convertToTimestamp(startTime);
-        long endTimestamp = convertToTimestamp(endTime);
-        TimeUtil.sleep(1000);
-        String str2 = "\"args\":";
-        // 定义所有阶段ID
-        String[] campIds = {
-                "HHK_SINGLE_CAMP_1",
-                "HHK_SINGLE_CAMP_2",
-                "HHK_SINGLE_CAMP_3"
-        };
-
-        for (String campId : campIds) {
-            try {
-                JSONObject jSONObject = new JSONObject();
-                jSONObject.put("endTime", endTimestamp);
-                jSONObject.put("playId", campId);
-                jSONObject.put("requestFrom", "pccp");
-                jSONObject.put("startTime", startTimestamp);
-
-                String requestString0 = RequestManager.requestString(
-                        "com.alipay.pcreditbfweb.drpc.collect.campConsult",
-                        "[{\"endTime\":" + endTimestamp
-                                + ",\"playId\":\"" + campId
-                                + "\",\"requestFrom\":\"pccp\""
-                                + ",\"startTime\":" + startTimestamp + "}]"
-                );
-                JSONObject requestString = new JSONObject(requestString0);
-                if (requestString != null) {
-                    JSONArray jSONArray = (JSONArray) JsonUtil.getValueByPathObject(requestString, "data.result.result.nodeList");
-                    if (jSONArray != null) {
-                        for (int i = 0; i < jSONArray.length(); i++) {
-                            JSONObject jSONObject2 = jSONArray.getJSONObject(i);
-                            String title = jSONObject2.getString("title");
-                            String status = jSONObject2.getString("status");
-                            String nodeId = JsonUtil.getValueByPath(jSONObject2, "config.id");
-
-                            if (!(nodeId.isEmpty() || "RECEIVE".equals(status) || "DISABLE".equals(status))) {
-                                jSONObject.put("nodeId", nodeId);
-                                requestString("com.alipay.pcreditbfweb.drpc.collect.campTrigger", str2 + jSONObject);
-                                Log.other(this.displayName + "任务阶段奖励领取[" + title + "]");
-                            }
-                        }
-                        Status.setFlagToday("HuaHuaKaCollect");
-                    }
-                }
-
-                TimeUtil.sleep(this.executeIntervalInt);
-
-            } catch (Throwable th) {
-                Log.error("campConsult error: " + campId+"因为:"+ th);
-                TimeUtil.sleep(this.executeIntervalInt);
-            }
-        }
-    }
-
     private String buildIndexParams() {
         return String.format(
-                "\"certId\":\"%s\",\"productCode\":\"%s\",\"productCodeFlop\":\"CARD_HUA_HUA_CARD_23Y06\",\"sceneCode\":\"%s\",\"sceneCodeFlop\":\"CARD_HUA_HUA_CARD\"",
+                "[{\"certId\":\"%s\",\"productCode\":\"%s\",\"productCodeFlop\":\"CARD_HUA_HUA_CARD_23Y06\",\"sceneCode\":\"%s\",\"sceneCodeFlop\":\"CARD_HUA_HUA_CARD\"}]",
                 this.certId, this.productCode, this.sceneCode
         );
     }
     private JSONObject refreshFragments() throws JSONException {
-        return requestString("com.alipay.pcreditbfweb.promo.hhk.index.refreshFragments",
-                "\"productCode\":\"HUA_HUA_CARD_NORMAL_23Y06\",\"sceneCode\":\"HUA_HUA_CARD\"");
+        return new JSONObject(RequestManager.requestString("com.alipay.pcreditbfweb.promo.hhk.index.refreshFragments",
+                "[{\"productCode\":\"HUA_HUA_CARD_NORMAL_23Y06\",\"sceneCode\":\"HUA_HUA_CARD\"}]"));
     }
 
     private void index() {
@@ -327,63 +253,58 @@ public class HuaHuaKa extends BaseCommTask {
             if (this.certId != null && !this.certId.isEmpty()) {
                 int i = 3;
                 do {
-                    JSONObject requestString = requestString("com.alipay.pcreditbfweb.promo.hhk.index", buildIndexParams());
-                    if (requestString != null) {
-                        requestString = requestString.getJSONObject("data");
-                        int remainingTimes = requestString.getInt("remainingTimes");
+                    JSONObject requestString = new JSONObject(RequestManager.requestString("com.alipay.pcreditbfweb.promo.hhk.index", buildIndexParams()));
+                    requestString = requestString.getJSONObject("data");
+                    int remainingTimes = requestString.getInt("remainingTimes");
 
-                        if (remainingTimes != 0) {
-                            Log.other(this.displayName + "还可翻[" + remainingTimes + "]次");
-                            JSONArray cardPrizes = requestString.getJSONArray("cardPrizes");
+                    if (remainingTimes != 0) {
+                        Log.other(this.displayName + "还可翻[" + remainingTimes + "]次");
+                        JSONArray cardPrizes = requestString.getJSONArray("cardPrizes");
 
-                            while (remainingTimes > 0) {
-                                boolean cardFlipped = false;
-                                for (int i3 = 0; i3 < cardPrizes.length(); i3++) {
-                                    if (remainingTimes <= 0) break;
+                        while (remainingTimes > 0) {
+                            boolean cardFlipped = false;
+                            for (int i3 = 0; i3 < cardPrizes.length(); i3++) {
 
-                                    JSONObject jSONObject = cardPrizes.getJSONObject(i3);
-                                    if (!jSONObject.getBoolean("isOpen")) {
-                                        boolean z = jSONObject.getBoolean("isNewPageBegin");
-                                        int position = Integer.parseInt(JsonUtil.getValueByPath(jSONObject, "position.index"));
+                                JSONObject jSONObject = cardPrizes.getJSONObject(i3);
+                                if (!jSONObject.getBoolean("isOpen")) {
+                                    boolean z = jSONObject.getBoolean("isNewPageBegin");
+                                    int position = Integer.parseInt(JsonUtil.getValueByPath(jSONObject, "position.index"));
 
-                                        int flopResult = flopCard(str, str2, position, z);
-                                        if (flopResult == 0) { // 成功
-                                            cardFlipped = true;
-                                            remainingTimes--;
-                                            TimeUtil.sleep(2000);
-                                            break;
-                                        }
-                                        else if (flopResult == 2) { // 需要重试
-                                            i--;
-                                            TimeUtil.sleep(2000);
-                                            cardFlipped = true; // 标记为已翻卡，继续循环
-                                            break;
-                                        }
-                                        else { // 其他错误
-                                            Log.other(this.displayName + "翻卡异常，继续尝试");
-                                            cardFlipped = true; // 标记为已翻卡，继续循环
-                                            break;
-                                        }
+                                    int flopResult = flopCard(str, str2, position, z);
+                                    if (flopResult == 0) { // 成功
+                                        cardFlipped = true;
+                                        remainingTimes--;
+                                        TimeUtil.sleep(2000);
+                                        break;
+                                    }
+                                    else if (flopResult == 2) { // 需要重试
+                                        i--;
+                                        TimeUtil.sleep(2000);
+                                        cardFlipped = true; // 标记为已翻卡，继续循环
+                                        break;
+                                    }
+                                    else { // 其他错误
+                                        Log.other(this.displayName + "翻卡异常，继续尝试");
+                                        cardFlipped = true; // 标记为已翻卡，继续循环
+                                        break;
                                     }
                                 }
-
-                                if (!cardFlipped) break;
-
-                                // 只刷新碎片信息，不重新查询主页
-                                JSONObject refreshData = refreshFragments();
-                                if (refreshData != null && refreshData.optBoolean("success")) {
-                                    JSONArray charNumberList = (JSONArray) JsonUtil.getValueByPathObject(
-                                            refreshData, "data.charNumberList");
-                                    merge(charNumberList); // 检查是否需要合卡
-                                }
-
-                                // 更新剩余次数
-                                JSONObject homeRefresh = requestString("com.alipay.pcreditbfweb.promo.hhk.index", buildIndexParams());
-                                if (homeRefresh != null) {
-                                    requestString = homeRefresh.getJSONObject("data");
-                                    remainingTimes = requestString.getInt("remainingTimes");
-                                }
                             }
+
+                            if (!cardFlipped) break;
+
+                            // 只刷新碎片信息，不重新查询主页
+                            JSONObject refreshData = refreshFragments();
+                            if (refreshData.optBoolean("success")) {
+                                JSONArray charNumberList = (JSONArray) JsonUtil.getValueByPathObject(
+                                        refreshData, "data.charNumberList");
+                                merge(charNumberList); // 检查是否需要合卡
+                            }
+
+                            // 更新剩余次数
+                            JSONObject homeRefresh = new JSONObject(RequestManager.requestString("com.alipay.pcreditbfweb.promo.hhk.index", buildIndexParams()));
+                            requestString = homeRefresh.getJSONObject("data");
+                            remainingTimes = requestString.getInt("remainingTimes");
                         }
                     }
                     TimeUtil.sleep(this.executeIntervalInt);
@@ -411,26 +332,24 @@ public class HuaHuaKa extends BaseCommTask {
         // 所有碎片都 ≥1 才执行合卡
         Log.other(this.displayName + "开始尝试合卡...");
 
-        JSONObject mergeResponse = requestString(
+        JSONObject mergeResponse = new JSONObject(RequestManager.requestString(
                 "com.alipay.pcreditbfweb.promo.hhk.index.merge",
-                "\"productCode\":\"HUA_HUA_CARD_NORMAL_23Y06\",\"sceneCode\":\"HUA_HUA_CARD\""
-        );
+                "[{\"productCode\":\"HUA_HUA_CARD_NORMAL_23Y06\",\"sceneCode\":\"HUA_HUA_CARD\"}]"
+        ));
 
-        if (mergeResponse != null && mergeResponse.has("data")) {
+        if (mergeResponse.has("data")) {
             JSONObject data = mergeResponse.getJSONObject("data");
             String campId = data.getString("campId");
             String bizNo = data.getString("bizNo");
 
-            JSONObject prizeResponse = requestString(
+            JSONObject prizeResponse = new JSONObject(RequestManager.requestString(
                     "com.alipay.pcreditbfweb.drpc.pageQueryPrizeSendOrderLite",
-                    "\"args\":{\"campIds\":[\"" + campId + "\"],\"outBizNo\":\"" + bizNo + "\",\"pageNum\":1,\"perPageSize\":10}"
-            );
+                    "[{\"args\":{\"campIds\":[\"" + campId + "\"],\"outBizNo\":\"" + bizNo + "\",\"pageNum\":1,\"perPageSize\":10}}]"
+            ));
 
-            if (prizeResponse != null) {
-                String prizeName = JsonUtil.getValueByPath(prizeResponse, "data.result.resultData.dataList.[0].prizeName");
-                Log.other(this.displayName + "合卡成功，获得[" + prizeName + "]");
-                return true;
-            }
+            String prizeName = JsonUtil.getValueByPath(prizeResponse, "data.result.resultData.dataList.[0].prizeName");
+            Log.other(this.displayName + "合卡成功，获得[" + prizeName + "]");
+            return true;
         }
 
         return false;
@@ -439,34 +358,32 @@ public class HuaHuaKa extends BaseCommTask {
 
     private int flopCard(String str, String str2, int i, boolean z) {
         try {
-            JSONObject requestString = requestString(
+            JSONObject requestString = new JSONObject(RequestManager.requestString(
                     "com.alipay.pcreditbfweb.promo.hhk.index.flopcard",
-                    "\"isNewPageBegin\":" + z +
+                    "[{\"isNewPageBegin\":" + z +
                             ",\"lineIndex\":" + i +
                             ",\"productCode\":\"" + str +
-                            "\",\"sceneCode\":\"" + str2 + "\""
-            );
+                            "\",\"sceneCode\":\"" + str2 + "\"}]"
+            ));
 
-            if (requestString != null) {
-                // 记录获得的卡片
-                Log.other(this.displayName + "翻卡获得[" +
-                        JsonUtil.getValueByPath(requestString, "data.playPrizeList.[0].prizeName") + "]");
+            // 记录获得的卡片
+            Log.other(this.displayName + "翻卡获得[" +
+                    JsonUtil.getValueByPath(requestString, "data.playPrizeList.[0].prizeName") + "]");
 
-                // 刷新碎片信息（保持原有方式，不使用refreshFragments方法）
-                JSONObject refreshData = requestString(
-                        "com.alipay.pcreditbfweb.promo.hhk.index.refreshFragments",
-                        "\"productCode\":\"HUA_HUA_CARD_NORMAL_23Y06\",\"sceneCode\":\"HUA_HUA_CARD\""
+            // 刷新碎片信息（保持原有方式，不使用refreshFragments方法）
+            JSONObject refreshData = new JSONObject(RequestManager.requestString(
+                    "com.alipay.pcreditbfweb.promo.hhk.index.refreshFragments",
+                    "[{\"productCode\":\"HUA_HUA_CARD_NORMAL_23Y06\",\"sceneCode\":\"HUA_HUA_CARD\"}]"
+            ));
+
+            if (refreshData.optBoolean("success")) {
+                // 更新碎片状态
+                JSONArray charNumberList = (JSONArray) JsonUtil.getValueByPathObject(
+                        refreshData, "data.charNumberList"
                 );
 
-                if (refreshData != null && refreshData.optBoolean("success")) {
-                    // 更新碎片状态
-                    JSONArray charNumberList = (JSONArray) JsonUtil.getValueByPathObject(
-                            refreshData, "data.charNumberList"
-                    );
-
-                    // 返回最新的合卡状态
-                    return merge(charNumberList) ? 0 : 2;
-                }
+                // 返回最新的合卡状态
+                return merge(charNumberList) ? 0 : 2;
             }
 
             return 2; // 默认需要重试
@@ -480,13 +397,11 @@ public class HuaHuaKa extends BaseCommTask {
     private void indexTrigger() {
         try {
             if (!Status.hasFlagToday(CompletedKeyEnum.HuaHuaKaSign.name())) {
-                JSONObject requestString = requestString("com.alipay.pcreditbfweb.promo.index.trigger", "\"campId\": \"CP14460747\"");
-                if (requestString != null) {
-                    Log.other(this.displayName + "签到成功[" + JsonUtil.getValueByPath(requestString, "data.prizeSendOrderList.[0].prizeName") + "]");
-                    Status.setFlagToday(CompletedKeyEnum.HuaHuaKaSign.name());
-                    TimeUtil.sleep(this.executeIntervalInt);
-                    return;
-                }
+                JSONObject requestString = new JSONObject(RequestManager.requestString("com.alipay.pcreditbfweb.promo.index.trigger", "[{\"campId\": \"CP14460747\"}]"));
+                Log.other(this.displayName + "签到成功[" + JsonUtil.getValueByPath(requestString, "data.prizeSendOrderList.[0].prizeName") + "]");
+                Status.setFlagToday(CompletedKeyEnum.HuaHuaKaSign.name());
+                TimeUtil.sleep(this.executeIntervalInt);
+                return;
             }
             TimeUtil.sleep(this.executeIntervalInt);
         } catch (Throwable th) {
@@ -497,9 +412,8 @@ public class HuaHuaKa extends BaseCommTask {
     private boolean trigger(String str, String str2, String str3) throws JSONException {
         boolean z = false;
         try {
-            if (requestString("com.alipay.pcreditbfweb.sdk.task.trigger", "\"appletId\": \"" + str2 + "\",\"outBizNo\": \"" + str2 + TimeUtil.getMinuteTimestamp() + "\",\"taskCenId\": \"" + str + "\",\"retryFlag\": true,\"stageCode\":\"" + str3 + "\"") != null) {
-                z = true;
-            }
+            new JSONObject(RequestManager.requestString("com.alipay.pcreditbfweb.sdk.task.trigger", "[{\"appletId\": \"" + str2 + "\",\"outBizNo\": \"" + str2 + TimeUtil.getMinuteTimestamp() + "\",\"taskCenId\": \"" + str + "\",\"retryFlag\": true,\"stageCode\":\"" + str3 + "\"}]"));
+            z = true;
             TimeUtil.sleep(this.executeIntervalInt);
             return z;
         } catch (Throwable th) {

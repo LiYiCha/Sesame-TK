@@ -49,7 +49,7 @@ public class LuckCard extends BaseCommTask {
             tasksLuckCard = new HashSet<>();
         }
 
-        JSONObject request = requestString("com.alipay.pcreditcardweb.activity.LuckCard.consult", "");
+        JSONObject request = new JSONObject(RequestManager.requestString("com.alipay.pcreditcardweb.activity.LuckCard.consult", "[{}]"));
         if (request == null) {
             Log.error(displayName+"[consult.request]debug--"+request);
             return;
@@ -115,8 +115,8 @@ public class LuckCard extends BaseCommTask {
                     "\"pzConfig\":{\"name\":\"任务奖励\"},\"taskCamp\":{\"appletId\":\"%s\",\"stageCode\":\"%s\",\"taskCenId\":\"%s\"},\"userCategory\":\"%s\"",
                     taskId, stageCode, taskCenterId, userCategory);
 
-            JSONObject triggerResponse = requestString(
-                    "com.alipay.pcreditcardweb.activity.LuckCard.taskTrigger", requestBody);
+            JSONObject triggerResponse = new JSONObject(RequestManager.requestString(
+                    "com.alipay.pcreditcardweb.activity.LuckCard.taskTrigger", "[{" + requestBody + "}]"));
 
             if (triggerResponse.optBoolean("success")) {
                 Log.other(this.displayName + "完成[" + subTitle + "]");
@@ -240,7 +240,7 @@ public class LuckCard extends BaseCommTask {
     //浏览15s游戏中心
     private boolean gameCenter() throws Exception {
         boolean isSuccess = false;
-        JSONObject request = requestString("com.alipay.pcreditbfweb.sdk.task.trigger",
+        JSONObject request = new JSONObject(RequestManager.requestString("com.alipay.pcreditbfweb.sdk.task.trigger",
                 "[{\"appletId\":\"AP13283002\"," +
                         "\"bizScene\":\"HAOYUNKA_DAILY\",\"bizSceneFrom\":\"creditCard\",\"extInfo\":{\"name\":\"任务奖励\"," +
                         "\"ticketCampId\":\"CP182329534\"},\"needleParam\":{},\"outBizNo\":\"AP1328300229106083\"," +

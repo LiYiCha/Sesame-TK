@@ -42,7 +42,7 @@ public class NeverLand extends BaseCommTask {
 
     private void mapStageReward(int i) {
         try {
-            JSONObject requestString = requestString("com.alipay.neverland.biz.rpc.mapStageReward", "\"branchId\": \"MASTER\",\"level\": " + i + ",\"source\": \"jkddicon\",\"mapId\": \"" + this.mapId + "\"");
+            JSONObject requestString = new JSONObject(RequestManager.requestString("com.alipay.neverland.biz.rpc.mapStageReward", "[{\"branchId\": \"MASTER\",\"level\": " + i + ",\"source\": \"jkddicon\",\"mapId\": \"" + this.mapId + "\"}]"));
             if (requestString != null) {
                 Object valueByPathObject = JsonUtil.getValueByPathObject(requestString, "data.receiveResult.prizes.[0]");
                 if (valueByPathObject != null) {
@@ -57,7 +57,7 @@ public class NeverLand extends BaseCommTask {
 
     private void offlineAward() {
         try {
-            JSONObject requestString = requestString("com.alipay.neverland.biz.rpc.offlineAward", "\"isAdvertisement\":false,\"source\":\"jkddicon\"");
+            JSONObject requestString = new JSONObject(RequestManager.requestString("com.alipay.neverland.biz.rpc.offlineAward", "[{\"isAdvertisement\":false,\"source\":\"jkddicon\"}]"));
             if (requestString != null) {
                 JSONObject dataObj = requestString.optJSONObject("data");
                 if (dataObj == null|| dataObj.length()==0) {
@@ -84,7 +84,7 @@ public class NeverLand extends BaseCommTask {
 
     private boolean queryBaseinfo() {
         try {
-            JSONObject requestString = requestString("com.alipay.neverland.biz.rpc.queryBaseinfo", "\"branchId\": \"MASTER\",\"source\":\"jkddicon\"");
+            JSONObject requestString = new JSONObject(RequestManager.requestString("com.alipay.neverland.biz.rpc.queryBaseinfo", "[{\"branchId\": \"MASTER\",\"source\":\"jkddicon\"}]"));
             if (requestString.optBoolean("success")) {
                 String s = requestString.optJSONObject("data").optString("mapId");
                 this.mapId = s;
@@ -100,7 +100,7 @@ public class NeverLand extends BaseCommTask {
 
     private void queryBubbleTask() {
         try {
-            JSONObject requestString = requestString("com.alipay.neverland.biz.rpc.queryBubbleTask", "\"source\":\"jkddicon\"");
+            JSONObject requestString = new JSONObject(RequestManager.requestString("com.alipay.neverland.biz.rpc.queryBubbleTask", "[{\"source\":\"jkddicon\"}]"));
             if (requestString != null && requestString.optBoolean("success")) {
                 // 添加空值检查
                 JSONObject data = requestString.optJSONObject("data");
@@ -145,7 +145,7 @@ public class NeverLand extends BaseCommTask {
                     String stringBuilder = "\"source\": \"jkddicon\",\"medEnergyBallInfoRecordIds\": " +
                             validRecordIds;
                     TimeUtil.sleep(3000L);
-                    requestString = requestString("com.alipay.neverland.biz.rpc.pickBubbleTaskEnergy", stringBuilder);
+                    requestString = new JSONObject(RequestManager.requestString("com.alipay.neverland.biz.rpc.pickBubbleTaskEnergy", "[{" + stringBuilder + "}]"));
 
                     if (requestString != null && requestString.optBoolean("success")) {
                         JSONObject dataObj = requestString.optJSONObject("data");
@@ -205,7 +205,7 @@ public class NeverLand extends BaseCommTask {
             String params = String.format("\"branchId\": \"%s\",\"source\": \"jkddicon\",\"mapId\": \"%s\"",
                     this.branchId, this.mapId);
 
-            JSONObject response = requestString("com.alipay.neverland.biz.rpc.queryMapStageRewardInfo", params);
+            JSONObject response = new JSONObject(RequestManager.requestString("com.alipay.neverland.biz.rpc.queryMapStageRewardInfo", "[{" + params + "}]"));
             if (response == null || !response.optBoolean("success")) {
                 return false;
             }
@@ -251,7 +251,7 @@ public class NeverLand extends BaseCommTask {
 
     private void queryMaps() {
         try {
-            JSONObject requestString = requestString("com.alipay.neverland.biz.rpc.queryMaps", "\"branchId\": \"MASTER\",\"source\":\"jkddicon\"");
+            JSONObject requestString = new JSONObject(RequestManager.requestString("com.alipay.neverland.biz.rpc.queryMaps", "[{\"branchId\": \"MASTER\",\"source\":\"jkddicon\"}]"));
             if (requestString.optBoolean("success")) {
                 JSONArray jSONArray = requestString.getJSONObject("data").getJSONArray("commonMap");
                 for (int i = 0; i < jSONArray.length(); i++) {
@@ -272,7 +272,7 @@ public class NeverLand extends BaseCommTask {
 
     private void queryTaskCenter() {
         try {
-            JSONObject requestString = requestString("com.alipay.neverland.biz.rpc.queryTaskCenter", "\"apDid\": \"N/JRfNgEj3Ry133cmrJZBVMIAFW92dVqjEyrrpB7ims=\",\"cityCode\": \"110100\",\"deviceLevel\": \"high\",\"source\": \"jkddicon\"");
+            JSONObject requestString = new JSONObject(RequestManager.requestString("com.alipay.neverland.biz.rpc.queryTaskCenter", "[{\"apDid\": \"N/JRfNgEj3Ry133cmrJZBVMIAFW92dVqjEyrrpB7ims=\",\"cityCode\": \"110100\",\"deviceLevel\": \"high\",\"source\": \"jkddicon\"}]"));
             if (requestString != null && requestString.optBoolean("success")) {
                 Object valueByPathObject = JsonUtil.getValueByPathObject(requestString, "data.taskCenterTaskVOS");
                 if (valueByPathObject != null) {
@@ -301,7 +301,7 @@ public class NeverLand extends BaseCommTask {
     private void queryTaskInfo() {
         while (true) {
             try {
-                JSONObject requestString = requestString("com.alipay.neverland.biz.rpc.queryTaskInfo", "\"source\":\"health-island\",\"type\":\"LIGHT_FEEDS_TASK\"");
+                JSONObject requestString = new JSONObject(RequestManager.requestString("com.alipay.neverland.biz.rpc.queryTaskInfo", "[{\"source\":\"health-island\",\"type\":\"LIGHT_FEEDS_TASK\"}]"));
                 if (requestString != null &&  requestString.optBoolean("success")) {
                     Object valueByPathObject = JsonUtil.getValueByPathObject(requestString, "data.taskInfos.[0]");
                     if (valueByPathObject != null) {
@@ -314,7 +314,7 @@ public class NeverLand extends BaseCommTask {
                         stringBuilder.append("\",\"energyNum\":\"");
                         stringBuilder.append(i);
                         stringBuilder.append("\",\"source\":\"jkdwodesign\",\"type\":\"LIGHT_FEEDS_TASK\"");
-                        if (requestString("com.alipay.neverland.biz.rpc.energyReceive", stringBuilder.toString()) != null) {
+                        if (new JSONObject(RequestManager.requestString("com.alipay.neverland.biz.rpc.energyReceive", "[{" + stringBuilder.toString() + "}]")) != null) {
                             String stringBuilder2 = this.displayName +
                                     "任务获得[" +
                                     i +
@@ -336,7 +336,7 @@ public class NeverLand extends BaseCommTask {
 
     private void sign() {
         try {
-            JSONObject requestString = requestString("com.alipay.neverland.biz.rpc.querySign", "\"source\": \"jkdwodesign\"");
+            JSONObject requestString = new JSONObject(RequestManager.requestString("com.alipay.neverland.biz.rpc.querySign", "[{\"source\": \"jkdwodesign\"}]"));
             if (requestString != null && requestString.optBoolean("success")) {
                 Object valueByPathObject = JsonUtil.getValueByPathObject(requestString, "data.days");
                 if (valueByPathObject != null) {
@@ -345,7 +345,7 @@ public class NeverLand extends BaseCommTask {
                         JSONObject jSONObject = jSONArray.getJSONObject(i);
                         if (jSONObject.getBoolean("current")) {
                             if (!jSONObject.getBoolean("signIn")) {
-                                requestString = requestString("com.alipay.neverland.biz.rpc.takeSign", "\"source\":\"jkddicon\"");
+                                requestString = new JSONObject(RequestManager.requestString("com.alipay.neverland.biz.rpc.takeSign", "[{\"source\":\"jkddicon\"}]"));
                                 if (requestString != null) {
                                     String stringBuilder = this.displayName +
                                             "签到成功，获得[" +
@@ -386,7 +386,7 @@ public class NeverLand extends BaseCommTask {
             TimeUtil.sleep(3000);
             jSONObject.put("scene", "MED_TASK_HALL");
             String jSONObject2 = jSONObject.toString();
-            JSONObject jsonObject = requestStringFalse("com.alipay.neverland.biz.rpc.taskSend", jSONObject2.substring(1, jSONObject2.length() - 1));
+            JSONObject jsonObject = new JSONObject(RequestManager.requestString("com.alipay.neverland.biz.rpc.taskSend", "[{" + jSONObject2.substring(1, jSONObject2.length() - 1) + "}]"));
             if (jsonObject == null || !jsonObject.optBoolean("success")){
                 if(jsonObject==null){
                     return false;
@@ -410,7 +410,7 @@ public class NeverLand extends BaseCommTask {
             jSONObject.put("progress", 1);
             jSONObject.put("source", "jkdwodesign");
             jSONObject2 = jSONObject.toString();
-            JSONObject requestString = requestString("com.alipay.neverland.biz.rpc.taskReceive", jSONObject2.substring(1, jSONObject2.length() - 1));
+            JSONObject requestString = new JSONObject(RequestManager.requestString("com.alipay.neverland.biz.rpc.taskReceive", "[{" + jSONObject2.substring(1, jSONObject2.length() - 1) + "}]"));
             TimeUtil.sleep(3000);
             if (requestString != null && requestString.optBoolean("success")) {
                 String stringBuilder = this.displayName +
@@ -437,8 +437,8 @@ public class NeverLand extends BaseCommTask {
     private boolean walkGrid() {
         try {
             if (!this.mapId.isEmpty()) {
-                JSONObject requestString = requestString("com.alipay.neverland.biz.rpc.walkGrid",
-                        "\"branchId\": \"MASTER\",\"drilling\": false,\"mapId\": \"" + this.mapId + "\",\"source\":\"jkddicon\"");
+                JSONObject requestString = new JSONObject(RequestManager.requestString("com.alipay.neverland.biz.rpc.walkGrid",
+                        "[{\"branchId\": \"MASTER\",\"drilling\": false,\"mapId\": \"" + this.mapId + "\",\"source\":\"jkddicon\"}]"));
 
                 if (requestString != null && requestString.getBoolean("success")) {
                     JSONObject data = requestString.getJSONObject("data");
@@ -507,7 +507,7 @@ public class NeverLand extends BaseCommTask {
             String title = jSONObject.optString("title", "未知任务");
             String bizId = logExtMap.getString("bizId");
 
-            JSONObject response = requestString("com.alipay.adtask.biz.mobilegw.service.task.finish", "\"bizId\": \"" + bizId + "\"");
+            JSONObject response = new JSONObject(RequestManager.requestString("com.alipay.adtask.biz.mobilegw.service.task.finish", "[{\"bizId\": \"" + bizId + "\"}]"));
             TimeUtil.sleep(3000);
             if (response != null && response.optBoolean("success")) {
                 String prizeCount = JsonUtil.getValueByPath(jSONObject, "prizes.[0].prizeCount");
@@ -523,7 +523,7 @@ public class NeverLand extends BaseCommTask {
 
     private void exchangePrize() {
         try {
-            JSONObject requestString = requestString("com.alipay.neverland.biz.rpc.queryExchangeModule", "\"assetType\": \"RED_PACKAGE_PIECE\",\"source\": \"jkddicon\"");
+            JSONObject requestString = new JSONObject(RequestManager.requestString("com.alipay.neverland.biz.rpc.queryExchangeModule", "[{\"assetType\": \"RED_PACKAGE_PIECE\",\"source\": \"jkddicon\"}]"));
             if (requestString != null && requestString.getBoolean("success")) {
                 requestString = requestString.getJSONObject("data");
                 int parseInt = Integer.parseInt(requestString.getJSONObject("mediumModule").optString("expiringAmount"));
@@ -539,7 +539,7 @@ public class NeverLand extends BaseCommTask {
                             if (i - parseInt <= 500) {
                                 string2 = jSONObject.getString("prizeId");
                                 String string3 = jSONObject.getString("prizeName");
-                                if (requestString("com.alipay.neverland.biz.rpc.doMediumExchangePrize", "\"assetType\": \"RED_PACKAGE_PIECE\",\"prizeId\": \"" + string2 + "\",\"campId\": \"" + string + "\",\"source\": \"jkddicon\"") != null) {
+                                if (new JSONObject(RequestManager.requestString("com.alipay.neverland.biz.rpc.doMediumExchangePrize", "[{\"assetType\": \"RED_PACKAGE_PIECE\",\"prizeId\": \"" + string2 + "\",\"campId\": \"" + string + "\",\"source\": \"jkddicon\"}]")) != null) {
                                     String str = this.displayName + "快过期红包碎片兑换[" + string3 + "]，请及时使用~";
                                     Log.other(str);
                                     String title = "健康岛兑换奖励：";
@@ -560,7 +560,7 @@ public class NeverLand extends BaseCommTask {
             if (!Status.hasFlagToday(CompletedKeyEnum.NeverLandSpecial.name())) {
                 int i = 0;
                 while (i < 2) {
-                    JSONObject requestString = requestString("com.alipay.neverland.biz.rpc.receiveSpecialPrize", "\"medPrizeIds\":[\"benefitCenterActivityPrize1\"],\"sceneType\":\"BENEFIT_CENTER\"");
+                    JSONObject requestString = new JSONObject(RequestManager.requestString("com.alipay.neverland.biz.rpc.receiveSpecialPrize", "[{\"medPrizeIds\":[\"benefitCenterActivityPrize1\"],\"sceneType\":\"BENEFIT_CENTER\"}]"));
                     if (requestString != null) {
                         JSONObject data = requestString.optJSONObject("data");
                         int num = 0;
@@ -587,7 +587,7 @@ public class NeverLand extends BaseCommTask {
             if (!Status.hasFlagToday(CompletedKeyEnum.NeverLandDailyAds.name())) {
                 int i = 0;
                 while (i < 7) {
-                    JSONObject requestString = requestString("com.alipay.neverland.biz.rpc.viewDailyAds", "\"source\":\"ch_appid-20001003__chsub_pageid-com.alipay.android.phone.businesscommon.globalsearch.ui.MainSearchActivity\"");
+                    JSONObject requestString = new JSONObject(RequestManager.requestString("com.alipay.neverland.biz.rpc.viewDailyAds", "[{\"source\":\"ch_appid-20001003__chsub_pageid-com.alipay.android.phone.businesscommon.globalsearch.ui.MainSearchActivity\"}]"));
                     if (requestString != null &&  requestString.getBoolean("success")) {
                         Object valueByPathObject = JsonUtil.getValueByPathObject(requestString, "data.userItems");
                         if (valueByPathObject != null) {

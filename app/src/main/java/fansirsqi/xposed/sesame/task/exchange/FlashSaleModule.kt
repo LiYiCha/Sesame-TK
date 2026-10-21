@@ -2,6 +2,7 @@ package fansirsqi.xposed.sesame.task.exchange
 
 import android.annotation.SuppressLint
 import fansirsqi.xposed.sesame.data.Status
+import fansirsqi.xposed.sesame.entity.MemberBenefit
 import org.json.JSONArray
 import fansirsqi.xposed.sesame.model.ModelFields
 import fansirsqi.xposed.sesame.model.ModelGroup
@@ -27,15 +28,6 @@ class FlashSaleModule : BaseFlashSaleTask() {
         linkedSetOf(),
         NeverLandEX::getExchangeItemListForUI
     )
-    private val enablePrivilege = BooleanModelField("enablePrivilege", "青春特权兑换-大额", false)
-    private val enablePrivilegeSmall = BooleanModelField("enablePrivilegeSmall", "青春特权兑换-小额", false)
-    private val enablePrivilegeList = BooleanModelField("enablePrivilegeList", "青春特权列表方式", false)
-    private val youthPrivilegeList = SelectModelField(
-        "youthPrivilegeList",
-        "青春特权 | 权益列表",
-        linkedSetOf(),
-        PrivilegeEX::getExchangeItemListForUI
-    )
     private val enablePackageExchange = BooleanModelField("enablePackageExchange", "包裹兑换", false)
     private val packageExchangeList = SelectModelField(
         "packageExchangeList",
@@ -56,50 +48,41 @@ class FlashSaleModule : BaseFlashSaleTask() {
         "游戏中心金币 | 秒杀开抢整点(0-23点)",
         20, 0, 23
     )
-    private val wakeUpMinuteBefore = IntegerModelField("wakeUpMinuteBefore", "唤醒提前时间(分钟)", 2, 1, 30)
-    private val enableConcurrent = BooleanModelField("enableConcurrent", "启用并发兑换", false)
-
-    override fun isConcurrentMode(): Boolean {
-        return enableConcurrent.value
-    }
+    private val enableGoldenBeanMall = BooleanModelField("goldenBeanMallExchange", "金豆商城秒杀", false)
+    private val goldenBeanMallList = SelectModelField(
+        "goldenBeanMallList",
+        "金豆商城 | 商品列表",
+        linkedSetOf(),
+        GoldenBeanMallEX::getExchangeItemListForUI
+    )
+    private val goldenBeanMallTargetHour = IntegerModelField(
+        "goldenBeanMallTargetHour",
+        "金豆商城 | 秒杀开抢整点(0-23点)",
+        0, 0, 23
+    )
 
     // 子任务实例
     private val neverLandEX = NeverLandEX()
-    // 大额和小额各用独立实例，避免并发执行时共享 AtomicBoolean/AtomicReference 状态相互干扰
-    protected val privilegeEX = PrivilegeEX()       // 青春特权大额（10点）
-    protected val privilegeSmallEX = PrivilegeEX()  // 青春特权小额（0点）
     protected val packageExchangeEX = PackageExchangeEX()
     protected val gameCenterGoldEX = GameCenterGoldEX()
+    protected val goldenBeanMallEX = GoldenBeanMallEX()
 
-    // 每个子任务的执行状态控制
-    @Volatile
-    private var privilegeTaskFuture: Future<*>? = null
-    @Volatile
-    private var privilegeSmallTaskFuture: Future<*>? = null
-    @Volatile
-    private var neverLandTaskFuture: Future<*>? = null
-    @Volatile
-    private var packageExchangeTaskFuture: Future<*>? = null
-    @Volatile
-    private var gameCenterGoldTaskFuture: Future<*>? = null
+    // 每个子任务的执行状态控制（key 为任务名，synchronized 保护）
+    private val subTaskFutures = HashMap<String, Future<*>>()
 
     companion object {
         private val TASK_EXECUTOR: ExecutorService = Executors.newFixedThreadPool(10)
 
-        private const val FLASH_SALE_LIST = "flash_sale_list"
         private const val NEVERLAND_LIST = "neverland_list"
         private const val BAOGUO_LIST = "baoguo_list"
         private const val GAMECENTER_GOLD_LIST = "gamecenter_gold_list"
+        private const val GOLDENBEAN_MALL_LIST = "goldenbean_mall_list"
 
         // 防止重复提交预加载任务
-        private val isPreloading = AtomicBoolean(false)
         private val isNeverLandPreloading = AtomicBoolean(false)
         private val isBaoguoPreloading = AtomicBoolean(false)
         private val isGameCenterGoldPreloading = AtomicBoolean(false)
-    }
-
-    override fun getWakeUpConfigField(): IntegerModelField? {
-        return null
+        private val isGoldenBeanMallPreloading = AtomicBoolean(false)
     }
 
     override fun buildExchangeItems(): List<ExchangeItem> {
@@ -117,130 +100,69 @@ class FlashSaleModule : BaseFlashSaleTask() {
     private fun initializeSubTasks() {
         // 健康岛
         neverLandEX.enableNeverLandEX = enableNeverLand
-        neverLandEX.wakeUpMinuteBefore = wakeUpMinuteBefore
         neverLandEX.neverLandList = neverLandList
-
-        // 青春特权大额
-        privilegeEX.isSmallExchange = false
-        privilegeEX.privilege = enablePrivilege
-        privilegeEX.privilegeSmall = enablePrivilegeSmall
-        privilegeEX.wakeUpMinuteBefore = wakeUpMinuteBefore
-        privilegeEX.enablePrivilegeList = enablePrivilegeList
-        privilegeEX.youthPrivilegeList = youthPrivilegeList
-
-        // 青春特权小额（共享配置字段，运行状态独立）
-        privilegeSmallEX.isSmallExchange = true
-        privilegeSmallEX.privilege = enablePrivilege
-        privilegeSmallEX.privilegeSmall = enablePrivilegeSmall
-        privilegeSmallEX.wakeUpMinuteBefore = wakeUpMinuteBefore
-        privilegeSmallEX.enablePrivilegeList = enablePrivilegeList
-        privilegeSmallEX.youthPrivilegeList = youthPrivilegeList
 
         // 包裹兑换
         packageExchangeEX.enablePackageExchange = enablePackageExchange
-        packageExchangeEX.wakeUpMinuteBefore = wakeUpMinuteBefore
         packageExchangeEX.packageExchangeList = packageExchangeList
 
         // 游戏中心金币秒杀
         gameCenterGoldEX.enableGameCenterGold = enableGameCenterGold
-        gameCenterGoldEX.wakeUpMinuteBefore = wakeUpMinuteBefore
         gameCenterGoldEX.gameCenterGoldList = gameCenterGoldList
         gameCenterGoldEX.targetHourField = gameCenterGoldTargetHour
+
+        // 金豆商城秒杀
+        goldenBeanMallEX.enableGoldenBeanMall = enableGoldenBeanMall
+        goldenBeanMallEX.goldenBeanMallList = goldenBeanMallList
+        goldenBeanMallEX.targetHourField = goldenBeanMallTargetHour
     }
 
     /**
      * 检查并调度预加载任务（一天执行一次）
-     * enablePrivilegeList 默认 false，此检查同时防止 init{} 阶段 Status 未就绪导致崩溃
+     * 此检查同时防止 init{} 阶段 Status 未就绪导致崩溃
      */
     private fun schedulePreloadIfNeeded() {
         if (fansirsqi.xposed.sesame.hook.lifecycle.LifecycleManager.getRpcBridge() == null) {
             return
         }
-        // 青春特权列表预加载
-        if (enablePrivilegeList.value &&
-            !Status.hasFlagToday(FLASH_SALE_LIST) &&
-            isPreloading.compareAndSet(false, true)) {
-            TASK_EXECUTOR.submit {
-                try {
-                    if (performPreload()) Status.setFlagToday(FLASH_SALE_LIST)
-                } finally {
-                    isPreloading.set(false)
-                }
-            }
+        schedulePreloadOnce("健康岛", enableNeverLandList, NEVERLAND_LIST, isNeverLandPreloading) {
+            NeverLandEX.refreshItemsFromAPI()
         }
-        // 健康岛商品列表预加载
-        if (enableNeverLandList.value &&
-            !Status.hasFlagToday(NEVERLAND_LIST) &&
-            isNeverLandPreloading.compareAndSet(false, true)) {
-            TASK_EXECUTOR.submit {
-                try {
-                    val items = NeverLandEX.refreshItemsFromAPI()
-                    if (items.isNotEmpty()) {
-                        Log.other("$TAG 健康岛预加载成功: ${items.size} 项")
-                        Status.setFlagToday(NEVERLAND_LIST)
-                    } else {
-                        Log.other("$TAG 健康岛预加载结果为空，下次运行时重试")
-                    }
-                } finally {
-                    isNeverLandPreloading.set(false)
-                }
-            }
+        schedulePreloadOnce("包裹兑换列表", enablePackageExchange, BAOGUO_LIST, isBaoguoPreloading) {
+            PackageExchangeEX.refreshItemsFromAPI()
         }
-        // 包裹兑换商品列表预加载
-        if (enablePackageExchange.value &&
-            !Status.hasFlagToday(BAOGUO_LIST) &&
-            isBaoguoPreloading.compareAndSet(false, true)) {
-            TASK_EXECUTOR.submit {
-                try {
-                    val items = PackageExchangeEX.refreshItemsFromAPI()
-                    if (items.isNotEmpty()) {
-                        Log.other("$TAG 包裹兑换列表预加载成功: ${items.size} 项")
-                        Status.setFlagToday(BAOGUO_LIST)
-                    } else {
-                        Log.other("$TAG 包裹兑换列表预加载结果为空，下次运行时重试")
-                    }
-                } finally {
-                    isBaoguoPreloading.set(false)
-                }
-            }
+        schedulePreloadOnce("游戏中心金币列表", enableGameCenterGoldList, GAMECENTER_GOLD_LIST, isGameCenterGoldPreloading) {
+            GameCenterGoldEX.refreshItemsFromAPI()
         }
-        // 游戏中心金币商品列表预加载
-        if (enableGameCenterGoldList.value &&
-            !Status.hasFlagToday(GAMECENTER_GOLD_LIST) &&
-            isGameCenterGoldPreloading.compareAndSet(false, true)) {
-            TASK_EXECUTOR.submit {
-                try {
-                    val items = GameCenterGoldEX.refreshItemsFromAPI()
-                    if (items.isNotEmpty()) {
-                        Log.other("$TAG 游戏中心金币列表预加载成功: ${items.size} 项")
-                        Status.setFlagToday(GAMECENTER_GOLD_LIST)
-                    } else {
-                        Log.other("$TAG 游戏中心金币列表预加载结果为空，下次运行时重试")
-                    }
-                } finally {
-                    isGameCenterGoldPreloading.set(false)
-                }
-            }
+        schedulePreloadOnce("金豆商城列表", enableGoldenBeanMall, GOLDENBEAN_MALL_LIST, isGoldenBeanMallPreloading) {
+            GoldenBeanMallEX.refreshItemsFromAPI()
         }
     }
 
-    /**
-     * 执行实际的预加载操作（在后台线程调用）
-     * 直接调用 refreshExchangeItemsFromAPI()，因为 getExchangeItemListForUI() 已改为只读缓存
-     */
-    private fun performPreload(): Boolean {
-        try {
-            val items = PrivilegeEX.refreshExchangeItemsFromAPI()
-            if (items.isNotEmpty()) {
-                Log.other("$TAG 青村特权成功预加载 ${items.size} 个兑换项")
-                return true
-            } else {
-                Log.other("$TAG 预加载兑换项列表为空，可能需要检查网络连接，请重试。")
-            }
-        } catch (e: Exception) {
-            Log.error("$TAG 预加载兑换项列表失败: ${e.message}")
+    /** 预加载商品列表：开关开启且当日未置旗标才执行，成功才置旗标，空结果下次运行重试 */
+    private fun schedulePreloadOnce(
+        name: String,
+        switch: BooleanModelField,
+        flagKey: String,
+        loadingFlag: AtomicBoolean,
+        refresh: () -> List<MemberBenefit>,
+    ) {
+        if (!switch.value || Status.hasFlagToday(flagKey) || !loadingFlag.compareAndSet(false, true)) {
+            return
         }
-        return false
+        TASK_EXECUTOR.submit {
+            try {
+                val items = refresh()
+                if (items.isNotEmpty()) {
+                    Log.other("$TAG ${name}预加载成功: ${items.size} 项")
+                    Status.setFlagToday(flagKey)
+                } else {
+                    Log.other("$TAG ${name}预加载结果为空，下次运行时重试")
+                }
+            } finally {
+                loadingFlag.set(false)
+            }
+        }
     }
 
     override fun getName(): String {
@@ -261,18 +183,15 @@ class FlashSaleModule : BaseFlashSaleTask() {
         fields.addField(enableNeverLand)
         fields.addField(enableNeverLandList)
         fields.addField(neverLandList)
-        fields.addField(enablePrivilege)
-        fields.addField(enablePrivilegeSmall)
-        fields.addField(enablePrivilegeList)
-        fields.addField(youthPrivilegeList)
         fields.addField(enablePackageExchange)
         fields.addField(packageExchangeList)
         fields.addField(enableGameCenterGold)
         fields.addField(enableGameCenterGoldList)
         fields.addField(gameCenterGoldList)
         fields.addField(gameCenterGoldTargetHour)
-        fields.addField(wakeUpMinuteBefore)
-        fields.addField(enableConcurrent)
+        fields.addField(enableGoldenBeanMall)
+        fields.addField(goldenBeanMallList)
+        fields.addField(goldenBeanMallTargetHour)
         return fields
     }
 
@@ -281,20 +200,44 @@ class FlashSaleModule : BaseFlashSaleTask() {
 
         // 同步最新配置到子实例，并按需触发预加载
         neverLandEX.neverLandList = neverLandList
-        privilegeEX.youthPrivilegeList = youthPrivilegeList
-        privilegeEX.enablePrivilegeList = enablePrivilegeList
-        privilegeSmallEX.youthPrivilegeList = youthPrivilegeList
-        privilegeSmallEX.enablePrivilegeList = enablePrivilegeList
         packageExchangeEX.packageExchangeList = packageExchangeList
         gameCenterGoldEX.gameCenterGoldList = gameCenterGoldList
         gameCenterGoldEX.targetHourField = gameCenterGoldTargetHour
+        goldenBeanMallEX.goldenBeanMallList = goldenBeanMallList
+        goldenBeanMallEX.targetHourField = goldenBeanMallTargetHour
         schedulePreloadIfNeeded()
 
-        if (enablePrivilege.value) submitPrivilegeTask()
-        if (enablePrivilegeSmall.value) submitPrivilegeSmallTask()
-        if (enableNeverLand.value) submitNeverLandTask()
-        if (enablePackageExchange.value) submitPackageExchangeTask()
-        if (enableGameCenterGold.value) submitGameCenterGoldTask()
+        if (enableNeverLand.value) submitSubTask("健康岛", neverLandEX)
+        if (enablePackageExchange.value) submitSubTask("包裹兑换", packageExchangeEX)
+        if (enableGameCenterGold.value) submitSubTask("游戏金币秒杀", gameCenterGoldEX)
+        if (enableGoldenBeanMall.value) submitSubTask("金豆商城秒杀", goldenBeanMallEX)
+    }
+
+    /**
+     * 提交子任务：Future 查重防重复提交，运行结束自动移除记录
+     */
+    private fun submitSubTask(name: String, task: BaseFlashSaleTask) {
+        synchronized(subTaskFutures) {
+            if (isTaskRunning(subTaskFutures[name])) {
+                Log.runtime("[FlashSaleModule🚀]${name}任务已在运行中，跳过重复提交")
+                return
+            }
+
+            try {
+                subTaskFutures[name] = TASK_EXECUTOR.submit {
+                    try {
+                        task.prepare()
+                        task.asyncRun()
+                    } catch (e: Exception) {
+                        Log.error("[FlashSaleModule🚀]${name}任务异常", e.message)
+                    } finally {
+                        synchronized(subTaskFutures) { subTaskFutures.remove(name) }
+                    }
+                }
+            } catch (e: Exception) {
+                Log.error("[FlashSaleModule🚀]${name}任务提交异常", e.message)
+            }
+        }
     }
 
     /**
@@ -302,136 +245,6 @@ class FlashSaleModule : BaseFlashSaleTask() {
      */
     private fun isTaskRunning(taskFuture: Future<*>?): Boolean {
         return taskFuture != null && !taskFuture.isDone && !taskFuture.isCancelled
-    }
-
-    /**
-     * 提交青春特权大额任务（早上10点）
-     */
-    private fun submitPrivilegeTask() {
-        if (isTaskRunning(privilegeTaskFuture)) {
-            Log.runtime("[FlashSaleModule🚀]青春特权大额任务已在运行中，跳过重复提交")
-            return
-        }
-
-        try {
-            privilegeTaskFuture = TASK_EXECUTOR.submit {
-                try {
-                    privilegeEX.prepare()
-                    privilegeEX.asyncRun()
-                } catch (e: Exception) {
-                    Log.error("[FlashSaleModule🚀]青春特权大额任务异常", e.message)
-                } finally {
-                    privilegeTaskFuture = null
-                }
-            }
-        } catch (e: Exception) {
-            Log.error("[FlashSaleModule🚀]青春特权大额任务提交异常", e.message)
-        }
-    }
-
-    /**
-     * 提交青春特权小额任务（晚上0点）
-     * 使用独立的 privilegeSmallEX 实例，避免与大额任务共用状态相互干扰
-     */
-    private fun submitPrivilegeSmallTask() {
-        if (isTaskRunning(privilegeSmallTaskFuture)) {
-            Log.runtime("[FlashSaleModule🚀]青春特权小额任务已在运行中，跳过重复提交")
-            return
-        }
-
-        try {
-            privilegeSmallTaskFuture = TASK_EXECUTOR.submit {
-                try {
-                    privilegeSmallEX.prepare()
-                    privilegeSmallEX.asyncRun()
-                } catch (e: Exception) {
-                    Log.error("[FlashSaleModule🚀]青春特权小额任务异常", e.message)
-                } finally {
-                    privilegeSmallTaskFuture = null
-                }
-            }
-        } catch (e: Exception) {
-            Log.error("[FlashSaleModule🚀]青春特权小额任务提交异常", e.message)
-        }
-    }
-
-    /**
-     * 提交健康岛任务
-     */
-    private fun submitNeverLandTask() {
-        if (isTaskRunning(neverLandTaskFuture)) {
-            Log.runtime("[FlashSaleModule🚀]健康岛任务已在运行中，跳过重复提交")
-            return
-        }
-
-        try {
-            neverLandTaskFuture = TASK_EXECUTOR.submit {
-                try {
-                    neverLandEX.prepare()
-                    neverLandEX.asyncRun()
-                } catch (e: Exception) {
-                    Log.error("[FlashSaleModule🚀]健康岛任务异常", e.message)
-                } finally {
-                    neverLandTaskFuture = null
-                }
-            }
-        } catch (e: Exception) {
-            Log.error("[FlashSaleModule🚀]健康岛任务提交异常", e.message)
-        }
-    }
-
-    /**
-     * 提交包裹兑换任务（0点, 10点, 18点）
-     */
-    private fun submitPackageExchangeTask() {
-        if (isTaskRunning(packageExchangeTaskFuture)) {
-            Log.runtime("[FlashSaleModule🚀]包裹兑换任务已在运行中，跳过重复提交")
-            return
-        }
-
-        try {
-            packageExchangeTaskFuture = TASK_EXECUTOR.submit {
-                try {
-                    packageExchangeEX.prepare()
-                    packageExchangeEX.asyncRun()
-                } catch (e: Exception) {
-                    Log.error("[FlashSaleModule🚀]包裹兑换任务异常", e.message)
-                } finally {
-                    packageExchangeTaskFuture = null
-                }
-            }
-        } catch (e: Exception) {
-            Log.error("[FlashSaleModule🚀]包裹兑换任务提交异常", e.message)
-        }
-    }
-
-    /**
-     * 提交游戏中心金币秒杀任务（晚上20点）
-     */
-    private fun submitGameCenterGoldTask() {
-        if (isTaskRunning(gameCenterGoldTaskFuture)) {
-            Log.runtime("[FlashSaleModule🚀]游戏金币秒杀任务已在运行中，跳过重复提交")
-            return
-        }
-
-        try {
-            gameCenterGoldTaskFuture = TASK_EXECUTOR.submit {
-                try {
-                    gameCenterGoldEX.prepare()
-                    gameCenterGoldEX.asyncRun()
-                } catch (e: Exception) {
-                    Log.error("[FlashSaleModule🚀]游戏金币秒杀任务异常", e.message)
-                } finally {
-                    gameCenterGoldTaskFuture = null
-                }
-            }
-        } catch (e: Exception) {
-            Log.error("[FlashSaleModule🚀]游戏金币秒杀任务提交异常", e.message)
-        }
-    }
-
-    override fun sendExchangeRequestAsync(params: JSONArray, item: ExchangeItem): Boolean {
-        return false
     }
 
     override val exchangeMode: ExchangeMode?
