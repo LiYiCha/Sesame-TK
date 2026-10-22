@@ -99,7 +99,14 @@ object AuthCodeHelper {
                 Log.runtime(TAG, "授权码服务尚未就绪，跳过本次获取[$appId]")
                 return null
             }
-            Log.printStackTrace(TAG, "主动调用获取授权码失败: ${e.message}", e)
+            // 解包反射包装层，取真实根因（InvocationTargetException.message 恒为 null）
+            val cause = generateSequence(e) { it.cause }.last()
+            if (cause.javaClass.name.contains("RpcException")) {
+                // RPC 传输层瞬时失败（如 MMTP -418），单行记录不打堆栈
+                Log.error(TAG, "获取授权码RPC传输失败[$appId]: ${cause.message}")
+            } else {
+                Log.printStackTrace(TAG, "主动调用获取授权码失败: ${cause.message}", cause)
+            }
             return null
         }
     }

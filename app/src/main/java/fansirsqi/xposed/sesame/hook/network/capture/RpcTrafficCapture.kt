@@ -1,6 +1,8 @@
 package fansirsqi.xposed.sesame.hook.network.capture
 
 import android.os.SystemClock
+import de.robv.android.xposed.XC_MethodHook
+import de.robv.android.xposed.XposedBridge
 import fansirsqi.xposed.sesame.hook.network.capture.PendingRegistry.HttpBodyObservation
 import fansirsqi.xposed.sesame.hook.network.capture.PendingRegistry.PendingHostRequest
 import fansirsqi.xposed.sesame.model.BaseModel
@@ -42,19 +44,25 @@ object RpcTrafficCapture {
         val payload: String? = null,
         val elapsedMs: Long = -1L,
         val note: String? = null,
-        val correlationStatus: String? = null
+        val correlationStatus: String? = null,
+        /** 该 payload 来自加解密 hook 命中（即此请求走内容加密），true 表示已解出明文 */
+        val enc: Boolean = false
     ) {
         fun copy(
             phase: TrafficPhase = this.phase,
             payload: String? = this.payload,
             note: String? = this.note
-        ): RpcTrafficEvent = RpcTrafficEvent(phase, source, method, requestId, payload, elapsedMs, note, correlationStatus)
+        ): RpcTrafficEvent = RpcTrafficEvent(phase, source, method, requestId, payload, elapsedMs, note, correlationStatus, enc)
     }
 
-    @Volatile
-    private var captureEnabledProvider: () -> Boolean = { BaseModel.enableHttpCapture.value }
-
     private val installLock = Any()
+
+    /**
+     * 引擎 hook 安装态：true=已安装（动态补装点位可登记 Unhook），false=已卸载（动态补装点位自行回收）。
+     * 关闭态所有 hook 已卸载，网络事件不再进入任何回调。
+     */
+    @Volatile
+    private var installed = false
     private val eventSequence = AtomicLong(0L)
 
     @Volatile
@@ -76,19 +84,66 @@ object RpcTrafficCapture {
         "params", "fetchedData", "fetchedData.params"
     )
 
-    // ==================== 安装入口 ====================
+    // ==================== 抓包模式（DataStore 持久化单值，天然互斥；抓包设置页退出时写入、宿主经 NIO 监听热装卸 hook） ====================
 
-    @JvmOverloads
-    fun install(classLoader: ClassLoader, enabledProvider: () -> Boolean = { BaseModel.enableHttpCapture.value }): Boolean {
-        captureEnabledProvider = enabledProvider
-        PendingRegistry.cleanupTick = {
-            drainCollectedPendingRequests()
-            expirePendingRequests()
+    enum class CaptureMode { OFF, RPC_DEBUG, HTTPS_DEBUG }
+
+    const val CAPTURE_MODE_KEY = "RpcTrafficCapture_Mode"
+
+    fun getCaptureMode(): CaptureMode = runCatching {
+        DataStore.get(CAPTURE_MODE_KEY, String::class.java)?.let { CaptureMode.valueOf(it) }
+    }.getOrNull() ?: CaptureMode.OFF
+
+    fun setCaptureMode(mode: CaptureMode) = DataStore.put(CAPTURE_MODE_KEY, mode.name)
+
+    /** 实际已应用模式，仅主进程 apply 成功后回写；设置页状态卡读取此值显示真实运行态 */
+    const val APPLIED_MODE_KEY = "RpcTrafficCapture_Applied"
+
+    fun getAppliedMode(): CaptureMode = runCatching {
+        DataStore.get(APPLIED_MODE_KEY, String::class.java)?.let { CaptureMode.valueOf(it) }
+    }.getOrNull() ?: CaptureMode.OFF
+
+    fun setAppliedMode(mode: CaptureMode) = DataStore.put(APPLIED_MODE_KEY, mode.name)
+
+    /** 加解密明文 hook 子开关（HTTPS 调试模式内的可选项，随模式退出页面提交、宿主独立装卸） */
+    const val CONTENT_ENCRYPT_KEY = "RpcTrafficCapture_ContentEncrypt"
+
+    fun isContentEncryptEnabled(): Boolean = DataStore.get(CONTENT_ENCRYPT_KEY, Boolean::class.java) ?: false
+
+    fun setContentEncryptEnabled(enabled: Boolean) = DataStore.put(CONTENT_ENCRYPT_KEY, enabled)
+
+    fun applyContentEncrypt(enabled: Boolean) = HttpHooks.setContentEncryptEnabled(enabled)
+
+    // ==================== 安装 / 卸载 ====================
+
+    /** hook 安装态，供 [trackOrRollback] 与动态补装点位读取 */
+    internal fun isHookActive(): Boolean = installed
+
+    /**
+     * 登记 Unhook 并双重检查：卸载先置 false 再扫尾，补装点位据此自行回收，
+     * 避免卸载竞态遗留孤儿 hook（关闭态仍产生回调）。
+     */
+    internal fun trackOrRollback(sink: MutableCollection<XC_MethodHook.Unhook>, unhook: XC_MethodHook.Unhook): Boolean {
+        if (installed) {
+            sink.add(unhook)
+            if (installed) return true
+            sink.remove(unhook)
         }
-        var installedAny = runCatching { HttpHooks.installMiniHttpHooks(classLoader) }
-            .onFailure { runCatching { Log.runtime(TAG, "安装 HTTP 抓包失败: ${it.message}") } }
-            .getOrDefault(false)
+        runCatching { unhook.unhook() }
+        return false
+    }
+
+    fun install(classLoader: ClassLoader): Boolean {
         synchronized(installLock) {
+            if (installed) return true
+            installed = true
+            PendingRegistry.cleanupTick = {
+                drainCollectedPendingRequests()
+                expirePendingRequests()
+            }
+            var installedAny = runCatching { HttpHooks.installMiniHttpHooks(classLoader) }
+                .onFailure { runCatching { Log.runtime(TAG, "安装 HTTP 抓包失败: ${it.message}") } }
+                .getOrDefault(false)
             val rpcInstalled = RpcHooks.installRpcBridgeHook(classLoader)
             val mtopInstalled = RpcHooks.installMtopHook(classLoader)
             if (rpcInstalled || mtopInstalled) {
@@ -100,6 +155,21 @@ object RpcTrafficCapture {
             }
             Log.runtime(TAG, if (installedAny) "抓包 Hook 安装完成" else "未找到可安装的抓包 Hook")
             return installedAny
+        }
+    }
+
+    /**
+     * 卸载全部引擎 hook：先关闸（动态补装点位自行回收），再扫尾 unhook 并清空关联表。
+     * 关闭态零回调、零事件级检查开销。
+     */
+    fun uninstall() {
+        synchronized(installLock) {
+            if (!installed) return
+            installed = false
+            RpcHooks.uninstallAll()
+            HttpHooks.uninstallAll()
+            PendingRegistry.clearAll()
+            Log.runtime(TAG, "抓包 Hook 已卸载")
         }
     }
 
@@ -132,18 +202,10 @@ object RpcTrafficCapture {
 
     internal fun isSourceEnabled(source: TrafficSource): Boolean = source.name !in readDisabledSources()
 
-    internal fun isCaptureEnabled(): Boolean {
-        val enabled = runCatching { captureEnabledProvider.invoke() }.getOrDefault(false)
-        if (!enabled) {
-            PendingRegistry.clearAll()
-        }
-        return enabled
-    }
-
     // ==================== 记录与派发 ====================
 
     internal fun recordHostRequest(pending: PendingHostRequest) {
-        if (!isCaptureEnabled() || isFiltered(pending.method, pending.requestPayload)) {
+        if (isFiltered(pending.method, pending.requestPayload)) {
             return
         }
         drainCollectedPendingRequests()
@@ -165,7 +227,6 @@ object RpcTrafficCapture {
         terminal: Boolean = true,
         note: String? = null
     ): Boolean {
-        if (!isCaptureEnabled()) return false
         val recorded = if (terminal) {
             PendingRegistry.take(pending, completed = true)
         } else {
@@ -193,7 +254,6 @@ object RpcTrafficCapture {
         note: String,
         correlationStatus: String? = null
     ) {
-        if (!isCaptureEnabled()) return
         if (!PendingRegistry.take(pending, completed = correlationStatus == null || correlationStatus == "CANCELLED")) return
         emitEvent(
             RpcTrafficEvent(
@@ -209,20 +269,12 @@ object RpcTrafficCapture {
     }
 
     internal fun recordPendingResponse(callback: Any, responsePayload: String, terminal: Boolean = true): Boolean {
-        if (!isCaptureEnabled()) {
-            PendingRegistry.removeAll(callback)
-            return false
-        }
         val pending = PendingRegistry.peek(callback) ?: return false
         if (!terminal) pending.callbackKept = true
         return recordHostResponse(pending, responsePayload, terminal)
     }
 
     internal fun tryRecordResponseFromField(callback: Any) {
-        if (!isCaptureEnabled()) {
-            PendingRegistry.removeAll(callback)
-            return
-        }
         val pending = PendingRegistry.peek(callback) ?: return
         if (pending.callbackKept) return
         val responsePayload = readAriverResponseField(callback)
@@ -238,7 +290,7 @@ object RpcTrafficCapture {
         terminal: Boolean = false,
         complete: Boolean? = true
     ) {
-        if (body.finished || !isCaptureEnabled()) return
+        if (body.finished) return
         if (!PendingRegistry.isBodyAttached(body) && !(terminal && body.afterNoBodyResponse)) return
         body.lastActivityElapsedMs = SystemClock.elapsedRealtime()
         payload.put("streamIdentity", body.streamIdentity)
@@ -303,6 +355,9 @@ object RpcTrafficCapture {
             put("elapsedMs", event.elapsedMs)
             put("refs", extractStructuredRefs(payloadOut))
             put("payload", if (payloadOut is String) parsePayloadForEvent(payloadOut) else payloadOut)
+            if (event.enc) put("enc", true)
+            // 密文嗅探：UTF-8 解出替换符说明 payload 非正常文本，疑似未解密的密文
+            if (payloadOut is String && payloadOut.contains('\uFFFD')) put("suspectEnc", true)
             if (truncated) {
                 put("payloadTruncated", true)
                 put("payloadLength", raw!!.length)

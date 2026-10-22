@@ -245,7 +245,7 @@ public class LuckCard extends BaseCommTask {
                         "\"bizScene\":\"HAOYUNKA_DAILY\",\"bizSceneFrom\":\"creditCard\",\"extInfo\":{\"name\":\"任务奖励\"," +
                         "\"ticketCampId\":\"CP182329534\"},\"needleParam\":{},\"outBizNo\":\"AP1328300229106083\"," +
                         "\"pccpId\":\"PCCP_2024120204226387059\",\"retryFlag\":true,\"stageCode\":\"send\"," +
-                        "\"taskCentId\":\"AP16247630\",\"taskType\":\"WAITING_TIME\",\"triggerRule\":\"TASK_LUCKY_TICKET_TRIGGER\"}]");
+                        "\"taskCentId\":\"AP16247630\",\"taskType\":\"WAITING_TIME\",\"triggerRule\":\"TASK_LUCKY_TICKET_TRIGGER\"}]"));
         if (request == null) {
             Log.error(displayName+"[gameCenter.request]debug--"+request);
             return false;

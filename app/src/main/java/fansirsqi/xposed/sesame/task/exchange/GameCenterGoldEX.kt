@@ -58,7 +58,7 @@ class GameCenterGoldEX : BaseFlashSaleTask() {
         fun refreshItemsFromAPI(): List<MemberBenefit> {
             return try {
                 val response = RequestManager.requestString(QUERY_METHOD, QUERY_PARAMS)
-                if (response.isNullOrEmpty()) {
+                if (response.isEmpty()) {
                     Log.error(TAG, "⚠️ 获取游戏金币商品列表返回为空")
                     return emptyList()
                 }
@@ -151,7 +151,7 @@ class GameCenterGoldEX : BaseFlashSaleTask() {
 
             // 2. 从 API 重新拉取最新商品与加签 sendSign
             val response = RequestManager.requestString(QUERY_METHOD, QUERY_PARAMS)
-            if (response.isNullOrEmpty()) {
+            if (response.isEmpty()) {
                 Log.error(TAG, "拉取游戏金币商品列表失败，任务终止")
                 return emptyList()
             }
@@ -193,7 +193,7 @@ class GameCenterGoldEX : BaseFlashSaleTask() {
     override fun tryExchange(item: ExchangeItem): Boolean {
         return try {
             val response = RequestManager.requestString(QUERY_METHOD, QUERY_PARAMS)
-            if (response.isNullOrEmpty()) {
+            if (response.isEmpty()) {
                 Log.error(TAG, "获取商品最新加签失败，prizeId: ${item.code}")
                 return false
             }
@@ -240,7 +240,7 @@ class GameCenterGoldEX : BaseFlashSaleTask() {
     override fun sendExchangeRequest(params: JSONArray, item: ExchangeItem): Boolean {
         return try {
             val responseStr = RequestManager.requestString(EXCHANGE_METHOD, params.toString())
-            if (responseStr.isNullOrEmpty()) {
+            if (responseStr.isEmpty()) {
                 Log.other("$TAG ❌ 兑换 [${item.name}] 返回为空")
                 return false
             }

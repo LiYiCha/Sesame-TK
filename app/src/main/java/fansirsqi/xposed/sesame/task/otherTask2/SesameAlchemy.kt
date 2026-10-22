@@ -636,6 +636,37 @@ class SesameAlchemy {
         }
     }
 
+    /** 生活记录确认回查：主源 queryLastOperateTask 未确认时，退任务列表按 templateId+recordId+finishFlag 兜底 */
+    private fun confirmLifeRecord(templateId: String, recordId: String): Boolean {
+        try {
+            val last = JSONObject(AntMemberRpcCall.Zmxy.Alchemy.queryLastOperateTask())
+            val vo = last.optJSONObject("data")?.optJSONObject("lastOperateTaskVO")
+            if (vo != null && vo.optString("templateId") == templateId &&
+                vo.optString("recordId") == recordId && vo.optBoolean("finishFlag")
+            ) {
+                return true
+            }
+        } catch (e: Exception) {
+            Log.error(TAG, "生活记录回查异常: $e")
+        }
+        try {
+            val list = JSONObject(AntMemberRpcCall.Zmxy.Alchemy.queryListV3())
+            val data = list.optJSONObject("data")
+            val matched = listOf("toCompleteVOS", "waitJoinTaskVOS", "waitCompleteTaskVOS").any { key ->
+                val arr = data?.optJSONArray(key) ?: return@any false
+                (0 until arr.length()).any { i ->
+                    val task = arr.optJSONObject(i)
+                    task != null && task.optString("templateId") == templateId &&
+                        task.optString("recordId") == recordId && task.optBoolean("finishFlag")
+                }
+            }
+            if (matched) return true
+        } catch (e: Exception) {
+            Log.error(TAG, "生活记录列表回查异常: $e")
+        }
+        return false
+    }
+
     // 获取任务列表
     private fun queryTaskLists(){
         try {
@@ -700,17 +731,9 @@ class SesameAlchemy {
                             sleepCompat(6000 + (Math.random() * 1000).toLong())
                             val (pushSuccess, pushErr) = pushActivity(recordId, title)
                             if (pushSuccess) {
-                                // 回查服务端上次操作任务，确认已记账
+                                // 回查服务端确认已记账，未确认时退任务列表兜底
                                 sleepCompat(2000)
-                                var confirmed = false
-                                try {
-                                    val last = JSONObject(AntMemberRpcCall.Zmxy.Alchemy.queryLastOperateTask())
-                                    val vo = last.optJSONObject("data")?.optJSONObject("lastOperateTaskVO")
-                                    confirmed = vo != null && vo.optString("templateId") == templateId &&
-                                            vo.optString("recordId") == recordId && vo.optBoolean("finishFlag")
-                                } catch (e: Exception) {
-                                    Log.error(TAG, "生活记录回查异常: $e")
-                                }
+                                val confirmed = confirmLifeRecord(templateId, recordId)
                                 if (confirmed) {
                                     handleTaskSuccess(title)
                                 } else {

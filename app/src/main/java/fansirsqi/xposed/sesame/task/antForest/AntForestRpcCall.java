@@ -118,6 +118,45 @@ public class AntForestRpcCall {
         );
     }
 
+    /** 查询背包中指定槽位的装扮列表 */
+    public static String listUserDressForBackpack(String positionType) {
+        try {
+            JSONObject requestObject = new JSONObject()
+                    .put("pageQuery", false)
+                    .put("positionType", positionType)
+                    .put("source", "chInfo_ch_appid-60000002")
+                    .put("version", "20230501");
+            return RequestManager.requestString(
+                    "alipay.antforest.forest.h5.listUserDressForBackpack",
+                    new JSONArray().put(requestObject).toString(),
+                    3,
+                    1000
+            );
+        } catch (Exception e) {
+            Log.printStackTrace(e);
+            return "";
+        }
+    }
+
+    /** 穿戴装扮 */
+    public static String wearDress(JSONArray dressTypeList) {
+        try {
+            JSONObject requestObject = new JSONObject()
+                    .put("dressTypeList", dressTypeList)
+                    .put("outBizNo", UUID.randomUUID().toString())
+                    .put("source", "chInfo_ch_appid-60000002");
+            return RequestManager.requestString(
+                    "alipay.antforest.forest.h5.wearDress",
+                    new JSONArray().put(requestObject).toString(),
+                    3,
+                    1000
+            );
+        } catch (Exception e) {
+            Log.printStackTrace(e);
+            return "";
+        }
+    }
+
     public static String queryFriendHomePage(String userId, String fromAct) {
         try {
             if (fromAct == null) {

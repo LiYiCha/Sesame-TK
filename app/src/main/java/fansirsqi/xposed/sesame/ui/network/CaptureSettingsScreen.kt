@@ -2,6 +2,7 @@ package fansirsqi.xposed.sesame.ui.network
 
 import android.content.Intent
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -28,6 +29,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -58,6 +60,28 @@ fun CaptureSettingsScreen(onBack: () -> Unit) {
     val disabledSources = remember { mutableStateOf(RpcTrafficCapture.getDisabledSources().toMutableSet()) }
     val keywords = remember { mutableStateOf(CaptureFilter.getKeywords()) }
     val showBlacklistDialog = remember { mutableStateOf(false) }
+    // 页面内仅暂存选择，退出页面时一次性提交，避免反复切换触发 hook 反复装卸
+    val storedMode = remember { mutableStateOf(RpcTrafficCapture.getCaptureMode()) }
+    var draftMode by remember { mutableStateOf(storedMode.value) }
+    val storedDecrypt = remember { mutableStateOf(RpcTrafficCapture.isContentEncryptEnabled()) }
+    var decryptDraft by remember { mutableStateOf(storedDecrypt.value) }
+    val modePending = draftMode != storedMode.value
+    val decryptPending = decryptDraft != storedDecrypt.value
+    val pending = modePending || decryptPending
+    val commitMode = {
+        if (modePending) {
+            RpcTrafficCapture.setCaptureMode(draftMode)
+            storedMode.value = draftMode
+        }
+        if (decryptPending) {
+            RpcTrafficCapture.setContentEncryptEnabled(decryptDraft)
+            storedDecrypt.value = decryptDraft
+        }
+        onBack()
+    }
+
+    // 系统返回与顶部返回共用提交路径，保证退出页面才生效
+    BackHandler { commitMode() }
 
     Scaffold(
         topBar = {
@@ -67,7 +91,7 @@ fun CaptureSettingsScreen(onBack: () -> Unit) {
                     containerColor = MaterialTheme.colorScheme.background
                 ),
                 navigationIcon = {
-                    IconButton(onClick = onBack) {
+                    IconButton(onClick = { commitMode() }) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
                     }
                 }
@@ -83,46 +107,164 @@ fun CaptureSettingsScreen(onBack: () -> Unit) {
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             item {
-                Text(
-                    text = "抓包来源",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold
-                )
-            }
-            items(RpcTrafficCapture.TrafficSource.entries.toList()) { source ->
-                val enabled = source.name !in disabledSources.value
                 Card(
                     modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
                 ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 8.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(text = source.title, style = MaterialTheme.typography.bodyMedium)
-                        Switch(
-                            checked = enabled,
-                            onCheckedChange = { checked ->
-                                RpcTrafficCapture.setSourceEnabled(source.name, checked)
-                                val updated = disabledSources.value.toMutableSet()
-                                if (checked) updated.remove(source.name) else updated.add(source.name)
-                                disabledSources.value = updated
-                            }
+                    Column(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
+                        Text(
+                            text = "当前状态",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
+                        Spacer(modifier = Modifier.height(6.dp))
+                        val appliedMode = RpcTrafficCapture.getAppliedMode()
+                        val running = appliedMode != RpcTrafficCapture.CaptureMode.OFF
+                        Text(
+                            text = if (running) {
+                                "运行中 · ${when (appliedMode) {
+                                    RpcTrafficCapture.CaptureMode.RPC_DEBUG -> "RPC 调试"
+                                    RpcTrafficCapture.CaptureMode.HTTPS_DEBUG -> "HTTPS 调试"
+                                    RpcTrafficCapture.CaptureMode.OFF -> ""
+                                }}"
+                            } else {
+                                "未运行"
+                            },
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = if (running) MaterialTheme.colorScheme.primary
+                            else MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        if (pending || appliedMode != storedMode.value) {
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = if (pending) "退出页面后生效" else "应用中",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
                     }
                 }
             }
             item {
                 Text(
-                    text = "记录写入 capture 日志；总开关在「设置 → 功能配置 → 开启网络抓包」。",
-                    style = MaterialTheme.typography.bodySmall,
+                    text = "抓包模式",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
-
+            listOf(
+                Triple(RpcTrafficCapture.CaptureMode.OFF, "关闭", "卸载全部抓包 hook，零回调零开销"),
+                Triple(RpcTrafficCapture.CaptureMode.RPC_DEBUG, "RPC 调试", "文本日志：H5 与底层 RPC 的请求/响应"),
+                Triple(RpcTrafficCapture.CaptureMode.HTTPS_DEBUG, "HTTPS 调试", "结构化抓包引擎，覆盖 RPC / H5 / HTTP 全通道")
+            ).forEach { (mode, title, desc) ->
+                item {
+                    val selected = draftMode == mode
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { draftMode = mode },
+                        colors = CardDefaults.cardColors(
+                            containerColor = if (selected) MaterialTheme.colorScheme.secondaryContainer
+                            else MaterialTheme.colorScheme.surface
+                        )
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp, vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            RadioButton(
+                                selected = selected,
+                                onClick = { draftMode = mode }
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = title,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                                Text(
+                                    text = desc,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+            // 抓包范围与加解密是引擎（HTTPS 调试）专属，仅该模式下显示
+            if (draftMode == RpcTrafficCapture.CaptureMode.HTTPS_DEBUG) {
+                item {
+                    Text(
+                        text = "抓包范围",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                items(RpcTrafficCapture.TrafficSource.entries.toList()) { source ->
+                    val enabled = source.name !in disabledSources.value
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp, vertical = 6.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(text = source.title, style = MaterialTheme.typography.bodyMedium)
+                            Switch(
+                                checked = enabled,
+                                onCheckedChange = { checked ->
+                                    RpcTrafficCapture.setSourceEnabled(source.name, checked)
+                                    val updated = disabledSources.value.toMutableSet()
+                                    if (checked) updated.remove(source.name) else updated.add(source.name)
+                                    disabledSources.value = updated
+                                }
+                            )
+                        }
+                    }
+                }
+                item {
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp, vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "解密加密请求",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                                Text(
+                                    text = "解出业务 RPC 明文，事件标记 enc",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            Switch(
+                                checked = decryptDraft,
+                                onCheckedChange = { decryptDraft = it }
+                            )
+                        }
+                    }
+                }
+            }
             item {
                 Card(
                     modifier = Modifier
@@ -133,7 +275,7 @@ fun CaptureSettingsScreen(onBack: () -> Unit) {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 14.dp),
+                            .padding(horizontal = 16.dp, vertical = 12.dp),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
@@ -159,7 +301,6 @@ fun CaptureSettingsScreen(onBack: () -> Unit) {
             }
 
             item {
-                Spacer(modifier = Modifier.height(8.dp))
                 Button(
                     onClick = {
                         val intent = Intent(context, LogViewerComposeActivity::class.java).apply {
@@ -174,6 +315,13 @@ fun CaptureSettingsScreen(onBack: () -> Unit) {
                 ) {
                     Text("查看抓包日志")
                 }
+            }
+            item {
+                Text(
+                    text = "记录写入 capture 日志；黑名单同时作用于两种模式。",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
         }
     }

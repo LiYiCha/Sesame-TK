@@ -578,9 +578,9 @@ object EnergyWaitingManager {
                     //Log.runtime(TAG, "  时间差异: 系统时间与执行时间差${System.currentTimeMillis() - actualTime}ms")
                     //Log.runtime(TAG, "  能量剩余时间: ${energyTimeRemain}秒")
                     //Log.runtime(TAG, "  能量是否成熟: $isEnergyMature")
-                    if (!task.isSelf()) {
-                        Log.runtime(TAG, "  保护是否结束: $isProtectionEnd")
-                    }
+                    //if (!task.isSelf()) {
+                    //    Log.runtime(TAG, "  保护是否结束: $isProtectionEnd")
+                    //}
                 } else {
                     // 简化日志：用于已成熟超过2分钟的任务
                     (-energyTimeRemain) / 60 // 成熟了多少分钟

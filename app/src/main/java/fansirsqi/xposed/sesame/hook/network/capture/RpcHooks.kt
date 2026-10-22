@@ -7,6 +7,7 @@ import fansirsqi.xposed.sesame.util.Log
 import java.util.ArrayDeque
 import java.util.IdentityHashMap
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.atomic.AtomicBoolean
 
 /** RPC 封装层 hook 面：RpcBridgeExtension / MtopBridgeExtention / BridgeCallback / H5RpcUtil。 */
@@ -24,6 +25,7 @@ internal object RpcHooks {
     private val rpcBridgeHookInstalled = AtomicBoolean(false)
     private val mtopHookInstalled = AtomicBoolean(false)
     private val h5HookInstalled = AtomicBoolean(false)
+    private val installedUnhooks = CopyOnWriteArrayList<XC_MethodHook.Unhook>()
 
     private val responseHookCalls = ThreadLocal<IdentityHashMap<Any, Boolean>>()
 
@@ -39,15 +41,14 @@ internal object RpcHooks {
             val bridgeClass = Class.forName(RPC_BRIDGE_CLASS, false, classLoader)
             val rpcMethod = HttpSnapshot.findMethod(bridgeClass, "rpc", 16, String::class.java)
                 ?: error("RpcBridgeExtension#rpc 未找到")
-            XposedBridge.hookMethod(rpcMethod, object : XC_MethodHook() {
+            val rpcUnhook = XposedBridge.hookMethod(rpcMethod, object : XC_MethodHook() {
                 override fun beforeHookedMethod(param: MethodHookParam) {
                     var context: RpcCallContext? = null
                     runCatching {
                         val args = param.args
                         val methodName = args.getOrNull(0) as? String
                         val callback = args.getOrNull(15)
-                        if (RpcTrafficCapture.isCaptureEnabled() &&
-                            RpcTrafficCapture.isSourceEnabled(RpcTrafficCapture.TrafficSource.ARIVER_RPC) &&
+                        if (RpcTrafficCapture.isSourceEnabled(RpcTrafficCapture.TrafficSource.ARIVER_RPC) &&
                             !methodName.isNullOrBlank()
                         ) {
                             val pending = PendingHostRequest(
@@ -88,6 +89,7 @@ internal object RpcHooks {
                     }
                 }
             })
+            if (!RpcTrafficCapture.trackOrRollback(installedUnhooks, rpcUnhook)) return@runCatching false
             rpcBridgeHookInstalled.set(true)
             Log.runtime(TAG, "已安装 RpcBridgeExtension#rpc 抓包")
             true
@@ -111,15 +113,13 @@ internal object RpcHooks {
                 ?: error("MtopBridgeExtention#sendMtop 未找到可关联的请求签名")
             val payloadIndex = mtopMethod.parameterTypes.indexOfFirst(jsonClass::isAssignableFrom)
             val callbackIndex = mtopMethod.parameterTypes.indexOfFirst(callbackClass::isAssignableFrom)
-            XposedBridge.hookMethod(mtopMethod, object : XC_MethodHook() {
+            val mtopUnhook = XposedBridge.hookMethod(mtopMethod, object : XC_MethodHook() {
                 override fun beforeHookedMethod(param: MethodHookParam) {
                     var context: RpcCallContext? = null
                     runCatching {
                         val args = param.args
                         val callback = args.getOrNull(callbackIndex)
-                        if (RpcTrafficCapture.isCaptureEnabled() &&
-                            RpcTrafficCapture.isSourceEnabled(RpcTrafficCapture.TrafficSource.ARIVER_RPC)
-                        ) {
+                        if (RpcTrafficCapture.isSourceEnabled(RpcTrafficCapture.TrafficSource.ARIVER_RPC)) {
                             val requestPayload = args.getOrNull(payloadIndex)?.toString()
                             val pending = PendingHostRequest(
                                 requestId = RpcTrafficCapture.newRequestId(),
@@ -159,6 +159,7 @@ internal object RpcHooks {
                     }
                 }
             })
+            if (!RpcTrafficCapture.trackOrRollback(installedUnhooks, mtopUnhook)) return@runCatching false
             mtopHookInstalled.set(true)
             Log.runtime(TAG, "已安装 MtopBridgeExtention#sendMtop 抓包")
             true
@@ -194,7 +195,7 @@ internal object RpcHooks {
             if (!markMethodHooking(method)) return@forEach
             runCatching {
                 method.isAccessible = true
-                XposedBridge.hookMethod(method, object : XC_MethodHook() {
+                val responseUnhook = XposedBridge.hookMethod(method, object : XC_MethodHook() {
                     override fun beforeHookedMethod(param: MethodHookParam) {
                         val callback = param.thisObject
                         val calls = responseHookCalls.get() ?: IdentityHashMap<Any, Boolean>().also(responseHookCalls::set)
@@ -202,7 +203,6 @@ internal object RpcHooks {
                         hookSlot.get()!!.addLast(outermost)
                         if (!outermost) return
                         runCatching {
-                            if (!RpcTrafficCapture.isCaptureEnabled()) return@runCatching
                             val result = param.args.getOrNull(0)
                             val responsePayload = if (method.name == "sendBridgeResponse") {
                                 val bridgeResult = result
@@ -245,8 +245,12 @@ internal object RpcHooks {
                         }
                     }
                 })
-                markMethodHooked(method)
-                Log.runtime(TAG, "已安装 BridgeCallback 响应抓包: $method; loader=${callbackClass.classLoader}")
+                if (RpcTrafficCapture.trackOrRollback(installedUnhooks, responseUnhook)) {
+                    markMethodHooked(method)
+                    Log.runtime(TAG, "已安装 BridgeCallback 响应抓包: $method; loader=${callbackClass.classLoader}")
+                } else {
+                    unmarkMethodHooking(method)
+                }
             }.onFailure {
                 unmarkMethodHooking(method)
                 runCatching { Log.runtime(TAG, "安装 BridgeCallback 响应抓包失败: $method ${it.stackTraceToString()}") }
@@ -264,14 +268,13 @@ internal object RpcHooks {
             val rpcCallMethod = HttpSnapshot.findMethod(rpcUtilClass, "rpcCall", 13, String::class.java)
                 ?: HttpSnapshot.findMethod(rpcUtilClass, "rpcCall", 12, String::class.java)
                 ?: error("H5RpcUtil#rpcCall 未找到")
-            XposedBridge.hookMethod(rpcCallMethod, object : XC_MethodHook() {
+            val h5Unhook = XposedBridge.hookMethod(rpcCallMethod, object : XC_MethodHook() {
                 override fun beforeHookedMethod(param: MethodHookParam) {
                     var pending: PendingHostRequest? = null
                     runCatching {
                         val args = param.args
                         val methodName = args.getOrNull(0) as? String
-                        if (RpcTrafficCapture.isCaptureEnabled() &&
-                            RpcTrafficCapture.isSourceEnabled(RpcTrafficCapture.TrafficSource.H5_RPC) &&
+                        if (RpcTrafficCapture.isSourceEnabled(RpcTrafficCapture.TrafficSource.H5_RPC) &&
                             !methodName.isNullOrBlank()
                         ) {
                             pending = PendingHostRequest(
@@ -305,6 +308,7 @@ internal object RpcHooks {
                     }
                 }
             })
+            if (!RpcTrafficCapture.trackOrRollback(installedUnhooks, h5Unhook)) return@runCatching false
             h5HookInstalled.set(true)
             Log.runtime(TAG, "已安装 H5RpcUtil#rpcCall 抓包")
             true
@@ -316,6 +320,16 @@ internal object RpcHooks {
     private fun readAriverResponseField(callback: Any): String? = runCatching {
         HttpSnapshot.findField(callback.javaClass, "mJSONResponse")?.get(callback)?.toString()
     }.getOrNull()
+
+    /** 卸载全部 RPC 封装层 hook 并复位安装状态，供 [RpcTrafficCapture.uninstall] 调用 */
+    fun uninstallAll() {
+        installedUnhooks.forEach { runCatching { it.unhook() } }
+        installedUnhooks.clear()
+        rpcBridgeHookInstalled.set(false)
+        mtopHookInstalled.set(false)
+        h5HookInstalled.set(false)
+        methodHooks.clear()
+    }
 
     // ===== method 级 hook 状态（false=占位安装中，true=已装） =====
 

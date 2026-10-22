@@ -8,7 +8,10 @@ import android.os.PowerManager;
 import java.lang.annotation.Annotation;
 import java.lang.reflect.Method;
 import java.util.Calendar;
+import java.util.List;
 import java.util.Objects;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import de.robv.android.xposed.XC_MethodHook;
 import de.robv.android.xposed.XposedHelpers;
@@ -36,6 +39,7 @@ import fansirsqi.xposed.sesame.task.ModelTask;
 import fansirsqi.xposed.sesame.task.TaskCommon;
 import fansirsqi.xposed.sesame.task.otherTask2.SeckillScheduler;
 import fansirsqi.xposed.sesame.util.Files;
+import fansirsqi.xposed.sesame.util.GlobalThreadPools;
 import fansirsqi.xposed.sesame.util.Log;
 import fansirsqi.xposed.sesame.util.Notify;
 import fansirsqi.xposed.sesame.util.PermissionUtil;
@@ -69,8 +73,9 @@ public class LifecycleManager {
     static RpcBridge rpcBridge;
     //@Getter
     private static RpcVersion rpcVersion;
-    private static XC_MethodHook.Unhook rpcRequestUnhook;
-    private static XC_MethodHook.Unhook rpcResponseUnhook;
+    private static final AtomicBoolean rpcDebugHooksInstalled = new AtomicBoolean(false);
+    private static final List<XC_MethodHook.Unhook> rpcDebugUnhooks = new CopyOnWriteArrayList<>();
+    private static volatile boolean decryptSwitchApplied = false;
     private static volatile Class<?> cachedFastJsonClass = null;
     private static final java.util.Map<Object, Object[]> rpcHookMap = new java.util.concurrent.ConcurrentHashMap<>();
     private static final java.util.Map<String, Long> h5BridgePending = new java.util.concurrent.ConcurrentHashMap<>();
@@ -337,16 +342,8 @@ public class LifecycleManager {
                 rpcBridge = new NewRpcBridge();
                 rpcBridge.load();
                 rpcVersion = rpcBridge.getVersion();
-                //抓包调试模式（需在 DataStore 初始化后开启，保证过滤配置可读取）
-                DataStore.INSTANCE.init(Files.CONFIG_DIR);
-                if (BaseModel.getDebugMode().getValue()) {
-                    setupRpcDebugHooks();
-                }
-                
-                // 抓包引擎（hook 封装层，请求响应对天然存在；记录经 Log.capture 写入 capture 日志）
-                if (BaseModel.enableHttpCapture.getValue()) {
-                    RpcTrafficCapture.INSTANCE.install(AppContext.getClassLoader());
-                }
+                // 抓包开关：DataStore 热监听驱动装卸 hook，切换不触发模块重载
+                initCaptureSwitches();
                 // 延迟注册动态 bundle 及登录界面 Hook
                 try {
                     MiscHookModule.delayRegisterBundleHooks(AppContext.getClassLoader());
@@ -409,29 +406,6 @@ public class LifecycleManager {
                 // 重置 mainTask
                 mainTask = null;
 
-                if (rpcResponseUnhook != null) {
-                    try {
-                        rpcResponseUnhook.unhook();
-                    } catch (Exception e) {
-                        Log.printStackTrace(e);
-                    }
-                }
-                if (rpcRequestUnhook != null) {
-                    try {
-                        rpcRequestUnhook.unhook();
-                    } catch (Exception e) {
-                        Log.printStackTrace(e);
-                    }
-                    rpcRequestUnhook = null;
-                }
-                if (rpcInvocationUnhook != null) {
-                    try {
-                        rpcInvocationUnhook.unhook();
-                    } catch (Exception e) {
-                        Log.printStackTrace(e);
-                    }
-                    rpcInvocationUnhook = null;
-                }
                 // 释放 WakeLock（lease 模式，各自持有各自释放）
                 closeStayAwakeLease();
                 if (rpcBridge != null) {
@@ -562,7 +536,6 @@ public class LifecycleManager {
     }
 
     private static boolean logReceiverRegistered = false;
-    private static XC_MethodHook.Unhook rpcInvocationUnhook = null;
 
     public static boolean isMainProcess() {
         try {
@@ -689,8 +662,9 @@ public class LifecycleManager {
      */
     @SuppressLint("WakelockTimeout")
     public static void setupRpcDebugHooks() {
+        if (!rpcDebugHooksInstalled.compareAndSet(false, true)) return;
         registerCaptureLogReceiver();
-        
+
         // 1. Hook H5/小程序层 RpcBridgeExtension 的所有 rpc 重载方法
         try {
             ClassLoader classLoader = AppContext.getClassLoader();
@@ -725,7 +699,7 @@ public class LifecycleManager {
             for (String clsName : bridgeClasses) {
                 Class<?> cls = XposedHelpers.findClassIfExists(clsName, classLoader);
                 if (cls != null) {
-                    de.robv.android.xposed.XposedBridge.hookAllMethods(cls, "rpc", h5RpcHook);
+                    rpcDebugUnhooks.addAll(de.robv.android.xposed.XposedBridge.hookAllMethods(cls, "rpc", h5RpcHook));
                     Log.runtime(TAG, "hook " + clsName + ".rpc successfully");
                 }
             }
@@ -737,7 +711,7 @@ public class LifecycleManager {
         // 2. Hook H5/小程序层 DefaultBridgeCallback 回调
         try {
             ClassLoader classLoader = AppContext.getClassLoader();
-            rpcResponseUnhook = XposedHelpers.findAndHookMethod(
+            rpcDebugUnhooks.add(XposedHelpers.findAndHookMethod(
                     "com.alibaba.ariver.engine.common.bridge.internal.DefaultBridgeCallback", classLoader
                     , "sendJSONResponse"
                     , classLoader.loadClass(General.JSON_OBJECT_NAME)
@@ -766,7 +740,7 @@ public class LifecycleManager {
                                 writeCaptureLog(logMessage);
                             }
                         }
-                    });
+                    }));
             Log.runtime(TAG, "hook record response successfully");
         } catch (Throwable t) {
             Log.runtime(TAG, "hook record response err:");
@@ -778,7 +752,7 @@ public class LifecycleManager {
             ClassLoader classLoader = AppContext.getClassLoader();
             Class<?> rpcHandlerClass = XposedHelpers.findClassIfExists("com.alipay.mobile.common.rpc.RpcInvocationHandler", classLoader);
             if (rpcHandlerClass != null) {
-                rpcInvocationUnhook = XposedHelpers.findAndHookMethod(rpcHandlerClass, "invoke", Object.class, java.lang.reflect.Method.class, Object[].class,
+                rpcDebugUnhooks.add(XposedHelpers.findAndHookMethod(rpcHandlerClass, "invoke", Object.class, java.lang.reflect.Method.class, Object[].class,
                     new XC_MethodHook() {
                         @Override
                         @SuppressWarnings("unchecked")
@@ -957,11 +931,79 @@ public class LifecycleManager {
                             
                             writeCaptureLog(logMessage);
                         }
-                    });
+                    }));
                 Log.runtime(TAG, "hook RpcInvocationHandler successfully");
             }
         } catch (Throwable t) {
             Log.runtime(TAG, "hook RpcInvocationHandler err: " + t.getMessage());
+        }
+    }
+
+    private static void teardownRpcDebugHooks() {
+        if (!rpcDebugHooksInstalled.getAndSet(false)) return;
+        for (XC_MethodHook.Unhook unhook : rpcDebugUnhooks) {
+            try {
+                unhook.unhook();
+            } catch (Throwable ignored) {
+            }
+        }
+        rpcDebugUnhooks.clear();
+        rpcHookMap.clear();
+        h5BridgePending.clear();
+        Log.runtime(TAG, "RPC 调试 Hook 已卸载");
+    }
+
+    private static final Object captureSwitchLock = new Object();
+    private static boolean debugSwitchApplied = false;
+    private static boolean captureSwitchApplied = false;
+
+    /**
+     * 抓包开关初始化：DataStore 热监听驱动 hook 装卸，切换开关不触发模块重载
+     */
+    public static void initCaptureSwitches() {
+        DataStore.init(Files.CONFIG_DIR);
+        // onChange 在 DataStore 写锁内触发，派发到线程池再装卸 hook
+        DataStore.setOnChangeListener(() -> GlobalThreadPools.execute(LifecycleManager::applyCaptureSwitches));
+        applyCaptureSwitches();
+    }
+
+    private static void applyCaptureSwitches() {
+        synchronized (captureSwitchLock) {
+            // 单值三态互斥：锁内读最新模式，与已应用状态比对后装卸
+            RpcTrafficCapture.CaptureMode mode = RpcTrafficCapture.getCaptureMode();
+            boolean debugOn = mode == RpcTrafficCapture.CaptureMode.RPC_DEBUG;
+            if (debugOn != debugSwitchApplied) {
+                if (debugOn) {
+                    setupRpcDebugHooks();
+                } else {
+                    teardownRpcDebugHooks();
+                }
+                debugSwitchApplied = debugOn;
+            }
+            // 抓包引擎仅主进程安装
+            if (!isMainProcess()) return;
+            boolean engineOn = mode == RpcTrafficCapture.CaptureMode.HTTPS_DEBUG;
+            if (engineOn != captureSwitchApplied) {
+                if (engineOn) {
+                    captureSwitchApplied = RpcTrafficCapture.install(AppContext.getClassLoader());
+                } else {
+                    RpcTrafficCapture.uninstall();
+                    captureSwitchApplied = false;
+                }
+            }
+            // 加解密子开关：仅 HTTPS 调试模式下生效，独立装卸
+            boolean decryptOn = engineOn && RpcTrafficCapture.isContentEncryptEnabled();
+            if (decryptOn != decryptSwitchApplied) {
+                RpcTrafficCapture.applyContentEncrypt(decryptOn);
+                decryptSwitchApplied = decryptOn;
+            }
+            // 回写实际运行态供设置页状态卡跨进程读取（安装失败时 applied 仍为旧值，UI 如实显示未生效）
+            RpcTrafficCapture.CaptureMode actual = debugSwitchApplied
+                    ? RpcTrafficCapture.CaptureMode.RPC_DEBUG
+                    : (captureSwitchApplied ? RpcTrafficCapture.CaptureMode.HTTPS_DEBUG : RpcTrafficCapture.CaptureMode.OFF);
+            if (RpcTrafficCapture.getAppliedMode() != actual) {
+                RpcTrafficCapture.setAppliedMode(actual);
+            }
         }
     }
 

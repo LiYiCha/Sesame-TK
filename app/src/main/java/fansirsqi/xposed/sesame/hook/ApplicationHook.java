@@ -28,7 +28,6 @@ import fansirsqi.xposed.sesame.hook.core.modules.LifecycleModule;
 import fansirsqi.xposed.sesame.hook.lifecycle.LifecycleManager;
 import fansirsqi.xposed.sesame.hook.rpc.bridge.RpcVersion;
 import fansirsqi.xposed.sesame.hook.scheduler.AlarmScheduler;
-import fansirsqi.xposed.sesame.model.BaseModel;
 import fansirsqi.xposed.sesame.util.GlobalThreadPools;
 import fansirsqi.xposed.sesame.util.Log;
 
@@ -41,10 +40,6 @@ public class ApplicationHook implements IXposedHookLoadPackage {
     //--------------------------------------------------------------
     // 公共API - 委托给新模块
     //--------------------------------------------------------------
-
-    public static String requestString(String str, String str2) {
-        return LifecycleManager.getRpcBridge().requestString(str, str2);
-    }
 
     public static ClassLoader getClassLoader() {
         return AppContext.getClassLoader();
@@ -246,13 +241,11 @@ public class ApplicationHook implements IXposedHookLoadPackage {
                                         // 忽略
                                     }
 
-                                    if (BaseModel.getDebugMode().getValue()) {
-                                        try {
-                                            LifecycleManager.setupRpcDebugHooks();
-                                            Log.runtime(TAG, "Subprocess setupRpcDebugHooks success");
-                                        } catch (Throwable t) {
-                                            Log.runtime(TAG, "Subprocess setupRpcDebugHooks err: " + t.getMessage());
-                                        }
+                                    try {
+                                        LifecycleManager.initCaptureSwitches();
+                                        Log.runtime(TAG, "Subprocess initCaptureSwitches success");
+                                    } catch (Throwable t) {
+                                        Log.runtime(TAG, "Subprocess initCaptureSwitches err: " + t.getMessage());
                                     }
                                 });
                             }

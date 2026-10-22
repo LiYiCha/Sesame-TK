@@ -14,6 +14,7 @@ import fansirsqi.xposed.sesame.entity.VitalityStore.Companion.getNameById
 import fansirsqi.xposed.sesame.task.antOrchard.GameTask
 import fansirsqi.xposed.sesame.hook.RequestManager.requestString
 import fansirsqi.xposed.sesame.hook.Toast
+import fansirsqi.xposed.sesame.hook.core.ModuleScope
 import fansirsqi.xposed.sesame.hook.internal.AlipayMiniMarkHelper
 import fansirsqi.xposed.sesame.hook.internal.AuthCodeHelper
 import fansirsqi.xposed.sesame.hook.rpc.intervallimit.FixedOrRangeIntervalLimit
@@ -59,6 +60,7 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.withContext
@@ -239,6 +241,8 @@ class AntForest : ModelTask(), EnergyCollectCallback {
     private val skipUsersCache: ConcurrentHashMap<String, String> = ConcurrentHashMap<String, String>()
 
     private var forestChouChouLe: BooleanModelField? = null //森林抽抽乐
+    private var forestDailyDress: BooleanModelField? = null //每日随机换装
+    private var forestRead: BooleanModelField? = null //无纸阅读
 
     /**
      * 加速器定时
@@ -621,6 +625,8 @@ class AntForest : ModelTask(), EnergyCollectCallback {
         modelFields.addField(BooleanModelField("receiveForestTaskAward", "森林任务", false).also { receiveForestTaskAward = it })
 
         modelFields.addField(BooleanModelField("forestChouChouLe", "森林寻宝任务", false).also { forestChouChouLe = it })
+        modelFields.addField(BooleanModelField("forestDailyDress", "每日随机更换森林装扮", false).also { forestDailyDress = it })
+        modelFields.addField(BooleanModelField("forestRead", "无纸阅读", false).also { forestRead = it })
 
         modelFields.addField(BooleanModelField("collectGiftBox", "领取礼盒", false).also { collectGiftBox = it })
 
@@ -985,6 +991,16 @@ class AntForest : ModelTask(), EnergyCollectCallback {
 
                 if (dailyCheckIn!!.value) {
                     studentSignInRedEnvelope()
+                }
+
+                if (forestDailyDress?.value == true) {
+                    ForestDress.run()
+                    tc.countDebug("每日换装")
+                }
+
+                // 无纸阅读需逐章真实等待，后台执行避免阻塞森林主流程
+                if (forestRead?.value == true) {
+                    ModuleScope.launch { ForestRead.run() }
                 }
 
                 if (forestChouChouLe!!.value) {
@@ -3373,7 +3389,7 @@ class AntForest : ModelTask(), EnergyCollectCallback {
              *    - needDouble: 双击卡开关已打开，且当前没有生效的双击卡。
              *    - needrobExpand: 1.1倍能量卡开关已打开，且当前没有生效的卡。
              *    - needStealth: 隐身卡开关已打开，且当前没有生效的隐身卡。
-             *    - needShield: 保护罩开关已打开，炸弹卡开关已关闭，且保护罩剩余时间不足一天。
+             *    - needShield: 保护罩开关已打开，炸弹卡开关已关闭，且剩余时间不足七天；按续用阈值及库存到期时间选择。
              *    - needEnergyBombCard: 炸弹卡开关已打开，保护罩开关已关闭，且炸弹卡剩余时间不足三天。
              *    - needBubbleBoostCard: 加速卡开关已打开。
              * 4. 如果有任何一个道具需要使用，则同步查询背包信息，并调用相应的使用道具方法。
@@ -3425,7 +3441,7 @@ class AntForest : ModelTask(), EnergyCollectCallback {
                         this.useBubbleBoostCard()
                     } // 使用加速卡
                     if (needShield) {
-                        Log.runtime(TAG, "尝试使用保护罩罩")
+                        Log.runtime(TAG, "尝试使用保护罩")
                         useShieldCard(bagObject)
                     } else if (needEnergyBombCard) {
                         Log.runtime(TAG, "准备使用能量炸弹卡")
@@ -3468,74 +3484,40 @@ class AntForest : ModelTask(), EnergyCollectCallback {
     }
 
     /**
-     * 保护罩剩余时间判断
-     * 以整数 HHmm 指定保护罩续写阈值。
-     * 例如：2355 表示 23 小时 55 分钟，0955 可直接写为 955。
-     * 校验规则：0 ≤ HH ≤ 99，0 ≤ mm ≤ 59；非法值将回退为默认值。
+     * 保护罩剩余时间判断。
+     * 未指定库存到期时间时只判断官方延期窗口（剩余不足7天即可续用）；
+     * 选定库存后再检查续用阈值（整数 HHmm，如 2355 表示 23小时55分）和临期条件。
      */
     @SuppressLint("DefaultLocale")
-    private fun shouldRenewShield(shieldEnd: Long, nowMillis: Long): Boolean {
+    private fun shouldRenewShield(shieldEnd: Long, nowMillis: Long, propExpireTime: Long? = null): Boolean {
+        if (shieldEnd <= nowMillis) {
+            return true
+        }
+        val remain = shieldEnd - nowMillis
+        if (remain >= 7 * TimeFormatter.ONE_DAY_MS) {
+            return false
+        }
+        if (propExpireTime == null) {
+            return true
+        }
         // 解析阈值配置
         var hours: Int
         var minutes: Int
         try {
             val abs = abs(SHIELD_RENEW_THRESHOLD_HHMM)
-            hours = abs / 100 // 提取小时部分
-            minutes = abs % 100 // 提取分钟部分
-            // 可以添加分钟有效性检查
+            hours = abs / 100
+            minutes = abs % 100
             if (minutes > 59) {
-                Log.runtime(TAG, "[保护罩] 分钟数无效: $minutes, 使用默认值")
                 hours = 23
                 minutes = 59
             }
         } catch (e: Exception) {
-            Log.runtime(TAG, "[保护罩] 解析阈值配置异常: " + e.message + ", 使用默认值")
             hours = 23
             minutes = 59
         }
         val thresholdMs = hours * TimeFormatter.ONE_HOUR_MS + minutes * TimeFormatter.ONE_MINUTE_MS
-
-        // 检测异常数据
-        if (shieldEnd > 0 && shieldEnd < nowMillis - 365 * TimeFormatter.ONE_DAY_MS) {
-            Log.runtime(TAG, "[保护罩] ⚠️ 检测到异常时间数据(${TimeUtil.getCommonDate(shieldEnd)})，跳过检查")
-            return false
-        }
-
-        if (shieldEnd in 1..nowMillis) { // 已过期
-            Log.runtime(
-                TAG,
-                "[保护罩] 已过期，立即续写；end=" + TimeUtil.getCommonDate(shieldEnd) + ", now=" + TimeUtil.getCommonDate(
-                    nowMillis
-                )
-            )
-            return true
-        }
-
-        if (shieldEnd == 0L) { // 未生效
-            Log.runtime(TAG, "[保护罩] 未生效，尝试使用")
-            return true
-        }
-        val remain = shieldEnd - nowMillis
-        val needRenew = remain <= thresholdMs
-        // 格式化剩余时间和阈值时间为更直观的显示
-        val remainTimeStr = TimeFormatter.formatRemainingTime(remain)
-        val thresholdTimeStr = String.format("%02d小时%02d分", hours, minutes)
-        if (needRenew) {
-            Log.runtime(
-                TAG, String.format(
-                    "[保护罩] 🔄 需要续写 - 剩余时间[%s] ≤ 续写阈值[%s]",
-                    remainTimeStr, thresholdTimeStr
-                )
-            )
-        } else {
-            Log.runtime(
-                TAG, String.format(
-                    "[保护罩] ✅ 无需续写 - 剩余时间[%s] > 续写阈值[%s]",
-                    remainTimeStr, thresholdTimeStr
-                )
-            )
-        }
-        return needRenew
+        // 剩余时间低于阈值正常续用；库存会在正常续用前过期时提前使用临期卡
+        return remain < thresholdMs || propExpireTime <= shieldEnd - thresholdMs
     }
 
     /**
@@ -4164,56 +4146,74 @@ class AntForest : ModelTask(), EnergyCollectCallback {
             val holdsNum = propJsonObj.optInt("holdsNum") // 当前持有数量
             val propName = propConfigVO.getString("propName")
             propEmoji(propName)
+            val propExpireTime = propJsonObj.optLong("recentExpireTime", 0L).takeIf { it > 0L } ?: Long.MAX_VALUE
+            if (propExpireTime <= System.currentTimeMillis()) {
+                Log.runtime(TAG, "道具[$propName]已过期，跳过使用")
+                return false
+            }
+            val previousShieldEnd = shieldEndTime
             val jo: JSONObject?
-            val isRenewable = isRenewableProp(propType)
+            val propGroup = AntForestRpcCall.getPropGroup(propType)
+            val isRenewable = propGroup == "shield" || isRenewableProp(propType)
             Log.runtime(
                 TAG,
                 "道具 $propName (类型: $propType), 是否可续用: $isRenewable, 当前持有数量: $holdsNum"
             )
-            val propGroup = AntForestRpcCall.getPropGroup(propType)
             if (isRenewable) {
                 // 第一步：发送检查/尝试使用请求 (secondConfirm=false)
                 val checkResponseStr = AntForestRpcCall.consumeProp(propGroup, propId, propType, false)
                 val checkResponse = JSONObject(checkResponseStr)
-                // Log.runtime(TAG, "发送检查请求: " + checkResponse);
                 var resData = checkResponse.optJSONObject("resData")
                 if (resData == null) {
                     resData = checkResponse
                 }
                 val status = resData.optString("usePropStatus")
-                if ("NEED_CONFIRM_CAN_PROLONG" == status || "REPLACE" == status) {
-                    // 情况1: 需要二次确认 (真正地续写)
+                if (status.startsWith("NEED_CONFIRM") ||
+                    ("REPLACE" == status && resData.optJSONObject("userPropVO") == null)
+                ) {
+                    // 二次确认（真正地续写）前复核续用条件，条件已变则不消耗库存
+                    if (propGroup == "shield" &&
+                        !shouldRenewShield(shieldEndTime, System.currentTimeMillis(), propExpireTime)
+                    ) {
+                        Log.runtime(TAG, "保护罩已不满足当前续用条件，停止二次确认")
+                        return false
+                    }
                     Log.runtime(TAG, propName + "需要二次确认，发送确认请求...")
                     GlobalThreadPools.sleepCompat(2000)
                     val confirmResponseStr =
                         AntForestRpcCall.consumeProp(propGroup, propId, propType, true)
                     jo = JSONObject(confirmResponseStr)
-                    // 提取道具名称用于日志显示
-                    val userPropVO = jo.optJSONObject("userPropVO")
-                    val usedPropName = userPropVO?.optString("propName") ?: propName
-                    Log.runtime(TAG, "已使用$usedPropName")
-
                 } else {
                     // 其他所有情况都视为最终结果，通常是失败
-                    // Log.runtime(TAG, "道具状态异常或使用失败12:"+ status)
                     jo = checkResponse
                 }
             } else {
                 // 非续用类道具，直接使用
                 val consumeResponse = AntForestRpcCall.consumeProp2(propGroup, propId, propType)
                 jo = JSONObject(consumeResponse)
-                // 提取道具名称用于日志显示
-                val userPropVO = jo.optJSONObject("userPropVO")
-                val usedPropName = userPropVO?.optString("propName") ?: propName
-                Log.runtime(TAG, "已使用$usedPropName")
             }
 
             // 统一结果处理
             if (ResChecker.checkRes(TAG + "使用道具失败:", jo)) {
-                // ⚡ 优化点：根据参数决定是否执行耗时的刷新操作
+                // 优先采用响应中回报的实际生效时间
+                val userProp = jo.optJSONObject("userPropVO")
+                val reportedEndTime = userProp?.optLong("endTime", 0L) ?: 0L
+                if (propGroup == "shield" && reportedEndTime > System.currentTimeMillis()) {
+                    shieldEndTime = reportedEndTime
+                }
                 if (needRefreshHome) {
                     updateSelfHomePage()
                 }
+                // 保护罩以响应或主页中的实际生效状态确认成功，未确认则不计消耗
+                if (propGroup == "shield") {
+                    val confirmNow = System.currentTimeMillis()
+                    if (shieldEndTime <= maxOf(previousShieldEnd, confirmNow)) {
+                        Log.error(TAG, "道具[$propName]响应成功但生效状态未确认，停止本轮使用")
+                        return false
+                    }
+                }
+                val usedPropName = userProp?.optString("propName")?.takeIf { it.isNotBlank() } ?: propName
+                Log.runtime(TAG, "已使用$usedPropName")
                 return true
             } else {
                 var errorData = jo.optJSONObject("resData")
@@ -4393,6 +4393,8 @@ class AntForest : ModelTask(), EnergyCollectCallback {
      */
     private fun useShieldCard(bagObject: JSONObject?) {
         try {
+            val now = System.currentTimeMillis()
+            val choice = shieldCard?.value ?: ApplyPropType.CLOSE
             Log.runtime(TAG, "尝试使用保护罩...")
 
             // 定义支持的保护罩类型
@@ -4405,7 +4407,7 @@ class AntForest : ModelTask(), EnergyCollectCallback {
                 "ENERGY_SHIELD"                    // 通用能量保护罩
             )
 
-            // 步骤1: 从背包中收集所有可用的保护罩
+            // 步骤1: 从背包中收集符合条件的保护罩（过滤过期、仅限时模式与续用时机）
             val availableShields: MutableList<JSONObject> = ArrayList()
             val forestPropVOList = bagObject?.optJSONArray("forestPropVOList")
 
@@ -4414,14 +4416,26 @@ class AntForest : ModelTask(), EnergyCollectCallback {
                     val prop = forestPropVOList.optJSONObject(i) ?: continue
                     val propType = prop.optJSONObject("propConfigVO")?.optString("propType") ?: ""
 
-                    if (shieldTypes.contains(propType)) {
-                        availableShields.add(prop)
+                    if (!shieldTypes.contains(propType)) {
+                        continue
                     }
+                    val expireTime = prop.optLong("recentExpireTime", 0L).takeIf { it > 0L } ?: Long.MAX_VALUE
+                    if (expireTime <= now ||
+                        (choice == ApplyPropType.ONLY_LIMIT_TIME && expireTime == Long.MAX_VALUE) ||
+                        !shouldRenewShield(shieldEndTime, now, expireTime)
+                    ) {
+                        continue
+                    }
+                    availableShields.add(prop)
                 }
             }
 
-            // 步骤2: 如果没有找到保护罩，尝试获取
+            // 步骤2: 仅在正常续用时机补货，不为提前延期额外兑换道具
             if (availableShields.isEmpty()) {
+                if (!shouldRenewShield(shieldEndTime, now, Long.MAX_VALUE)) {
+                    Log.runtime(TAG, "保护罩未到正常续用时机，且无需要提前使用的临期库存")
+                    return
+                }
                 // 2.1 若青春特权开启 → 尝试领取并重新查找
                 if (youthPrivilege?.value == true) {
                     Log.runtime(TAG, "尝试通过青春特权获取保护罩...")
@@ -4462,31 +4476,22 @@ class AntForest : ModelTask(), EnergyCollectCallback {
                 }
             }
 
-            // 步骤3: 按过期时间升序排序，优先使用即将过期的保护罩
-            if (availableShields.isNotEmpty()) {
-                Collections.sort(
-                    availableShields,
-                    Comparator { p1: JSONObject?, p2: JSONObject? ->
-                        val expireTime1 = p1!!.optLong("recentExpireTime", Long.MAX_VALUE)
-                        val expireTime2 = p2!!.optLong("recentExpireTime", Long.MAX_VALUE)
-                        expireTime1.compareTo(expireTime2)
-                    })
-
-                // 步骤4: 逐个尝试使用保护罩
-                for (shieldObj in availableShields) {
-                    val propType = shieldObj.optJSONObject("propConfigVO")?.optString("propType") ?: ""
-                    val propName = shieldObj.optJSONObject("propConfigVO")?.optString("propName") ?: propType
-                    Log.runtime(TAG, "尝试使用保护罩: $propName")
-                    if (usePropBag(shieldObj)) {
-                        Log.runtime(TAG, "保护罩使用成功: $propName")
-                        return // 使用成功，直接退出
-                    } else {
-                        Log.runtime(TAG, "保护罩使用失败: $propName，尝试下一个...")
-                    }
-                }
+            // 步骤3: 仅尝试最早到期的一张；结果不明时不继续消耗其他库存
+            val shieldObj = availableShields.minByOrNull {
+                it.optLong("recentExpireTime", 0L).takeIf { expiry -> expiry > 0L } ?: Long.MAX_VALUE
             }
-            // 步骤5: 未使用成功（无论是否找到）
-            Log.runtime(TAG, "背包中未找到或无法使用任何可用保护罩")
+            if (shieldObj != null) {
+                val propName = shieldObj.optJSONObject("propConfigVO")?.optString("propName")
+                    ?: shieldObj.optJSONObject("propConfigVO")?.optString("propType") ?: ""
+                Log.runtime(TAG, "尝试使用保护罩: $propName")
+                if (usePropBag(shieldObj)) {
+                    Log.runtime(TAG, "保护罩使用成功: $propName")
+                } else {
+                    Log.runtime(TAG, "保护罩使用未确认: $propName，等待下轮状态回查")
+                }
+                return
+            }
+            Log.runtime(TAG, "背包中未找到符合设置的可用保护罩")
 
         } catch (th: Throwable) {
             Log.printStackTrace(TAG, "useShieldCard err", th)

@@ -18,4 +18,5 @@ public enum CompletedKeyEnum {
     NeverlandJump,
     neverLandEX,
     GameCenterGoldTask,
+    taskPointPrize,
 }

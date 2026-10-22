@@ -1,5 +1,6 @@
 package fansirsqi.xposed.sesame.util
 
+import android.annotation.SuppressLint
 import android.content.Context
 import com.updater.Updater
 import com.updater.ui.UpdaterThemeConfig
@@ -16,7 +17,9 @@ import fansirsqi.xposed.sesame.ui.theme.app.HolidayTheme
 object AppUpdaterManager {
 
     private const val TAG = "AppUpdater"
+    @SuppressLint("StaticFieldLeak")
     private var updaterInstance: Updater? = null
+
 
     /**
      * 获取或初始化更新器单例

@@ -3,6 +3,7 @@ package fansirsqi.xposed.sesame.task.exchange
 import android.annotation.SuppressLint
 import fansirsqi.xposed.sesame.data.Status
 import fansirsqi.xposed.sesame.entity.MemberBenefit
+import fansirsqi.xposed.sesame.hook.lifecycle.LifecycleManager
 import org.json.JSONArray
 import fansirsqi.xposed.sesame.model.ModelFields
 import fansirsqi.xposed.sesame.model.ModelGroup
@@ -21,7 +22,6 @@ class FlashSaleModule : BaseFlashSaleTask() {
 
     // 配置字段
     private val enableNeverLand = BooleanModelField("enableNeverLand", "健康岛兑换", false)
-    private val enableNeverLandList = BooleanModelField("enableNeverLandList", "健康岛列表方式", false)
     private val neverLandList = SelectModelField(
         "neverLandList",
         "健康岛 | 商品列表",
@@ -36,7 +36,6 @@ class FlashSaleModule : BaseFlashSaleTask() {
         PackageExchangeEX::getExchangeItemListForUI
     )
     private val enableGameCenterGold = BooleanModelField("enableGameCenterGold", "游戏中心金币秒杀", false)
-    private val enableGameCenterGoldList = BooleanModelField("enableGameCenterGoldList", "游戏中心金币列表方式", false)
     private val gameCenterGoldList = SelectModelField(
         "gameCenterGoldList",
         "游戏中心金币 | 商品列表",
@@ -122,16 +121,16 @@ class FlashSaleModule : BaseFlashSaleTask() {
      * 此检查同时防止 init{} 阶段 Status 未就绪导致崩溃
      */
     private fun schedulePreloadIfNeeded() {
-        if (fansirsqi.xposed.sesame.hook.lifecycle.LifecycleManager.getRpcBridge() == null) {
+        if (LifecycleManager.getRpcBridge() == null) {
             return
         }
-        schedulePreloadOnce("健康岛", enableNeverLandList, NEVERLAND_LIST, isNeverLandPreloading) {
+        schedulePreloadOnce("健康岛", enableNeverLand, NEVERLAND_LIST, isNeverLandPreloading) {
             NeverLandEX.refreshItemsFromAPI()
         }
         schedulePreloadOnce("包裹兑换列表", enablePackageExchange, BAOGUO_LIST, isBaoguoPreloading) {
             PackageExchangeEX.refreshItemsFromAPI()
         }
-        schedulePreloadOnce("游戏中心金币列表", enableGameCenterGoldList, GAMECENTER_GOLD_LIST, isGameCenterGoldPreloading) {
+        schedulePreloadOnce("游戏中心金币列表", enableGameCenterGold, GAMECENTER_GOLD_LIST, isGameCenterGoldPreloading) {
             GameCenterGoldEX.refreshItemsFromAPI()
         }
         schedulePreloadOnce("金豆商城列表", enableGoldenBeanMall, GOLDENBEAN_MALL_LIST, isGoldenBeanMallPreloading) {
@@ -181,12 +180,10 @@ class FlashSaleModule : BaseFlashSaleTask() {
     override fun getFields(): ModelFields {
         val fields = super.getFields() ?: ModelFields()
         fields.addField(enableNeverLand)
-        fields.addField(enableNeverLandList)
         fields.addField(neverLandList)
         fields.addField(enablePackageExchange)
         fields.addField(packageExchangeList)
         fields.addField(enableGameCenterGold)
-        fields.addField(enableGameCenterGoldList)
         fields.addField(gameCenterGoldList)
         fields.addField(gameCenterGoldTargetHour)
         fields.addField(enableGoldenBeanMall)

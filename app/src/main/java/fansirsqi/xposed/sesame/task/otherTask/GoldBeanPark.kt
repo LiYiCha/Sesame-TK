@@ -7,6 +7,7 @@ import fansirsqi.xposed.sesame.task.antOrchard.GameTask
 import fansirsqi.xposed.sesame.task.common.GameCenterPlayRpcCall
 import fansirsqi.xposed.sesame.util.GlobalThreadPools
 import fansirsqi.xposed.sesame.util.Log
+import fansirsqi.xposed.sesame.util.TaskBlacklist
 import fansirsqi.xposed.sesame.util.TimeUtil
 import fansirsqi.xposed.sesame.util.maps.UserMap
 import kotlinx.coroutines.delay
@@ -395,6 +396,9 @@ class GoldBeanPark @JvmOverloads constructor(
                             if (desc.isNotEmpty()) {
                                 Log.error(TAG, "完成任务[$title]响应: $desc")
                             }
+                            // 不支持rpc调用等不可恢复错误自动加入通用黑名单，当日不再重复尝试
+                            val errorCode = finishRes.optString("code", "")
+                            TaskBlacklist.autoAddToBlacklist(taskId, title, errorCode, desc)
                         }
                         delay(2000 + (0..1000).random().toLong())
                         continue
@@ -628,6 +632,9 @@ class GoldBeanPark @JvmOverloads constructor(
         type: String,
         title: String
     ): Boolean {
+        // 0. 通用任务黑名单（含历史不支持rpc调用自动拉黑的任务）
+        if (TaskBlacklist.isTaskInBlacklist(taskId) || TaskBlacklist.isTaskInBlacklist(title)) return true
+
         // 1. 行为与类型黑名单 (外部跳转、支付、理财)
         if (actionType == "VISIT" || actionType == "JUMP_APP" || type.contains("APP") ||
             type == "XIANSHANGZHIFU" || type == "XIANXIAZHIFU" || type == "YUEBAO") {

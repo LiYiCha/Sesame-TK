@@ -1449,7 +1449,7 @@ class AntSports : ModelTask() {
                 Log.runtime(TAG, jo.getString("resultDesc"))
             }
         } catch (t: Throwable) {
-            Log.printStackTrace(TAG, "queryWalkStep err:", t)
+            Log.error(TAG, "queryWalkStep err: ${t.message}")
         }
     }
 

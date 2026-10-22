@@ -39,7 +39,9 @@ class OrchardChouChouLe(private val executeIntervalInt: Int) {
             // 1. 进入活动，获取 activityId
             val entry = JSONObject(AntOrchardRpcCall.enterDrawActivity())
             if (markActivityClosed(entry)) return
-            if (!ResChecker.checkRes(TAG, entry)) {
+            val entrySuccess = if (entry.has("success")) entry.optBoolean("success")
+                else entry.optString("code") == "100000000" || ResChecker.checkRes(TAG, entry)
+            if (!entrySuccess) {
                 Log.error(TAG, "农场抽抽乐活动查询失败 raw=$entry")
                 return
             }
@@ -175,12 +177,6 @@ class OrchardChouChouLe(private val executeIntervalInt: Int) {
                         if (failedTasks.contains(taskType)) {
                             skipped++
                             continue
-                        }
-                        // 浏览类任务需要按 prodPlayParam.timeCount 真实等待
-                        if (base.optString("taskProdPlayType") == "VISIT_FLOAT_BALL") {
-                            val playParam = runCatching { JSONObject(base.optString("prodPlayParam")) }.getOrNull()
-                            val seconds = playParam?.optLong("timeCount", 0L) ?: 0L
-                            if (seconds > 0) CoroutineUtils.sleepCompat(seconds * 1000)
                         }
                         val finishRes = JSONObject(AntOrchardRpcCall.finishDrawTask(sceneCode, taskType))
                         if (markActivityClosed(finishRes)) return

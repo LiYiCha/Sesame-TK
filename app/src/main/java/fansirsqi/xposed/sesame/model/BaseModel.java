@@ -88,17 +88,6 @@ public class BaseModel extends Model {
     @Getter
     public static final IntegerModelField setMaxErrorCount = new IntegerModelField("setMaxErrorCount", "异常次数阈值", 8);
     /**
-     * 是否开启抓包调试模式
-     */
-    @Getter
-    public static final BooleanModelField debugMode = new BooleanModelField("debugMode", "开启抓包", false);
-
-    /**
-     * 是否开启网络抓包 (HTTP/HTTPS)
-     */
-    @Getter
-    public static final BooleanModelField enableHttpCapture = new BooleanModelField("enableHttpCapture", "开启网络抓包(HTTP/HTTPS)", false);
-    /**
      * 是否申请支付宝的后台运行权限
      */
     @Getter
@@ -213,9 +202,7 @@ public class BaseModel extends Model {
         modelFields.addField(waitWhenException);//异常发生时的等待时间
         modelFields.addField(errNotify);//异常通知开关
 //        modelFields.addField(setMaxErrorCount);//异常次数阈值
-        modelFields.addField(debugMode);//是否开启抓包调试模式
         modelFields.addField(enableSkinModule);//是否启用皮肤模块
-        modelFields.addField(enableHttpCapture);//是否启用http网络请求抓包
         modelFields.addField(sendHookData);//启用Hook数据转发
         modelFields.addField(sendHookDataUrl);//Hook数据转发地址
         modelFields.addField(batteryPerm);//是否申请支付宝的后台运行权限

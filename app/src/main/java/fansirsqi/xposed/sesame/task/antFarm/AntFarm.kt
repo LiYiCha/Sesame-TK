@@ -2883,10 +2883,8 @@ class AntFarm : ModelTask() {
                     syncAnimalStatus(ownerFarmId)
                     if (AnimalFeedStatus.HUNGRY.name == ownerAnimal.animalFeedStatus) {
                         if (feedAnimal(ownerFarmId)) {
-                            // 这里似乎不用在刷新了
                             syncAnimalStatus(ownerFarmId)
-                            // 投喂成功后剩余食物变成了180g
-                            remainingFood = 180.0
+                            remainingFood = (countdown?.toDouble() ?: 0.0) * totalConsumeSpeed
                             Log.farm("加速卡后投喂小鸡成功！")
                             /* 使用加速卡后尝试领取饲料，因为连续使用加速卡会导致饲料缺口，连续使用8张加速卡，最多可
                                 能投喂两次，饲料减少360g,这显然会导致游戏改分的判断条件失败，这样就不能在一次软件运行
@@ -4149,6 +4147,7 @@ class AntFarm : ModelTask() {
                 }
             }
         } catch (t: Throwable) {
+            if (t is CancellationException || t is InterruptedException) throw t
             Log.printStackTrace(TAG, "handleNpcAnimalLogic err:", t)
         }
     }
@@ -4165,6 +4164,7 @@ class AntFarm : ModelTask() {
                 Log.runtime(TAG, "NPC小鸡🤖[雇佣${config.nickName}失败: ${jo.optString("memo")}]")
             }
         } catch (e: Exception) {
+            if (e is CancellationException || e is InterruptedException) throw e
             Log.printStackTrace(TAG, "hireNpc err", e)
         }
         return false

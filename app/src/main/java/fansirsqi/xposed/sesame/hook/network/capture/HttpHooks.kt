@@ -13,6 +13,7 @@ import java.util.ArrayDeque
 import java.util.IdentityHashMap
 import java.util.concurrent.CancellationException
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.Future
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.TimeoutException
@@ -28,6 +29,8 @@ internal object HttpHooks {
     private const val MINI_RESPONSE_CLASS = "com.alipay.android.phone.event.ariver.network.HttpRequestResponseTrigger"
     private const val H5_NETWORK_CLASS = "com.alipay.mobile.common.transport.h5.H5NetworkManager"
     private const val XRIVER_CLASS = "com.alibaba.xriver.android.proxy.CRVRequestProxy"
+    private const val CONTENT_CRYPT_CLASS =
+        "com.alipay.mobile.common.transport.http.selfencrypt.contentcrypt.ContentEncryptUtils"
     private const val ARIVER_PAGE_CLASS = "com.alibaba.ariver.app.api.Page"
     private const val FASTJSON_CLASS = "com.alibaba.fastjson.JSONObject"
     private const val CRV_PAGE_CLASS = "com.alibaba.xriver.android.node.CRVPage"
@@ -37,6 +40,10 @@ internal object HttpHooks {
     private val methodHooks = ConcurrentHashMap<java.lang.reflect.Method, Boolean>()
     private val miniClassInstallations = ConcurrentHashMap<Class<*>, Boolean>()
     private val miniClassFailures = ConcurrentHashMap.newKeySet<Class<*>>()
+    private val installedUnhooks = CopyOnWriteArrayList<XC_MethodHook.Unhook>()
+    private val contentCryptUnhooks = CopyOnWriteArrayList<XC_MethodHook.Unhook>()
+    @Volatile
+    private var captureClassLoader: ClassLoader? = null
 
     private val responseHookCalls = ThreadLocal<IdentityHashMap<Any, Boolean>>()
     private val bodyAccessorCalls = ThreadLocal<IdentityHashMap<PendingHostRequest, Boolean>>()
@@ -48,8 +55,9 @@ internal object HttpHooks {
     private val hookSlot = CaptureSlot()
 
     fun installMiniHttpHooks(classLoader: ClassLoader): Boolean {
+        captureClassLoader = classLoader
         var installed = false
-        listOf(MINI_REQUEST_CLASS, MINI_RESPONSE_CLASS, H5_NETWORK_CLASS, XRIVER_CLASS).forEach { name ->
+        listOf(MINI_REQUEST_CLASS, MINI_RESPONSE_CLASS, H5_NETWORK_CLASS, XRIVER_CLASS, CONTENT_CRYPT_CLASS).forEach { name ->
             runCatching {
                 if (installMiniHttpClass(Class.forName(name, false, classLoader))) installed = true
             }.onFailure {
@@ -70,7 +78,7 @@ internal object HttpHooks {
             loaderClasses.add(current)
             current = current.superclass
         }
-        val targetNames = setOf(MINI_REQUEST_CLASS, MINI_RESPONSE_CLASS, H5_NETWORK_CLASS, XRIVER_CLASS)
+        val targetNames = setOf(MINI_REQUEST_CLASS, MINI_RESPONSE_CLASS, H5_NETWORK_CLASS, XRIVER_CLASS, CONTENT_CRYPT_CLASS)
         var installed = false
         loaderClasses.forEach { loaderClass ->
             runCatching {
@@ -80,7 +88,7 @@ internal object HttpHooks {
                     if (methodHooks.putIfAbsent(method, false) != null) return@forEach
                     runCatching {
                         method.isAccessible = true
-                        XposedBridge.hookMethod(method, object : XC_MethodHook() {
+                        val unhook = XposedBridge.hookMethod(method, object : XC_MethodHook() {
                             override fun afterHookedMethod(param: MethodHookParam) {
                                 val result = param.result as? Class<*> ?: return
                                 if (result.name in targetNames) {
@@ -89,8 +97,12 @@ internal object HttpHooks {
                                 }
                             }
                         })
-                        methodHooks[method] = true
-                        installed = true
+                        if (RpcTrafficCapture.trackOrRollback(installedUnhooks, unhook)) {
+                            methodHooks[method] = true
+                            installed = true
+                        } else {
+                            methodHooks.remove(method, false)
+                        }
                     }.onFailure {
                         methodHooks.remove(method, false)
                     }
@@ -106,6 +118,7 @@ internal object HttpHooks {
         when (targetClass.name) {
             H5_NETWORK_CLASS -> return installH5NetworkHook(targetClass)
             XRIVER_CLASS -> return installXriverHttpHooks(targetClass)
+            CONTENT_CRYPT_CLASS -> return installContentEncryptHooks(targetClass)
         }
         val isRequest = when (targetClass.name) {
             MINI_REQUEST_CLASS -> true
@@ -133,19 +146,99 @@ internal object HttpHooks {
         return anyInstalled
     }
 
+    /**
+     * 内容加解密明文点：请求侧入参即加密前明文、响应侧返回值即解密后明文。
+     * 该方法仅在逐请求判定走内容加密时才被调用，命中即为加密识别信号（enc 标记），
+     * 未加密链路不经过此 hook，零触发零干扰。
+     */
+    private fun installContentEncryptHooks(targetClass: Class<*>): Boolean {
+        // 子开关关闭时不安装且不记失败，等待开关开启后由 setContentEncryptEnabled 补装
+        if (!RpcTrafficCapture.isContentEncryptEnabled()) return false
+        if (miniClassFailures.contains(targetClass)) return false
+        if (miniClassInstallations.putIfAbsent(targetClass, true) == true) return true
+        // 全局开关仅日志参考一次，是否加密逐请求以命中为准
+        runCatching {
+            Log.runtime(TAG, "内容加密总开关: ${targetClass.getMethod("isRpcContentEncryptOn").invoke(null)}")
+        }
+        var anyInstalled = false
+        runCatching {
+            var tracked = false
+            XposedBridge.hookAllMethods(targetClass, "getEncryptedEntity", object : XC_MethodHook() {
+                override fun beforeHookedMethod(param: MethodHookParam) {
+                    runCatching {
+                        if (!RpcTrafficCapture.isSourceEnabled(RpcTrafficCapture.TrafficSource.MINI_HTTP)) return
+                        val plain = param.args.getOrNull(0) as? ByteArray ?: return
+                        val pending = param.args.getOrNull(1)?.let { PendingRegistry.peek(it) }
+                        RpcTrafficCapture.emitEvent(
+                            RpcTrafficCapture.RpcTrafficEvent(
+                                phase = RpcTrafficCapture.TrafficPhase.REQUEST,
+                                source = pending?.source ?: RpcTrafficCapture.TrafficSource.MINI_HTTP,
+                                method = pending?.method ?: "${targetClass.simpleName}#getEncryptedEntity",
+                                requestId = pending?.requestId,
+                                payload = String(plain, Charsets.UTF_8),
+                                note = "content-encrypt 请求明文",
+                                enc = true
+                            )
+                        )
+                    }.onFailure { Log.runtime(TAG, "记录加密请求失败: ${it.message}") }
+                }
+            }).forEach { if (RpcTrafficCapture.trackOrRollback(contentCryptUnhooks, it)) tracked = true }
+            if (tracked) anyInstalled = true
+        }.onFailure { Log.runtime(TAG, "hook getEncryptedEntity 失败: ${it.message}") }
+        runCatching {
+            var tracked = false
+            XposedBridge.hookAllMethods(targetClass, "getDecryptedContent", object : XC_MethodHook() {
+                override fun afterHookedMethod(param: MethodHookParam) {
+                    runCatching {
+                        if (!RpcTrafficCapture.isSourceEnabled(RpcTrafficCapture.TrafficSource.MINI_HTTP)) return
+                        val plain = param.result as? ByteArray ?: return
+                        RpcTrafficCapture.emitEvent(
+                            RpcTrafficCapture.RpcTrafficEvent(
+                                phase = RpcTrafficCapture.TrafficPhase.RESPONSE,
+                                source = RpcTrafficCapture.TrafficSource.MINI_HTTP,
+                                method = "${targetClass.simpleName}#getDecryptedContent",
+                                payload = String(plain, Charsets.UTF_8),
+                                note = "content-encrypt 响应明文（独立记录）",
+                                enc = true
+                            )
+                        )
+                    }.onFailure { Log.runtime(TAG, "记录解密响应失败: ${it.message}") }
+                }
+            }).forEach { if (RpcTrafficCapture.trackOrRollback(contentCryptUnhooks, it)) tracked = true }
+            if (tracked) anyInstalled = true
+        }.onFailure { Log.runtime(TAG, "hook getDecryptedContent 失败: ${it.message}") }
+        if (!anyInstalled) miniClassFailures.add(targetClass)
+        return anyInstalled
+    }
+
+    /** 加解密子开关装卸：开启时主动补装（类可能已加载过），关闭时仅回收解密 hook 与状态 */
+    fun setContentEncryptEnabled(enabled: Boolean) {
+        if (enabled) {
+            val loader = captureClassLoader ?: return
+            runCatching {
+                installMiniHttpClass(Class.forName(CONTENT_CRYPT_CLASS, false, loader))
+            }.onFailure {
+                runCatching { Log.runtime(TAG, "加解密补装暂未成功（类未加载，等待监听触发）: ${it.message}") }
+            }
+        } else {
+            contentCryptUnhooks.forEach { runCatching { it.unhook() } }
+            contentCryptUnhooks.clear()
+            miniClassInstallations.keys.removeIf { it.name == CONTENT_CRYPT_CLASS }
+            miniClassFailures.removeIf { it.name == CONTENT_CRYPT_CLASS }
+        }
+    }
+
     private fun hookMiniHttpMethod(targetClass: Class<*>, method: java.lang.reflect.Method, isRequest: Boolean): Boolean {
         if (methodHooks.putIfAbsent(method, false) != null) return methodHooks[method] == true
         return runCatching {
             method.isAccessible = true
-            XposedBridge.hookMethod(method, object : XC_MethodHook() {
+            val unhook = XposedBridge.hookMethod(method, object : XC_MethodHook() {
                 override fun beforeHookedMethod(param: MethodHookParam) {
                     var context: RpcCallContext? = null
                     runCatching {
                         val args = param.args.toList()
                         if (isRequest) {
-                            if (RpcTrafficCapture.isCaptureEnabled() &&
-                                RpcTrafficCapture.isSourceEnabled(RpcTrafficCapture.TrafficSource.MINI_HTTP)
-                            ) {
+                            if (RpcTrafficCapture.isSourceEnabled(RpcTrafficCapture.TrafficSource.MINI_HTTP)) {
                                 val callbackIndex = method.parameterTypes.indexOfFirst { it.name == RpcHooks.BRIDGE_CALLBACK_IFACE }
                                 val callback = param.args.getOrNull(callbackIndex)
                                 val dataArguments = method.parameterTypes.indices.filter { index ->
@@ -177,9 +270,7 @@ internal object HttpHooks {
                                 }
                             }
                         } else {
-                            if (RpcTrafficCapture.isCaptureEnabled() &&
-                                RpcTrafficCapture.isSourceEnabled(RpcTrafficCapture.TrafficSource.MINI_HTTP)
-                            ) {
+                            if (RpcTrafficCapture.isSourceEnabled(RpcTrafficCapture.TrafficSource.MINI_HTTP)) {
                                 RpcTrafficCapture.emitEvent(
                                     RpcTrafficCapture.RpcTrafficEvent(
                                         phase = RpcTrafficCapture.TrafficPhase.RESPONSE,
@@ -207,6 +298,10 @@ internal object HttpHooks {
                     }
                 }
             })
+            if (!RpcTrafficCapture.trackOrRollback(installedUnhooks, unhook)) {
+                methodHooks.remove(method, false)
+                return@runCatching false
+            }
             methodHooks[method] = true
             Log.runtime(TAG, "已安装小程序 HTTP ${if (isRequest) "请求" else "响应"}抓包: $method; loader=${targetClass.classLoader}")
             true
@@ -243,13 +338,11 @@ internal object HttpHooks {
                 if (methodHooks.putIfAbsent(method, false) != null) return@forEach
                 runCatching {
                     method.isAccessible = true
-                    XposedBridge.hookMethod(method, object : XC_MethodHook() {
+                    val unhook = XposedBridge.hookMethod(method, object : XC_MethodHook() {
                         override fun beforeHookedMethod(param: MethodHookParam) {
                             var event: RpcTrafficCapture.RpcTrafficEvent? = null
                             runCatching {
-                                if (RpcTrafficCapture.isCaptureEnabled() &&
-                                    RpcTrafficCapture.isSourceEnabled(RpcTrafficCapture.TrafficSource.MINI_HTTP)
-                                ) {
+                                if (RpcTrafficCapture.isSourceEnabled(RpcTrafficCapture.TrafficSource.MINI_HTTP)) {
                                     event = RpcTrafficCapture.RpcTrafficEvent(
                                         phase = if (isRequest) RpcTrafficCapture.TrafficPhase.REQUEST else RpcTrafficCapture.TrafficPhase.RESPONSE,
                                         source = RpcTrafficCapture.TrafficSource.MINI_HTTP,
@@ -280,8 +373,12 @@ internal object HttpHooks {
                             }
                         }
                     })
-                    methodHooks[method] = true
-                    Log.runtime(TAG, "已安装 XRiver HTTP 抓包: $method; loader=$loader")
+                    if (RpcTrafficCapture.trackOrRollback(installedUnhooks, unhook)) {
+                        methodHooks[method] = true
+                        Log.runtime(TAG, "已安装 XRiver HTTP 抓包: $method; loader=$loader")
+                    } else {
+                        methodHooks.remove(method, false)
+                    }
                 }.onFailure {
                     methodHooks.remove(method, false)
                     runCatching { Log.runtime(TAG, "安装 XRiver HTTP 抓包失败: $method ${it.stackTraceToString()}") }
@@ -312,12 +409,12 @@ internal object HttpHooks {
                 if (methodHooks.putIfAbsent(method, false) != null) return@forEach
                 runCatching {
                     method.isAccessible = true
-                    XposedBridge.hookMethod(method, object : XC_MethodHook() {
+                    val unhook = XposedBridge.hookMethod(method, object : XC_MethodHook() {
                         override fun beforeHookedMethod(param: MethodHookParam) {
                             var pending: PendingHostRequest? = null
                             runCatching {
                                 val requestObject = param.args.getOrNull(0)
-                                if (requestObject != null && RpcTrafficCapture.isCaptureEnabled() &&
+                                if (requestObject != null &&
                                     RpcTrafficCapture.isSourceEnabled(RpcTrafficCapture.TrafficSource.MINI_HTTP)
                                 ) {
                                     val payload = HttpSnapshot.arguments(method, param.args.toList(), setOf(0))
@@ -372,8 +469,12 @@ internal object HttpHooks {
                             }
                         }
                     })
-                    methodHooks[method] = true
-                    Log.runtime(TAG, "已安装公共 HTTP 请求抓包: $method; loader=${targetClass.classLoader}")
+                    if (RpcTrafficCapture.trackOrRollback(installedUnhooks, unhook)) {
+                        methodHooks[method] = true
+                        Log.runtime(TAG, "已安装公共 HTTP 请求抓包: $method; loader=${targetClass.classLoader}")
+                    } else {
+                        methodHooks.remove(method, false)
+                    }
                 }.onFailure {
                     methodHooks.remove(method, false)
                     runCatching { Log.runtime(TAG, "安装公共 HTTP 请求抓包失败: $method ${it.stackTraceToString()}") }
@@ -404,7 +505,7 @@ internal object HttpHooks {
             if (methodHooks.putIfAbsent(method, false) != null) return@forEach
             runCatching {
                 method.isAccessible = true
-                XposedBridge.hookMethod(method, object : XC_MethodHook() {
+                val unhook = XposedBridge.hookMethod(method, object : XC_MethodHook() {
                     override fun beforeHookedMethod(param: MethodHookParam) {
                         var observed: Triple<PendingHostRequest?, Boolean, Boolean>? = null
                         runCatching {
@@ -484,8 +585,12 @@ internal object HttpHooks {
                         }
                     }
                 })
-                methodHooks[method] = true
-                Log.runtime(TAG, "已安装 HTTP Future 观察: $method; loader=${futureClass.classLoader}")
+                if (RpcTrafficCapture.trackOrRollback(installedUnhooks, unhook)) {
+                    methodHooks[method] = true
+                    Log.runtime(TAG, "已安装 HTTP Future 观察: $method; loader=${futureClass.classLoader}")
+                } else {
+                    methodHooks.remove(method, false)
+                }
             }.onFailure {
                 methodHooks.remove(method, false)
                 runCatching { Log.runtime(TAG, "安装 HTTP Future 观察失败: $method ${it.stackTraceToString()}") }
@@ -494,7 +599,6 @@ internal object HttpHooks {
     }
 
     private fun observeHttpResponseBody(pending: PendingHostRequest, value: Any?) {
-        if (!RpcTrafficCapture.isCaptureEnabled()) return
         val calls = bodyAccessorCalls.get() ?: IdentityHashMap<PendingHostRequest, Boolean>().also(bodyAccessorCalls::set)
         val alreadyObserving = calls.put(pending, true) != null
         try {
@@ -590,13 +694,13 @@ internal object HttpHooks {
             if (methodHooks.putIfAbsent(method, false) != null) return@forEach
             runCatching {
                 method.isAccessible = true
-                XposedBridge.hookMethod(method, object : XC_MethodHook() {
+                val unhook = XposedBridge.hookMethod(method, object : XC_MethodHook() {
                     override fun beforeHookedMethod(param: MethodHookParam) {
                         var observing: PendingHostRequest? = null
                         runCatching {
                             val owner = param.thisObject
                             val pending = owner?.let { PendingRegistry.peek(it) }
-                            if (owner != null && pending != null && RpcTrafficCapture.isCaptureEnabled()) {
+                            if (owner != null && pending != null) {
                                 if (!PendingRegistry.isObservingStream(pending)) {
                                     val calls = bodyAccessorCalls.get()
                                         ?: IdentityHashMap<PendingHostRequest, Boolean>().also(bodyAccessorCalls::set)
@@ -628,8 +732,12 @@ internal object HttpHooks {
                         }
                     }
                 })
-                methodHooks[method] = true
-                Log.runtime(TAG, "已安装 HTTP 实体/取流观察: $method; loader=${bodyClass.classLoader}")
+                if (RpcTrafficCapture.trackOrRollback(installedUnhooks, unhook)) {
+                    methodHooks[method] = true
+                    Log.runtime(TAG, "已安装 HTTP 实体/取流观察: $method; loader=${bodyClass.classLoader}")
+                } else {
+                    methodHooks.remove(method, false)
+                }
             }.onFailure {
                 methodHooks.remove(method, false)
                 runCatching { Log.runtime(TAG, "安装 HTTP 实体/取流观察失败: $method ${it.stackTraceToString()}") }
@@ -661,14 +769,14 @@ internal object HttpHooks {
             if (methodHooks.putIfAbsent(method, false) != null) return@forEach
             runCatching {
                 method.isAccessible = true
-                XposedBridge.hookMethod(method, object : XC_MethodHook() {
+                val unhook = XposedBridge.hookMethod(method, object : XC_MethodHook() {
                     override fun beforeHookedMethod(param: MethodHookParam) {
                         var body: HttpBodyObservation? = null
                         runCatching {
                             val stream = param.thisObject
                             if (stream != null) {
                                 val observed = PendingRegistry.bodyOf(stream)
-                                if (observed != null && RpcTrafficCapture.isCaptureEnabled()) {
+                                if (observed != null) {
                                     val calls = responseHookCalls.get()
                                         ?: IdentityHashMap<Any, Boolean>().also(responseHookCalls::set)
                                     if (calls.put(observed.pending, true) == null) body = observed
@@ -760,7 +868,11 @@ internal object HttpHooks {
                         }
                     }
                 })
-                methodHooks[method] = true
+                if (RpcTrafficCapture.trackOrRollback(installedUnhooks, unhook)) {
+                    methodHooks[method] = true
+                } else {
+                    methodHooks.remove(method, false)
+                }
             }.onFailure {
                 methodHooks.remove(method, false)
             }
@@ -771,6 +883,17 @@ internal object HttpHooks {
     private fun readAriverResponseField(callback: Any): String? = runCatching {
         HttpSnapshot.findField(callback.javaClass, "mJSONResponse")?.get(callback)?.toString()
     }.getOrNull()
+
+    /** 卸载全部 HTTP 侧 hook（含类加载监听）并复位安装状态，供 [RpcTrafficCapture.uninstall] 调用 */
+    fun uninstallAll() {
+        installedUnhooks.forEach { runCatching { it.unhook() } }
+        installedUnhooks.clear()
+        setContentEncryptEnabled(false)
+        classLoaderListenerInstalled.set(false)
+        methodHooks.clear()
+        miniClassInstallations.clear()
+        miniClassFailures.clear()
+    }
 
     private class RpcCallContext(val pending: PendingHostRequest?, val callback: Any?)
 }

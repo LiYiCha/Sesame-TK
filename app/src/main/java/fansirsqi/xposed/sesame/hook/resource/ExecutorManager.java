@@ -3,37 +3,15 @@ package fansirsqi.xposed.sesame.hook.resource;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicLong;
 
 import fansirsqi.xposed.sesame.util.Log;
 
 /**
  * ExecutorService 资源管理器
- * 提供完善的关闭逻辑和资源泄漏检测
+ * 提供完善的关闭逻辑
  */
 public class ExecutorManager {
     private static final String TAG = ExecutorManager.class.getSimpleName();
-
-    // 资源泄漏检测
-    private static final AtomicLong activeExecutors = new AtomicLong(0);
-    private static final AtomicLong activeSchedulers = new AtomicLong(0);
-
-    /**
-     * 注册 ExecutorService（用于泄漏检测）
-     */
-    public static void registerExecutor() {
-        activeExecutors.incrementAndGet();
-        // Log.runtime(TAG, "ExecutorService 已注册，当前活跃数: " + count);
-    }
-
-    /**
-     * 注册 ScheduledExecutorService（用于泄漏检测）
-     */
-    public static void registerScheduler() {
-        activeSchedulers.incrementAndGet();
-        // Log.runtime(TAG, "ScheduledExecutorService 已注册，当前活跃数: " + count);
-    }
 
     /**
      * 优雅关闭 ExecutorService
@@ -63,7 +41,6 @@ public class ExecutorManager {
             // 2. 等待现有任务完成
             if (executor.awaitTermination(timeoutSeconds, TimeUnit.SECONDS)) {
                 Log.runtime(TAG, name + " 已优雅关闭");
-                activeExecutors.decrementAndGet();
                 return true;
             }
 
@@ -74,7 +51,6 @@ public class ExecutorManager {
             // 4. 再次等待
             if (executor.awaitTermination(timeoutSeconds, TimeUnit.SECONDS)) {
                 Log.runtime(TAG, name + " 已强制关闭");
-                activeExecutors.decrementAndGet();
                 return true;
             }
 
@@ -86,7 +62,6 @@ public class ExecutorManager {
             Log.error(TAG, name + " 关闭时被中断");
             executor.shutdownNow();
             Thread.currentThread().interrupt();
-            activeExecutors.decrementAndGet();
             return false;
         } catch (Exception e) {
             Log.error(TAG, name + " 关闭时发生异常: " + e.getMessage());
@@ -123,7 +98,6 @@ public class ExecutorManager {
             // 2. 等待现有任务完成
             if (scheduler.awaitTermination(timeoutSeconds, TimeUnit.SECONDS)) {
                 Log.runtime(TAG, name + " 已优雅关闭");
-                activeSchedulers.decrementAndGet();
                 return true;
             }
 
@@ -134,7 +108,6 @@ public class ExecutorManager {
             // 4. 再次等待
             if (scheduler.awaitTermination(timeoutSeconds, TimeUnit.SECONDS)) {
                 Log.runtime(TAG, name + " 已强制关闭");
-                activeSchedulers.decrementAndGet();
                 return true;
             }
 
@@ -146,58 +119,11 @@ public class ExecutorManager {
             Log.error(TAG, name + " 关闭时被中断");
             scheduler.shutdownNow();
             Thread.currentThread().interrupt();
-            activeSchedulers.decrementAndGet();
             return false;
         } catch (Exception e) {
             Log.error(TAG, name + " 关闭时发生异常: " + e.getMessage());
             Log.printStackTrace(TAG, e);
             return false;
         }
-    }
-
-    /**
-     * 检查资源泄漏
-     * 如果有未关闭的执行器，记录警告
-     */
-    public static void checkLeak() {
-        /*
-        long executorCount = activeExecutors.get();
-        long schedulerCount = activeSchedulers.get();
-
-        if (executorCount > 0) {
-            Log.error(TAG, "⚠️ 检测到 ExecutorService 资源泄漏！活跃数: " + executorCount);
-        }
-
-        if (schedulerCount > 0) {
-            Log.error(TAG, "⚠️ 检测到 ScheduledExecutorService 资源泄漏！活跃数: " + schedulerCount);
-        }
-
-        if (executorCount == 0 && schedulerCount == 0) {
-            Log.runtime(TAG, "✓ 未检测到 ExecutorService 资源泄漏");
-        }
-        */
-    }
-
-    /**
-     * 获取当前活跃的执行器数量
-     */
-    public static long getActiveExecutorCount() {
-        return activeExecutors.get();
-    }
-
-    /**
-     * 获取当前活跃的调度器数量
-     */
-    public static long getActiveSchedulerCount() {
-        return activeSchedulers.get();
-    }
-
-    /**
-     * 重置计数器（用于测试或重新初始化）
-     */
-    public static void resetCounters() {
-        activeExecutors.set(0);
-        activeSchedulers.set(0);
-        Log.runtime(TAG, "资源计数器已重置");
     }
 }

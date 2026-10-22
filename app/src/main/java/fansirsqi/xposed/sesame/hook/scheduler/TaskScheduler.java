@@ -94,8 +94,6 @@ public class TaskScheduler {
                         return t;
                     });
                     executor = taskExecutor;
-                    // 注册执行器用于资源泄漏检测
-                    ExecutorManager.registerExecutor();
                 }
             }
         }
@@ -121,8 +119,6 @@ public class TaskScheduler {
                         return t;
                     });
                     sched = scheduler;
-                    // 注册调度器用于资源泄漏检测
-                    ExecutorManager.registerScheduler();
                 }
             }
         }

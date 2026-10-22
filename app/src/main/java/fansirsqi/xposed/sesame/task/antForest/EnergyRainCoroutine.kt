@@ -43,9 +43,9 @@ object EnergyRainCoroutine {
             val timeSinceLastExec = currentTime - lastExecuteTime
             val cooldownSeconds = 3 // 冷却时间：3秒
 
-            if (timeSinceLastExec < cooldownSeconds * 1000) {
-                // 粗放点，delay 3秒
-                delay(cooldownSeconds * 1000.toLong())
+            if (timeSinceLastExec < cooldownSeconds * 1000L) {
+                // 只补足剩余冷却时间
+                delay(cooldownSeconds * 1000L - timeSinceLastExec)
             }
 
             energyRain()

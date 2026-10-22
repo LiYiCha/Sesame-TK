@@ -44,14 +44,6 @@ public abstract class BaseTask {
             }
         }
     }
-    private void stopChildTasks() {
-        for (BaseTask childTask : childTaskMap.values()) {
-            if (childTask != null) {
-                ThreadUtil.shutdownAndWait(childTask.getThread(), -1, TimeUnit.SECONDS);
-            }
-        }
-        childTaskMap.clear();
-    }
     /**
      * 启动任务执行
      *

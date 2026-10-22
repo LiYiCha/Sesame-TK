@@ -387,19 +387,26 @@ class AntOrchard : ModelTask() {
                 Log.runtime(TAG, "检测到7点已过，尝试领取摇钱树余额奖励...")
                 val res = AntOrchardRpcCall.moneyTreeTrigger()
                 val json = JSONObject(res)
-                if (json.optBoolean("success")) {
-                    val result = json.optJSONObject("result")
-                    val awardInfo = result?.optJSONObject("awardInfo")
-                    val amount = awardInfo?.optString("totalAmount", "0") ?: "0"
-
-                    if (amount != "0") {
-                        Log.farm("摇钱树💰[获得余额]#$amount 元")
-                    } else {
-                        Log.runtime(TAG, "摇钱树暂无奖励可领")
-                    }
+                val result = json.optJSONObject("result")
+                if ((json.has("success") && !json.optBoolean("success")) ||
+                    (result?.has("success") == true && !result.optBoolean("success"))
+                ) {
+                    Log.error(TAG, "摇钱树奖励领取失败: $json")
+                } else if (result?.optString("errCode") == "03000021" && result.optString("errKey") == "emptyAwardList") {
+                    Log.farm("摇钱树💰[奖励已领取，本轮无需重复领取]")
                     Status.setFlagToday(STATUS_MONEY_TREE_COLLECTED)
                 } else {
-                    Log.runtime(TAG, "摇钱树奖励领取失败: $json")
+                    val amount = result?.optJSONObject("awardInfo")?.optString("totalAmount")?.toBigDecimalOrNull()
+                    if (amount == null || amount.signum() < 0) {
+                        Log.error(TAG, "摇钱树领奖结果未确认，保留后续回查: $json")
+                    } else {
+                        if (amount.signum() > 0) {
+                            Log.farm("摇钱树💰[获得余额]#${amount.toPlainString()} 元")
+                        } else {
+                            Log.runtime(TAG, "摇钱树暂无奖励可领")
+                        }
+                        Status.setFlagToday(STATUS_MONEY_TREE_COLLECTED)
+                    }
                 }
 
                 try {
