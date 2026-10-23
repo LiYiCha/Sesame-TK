@@ -656,7 +656,7 @@ public class AntFarmRpcCall {
     }
 
     /**
-     * 领取黄金小鸡任务奖励 (新增)
+     * 领取黄金小鸡任务奖励
      * taskSceneCode: ANTFARM_CAIFU_NPC_TASK
      */
     public static String receiveGoldChickenTaskAward(String taskId) {
@@ -1504,7 +1504,7 @@ public class AntFarmRpcCall {
         return RequestManager.requestString("com.alipay.antieptask.receiveTaskAwardantfarm", data);
     }
 
-    // === 以下为 AG-dev 新增（仅农场相关） ===
+    // === 以下为 AG-dev  （仅农场相关） ===
 
     /** 查询"雇佣小鸡拿饲料"任务候选列表 */
     public static String hireAnimalTaskList() {

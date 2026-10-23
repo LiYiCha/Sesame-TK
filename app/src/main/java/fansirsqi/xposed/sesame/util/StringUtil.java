@@ -77,7 +77,6 @@ public class StringUtil {
         result = text.substring(zLen, yLen);
         return result;
     }
-    //新增
     public static String getJsonString(Map<String, Object> map) {
         StringBuilder sb = new StringBuilder("[{");
         for (Map.Entry<String, Object> entry : map.entrySet()) {

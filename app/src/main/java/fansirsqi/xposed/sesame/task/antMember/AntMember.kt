@@ -19,6 +19,7 @@ import fansirsqi.xposed.sesame.model.modelFieldExt.SelectModelField
 import fansirsqi.xposed.sesame.util.TaskBlacklist.autoAddToBlacklist
 import fansirsqi.xposed.sesame.task.ModelTask
 import fansirsqi.xposed.sesame.task.antOrchard.AntOrchardRpcCall.orchardSpreadManure
+import fansirsqi.xposed.sesame.task.antOrchard.UrlUtil
 import fansirsqi.xposed.sesame.util.CoroutineUtils
 import fansirsqi.xposed.sesame.util.GlobalThreadPools
 import fansirsqi.xposed.sesame.task.common.GameCenterPlayRpcCall
@@ -42,6 +43,7 @@ import kotlinx.coroutines.runBlocking
 import org.json.JSONArray
 import org.json.JSONException
 import org.json.JSONObject
+import java.net.URLDecoder
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -69,6 +71,9 @@ class AntMember : ModelTask() {
     private var collectSesame: BooleanModelField? = null
     private var collectSesameWithOneClick: BooleanModelField? = null
     private var sesameTask: BooleanModelField? = null
+
+    // 成就馆勋章领取
+    private var sesameAchievements: BooleanModelField? = null
     private var collectInsuredGold: BooleanModelField? = null
     private var enableGameCenter: BooleanModelField? = null
     private var merchantSign: BooleanModelField? = null
@@ -83,9 +88,6 @@ class AntMember : ModelTask() {
     // 芝麻树
     private var enableZhimaTree: BooleanModelField? = null
 
-    /*//年度回顾
-    private var annualReview: BooleanModelField? = null*/
-
     // 黄金票配置 - 签到
     private var enableGoldTicket: BooleanModelField? = null
 
@@ -96,7 +98,7 @@ class AntMember : ModelTask() {
     private var collectStickers: BooleanModelField? = null
     private var billBlockWorld: BooleanModelField? = null
 
-    // 【新增】芝麻粒兑换
+    // 芝麻粒兑换
     private var sesameGrainExchange: BooleanModelField? = null
     private var sesameGrainExchangeList: SelectModelField? = null
 
@@ -144,6 +146,10 @@ class AntMember : ModelTask() {
             BooleanModelField(
                 "sesameTask", "芝麻信用|芝麻粒信用任务", false
             ).also { sesameTask = it })
+        modelFields.addField(
+            BooleanModelField(
+                "sesameAchievements", "芝麻信用|成就馆领取", false
+            ).also { sesameAchievements = it })
         modelFields.addField(BooleanModelField("collectSesame", "芝麻信用|芝麻粒领取", false).also {
             collectSesame = it
         })
@@ -201,11 +207,6 @@ class AntMember : ModelTask() {
             BooleanModelField(
                 "beanExchangeBubbleBoost", "安心豆兑换时光加速器", false
             ).also { beanExchangeBubbleBoost = it })
-        /* modelFields.addField(
-             BooleanModelField(
-                 "annualReview", "年度回顾", false
-             ).also { annualReview = it })*/
-
 
         collectStickers = BooleanModelField("CollectStickers", "领取贴纸", false)
         modelFields.addField(collectStickers)
@@ -260,6 +261,11 @@ class AntMember : ModelTask() {
                             queryAndCollect() //做完任务领取球
                             Log.runtime(TAG, "✅ 芝麻信用任务已完成，今天不再执行")
                         }
+                        // 新任务中心与通行证（每次执行）
+                        if (sesameTask!!.value) {
+                            handleNewTaskCenterTasks()
+                            handleCreditPassages()
+                        }
                         if (collectSesame!!.value) {
                             deferredTasks.add(async(Dispatchers.IO) {
                                 collectSesame(
@@ -267,6 +273,11 @@ class AntMember : ModelTask() {
                                 )
                             })
                         }
+                    }
+
+                    // 成就馆勋章领取
+                    if (sesameAchievements!!.value) {
+                        handleCreditAchievements()
                     }
 
                     // 芝麻炼金
@@ -325,15 +336,9 @@ class AntMember : ModelTask() {
                 deferredTasks.add(async(Dispatchers.IO) { doSignFloatingBall() })
                 deferredTasks.add(async(Dispatchers.IO) { doQueryGameEntrance() })
 
-                /* if (annualReview!!.value) {   //年度回顾已下线
-                     deferredTasks.add(async(Dispatchers.IO) { doAnnualReview() })
-                 }*/
-
                 if (beanExchangeBubbleBoost!!.value) {
                     deferredTasks.add(async(Dispatchers.IO) { beanExchangeBubbleBoost() })
                 }
-
-
 
                 if (merchantSign!!.value || merchantKmdk!!.value || merchantMoreTask!!.value) {
                     deferredTasks.add(async(Dispatchers.IO) {
@@ -365,7 +370,7 @@ class AntMember : ModelTask() {
             Log.runtime("$TAG.", "开始执行信誉任务领取")
             var resp: String?
             try {
-                resp = AntMemberRpcCall.Zmxy.queryGrowthGuideToDoList("yuebao_7d", "1.0.2025.10.27")
+                resp = AntMemberRpcCall.Zmxy.queryGrowthGuideToDoList("", "1.0.2025.10.27")
             } catch (e: Throwable) {
                 Log.printStackTrace("$TAG.handleGrowthGuideTasks.queryGrowthGuideToDoList", e)
                 return
@@ -624,280 +629,226 @@ class AntMember : ModelTask() {
     }
 
     /**
-     * 年度回顾任务：通过 programInvoke 查询并自动完成任务
-     *
-     *
-     * 1) alipay.imasp.program.programInvoke + ..._task_reward_query 查询 playTaskOrderInfoList
-     * 2) 对于 taskStatus = "init" 的任务，使用 ..._task_reward_apply(code) 领取，得到 recordNo
-     * 3) 使用 ..._task_reward_process(code, recordNo) 上报完成，服务端自动发放成长值奖励
+     * 成就馆：自动领取已达成的成就勋章
      */
-    private suspend fun doAnnualReview(): Unit = CoroutineUtils.run {
+    private fun handleCreditAchievements() {
         try {
-            Log.runtime("$TAG.doAnnualReview", "年度回顾🎞[开始执行]")
-
-            val resp = AntMemberRpcCall.annualReviewQueryTasks()
-            if (resp == null || resp.isEmpty()) {
-                Log.runtime("$TAG.doAnnualReview", "年度回顾[查询返回空]")
+            val homeRaw = AntMemberRpcCall.queryAccomplishmentHome("") ?: return
+            if (homeRaw.isEmpty()) return
+            val home = JSONObject(homeRaw)
+            if (!ResChecker.checkRes(TAG, home)) {
+                Log.error("$TAG.handleCreditAchievements", "成就馆查询失败")
                 return
             }
-
-            val root: JSONObject?
-            try {
-                root = JSONObject(resp)
-            } catch (e: Throwable) {
-                Log.printStackTrace("$TAG.doAnnualReview.parseRoot", e)
-                return
+            val tabs = home.optJSONObject("data")?.optJSONArray("tabs") ?: return
+            for (i in 0 until tabs.length()) {
+                val tabCode = tabs.optJSONObject(i)?.optString("tabCode").orEmpty()
+                if (tabCode.isEmpty()) continue
+                claimAchievementsInTab(tabCode)
             }
-
-            if (!root.optBoolean("isSuccess", false)) {
-                Log.runtime("$TAG.doAnnualReview", "年度回顾[查询失败]#$resp")
-                return
-            }
-
-            val components = root.optJSONObject("components")
-            if (components == null || components.length() == 0) {
-                Log.runtime("$TAG.doAnnualReview", "年度回顾[components 为空]")
-                return
-            }
-
-            var queryComp = components.optJSONObject(AntMemberRpcCall.ANNUAL_REVIEW_QUERY_COMPONENT)
-            if (queryComp == null) {
-                // 兜底：取第一个组件
-                try {
-                    val it = components.keys()
-                    if (it.hasNext()) {
-                        queryComp = components.optJSONObject(it.next())
-                    }
-                } catch (_: Throwable) {
-                }
-            }
-            if (queryComp == null) {
-                Log.runtime("$TAG.doAnnualReview", "年度回顾[未找到查询组件]")
-                return
-            }
-            if (!queryComp.optBoolean("isSuccess", true)) {
-                Log.runtime("$TAG.doAnnualReview", "年度回顾[查询组件返回失败]")
-                return
-            }
-
-            val content = queryComp.optJSONObject("content")
-            if (content == null) {
-                Log.runtime("$TAG.doAnnualReview", "年度回顾[content 为空]")
-                return
-            }
-
-            val taskList = content.optJSONArray("playTaskOrderInfoList")
-            if (taskList == null || taskList.length() == 0) {
-                Log.runtime("$TAG.doAnnualReview", "年度回顾[当前无可处理任务]")
-                return
-            }
-
-            var candidate = 0
-            var applied = 0
-            var processed = 0
-            var failed = 0
-
-            for (i in 0..<taskList.length()) {
-                val task = taskList.optJSONObject(i) ?: continue
-
-                val taskStatus = task.optString("taskStatus", "")
-                if ("init" != taskStatus) {
-                    // 已完成/已领奖等状态直接跳过
-                    continue
-                }
-                candidate++
-
-                var code = task.optString("code", "")
-                if (code.isEmpty()) {
-                    val extInfo = task.optJSONObject("extInfo")
-                    if (extInfo != null) {
-                        code = extInfo.optString("taskId", "")
-                    }
-                }
-                if (code.isEmpty()) {
-                    failed++
-                    continue
-                }
-
-                var taskName = code
-                val displayInfo = task.optJSONObject("displayInfo")
-                if (displayInfo != null) {
-                    val name = displayInfo.optString(
-                        "taskName", displayInfo.optString("activityName", code)
-                    )
-                    if (!name.isEmpty()) {
-                        taskName = name
-                    }
-                }
-
-                // ========== Step 1: 领取任务 (apply) ==========
-                val applyResp = AntMemberRpcCall.annualReviewApplyTask(code)
-                if (applyResp == null || applyResp.isEmpty()) {
-                    Log.runtime("$TAG.doAnnualReview", "年度回顾[领任务失败]$taskName#响应为空")
-                    failed++
-                    continue
-                }
-
-                val applyRoot: JSONObject?
-                try {
-                    applyRoot = JSONObject(applyResp)
-                } catch (e: Throwable) {
-                    Log.printStackTrace("$TAG.doAnnualReview.parseApply", e)
-                    failed++
-                    continue
-                }
-                if (!applyRoot.optBoolean("isSuccess", false)) {
-                    Log.runtime("$TAG.doAnnualReview", "年度回顾[领任务失败]$taskName#$applyResp")
-                    failed++
-                    continue
-                }
-                val applyComps = applyRoot.optJSONObject("components")
-                if (applyComps == null) {
-                    failed++
-                    continue
-                }
-                var applyComp = applyComps.optJSONObject(AntMemberRpcCall.ANNUAL_REVIEW_APPLY_COMPONENT)
-                if (applyComp == null) {
-                    try {
-                        val it2 = applyComps.keys()
-                        if (it2.hasNext()) {
-                            applyComp = applyComps.optJSONObject(it2.next())
-                        }
-                    } catch (_: Throwable) {
-                    }
-                }
-                if (applyComp == null || !applyComp.optBoolean("isSuccess", true)) {
-                    failed++
-                    continue
-                }
-                val applyContent = applyComp.optJSONObject("content")
-                if (applyContent == null) {
-                    failed++
-                    continue
-                }
-                val claimedTask = applyContent.optJSONObject("claimedTask")
-                if (claimedTask == null) {
-                    failed++
-                    continue
-                }
-                val recordNo = claimedTask.optString("recordNo", "")
-                if (recordNo.isEmpty()) {
-                    failed++
-                    continue
-                }
-                applied++
-
-                delay(500)
-
-                // ========== Step 2: 提交任务完成 (process) ==========
-                val processResp = AntMemberRpcCall.annualReviewProcessTask(code, recordNo)
-                if (processResp == null || processResp.isEmpty()) {
-                    Log.runtime("$TAG.doAnnualReview", "年度回顾[提交任务失败]$taskName#响应为空")
-                    failed++
-                    continue
-                }
-
-                val processRoot: JSONObject?
-                try {
-                    processRoot = JSONObject(processResp)
-                } catch (e: Throwable) {
-                    Log.printStackTrace("$TAG.doAnnualReview.parseProcess", e)
-                    failed++
-                    continue
-                }
-                if (!processRoot.optBoolean("isSuccess", false)) {
-                    Log.runtime("$TAG.doAnnualReview", "年度回顾[提交任务失败]$taskName#$processResp")
-                    failed++
-                    continue
-                }
-                val processComps = processRoot.optJSONObject("components")
-                if (processComps == null) {
-                    failed++
-                    continue
-                }
-                var processComp = processComps.optJSONObject(AntMemberRpcCall.ANNUAL_REVIEW_PROCESS_COMPONENT)
-                if (processComp == null) {
-                    try {
-                        val it3 = processComps.keys()
-                        if (it3.hasNext()) {
-                            processComp = processComps.optJSONObject(it3.next())
-                        }
-                    } catch (_: Throwable) {
-                    }
-                }
-                if (processComp == null || !processComp.optBoolean("isSuccess", true)) {
-                    failed++
-                    continue
-                }
-                val processContent = processComp.optJSONObject("content")
-                if (processContent == null) {
-                    failed++
-                    continue
-                }
-                val processedTask = processContent.optJSONObject("processedTask")
-                if (processedTask == null) {
-                    failed++
-                    continue
-                }
-                val newStatus = processedTask.optString("taskStatus", "")
-                var rewardStatus = processedTask.optString("rewardStatus", "")
-
-                // ========== Step 3: 如仍未发奖，则调用 get_reward 领取奖励 ==========
-                if (!"success".equals(rewardStatus, ignoreCase = true)) {
-                    try {
-                        val rewardResp = AntMemberRpcCall.annualReviewGetReward(code, recordNo)
-                        if (rewardResp != null && !rewardResp.isEmpty()) {
-                            val rewardRoot = JSONObject(rewardResp)
-                            if (rewardRoot.optBoolean("isSuccess", false)) {
-                                val rewardComps = rewardRoot.optJSONObject("components")
-                                if (rewardComps != null) {
-                                    var rewardComp = rewardComps.optJSONObject(AntMemberRpcCall.ANNUAL_REVIEW_GET_REWARD_COMPONENT)
-                                    if (rewardComp == null) {
-                                        try {
-                                            val it4 = rewardComps.keys()
-                                            if (it4.hasNext()) {
-                                                rewardComp = rewardComps.optJSONObject(it4.next())
-                                            }
-                                        } catch (_: Throwable) {
-                                        }
-                                    }
-                                    if (rewardComp != null && rewardComp.optBoolean(
-                                            "isSuccess", true
-                                        )
-                                    ) {
-                                        val rewardContent = rewardComp.optJSONObject("content")
-                                        if (rewardContent != null) {
-                                            var rewardTask = rewardContent.optJSONObject("processedTask")
-                                            if (rewardTask == null) {
-                                                rewardTask = rewardContent.optJSONObject("claimedTask")
-                                            }
-                                            if (rewardTask != null) {
-                                                val rs = rewardTask.optString("rewardStatus", "")
-                                                if (!rs.isEmpty()) {
-                                                    rewardStatus = rs
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    } catch (e: Throwable) {
-                        Log.printStackTrace("$TAG.doAnnualReview.getReward", e)
-                    }
-                }
-
-                processed++
-                Log.other("年度回顾🎞[任务完成]$taskName#状态=$newStatus 奖励状态=$rewardStatus")
-            }
-
-            Log.runtime(
-                "$TAG.doAnnualReview", "年度回顾🎞[执行结束] 待处理=$candidate 已领取=$applied 已提交=$processed 失败=$failed"
-            )
         } catch (t: Throwable) {
-            Log.printStackTrace("$TAG.doAnnualReview", t)
+            Log.printStackTrace("handleCreditAchievements", t)
         }
     }
+
+    /**
+     * 遍历单个页签下的成就系列，领取已达标的勋章等级
+     */
+    private fun claimAchievementsInTab(tabCode: String) {
+        val raw = AntMemberRpcCall.queryAccomplishmentHome(tabCode) ?: return
+        if (raw.isEmpty()) return
+        val resp = JSONObject(raw)
+        if (!ResChecker.checkRes(TAG, resp)) {
+            Log.error("$TAG.handleCreditAchievements", "成就馆页签查询失败 tab=$tabCode")
+            return
+        }
+        val categories = resp.optJSONObject("data")?.optJSONArray("themeCategories") ?: return
+        for (c in 0 until categories.length()) {
+            val seriesList = categories.optJSONObject(c)?.optJSONArray("seriesList") ?: continue
+            for (s in 0 until seriesList.length()) {
+                val medal = seriesList.optJSONObject(s) ?: continue
+                val seriesCode = medal.optString("medalSeriesCode")
+                if (seriesCode.isEmpty()) continue
+                var target = medal
+                // 已领取且达到下一级阈值时，查详情定位当前可领取的等级
+                if (medal.optLong("claimedAt") > 0 && medal.optLong("nextThreshold") > 0 &&
+                    medal.optLong("currentValue") >= medal.optLong("nextThreshold")
+                ) {
+                    val detailRaw = AntMemberRpcCall.enterAccomplishmentDetailV2(seriesCode) ?: continue
+                    val detail = JSONObject(detailRaw)
+                    val levels = detail.optJSONObject("data")?.optJSONArray("levels")
+                    if (!ResChecker.checkRes(TAG, detail) || levels == null) {
+                        Log.error("$TAG.handleCreditAchievements", "成就等级查询失败 series=$seriesCode")
+                        continue
+                    }
+                    target = (0 until levels.length()).mapNotNull { levels.optJSONObject(it) }
+                        .filter {
+                            it.optLong("claimedAt") == 0L && it.optLong("threshold") > 0 &&
+                                it.optLong("currentValue") >= it.optLong("threshold")
+                        }
+                        .maxByOrNull { it.optInt("levelNo") } ?: medal
+                }
+                val claimed = target.optLong("claimedAt") > 0
+                val ready = !claimed && (target.optString("displayState") == "UNCLAIMED" ||
+                    (target.optLong("threshold") > 0 && target.optLong("currentValue") >= target.optLong("threshold")))
+                if (!ready) continue
+                val medalName = target.optString("medalName", seriesCode)
+                val claimRaw = AntMemberRpcCall.claimAccomplishmentV2(seriesCode) ?: continue
+                val claimJo = JSONObject(claimRaw)
+                if (ResChecker.checkRes(TAG, claimJo)) {
+                    Log.other("成就馆🎖️[领取成功] $medalName")
+                    Thread.sleep(1000)
+                } else {
+                    Log.error("$TAG.handleCreditAchievements", "成就馆领取失败 $medalName - $claimRaw")
+                }
+            }
+        }
+    }
+
+    /**
+     * 通行证：自动激活资格已满足且无需验证的信用特权
+     */
+    private fun handleCreditPassages() {
+        try {
+            val raw = AntMemberRpcCall.queryPassageScenes() ?: return
+            if (raw.isEmpty()) return
+            val resp = JSONObject(raw)
+            if (!ResChecker.checkRes(TAG, resp)) {
+                Log.error("$TAG.handleCreditPassages", "通行证场景查询失败")
+                return
+            }
+            val scenes = resp.optJSONObject("data")?.optJSONArray("scenes") ?: return
+            for (i in 0 until scenes.length()) {
+                val scene = scenes.optJSONObject(i) ?: continue
+                val sceneCode = scene.optString("sceneCode")
+                if (sceneCode.isEmpty()) continue
+                val status = scene.optString("activationStatus")
+                if (status == "ACTIVATED") continue
+                if (status != "INACTIVATED" || scene.optString("qualificationStatus") != "ELIGIBLE" ||
+                    scene.optString("verificationStatus") != "NOT_REQUIRED"
+                ) {
+                    continue
+                }
+                val sceneName = scene.optString("sceneName", sceneCode)
+                val panelRaw = AntMemberRpcCall.queryPassageActivationPanel(sceneCode) ?: continue
+                val panel = JSONObject(panelRaw)
+                if (!ResChecker.checkRes(TAG, panel)) {
+                    Log.error("$TAG.handleCreditPassages", "通行证开通面板查询失败 $sceneName")
+                    continue
+                }
+                val panelScene = panel.optJSONObject("data")
+                if (panelScene == null || panelScene.optString("activationStatus") == "ACTIVATED") continue
+                if (panelScene.optString("sceneCode") != sceneCode ||
+                    panelScene.optString("qualificationStatus") != "ELIGIBLE" ||
+                    panelScene.optString("verificationStatus") != "NOT_REQUIRED"
+                ) {
+                    Log.runtime(TAG, "通行证[$sceneName]资格或验证条件待满足，跳过")
+                    continue
+                }
+                val activateRaw = AntMemberRpcCall.activatePassage(sceneCode) ?: continue
+                val activateJo = JSONObject(activateRaw)
+                if (ResChecker.checkRes(TAG, activateJo)) {
+                    Log.other("通行证🎫[激活成功] $sceneName")
+                    Thread.sleep(1000)
+                } else {
+                    Log.error("$TAG.handleCreditPassages", "通行证激活失败 $sceneName - $activateRaw")
+                }
+            }
+        } catch (t: Throwable) {
+            Log.printStackTrace("handleCreditPassages", t)
+        }
+    }
+
+    /**
+     * 新任务中心：查询模块配置、签到状态与任务列表
+     */
+    private fun handleNewTaskCenterTasks() {
+        try {
+            val configRaw = AntMemberRpcCall.queryNewTaskCenterModuleConfigs()
+            if (!configRaw.isNullOrEmpty()) {
+                val configJo = JSONObject(configRaw)
+                if (!ResChecker.checkRes(TAG, configJo)) {
+                    Log.runtime(TAG, "新任务中心配置查询失败: ${newTaskCenterErrorDesc(configJo)}")
+                }
+            }
+
+            val signRaw = AntMemberRpcCall.newTaskCenterSignStatusQuery()
+            if (!signRaw.isNullOrEmpty()) {
+                val signJo = JSONObject(signRaw)
+                if (ResChecker.checkRes(TAG, signJo)) {
+                    handleNewTaskCenterSign(signJo)
+                } else {
+                    Log.runtime(TAG, "新任务中心签到状态查询失败: ${newTaskCenterErrorDesc(signJo)}")
+                }
+            }
+
+            val listRaw = AntMemberRpcCall.newTaskCenterQueryTaskList()
+            if (!listRaw.isNullOrEmpty()) {
+                val listJo = JSONObject(listRaw)
+                if (ResChecker.checkRes(TAG, listJo)) {
+                    inspectNewTaskCenterTaskList(listJo)
+                } else {
+                    Log.runtime(TAG, "新任务中心任务列表查询失败: ${newTaskCenterErrorDesc(listJo)}")
+                }
+            }
+
+            val popRaw = AntMemberRpcCall.newTaskCenterQueryPop()
+            if (!popRaw.isNullOrEmpty()) {
+                val popJo = JSONObject(popRaw)
+                if (!ResChecker.checkRes(TAG, popJo)) {
+                    Log.runtime(TAG, "新任务中心弹窗查询失败: ${newTaskCenterErrorDesc(popJo)}")
+                }
+            }
+        } catch (t: Throwable) {
+            Log.printStackTrace("handleNewTaskCenterTasks", t)
+        }
+    }
+
+    /**
+     * 解析签到状态，待签到时打印提示（签到含动态参数，暂不自动执行）
+     */
+    private fun handleNewTaskCenterSign(signStatus: JSONObject) {
+        val signInfo = signStatus.optJSONObject("signInfo") ?: return
+        val action = signInfo.optString("buttonActionEnum")
+        val signed = signInfo.optBoolean("todaySignedFlag", false) ||
+            signInfo.optString("signStatus").equals("SIGNED", ignoreCase = true)
+        if (signed || !action.equals("DO_SIGN", ignoreCase = true)) {
+            val text = signInfo.optString("buttonText").ifBlank { action.ifBlank { "已处理" } }
+            Log.runtime(TAG, "新任务中心签到状态: $text")
+            return
+        }
+        Log.runtime(TAG, "新任务中心[待签到]#签到含动态bizNo/token，暂不自动签到")
+    }
+
+    /**
+     * 汇总新任务中心任务列表（暂未接入自动执行）
+     */
+    private fun inspectNewTaskCenterTaskList(taskListResponse: JSONObject) {
+        val taskGroupList = taskListResponse.optJSONArray("taskGroupList") ?: return
+        for (groupIndex in 0 until taskGroupList.length()) {
+            val group = taskGroupList.optJSONObject(groupIndex) ?: continue
+            val taskList = group.optJSONArray("taskList") ?: continue
+            val summaries = mutableListOf<String>()
+            for (taskIndex in 0 until taskList.length()) {
+                val task = taskList.optJSONObject(taskIndex) ?: continue
+                val taskCode = task.optString("taskCode")
+                val taskName = task.optString("taskName").ifBlank {
+                    task.optString("taskDesc").ifBlank { taskCode }
+                }
+                summaries.add("$taskName(taskCode=$taskCode,type=${task.optString("taskType")}," +
+                    "action=${task.optString("taskAction")},scene=${task.optString("taskScene")})")
+            }
+            if (summaries.isNotEmpty()) {
+                Log.runtime(TAG, "新任务中心[暂未接入自动执行]#${summaries.size}项: ${summaries.joinToString("；")}")
+            }
+        }
+    }
+
+    private fun newTaskCenterErrorDesc(response: JSONObject): String =
+        response.optString("resultDesc").ifBlank { response.optString("resultView") }
+            .ifBlank { response.optString("errorMsg") }
+            .ifBlank { response.optString("memo") }
+            .ifBlank { response.toString() }
 
     /**
      * 会员积分0元兑，权益道具兑换
@@ -1323,13 +1274,11 @@ class AntMember : ModelTask() {
     }
 
     /**
-     * 芝麻粒信用福利签到  与芝麻粒炼金的签到方法都一样 alchemyQueryCheckIn 只不过scenecode不一样
-     * 基于 HomeV8RpcManager.queryServiceCard 返回的 serviceCardVOList
-     * 通过 itemAttrs.checkInModuleVO.currentDateCheckInTaskVO 判断今日是否可签到
+     * 芝麻粒福利签到：查询签到任务列表，今日可签到时完成签到
      */
     private fun doSesameZmlCheckIn() {
         try {
-            val checkInRes = AntMemberRpcCall.Zmxy.Alchemy.alchemyQueryCheckIn("zml")
+            val checkInRes = AntMemberRpcCall.zmlCheckInQueryTaskLists()
             val checkInJo = JSONObject(checkInRes)
             if (ResChecker.checkRes(TAG, checkInJo)) {
                 val data = checkInJo.optJSONObject("data")
@@ -1458,8 +1407,51 @@ class AntMember : ModelTask() {
                 }
                 Log.other("芝麻信用💳[" + title + "]#" + potentialSize + "粒" + (if (withOneClick) "(一键收取)" else ""))
             }
+
+            // 收取完成后处理积分宝箱
+            handlePointTreasureBox()
         } catch (t: Throwable) {
             Log.printStackTrace("$TAG.collectSesame", t)
+        }
+    }
+
+    /**
+     * 积分宝箱：可领取时开启并回查确认
+     * @return false 表示宝箱状态未确认，保留后续重试
+     */
+    private fun handlePointTreasureBox(): Boolean {
+        try {
+            val queryJo = JSONObject(AntMemberRpcCall.queryPointTreasureBox())
+            if (!ResChecker.checkRes(TAG, queryJo)) {
+                Log.error("$TAG.handlePointTreasureBox", "积分宝箱查询失败:$queryJo")
+                return false
+            }
+            val data = queryJo.optJSONObject("data") ?: return false
+            if (!data.optBoolean("hasBox", false) || "WAIT_CLAIM" != data.optString("status")) {
+                return true
+            }
+            val openJo = JSONObject(AntMemberRpcCall.openPointTreasureBox())
+            if (!ResChecker.checkRes(TAG, openJo)) {
+                Log.error("$TAG.handlePointTreasureBox", "开启积分宝箱失败:$openJo")
+                return false
+            }
+            val reward = openJo.optJSONObject("data")?.optInt("rewardAmount", 0) ?: 0
+            Log.other("芝麻信用💳[开启积分宝箱]#获得${reward}粒")
+
+            val refreshedJo = JSONObject(AntMemberRpcCall.queryPointTreasureBox())
+            if (!ResChecker.checkRes(TAG, refreshedJo)) {
+                Log.error("$TAG.handlePointTreasureBox", "积分宝箱回查失败:$refreshedJo")
+                return false
+            }
+            val refreshedData = refreshedJo.optJSONObject("data") ?: return false
+            if (refreshedData.optBoolean("hasBox", false) && refreshedData.optString("status") == "WAIT_CLAIM") {
+                Log.error("$TAG.handlePointTreasureBox", "开启积分宝箱后仍为WAIT_CLAIM，停止重复提交")
+                return false
+            }
+            return true
+        } catch (t: Throwable) {
+            Log.printStackTrace("$TAG.handlePointTreasureBox", t)
+            return false
         }
     }
 
@@ -2796,7 +2788,7 @@ class AntMember : ModelTask() {
             // 任务完成后再次检查体力药水
             checkAndUseStamina()
 
-            // ================= Step 4: [新增] 任务完成后一键收取芝麻粒 =================
+            // ================= Step 4:任务完成后一键收取芝麻粒 =================
             Log.runtime(TAG, "芝麻炼金⚗️[任务处理完毕，准备开启宝箱及收取芝麻粒]")
             delay(2000) // 稍作等待，确保任务奖励到账
 
@@ -2997,11 +2989,22 @@ class AntMember : ModelTask() {
                 val result = json.optJSONObject("extInfo") ?: return@run
                 val queryResult = result.optJSONObject("zhimaTreeHomePageQueryResult") ?: return@run
 
+                // 0. 处理 homeSpaceResultList 广告浏览任务，先做以保证净化值基线准确
+                val adList = queryResult.optJSONArray("homeSpaceResultList")
+                if (adList != null) {
+                    val baselineScore = queryResult.optLong("purificationScore", -1L)
+                    if (baselineScore < 0) {
+                        Log.runtime(TAG, "芝麻树🌳[广告任务暂缓] 首页净化值未确认")
+                    } else {
+                        processZhimaTreeAdList(adList, "home.homeSpaceResultList", baselineScore)
+                    }
+                }
+
                 // 1. 处理 browseTaskList (如：芝麻树首页每日_浏览任务)
                 val browseList = queryResult.optJSONArray("browseTaskList")
                 if (browseList != null) {
                     for (i in 0..<browseList.length()) {
-                        processSingleTask(browseList.getJSONObject(i))
+                        processSingleTask(browseList.getJSONObject(i), "home.browseTaskList")
                     }
                 }
 
@@ -3009,7 +3012,7 @@ class AntMember : ModelTask() {
                 val statusList = queryResult.optJSONArray("taskStatusList")
                 if (statusList != null) {
                     for (i in 0..<statusList.length()) {
-                        processSingleTask(statusList.getJSONObject(i))
+                        processSingleTask(statusList.getJSONObject(i), "home.taskStatusList")
                     }
                 }
             }
@@ -3031,10 +3034,16 @@ class AntMember : ModelTask() {
 
                 val taskDetailListObj = extInfo.optJSONObject("taskDetailList") ?: return@run
 
+                // 0. 处理 spaceResultList 广告浏览任务
+                val adList = taskDetailListObj.optJSONArray("spaceResultList")
+                if (adList != null) {
+                    processZhimaTreeAdList(adList, "rent.spaceResultList", -1L)
+                }
+
                 val tasks = taskDetailListObj.optJSONArray("taskDetailList") ?: return@run
 
                 for (i in 0..<tasks.length()) {
-                    processSingleTask(tasks.getJSONObject(i))
+                    processSingleTask(tasks.getJSONObject(i), "rent.taskDetailList")
                 }
             }
         } catch (e: Exception) {
@@ -3043,9 +3052,257 @@ class AntMember : ModelTask() {
     }
 
     /**
+     * 芝麻树广告浏览任务标识（列表解析结果）
+     */
+    private data class ZhimaTreeAdTaskRef(
+        val title: String,
+        val rewardText: String,
+        val bizId: String,
+        val spaceCode: String
+    )
+
+    /**
+     * 遍历广告位列表并逐个完成广告浏览任务
+     *
+     * @param baselineScore 首页来源的净化值基线，用于回查奖励到账
+     */
+    private suspend fun processZhimaTreeAdList(spaceResultList: JSONArray, sourceName: String, baselineScore: Long) {
+        val seenBizIds = mutableSetOf<String>()
+        for (i in 0..<spaceResultList.length()) {
+            val spaceResult = spaceResultList.optJSONObject(i) ?: continue
+            val listSpaceCode = spaceResult.optString("spaceCode")
+            val spaceObjectList = spaceResult.optJSONArray("spaceObjectList") ?: continue
+            for (j in 0..<spaceObjectList.length()) {
+                val spaceObject = spaceObjectList.optJSONObject(j) ?: continue
+                val adTask = extractZhimaTreeAdTaskContent(spaceObject)
+                val ref = buildZhimaTreeAdTaskRef(adTask, listSpaceCode) ?: continue
+                // 同次遍历内按业务号去重
+                if (!seenBizIds.add(ref.bizId)) continue
+                finishZhimaTreeAdTask(ref, sourceName, baselineScore)
+            }
+        }
+    }
+
+    /**
+     * 取广告位对象内容，content 缺失时用对象本身
+     */
+    private fun extractZhimaTreeAdTaskContent(spaceObject: JSONObject): JSONObject =
+        when (val content = spaceObject.opt("content")) {
+            is JSONObject -> content
+            is String -> parseJsonObjectOrNull(content) ?: spaceObject
+            else -> spaceObject
+        }
+
+    /**
+     * 解析广告任务的业务号、浏览配置与奖励文案，关键字段缺失时返回 null
+     */
+    private fun buildZhimaTreeAdTaskRef(adTask: JSONObject, listSpaceCode: String): ZhimaTreeAdTaskRef? {
+        val logExtMap = adTask.optJSONObject("logExtMap")
+        val schemaJson = parseJsonObjectOrNull(adTask.optString("schemaJson"))
+        val clickThroughUrl = adTask.optString("clickThroughUrl")
+            .ifBlank { schemaJson?.optString("url").orEmpty() }
+        val rewardAmount = schemaJson?.optString("taskRewardAmount").orEmpty()
+            .ifBlank { adTask.optString("rewardNum") }
+            .ifBlank { logExtMap?.optString("rewardNum").orEmpty() }
+        val spaceCode = resolveAdTaskSpaceCode(logExtMap, clickThroughUrl, listSpaceCode, rewardAmount).orEmpty()
+        val bizId = logExtMap?.optString("bizId").orEmpty()
+            .ifBlank { adTask.optString("xlightBizId") }
+            .ifBlank { adTask.optString("bizId") }
+            .ifBlank { schemaJson?.optString("adBizId").orEmpty() }
+            .ifBlank { extractQueryParam(clickThroughUrl, "bizId").orEmpty() }
+            .ifBlank { extractAdRenderConfigValue(spaceCode, "bizId") }
+        if (bizId.isEmpty()) return null
+        val title = schemaJson?.optString("taskMainTitle").orEmpty()
+            .ifBlank { schemaJson?.optString("title").orEmpty() }
+            .ifBlank { adTask.optString("title") }
+            .ifBlank { "芝麻树广告浏览任务" }
+        val renderRewardAmount = rewardAmount.ifBlank { extractAdRenderConfigValue(spaceCode, "rewardNum") }
+        val rewardText = when {
+            renderRewardAmount.isEmpty() -> "奖励已领取"
+            renderRewardAmount.contains("净化") || renderRewardAmount.contains("能量") -> renderRewardAmount
+            else -> renderRewardAmount + "净化值"
+        }
+        return ZhimaTreeAdTaskRef(title, rewardText, bizId, spaceCode)
+    }
+
+    /**
+     * 完成单个广告浏览任务：登记浏览位 → 等待浏览 → 上报完成
+     */
+    private suspend fun finishZhimaTreeAdTask(ref: ZhimaTreeAdTaskRef, sourceName: String, baselineScore: Long) {
+        try {
+            if (ref.spaceCode.isEmpty()) {
+                Log.error(TAG, "芝麻树🌳[广告任务缺少浏览配置] ${ref.title} - bizId=${ref.bizId}")
+                return
+            }
+            val layerRes = AntMemberRpcCall.adTaskApplayerQuery(ref.spaceCode) ?: return
+            val layerJo = JSONObject(layerRes)
+            if (!ResChecker.checkRes(TAG, layerJo) && "0" != layerJo.optString("errCode")) {
+                if (isAdTaskRetryable(layerJo)) {
+                    Log.runtime(TAG, "芝麻树🌳[广告浏览配置暂时不可用] ${ref.title} - $layerRes")
+                } else {
+                    Log.error(TAG, "芝麻树🌳[广告浏览配置失败] ${ref.title} - $layerRes")
+                }
+                return
+            }
+            // 模拟浏览等待
+            delay(8000)
+            val finishRes = AntMemberRpcCall.taskFinish(ref.bizId, false) ?: return
+            val finishJo = JSONObject(finishRes)
+            when {
+                isAdTaskFinishSuccess(finishJo) -> {
+                    Log.other("芝麻树🌳[广告任务完成] ${ref.title} #${ref.rewardText}")
+                    if (sourceName == "home.homeSpaceResultList") {
+                        confirmZhimaTreeAdReward(ref, baselineScore)
+                    }
+                }
+                isAdTaskAlreadyFinished(finishJo) ->
+                    Log.runtime(TAG, "芝麻树🌳[广告任务已完成] ${ref.title}")
+                isAdTaskRetryable(finishJo) ->
+                    Log.runtime(TAG, "芝麻树🌳[广告任务暂时未完成] ${ref.title} - $finishRes")
+                else ->
+                    Log.error(TAG, "芝麻树🌳[广告任务上报失败] ${ref.title} - $finishRes")
+            }
+        } catch (t: Throwable) {
+            Log.printStackTrace(TAG, t)
+        }
+    }
+
+    /**
+     * 回查首页净化值确认广告奖励到账
+     */
+    private suspend fun confirmZhimaTreeAdReward(ref: ZhimaTreeAdTaskRef, baselineScore: Long) {
+        if (baselineScore < 0) return
+        delay(5000)
+        val rewardNum = extractAdRenderConfigValue(ref.spaceCode, "rewardNum").toIntOrNull() ?: 0
+        val res = AntMemberRpcCall.zhimaTreeHomePage() ?: return
+        val json = JSONObject(res)
+        if (!ResChecker.checkRes(TAG, json)) return
+        val score = json.optJSONObject("extInfo")
+            ?.optJSONObject("zhimaTreeHomePageQueryResult")
+            ?.optLong("purificationScore", -1L) ?: -1L
+        if (score < 0) return
+        if (rewardNum > 0 && score >= baselineScore + rewardNum) {
+            Log.other("芝麻树🌳[广告奖励到账] ${ref.title} 净化值=$score")
+        } else {
+            Log.runtime(TAG, "芝麻树🌳[广告奖励待回查] ${ref.title} 净化值=$score 基线=$baselineScore 奖励=$rewardNum")
+        }
+    }
+
+    /**
+     * 芝麻树任务执行上下文（跳转参数与租赁来源标识）
+     */
+    private data class ZhimaTreeActionContext(
+        val chInfo: String,
+        val refer: String,
+        val playInfo: String,
+        val appId: String,
+        val taskChannel: String,
+        val sourceName: String
+    )
+
+    /**
+     * 解析任务自带的跳转上下文，字段缺失时回退默认常量
+     */
+    private fun resolveZhimaTreeActionContext(task: JSONObject, sourceName: String): ZhimaTreeActionContext {
+        val taskBaseInfo = task.optJSONObject("taskBaseInfo") ?: JSONObject()
+        val taskMaterial = task.optJSONObject("taskMaterial")
+        val morphoDetail = task.optJSONObject("taskExtProps")?.opt("TASK_MORPHO_DETAIL")?.let { detail ->
+            when (detail) {
+                is JSONObject -> detail
+                is String -> parseJsonObjectOrNull(detail)
+                else -> null
+            }
+        }
+
+        val urlCandidates = linkedSetOf<String>()
+        sequenceOf(
+            taskMaterial?.optString("jumpUrl").orEmpty(),
+            morphoDetail?.optString("jumpUrl").orEmpty(),
+            task.optString("actionUrl"),
+            task.optString("targetUrl").ifBlank { taskMaterial?.optString("targetUrl").orEmpty() },
+            task.optString("schema").ifBlank { taskMaterial?.optString("schema").orEmpty() },
+            taskBaseInfo.optString("appletSchema")
+        ).map { it.trim() }.filter { it.isNotBlank() }.forEach { urlCandidates.add(it) }
+
+        val explicitChInfo = sequenceOf(
+            task.optString("chInfo"),
+            taskBaseInfo.optString("chInfo"),
+            taskMaterial?.optString("chInfo").orEmpty(),
+            morphoDetail?.optString("chInfo").orEmpty(),
+            task.optJSONObject("taskParticipateExtInfo")?.optString("chInfo").orEmpty()
+        ).map { it.trim() }.firstOrNull { it.isNotBlank() } ?: ""
+        val derivedChInfo = urlCandidates.asSequence()
+            .mapNotNull { extractQueryParam(it, "chInfo") }
+            .map { it.trim() }
+            .firstOrNull { it.isNotBlank() && (it.startsWith("ch_url-") || it.startsWith("ch_appid-")) } ?: ""
+        val chInfo = explicitChInfo.ifBlank { derivedChInfo }.ifBlank { AntMemberRpcCall.ZHIMATREE_CH_INFO }
+
+        val refer = sequenceOf(
+            task.optString("refer"),
+            taskBaseInfo.optString("refer"),
+            taskMaterial?.optString("refer").orEmpty(),
+            morphoDetail?.optString("refer").orEmpty(),
+            task.optJSONObject("taskParticipateExtInfo")?.optString("refer").orEmpty()
+        ).map { it.trim() }.firstOrNull { it.isNotBlank() }
+            ?: buildZhimaTreeReferFromChInfo(chInfo)
+
+        val playInfo = sequenceOf(
+            task.optString("playInfo"),
+            taskBaseInfo.optString("playInfo"),
+            taskMaterial?.optString("playInfo").orEmpty(),
+            morphoDetail?.optString("playInfo").orEmpty(),
+            task.optJSONObject("taskParticipateExtInfo")?.optString("playInfo").orEmpty()
+        ).map { it.trim() }.firstOrNull { it.isNotBlank() }
+            ?: AntMemberRpcCall.ZHIMATREE_PLAY_INFO
+
+        val appId = sequenceOf(
+            taskBaseInfo.optString("appId"),
+            task.optString("appId"),
+            taskMaterial?.optString("appId").orEmpty(),
+            morphoDetail?.optString("appId").orEmpty(),
+            extractSesameAppId(chInfo)
+        ).map { it.trim() }.firstOrNull { it.isNotBlank() }
+            ?: urlCandidates.asSequence().map { extractSesameAppId(it) }
+                .map { it.trim() }.firstOrNull { it.isNotBlank() }
+            ?: ""
+
+        val taskChannel = task.optString("taskChannel").trim()
+            .ifBlank { taskBaseInfo.optString("taskChannel").trim() }
+            .ifBlank { taskMaterial?.optString("taskChannel").orEmpty().trim() }
+            .ifBlank { morphoDetail?.optString("taskChannel").orEmpty().trim() }
+
+        return ZhimaTreeActionContext(chInfo, refer, playInfo, appId, taskChannel, sourceName)
+    }
+
+    private fun buildZhimaTreeReferFromChInfo(chInfo: String): String {
+        if (chInfo.isEmpty() || chInfo.contains("://") || chInfo.contains("caprMode=") || chInfo.startsWith("alipays://")) {
+            return AntMemberRpcCall.ZHIMATREE_REFER
+        }
+        return "https://render.alipay.com/p/yuyan/180020010001288004/zmTree.html?caprMode=sync&chInfo=$chInfo"
+    }
+
+    /**
+     * 从 chInfo/跳转链接中提取纯数字小程序 appId
+     */
+    private fun extractSesameAppId(text: String): String {
+        val rawText = text.trim()
+        if (rawText.isEmpty()) return ""
+        if (rawText.all { it.isDigit() }) return rawText
+        UrlUtil.getParamValue(rawText, "appId")?.trim()
+            ?.takeIf { it.isNotBlank() && it.all(Char::isDigit) }?.let { return it }
+        val hostSuffix = ".hybrid.alipay-eco.com"
+        val hostIndex = rawText.indexOf(hostSuffix)
+        if (hostIndex <= 0) return ""
+        val schemeIndex = rawText.lastIndexOf("://", hostIndex)
+        val hostStart = if (schemeIndex >= 0) schemeIndex + 3 else 0
+        val host = rawText.substring(hostStart, hostIndex).trim()
+        return host.takeIf { it.isNotBlank() && it.all(Char::isDigit) } ?: ""
+    }
+
+    /**
      * 处理单个任务对象的逻辑
      */
-    private suspend fun processSingleTask(task: JSONObject) {
+    private suspend fun processSingleTask(task: JSONObject, sourceName: String) {
         try {
             val sendCampTriggerType = task.optString("sendCampTriggerType")
             if ("EVENT_TRIGGER" == sendCampTriggerType) {
@@ -3073,15 +3330,16 @@ class AntMember : ModelTask() {
 
             // 解析奖励信息.
             val prizeName = getPrizeName(task)
+            val context = resolveZhimaTreeActionContext(task, sourceName)
 
             if ("NOT_DONE" == status || "SIGNUP_COMPLETE" == status) {
                 // SIGNUP_COMPLETE 通常表示已报名但未做，或者对于复访任务表示可以去完成
                 Log.runtime("芝麻树🌳[开始任务] " + title + (if (prizeName.isEmpty()) "" else " ($prizeName)"))
-                performTask(taskId, title, prizeName)
+                performTask(taskId, title, prizeName, context)
                 // 任务完成
             } else if ("TO_RECEIVE" == status) {
                 // 待领取状态
-                if (doTaskAction(taskId, "receive")) {
+                if (doTaskAction(taskId, "receive", context)) {
                     val logMsg = "芝麻树🌳[领取奖励] " + title + " #" + (prizeName.ifEmpty { "奖励已领取" })
                     Log.forest(logMsg) // 输出到 forest
                 }
@@ -3094,16 +3352,16 @@ class AntMember : ModelTask() {
     /**
      * 执行任务动作：去完成 -> 等待 -> 领取
      */
-    private suspend fun performTask(taskId: String?, title: String, prizeName: String): Boolean {
+    private suspend fun performTask(taskId: String?, title: String, prizeName: String, context: ZhimaTreeActionContext): Boolean {
         return try {
             // 发送"去完成"指令
-            if (doTaskAction(taskId, "send")) {
+            if (doTaskAction(taskId, "send", context)) {
                 val waitTime = 16000L // 默认等待16秒，覆盖大多数浏览任务
 
                 delay(waitTime)
 
                 // 发送"领取"指令
-                if (doTaskAction(taskId, "receive")) {
+                if (doTaskAction(taskId, "receive", context)) {
                     val logMsg = "芝麻树🌳[完成任务] " + title + " #" + (prizeName.ifEmpty { "奖励已领取" })
                     Log.forest(logMsg) // 这里输出到 forest
                     return true
@@ -3170,15 +3428,64 @@ class AntMember : ModelTask() {
         return prizeName
     }
 
-    private fun doTaskAction(taskId: String?, stageCode: String?): Boolean {
+    private fun doTaskAction(taskId: String?, stageCode: String?, context: ZhimaTreeActionContext?): Boolean {
         try {
-            val s = AntMemberRpcCall.rentGreenTaskFinish(taskId, stageCode) ?: return false
+            // 租赁来源且渠道为 RENT 的任务需携带小程序与用户标识
+            val carryRentContext = context != null &&
+                    context.sourceName == "rent.taskDetailList" &&
+                    context.taskChannel.equals("RENT", ignoreCase = true)
+            val chInfo = context?.chInfo ?: AntMemberRpcCall.ZHIMATREE_CH_INFO
+            val refer = context?.refer ?: AntMemberRpcCall.ZHIMATREE_REFER
+            val playInfo = context?.playInfo ?: AntMemberRpcCall.ZHIMATREE_PLAY_INFO
+            val appletId = if (carryRentContext) context?.appId ?: "" else ""
+            val userId = if (carryRentContext) UserMap.currentUid ?: "" else ""
+            val s = AntMemberRpcCall.rentGreenTaskFinish(taskId, stageCode, chInfo, refer, playInfo, appletId, userId)
+                ?: return false
             val json = JSONObject(s)
             return ResChecker.checkRes(TAG, json)
         } catch (e: Exception) {
             Log.printStackTrace(TAG, e)
             return false
         }
+    }
+
+    /**
+     * 净化区域（服务端下发的可清理区域）
+     */
+    private data class ZhimaTreeClearArea(val clearArea: String, val sort: Int)
+
+    /**
+     * 从首页 garbageMap 提取可清理区域，按排序去重
+     */
+    private fun extractZhimaTreeClearAreas(homeResult: JSONObject): List<ZhimaTreeClearArea> {
+        val garbageMap = homeResult.optJSONObject("garbageMap") ?: return emptyList()
+        val areas = mutableListOf<ZhimaTreeClearArea>()
+        val seenAreas = linkedSetOf<String>()
+        fun add(clearArea: String, sort: Int) {
+            if (clearArea.isBlank() || !seenAreas.add(clearArea)) return
+            areas.add(ZhimaTreeClearArea(clearArea, sort))
+        }
+        val typeKeys = garbageMap.keys()
+        while (typeKeys.hasNext()) {
+            val typeList = garbageMap.optJSONArray(typeKeys.next()) ?: continue
+            for (typeIndex in 0 until typeList.length()) {
+                val group = typeList.optJSONObject(typeIndex) ?: continue
+                val groupArea = group.optString("subType")
+                val groupSort = group.optInt("subShowSort", Int.MAX_VALUE)
+                val garbageSubList = group.optJSONArray("garbageSubList")
+                if (garbageSubList == null || garbageSubList.length() == 0) {
+                    add(groupArea, groupSort)
+                    continue
+                }
+                for (subIndex in 0 until garbageSubList.length()) {
+                    val garbage = garbageSubList.optJSONObject(subIndex) ?: continue
+                    val clearArea = garbage.optString("trashSubType").ifBlank { groupArea }
+                    val sort = garbage.optInt("trashClearSort", garbage.optInt("trashSubShowSort", groupSort))
+                    add(clearArea, sort)
+                }
+            }
+        }
+        return areas.sortedWith(compareBy<ZhimaTreeClearArea> { it.sort }.thenBy { it.clearArea })
     }
 
     /**
@@ -3214,28 +3521,43 @@ class AntMember : ModelTask() {
                 return@run
             }
 
-            Log.runtime("芝麻树🌳[开始净化] 可点击 $clicks 次")
+            val clearAreas = extractZhimaTreeClearAreas(result)
+            if (clearAreas.isEmpty()) {
+                Log.runtime("芝麻树🌳[净化区域缺失] 服务端返回可点击 $clicks 次，但未返回clearArea，保留后续重试机会")
+                return@run
+            }
 
-            for (i in 0..<clicks) {
-                val res = AntMemberRpcCall.zhimaTreeCleanAndPush(treeCode) ?: break
+            val targetAreas = clearAreas.take(clicks)
+            Log.runtime("芝麻树🌳[开始净化] 可点击 $clicks 次，待清理 ${targetAreas.size} 处")
+
+            for ((index, area) in targetAreas.withIndex()) {
+                val res = AntMemberRpcCall.zhimaTreeCleanAndPush(treeCode, area.clearArea) ?: break
 
                 val json = JSONObject(res)
                 if (!ResChecker.checkRes(TAG, json)) break
 
                 val ext = json.optJSONObject("extInfo") ?: continue
+                val cleanResult = ext.optJSONObject("zhimaTreeCleanAndPushResult")
 
                 // 优先从标准路径取分数
-                var newScore = ext.optJSONObject("zhimaTreeCleanAndPushResult")?.optInt("purificationScore", -1) ?: -1
+                var newScore = cleanResult?.optInt("purificationScore", -1) ?: -1
                 // 兼容旧结构：直接在 extInfo 顶层
                 if (newScore == -1) {
-                    newScore = ext.optInt("purificationScore", score - (i + 1) * 100)
+                    newScore = ext.optInt("purificationScore", score - (index + 1) * 100)
                 }
 
-                val growth = ext.optJSONObject("zhimaTreeCleanAndPushResult")?.optJSONObject("currentTreeInfo")?.optInt("scoreSummary", -1) ?: -1
+                val currentTreeInfo = cleanResult?.optJSONObject("currentTreeInfo")
+                val growth = currentTreeInfo?.optInt("scoreSummary", -1) ?: -1
+                val remainClicks = currentTreeInfo?.optInt("remainPurificationClickNum", -1) ?: -1
 
-                var log = "芝麻树🌳[净化]第" + (i + 1) + "次 | 剩:" + newScore + "g"
+                var log = "芝麻树🌳[净化]第" + (index + 1) + "次#" + area.clearArea + " | 剩:" + newScore + "g"
                 if (growth != -1) log += "|成长:$growth"
+                if (remainClicks != -1) log += "|剩余次数:$remainClicks"
                 Log.forest("$log ✅")
+
+                if (remainClicks == 0) {
+                    break
+                }
 
                 delay(1500)
             }
@@ -3712,19 +4034,246 @@ class AntMember : ModelTask() {
         }
 
         /**
+         * 反复解码 URL 组件直至稳定，最多 3 轮
+         */
+        private fun decodeUrlComponentRepeated(value: String?, maxRounds: Int = 3): String {
+            var current = value?.trim().orEmpty()
+            if (current.isEmpty()) return ""
+            repeat(maxRounds) {
+                val decoded = try {
+                    URLDecoder.decode(current, "UTF-8")
+                } catch (_: Throwable) {
+                    return current
+                }
+                if (decoded == current) return current
+                current = decoded
+            }
+            return current
+        }
+
+        private fun parseJsonObjectOrNull(raw: String?): JSONObject? {
+            val value = raw?.trim().orEmpty()
+            if (value.isEmpty() || !value.startsWith("{")) return null
+            return try {
+                JSONObject(value)
+            } catch (_: Throwable) {
+                null
+            }
+        }
+
+        /**
+         * 从 URL（含编码态）中提取指定查询参数值
+         */
+        private fun extractQueryParam(rawUrl: String?, name: String): String? {
+            val url = rawUrl?.takeIf { it.isNotBlank() } ?: return null
+            val marker = "$name="
+            for (candidate in listOf(url, decodeUrlComponentRepeated(url))) {
+                val startIndex = candidate.indexOf(marker)
+                if (startIndex < 0) continue
+                val valueStart = startIndex + marker.length
+                val valueEnd = candidate.indexOf('&', valueStart).takeIf { it >= 0 } ?: candidate.length
+                val decodedValue = decodeUrlComponentRepeated(candidate.substring(valueStart, valueEnd))
+                if (decodedValue.isNotBlank()) return decodedValue
+            }
+            return null
+        }
+
+        private fun buildAdTaskSpaceCodeFromRenderConfigKey(rawRenderConfigKey: String?): String? {
+            val decoded = decodeUrlComponentRepeated(rawRenderConfigKey)
+            if (decoded.isEmpty()) return null
+            return decoded.takeIf { it.contains("adPosId#") || it.contains("_duration=") }
+        }
+
+        /**
+         * 从渲染配置串中提取指定键值
+         */
+        private fun extractAdRenderConfigValue(rawRenderConfigKey: String?, key: String): String {
+            val renderConfigKey = buildAdTaskSpaceCodeFromRenderConfigKey(rawRenderConfigKey)
+                ?: decodeUrlComponentRepeated(rawRenderConfigKey)
+            if (renderConfigKey.isEmpty()) return ""
+            val prefix = "$key#"
+            return renderConfigKey.split("##")
+                .firstOrNull { it.startsWith(prefix) }
+                ?.substring(prefix.length) ?: ""
+        }
+
+        private fun extractAdTaskSpaceCodeFromCdpQueryParams(rawUrl: String?): String? {
+            val rawParams = extractQueryParam(rawUrl, "cdpQueryParams")
+                ?: extractQueryParam(rawUrl, "useCdpQueryParams")
+                ?: return null
+            val params = parseJsonObjectOrNull(rawParams) ?: return null
+            return buildAdTaskSpaceCodeFromRenderConfigKey(params.optString("spaceCode"))
+                ?: buildAdTaskSpaceCodeFromRenderConfigKey(params.optString("renderConfigKey"))
+        }
+
+        private fun buildAdTaskSpaceCodeFromLogExtMap(
+            logExtMap: JSONObject?,
+            fallbackSpaceCode: String?,
+            fallbackRewardNum: String?
+        ): String? {
+            if (logExtMap == null) return null
+            val adPositionId = logExtMap.optString("adPositionId")
+            val taskType = logExtMap.optString("taskType")
+            val mediaScene = logExtMap.optString("mediaScene").ifBlank { logExtMap.optString("ch") }
+            val rewardNum = logExtMap.optString("rewardNum").ifBlank { fallbackRewardNum.orEmpty() }
+            val spaceCode = logExtMap.optString("spaceCode").ifBlank { fallbackSpaceCode.orEmpty() }
+            if (adPositionId.isEmpty() || taskType.isEmpty() || mediaScene.isEmpty() ||
+                rewardNum.isEmpty() || spaceCode.isEmpty()
+            ) {
+                return null
+            }
+            val sceneCode = logExtMap.optString("sceneCode")
+            val expCode = logExtMap.optString("expCode").ifBlank { "null" }
+            return "adPosId#$adPositionId##taskType#$taskType##sceneCode#$sceneCode" +
+                    "##mediaScene#$mediaScene##rewardNum#$rewardNum##spaceCode#$spaceCode##expCode#$expCode"
+        }
+
+        private fun resolveAdTaskSpaceCode(
+            logExtMap: JSONObject?,
+            actionUrl: String?,
+            fallbackSpaceCode: String?,
+            fallbackRewardNum: String?
+        ): String? {
+            val candidates = listOf(
+                logExtMap?.optString("renderConfigKey"),
+                extractQueryParam(actionUrl, "renderConfigKey"),
+                extractAdTaskSpaceCodeFromCdpQueryParams(actionUrl),
+                logExtMap?.optString("spaceCode"),
+                fallbackSpaceCode
+            )
+            for (candidate in candidates) {
+                buildAdTaskSpaceCodeFromRenderConfigKey(candidate)?.let { return it }
+            }
+            return buildAdTaskSpaceCodeFromLogExtMap(logExtMap, fallbackSpaceCode, fallbackRewardNum)
+        }
+
+        /**
+         * 解析广告任务浏览配置 spaceCode，解析失败返回 null 表示直接上报
+         */
+        private fun resolveSesameAdTaskSpaceCode(task: JSONObject, logExtMap: JSONObject): String? {
+            if ("LJCS" == task.optString("rewardType")) {
+                val ch = logExtMap.optString("ch")
+                val adPositionId = logExtMap.optString("adPositionId")
+                if (ch.isNotBlank() && adPositionId.isNotBlank()) {
+                    return "${ch}_${adPositionId}_duration=5"
+                }
+            }
+            return resolveAdTaskSpaceCode(
+                logExtMap,
+                task.optString("actionUrl"),
+                null,
+                task.optString("rewardAmount")
+            )
+        }
+
+        private fun isAdTaskFinishSuccess(response: JSONObject): Boolean =
+            ResChecker.checkRes(TAG, response) ||
+                    "0" == response.optString("errCode") ||
+                    "SUCCESS".equals(response.optString("resultCode"), true) ||
+                    "SUCCESS".equals(response.optString("errorCode"), true)
+
+        private fun isAdTaskAlreadyFinished(response: JSONObject): Boolean {
+            val resultCode = response.optString(
+                "resultCode", response.optString("errorCode", response.optString("errCode", ""))
+            )
+            return resultCode in setOf(
+                "TASK_ALREADY_FINISHED", "TASK_HAS_FINISHED", "REPEAT_FINISH", "REPEAT_REWARD"
+            )
+        }
+
+        private fun isAdTaskRetryable(response: JSONObject): Boolean {
+            val code = response.optString(
+                "errorCode", response.optString("resultCode", response.optString("errCode", ""))
+            )
+            var explicit: Boolean? = null
+            for (key in listOf("retryable", "retriable", "canRetry", "needRetry")) {
+                if (response.has(key) && !response.isNull(key)) {
+                    explicit = response.optBoolean(key, false)
+                    break
+                }
+            }
+            if (explicit == null) {
+                explicit = response.optJSONObject("resData")?.let { nested ->
+                    for (key in listOf("retryable", "retriable", "canRetry", "needRetry")) {
+                        if (nested.has(key) && !nested.isNull(key)) {
+                            return@let nested.optBoolean(key, false)
+                        }
+                    }
+                    null
+                }
+            }
+            if (explicit == true) return true
+            return code in setOf(
+                "OP_REPEAT_CHECK", "SYSTEM_BUSY", "NETWORK_ERROR", "COLLECT_CREDIT_FEEDBACK_FAILED"
+            )
+        }
+
+        /**
+         * 广告任务奖励展示文案
+         */
+        private fun formatSesameAdTaskReward(task: JSONObject): String {
+            val rewardAmount = task.optInt("rewardAmount", 0)
+            return when (task.optString("rewardType", "ZML")) {
+                "LJCS" -> "${rewardAmount}次炼金次数"
+                "ZML" -> "${rewardAmount}粒"
+                else -> {
+                    val rewardType = task.optString("rewardType")
+                    if (rewardType.isEmpty()) "${rewardAmount}粒" else "$rewardAmount$rewardType"
+                }
+            }
+        }
+
+        /**
+         * 炼金次数类广告任务完成后回查登记结果
+         */
+        private fun confirmAlchemyAdTaskFinished(adTaskBizId: String, taskTitle: String): Boolean? {
+            return try {
+                val lastOperateRes = AntMemberRpcCall.queryLastOperateTask("alchemy")
+                val lastOperateJo = JSONObject(lastOperateRes)
+                if (!ResChecker.checkRes(TAG, lastOperateJo)) {
+                    Log.runtime(TAG, "炼金次数回查失败: $taskTitle - $lastOperateRes")
+                    return null
+                }
+                val lastTask = lastOperateJo.optJSONObject("data")?.optJSONObject("lastOperateTaskVO")
+                val matched = lastTask?.optBoolean("finishFlag", false) == true &&
+                        "LJCS" == lastTask.optString("rewardType") &&
+                        (adTaskBizId.isEmpty() || adTaskBizId == lastTask.optString("adTaskBizId"))
+                if (!matched) {
+                    Log.runtime(TAG, "炼金次数回查未确认: $taskTitle | adTaskBizId=$adTaskBizId")
+                }
+                matched
+            } catch (t: Throwable) {
+                Log.printStackTrace("$TAG.confirmAlchemyAdTaskFinished", t)
+                null
+            }
+        }
+
+        /**
          * 检查是否满足运行芝麻信用任务的条件
          * @return bool
          */
         private fun checkSesameCanRun(): Boolean {
             try {
-                val s = AntMemberRpcCall.queryHome()
-                val jo = JSONObject(s)
-                if (!ResChecker.checkRes(TAG, jo)) {
-                    Log.error("$TAG.checkSesameCanRun.queryHome", "芝麻信用💳[首页响应失败]#$s")
-                    return false
+                // 优先走 V8 首页，失败时回退 V7
+                var s = AntMemberRpcCall.queryHomeV8()
+                var jo = try {
+                    JSONObject(s)
+                } catch (t: Throwable) {
+                    Log.error("$TAG.checkSesameCanRun.queryHomeV8", "芝麻信用💳[首页解析失败]，回退V7")
+                    s = AntMemberRpcCall.queryHome()
+                    JSONObject(s)
                 }
-                val entrance = jo.getJSONObject("entrance")
-                if (!entrance.optBoolean("openApp")) {
+                if (!ResChecker.checkRes(TAG, jo)) {
+                    Log.runtime("$TAG.checkSesameCanRun", "芝麻信用💳[V8首页响应失败]，回退V7")
+                    s = AntMemberRpcCall.queryHome()
+                    jo = JSONObject(s)
+                    if (!ResChecker.checkRes(TAG, jo)) {
+                        Log.error("$TAG.checkSesameCanRun.queryHome", "芝麻信用💳[首页响应失败]#$s")
+                        return false
+                    }
+                }
+                val entrance = jo.optJSONObject("entrance")
+                if (entrance == null || !entrance.optBoolean("openApp")) {
                     Log.other("芝麻信用💳[未开通芝麻信用]")
                     return false
                 }
@@ -3781,8 +4330,9 @@ class AntMember : ModelTask() {
  
                 val bizType = task.optString("bizType", "")
                 if ("AD_TASK" == bizType) {
-                    val bizId = task.optString("adTaskBizId", "")
-                        .ifEmpty { task.optJSONObject("logExtMap")?.optString("bizId", "") ?: "" }
+                    val logExtMap = task.optJSONObject("logExtMap")
+                    val bizId = logExtMap?.optString("bizId", "")?.ifEmpty { task.optString("adTaskBizId", "") }
+                        ?: task.optString("adTaskBizId", "")
                     if (bizId.isEmpty()) {
                         Log.runtime(TAG, "芝麻信用广告任务缺少bizId, 跳过: $taskTitle")
                         skippedCount++
@@ -3790,6 +4340,51 @@ class AntMember : ModelTask() {
                     }
 
                     Log.runtime(TAG, "芝麻信用广告任务: $taskTitle 准备执行")
+
+                    // 炼金次数类任务先登记次数
+                    val isLjcs = "LJCS" == task.optString("rewardType")
+                    val adTaskBizId = task.optString("adTaskBizId").ifEmpty { bizId }
+                    if (isLjcs) {
+                        try {
+                            val rewardRes = AntMemberRpcCall.adRewardLjcs(adTaskBizId)
+                            val rewardJo = JSONObject(rewardRes)
+                            if (!ResChecker.checkRes(TAG, rewardJo)) {
+                                if (isAdTaskAlreadyFinished(rewardJo)) {
+                                    Log.runtime(TAG, "炼金次数登记已完成，继续浏览上报: $taskTitle")
+                                } else {
+                                    Log.error(TAG, "炼金次数登记失败: $taskTitle - $rewardRes")
+                                    skippedCount++
+                                    continue
+                                }
+                            }
+                        } catch (e: Throwable) {
+                            Log.printStackTrace("$TAG.doAllAvailableSesameTask.adRewardLjcs", e)
+                            skippedCount++
+                            continue
+                        }
+                    }
+
+                    // 广告浏览配置查询，解析失败直接上报
+                    val spaceCode = resolveSesameAdTaskSpaceCode(task, logExtMap ?: JSONObject())
+                    if (!spaceCode.isNullOrEmpty()) {
+                        try {
+                            val layerRes = AntMemberRpcCall.adTaskApplayerQuery(spaceCode)
+                            val layerJo = JSONObject(layerRes)
+                            if (!ResChecker.checkRes(TAG, layerJo) && "0" != layerJo.optString("errCode")) {
+                                if (isAdTaskRetryable(layerJo)) {
+                                    Log.runtime(TAG, "芝麻信用广告浏览配置暂时不可用: $taskTitle - $layerRes")
+                                } else {
+                                    Log.error(TAG, "芝麻信用广告浏览配置失败: $taskTitle - $layerRes")
+                                }
+                                skippedCount++
+                                continue
+                            }
+                        } catch (e: Throwable) {
+                            Log.printStackTrace("$TAG.doAllAvailableSesameTask.adTaskApplayerQuery", e)
+                            skippedCount++
+                            continue
+                        }
+                    }
 
                     var sleepTime = 16000L
                     if (taskTitle.contains("15秒") || taskTitle.contains("15s") || taskTitle.contains("逛一逛")) {
@@ -3800,20 +4395,29 @@ class AntMember : ModelTask() {
                     delay(sleepTime)
 
                     try {
-                        val adFinishRes = AntMemberRpcCall.taskFinish(bizId)
+                        val adFinishRes = AntMemberRpcCall.taskFinish(bizId, true)
                         val adFinishJo = JSONObject(adFinishRes)
-                        if (ResChecker.checkRes(TAG, adFinishJo) || "0" == adFinishJo.optString("errCode")) {
-                            val reward = task.optInt("rewardAmount", 0)
-                            Log.other("芝麻信用💳[广告任务完成: " + taskTitle + "]#获得" + reward + "粒")
-                            completedCount++
-                        } else {
-                            Log.error(TAG, "芝麻信用广告任务上报失败: $taskTitle - $adFinishRes")
-                            val adErrMsg = adFinishJo.optString("errMsg", "")
-                            if (adErrMsg.contains("系统异常")) {
-                                val errCode = adFinishJo.optString("errCode", "")
-                                autoAddToBlacklist(taskTitle, taskTitle, errCode, adErrMsg)
+                        when {
+                            isAdTaskFinishSuccess(adFinishJo) -> {
+                                if (isLjcs) {
+                                    confirmAlchemyAdTaskFinished(adTaskBizId, taskTitle)
+                                }
+                                Log.other("芝麻信用💳[广告任务完成: " + taskTitle + "]#获得" + formatSesameAdTaskReward(task))
+                                completedCount++
                             }
-                            skippedCount++
+                            isAdTaskAlreadyFinished(adFinishJo) -> {
+                                Log.runtime(TAG, "芝麻信用广告任务已完成，跳过重复上报: $taskTitle")
+                                completedCount++
+                            }
+                            else -> {
+                                Log.error(TAG, "芝麻信用广告任务上报失败: $taskTitle - $adFinishRes")
+                                val adErrMsg = adFinishJo.optString("errMsg", "")
+                                if (adErrMsg.contains("系统异常")) {
+                                    val errCode = adFinishJo.optString("errCode", "")
+                                    autoAddToBlacklist(taskTitle, taskTitle, errCode, adErrMsg)
+                                }
+                                skippedCount++
+                            }
                         }
                     } catch (e: Throwable) {
                         Log.printStackTrace("$TAG.doAllAvailableSesameTask.adTask", e)
@@ -3869,6 +4473,17 @@ class AntMember : ModelTask() {
                         continue
                     }
                     recordId = task.getString("recordId")
+                }
+
+                // 租赁类任务完成前需先提交租赁动作
+                if (taskTemplateId == "zml_zmzl_cyz_erfang") {
+                    val actionRes = AntMemberRpcCall.submitSesameRentAction()
+                    val actionJo = parseJsonObjectOrNull(actionRes)
+                    if (actionJo == null || !ResChecker.checkRes(TAG, actionJo)) {
+                        Log.error(TAG, "芝麻信用💳[租赁动作提交失败]#$taskTitle - $actionRes")
+                        skippedCount++
+                        continue
+                    }
                 }
 
                 // 完成任务
@@ -4377,7 +4992,7 @@ class AntMember : ModelTask() {
     }
 
     /**
-     * 【新增】芝麻粒兑换道具
+     * 芝麻粒兑换道具
      * 仿照会员积分兑换逻辑：遍历列表更新Map，同时匹配用户设置进行兑换
      */
     private suspend fun doSesameGrainExchange(): Unit = CoroutineUtils.run {
@@ -4390,58 +5005,90 @@ class AntMember : ModelTask() {
             val userId = UserMap.currentUid
             // 获取用户在配置中选中的商品ID列表（白名单）
             val targetIds = sesameGrainExchangeList!!.value
-            var currentPage = 1
             // 限制最大页数，防止无限循环（抓包看大概也就3-5页）
             val maxPage = 10
             val pageSize = 99 //适当调整pageSize 减少请求
-            var hasNextPage = true
 
-            while (hasNextPage && currentPage <= maxPage) {
-                // 稍微延时，避免请求过快被风控
-                GlobalThreadPools.sleepCompat(1500L)
-                // 调用 RPC 获取列表
-                val jo = JSONObject(AntMemberRpcCall.queryExchangeList(currentPage, pageSize))
-//                所有的请求使用这个类方法检查过滤就行了
-                if (!ResChecker.checkRes(TAG, jo)) {//一次失败直接return不要break
-                    Log.error(TAG, "芝麻粒商品列表校验失败: $jo")
-                    return@run
+            // 标签遍历：先查全部商品，再从响应 tabList 发现其余标签
+            val pendingTabs = mutableListOf<String?>(null)
+            val scannedTabs = linkedSetOf<String>()
+            var tabIndex = 0
+            while (tabIndex < pendingTabs.size) {
+                val tab = pendingTabs[tabIndex++]
+                val tabKey = tab ?: ""
+                if (!scannedTabs.add(tabKey)) continue
+                var currentPage = 1
+                val seenItemIds = linkedSetOf<String>()
+
+                while (currentPage <= maxPage) {
+                    // 稍微延时，避免请求过快被风控
+                    GlobalThreadPools.sleepCompat(1500L)
+                    // 调用 RPC 获取列表
+                    val jo = JSONObject(AntMemberRpcCall.queryExchangeList(currentPage, pageSize, tab))
+                    if (!ResChecker.checkRes(TAG, jo)) {//一次失败直接return不要break
+                        Log.error(TAG, "芝麻粒商品列表校验失败: $jo")
+                        return@run
+                    }
+
+                    val data = jo.optJSONObject("data") ?: return@run //没数据也return
+
+                    // 发现新标签加入待扫描队列
+                    val tabList = data.optJSONArray("tabList")
+                    if (tabList != null) {
+                        for (i in 0 until tabList.length()) {
+                            val discoveredTab = tabList.optJSONObject(i)?.optString("tab")?.trim().orEmpty()
+                                .ifEmpty { tabList.optString(i) }
+                            if (discoveredTab.isNotBlank() && discoveredTab != "all" &&
+                                !scannedTabs.contains(discoveredTab) && !pendingTabs.contains(discoveredTab)
+                            ) {
+                                pendingTabs.add(discoveredTab)
+                            }
+                        }
+                    }
+
+                    val list = data.optJSONArray("awardTemplateList") ?: return@run
+                    val seenCount = seenItemIds.size
+
+                    // 遍历当前页的商品
+                    for (i in 0 until list.length()) {
+                        val item = list.getJSONObject(i)
+                        val name = item.optString("awardName", "未知商品")
+                        val id = item.optString("awardTemplateId")
+                        val pointNeeded = item.optString("point", "0")
+                        val remainingBudget = item.optInt("remainingBudget", 0) // 库存
+                        if (id.isEmpty()) continue
+                        seenItemIds.add(id)
+                        // 1. 核心步骤：记录 ID 和 名称 的映射关系
+                        // 这样下次进入设置界面，就能看到中文名称了
+                        IdMapManager.getInstance(SesameGiftMap::class.java).add(id, name)
+                        // 2. 检查是否在用户的待兑换列表里（白名单）
+                        val inWhiteList = targetIds.contains(id)
+                        if (!inWhiteList) {
+                            // 如果没勾选，就跳过，不做处理
+                            continue
+                        }
+                        // 3. 检查库存
+                        if (remainingBudget <= 0) {
+                            Log.runtime(TAG, "跳过[$name]: 库存不足")
+                            continue
+                        }
+                        // 4. 执行兑换 (这里不加每日限制判断了，只要有库存且勾选了就尝试兑换)
+                        Log.runtime(TAG, "准备兑换[$name], ID: $id, 需芝麻粒: $pointNeeded")
+                        if (exchangeSesameGift(id, name, pointNeeded)) {
+                            // 兑换成功后，稍微等待一下
+                            delay(2000)
+                        }
+                    }
+
+                    val hasNext = data.optBoolean("hasNext", false)
+                    // 分页未前进时终止当前标签，防止死循环
+                    if (hasNext && (list.length() == 0 || seenItemIds.size == seenCount)) {
+                        Log.error(TAG, "芝麻粒兑换分页未前进: tab=$tabKey page=$currentPage，停止当前标签")
+                        break
+                    }
+                    if (!hasNext) break
+                    currentPage++
                 }
-
-                val data = jo.optJSONObject("data") ?: return@run //没数据也return
-                val list = data.optJSONArray("awardTemplateList") ?: return@run
-
-                // 遍历当前页的商品
-                for (i in 0 until list.length()) {
-                    val item = list.getJSONObject(i)
-                    val name = item.optString("awardName", "未知商品")
-                    val id = item.optString("awardTemplateId")
-                    val pointNeeded = item.optString("point", "0")
-                    val remainingBudget = item.optInt("remainingBudget", 0) // 库存
-                    if (id.isEmpty()) continue
-                    // 1. 核心步骤：记录 ID 和 名称 的映射关系
-                    // 这样下次进入设置界面，就能看到中文名称了
-                    IdMapManager.getInstance(SesameGiftMap::class.java).add(id, name)
-                    // 2. 检查是否在用户的待兑换列表里（白名单）
-                    val inWhiteList = targetIds.contains(id)
-                    if (!inWhiteList) {
-                        // 如果没勾选，就跳过，不做处理
-                        continue
-                    }
-                    // 3. 检查库存
-                    if (remainingBudget <= 0) {
-                        Log.runtime(TAG, "跳过[$name]: 库存不足")
-                        continue
-                    }
-                    // 4. 执行兑换 (这里不加每日限制判断了，只要有库存且勾选了就尝试兑换)
-                    Log.runtime(TAG, "准备兑换[$name], ID: $id, 需芝麻粒: $pointNeeded")
-                    if (exchangeSesameGift(id, name, pointNeeded)) {
-                        // 兑换成功后，稍微等待一下
-                        delay(2000)
-                    }
-                }
-                // 判断是否有下一页
-                hasNextPage = data.optBoolean("hasNext", false)
-                currentPage++
             }
 
             // 保存映射关系到本地文件 sesame_gift.json
@@ -4456,24 +5103,49 @@ class AntMember : ModelTask() {
     }
 
     /**
-     * 执行具体的芝麻粒兑换请求
+     * 执行具体的芝麻粒兑换请求：详情确认 → 兑换 → 结果回查
      */
     private fun exchangeSesameGift(templateId: String, name: String, point: String): Boolean {
         try {
-            // 调用兑换接口
+            // 兑换前查询详情确认当前状态
+            val detailJo = JSONObject(AntMemberRpcCall.queryAwardDetail(templateId))
+            if (!ResChecker.checkRes(TAG, detailJo)) {
+                Log.error(TAG, "芝麻粒兑换详情查询失败[$name]")
+                return false
+            }
+            val template = detailJo.optJSONObject("data")?.optJSONObject("awardTemplateVO")
+            if (template == null) {
+                Log.error(TAG, "芝麻粒兑换详情缺少 awardTemplateVO[$name]")
+                return false
+            }
+            if (template.optBoolean("hasTaken", false) || template.optBoolean("hasFinished", false)) {
+                Log.other("芝麻粒兑换🛒[$name]已领取或已完成")
+                return true
+            }
+
+            // 执行兑换
             val resString = AntMemberRpcCall.obtainAward(templateId)
             val jo = JSONObject(resString)
-
-            // 检查结果
-            if (ResChecker.checkRes(TAG, jo)) {
-                jo.optJSONObject("data")?.optString("awardRecordId", "")
-                Log.other("芝麻粒兑换🛒[成功] $name #消耗${point}粒")
-                return true
-            } else {
+            if (!ResChecker.checkRes(TAG, jo)) {
                 val errorMsg = jo.optString("resultView", resString)
                 // 如果是“积分不足”等错误，也会在这里打印
                 Log.error(TAG, "兑换失败[$name]: $errorMsg")
+                return false
             }
+            val recordId = jo.optJSONObject("data")?.optString("awardRecordId", "").orEmpty()
+            if (recordId.isEmpty()) {
+                Log.error(TAG, "芝麻粒兑换未返回 awardRecordId[$name]")
+                return false
+            }
+
+            // 回查兑换结果确认到账
+            val awardDetail = JSONObject(AntMemberRpcCall.queryMyAwardDetail(recordId))
+            if (!ResChecker.checkRes(TAG, awardDetail) || awardDetail.optJSONObject("data") == null) {
+                Log.error(TAG, "芝麻粒兑换结果未确认[$name] recordId=$recordId")
+                return false
+            }
+            Log.other("芝麻粒兑换🛒[成功] $name #消耗${point}粒")
+            return true
         } catch (t: Throwable) {
             Log.printStackTrace(TAG, "exchangeSesameGift 错误:", t)
         }

@@ -373,11 +373,15 @@ public class YebExpGold extends BaseCommTask {
     /** 按源分发执行：PROMO → promosdk2024.task.complete；MAIN → promosdk.index.forward（固定 appletId） */
     private JSONObject executeTask(TaskEntry entry, String status) {
         if (SOURCE_PROMO.equals(entry.source)) {
-            return new JSONObject(RequestManager.requestString(
-                    "com.alipay.yebpromobff.promosdk2024.task.complete",
-                    "[{\"appName\":\"yebpromobff\",\"outBizNo\":\"" + entry.taskId + "-" + System.currentTimeMillis()
-                            + "-\",\"playActionCode\":\"TASK_COMPLETE\",\"playEntrance\":\"HYQ_TASK_LIST_ENTRANCE_2\",\"taskId\":\""
-                            + entry.taskId + "\"}]"));
+            try {
+                return new JSONObject(RequestManager.requestString(
+                        "com.alipay.yebpromobff.promosdk2024.task.complete",
+                        "[{\"appName\":\"yebpromobff\",\"outBizNo\":\"" + entry.taskId + "-" + System.currentTimeMillis()
+                                + "-\",\"playActionCode\":\"TASK_COMPLETE\",\"playEntrance\":\"HYQ_TASK_LIST_ENTRANCE_2\",\"taskId\":\""
+                                + entry.taskId + "\"}]"));
+            } catch (JSONException e) {
+                return null;
+            }
         }
         // MAIN 源：not_sign/sign → task.trigger，其余 → task.complete
         String path = ("not_sign".equals(status) || "sign".equals(status)) ? "task.trigger" : "task.complete";

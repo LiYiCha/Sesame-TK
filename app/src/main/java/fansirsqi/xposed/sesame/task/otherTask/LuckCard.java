@@ -93,10 +93,10 @@ public class LuckCard extends BaseCommTask {
             }
             //完成任务中心的任务
             if ("WAITING_TIME".equals(JsonUtil.getValueByPath(extProps, "TASK_TYPE"))){
-                if (!Status.hasFlagToday(CompletedKeyEnum.GameCenterTaskGameCenter.name())) {
+                if (!Status.hasFlagToday("GameCenterTaskGameCenter")) {
                     boolean gameCenter = gameCenter();
                     if (gameCenter) {
-                        Status.setFlagToday(CompletedKeyEnum.GameCenterTaskGameCenter.name());
+                        Status.setFlagToday("GameCenterTaskGameCenter");
                     }
                 }
             }

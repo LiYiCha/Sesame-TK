@@ -12,7 +12,6 @@ import java.nio.ByteBuffer
 import java.nio.CharBuffer
 import java.nio.charset.CharsetDecoder
 import java.nio.charset.CodingErrorAction
-//import android.util.Log
 
 /**
  * 自定义 WebView 类，提供默认的初始化设置和滚动到底部的功能。
@@ -130,7 +129,7 @@ class MyWebView : WebView {
         val f = File(path)
         watchingFile = f
         raf = RandomAccessFile(f, "r").apply {
-            // 如果只想看新增，从文件末尾开始；若想包含历史，注释掉下一行
+            // 如果只想看，从文件末尾开始；若想包含历史，注释掉下一行
             seek(f.length())
         }
 

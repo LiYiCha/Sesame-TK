@@ -39,7 +39,7 @@ object LocationHelper {
     }
 
     /**
-     * ✅ 新增：挂起函数版本 (推荐 Kotlin 使用)
+     *  挂起函数版本 (推荐 Kotlin 使用)
      * 在后台线程获取位置并返回结果，自动切回原线程
      */
     suspend fun requestLocationSuspend(): JSONObject = withContext(Dispatchers.Default) {

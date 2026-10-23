@@ -452,7 +452,7 @@ class NpcChicken {
             val updated = remoteMap.filterKeys { it in localMap }
                 .filter { (key, value) -> localMap[key] != value && localMap[key]?.animalId == value.animalId }
                 .keys.toList()
-            Log.farm("🐥NPC小鸡 NPC配置已覆盖更新 新增:$added 替换:$replaced 更新:$updated 移除:$removed")
+            Log.farm("🐥NPC小鸡 NPC配置已覆盖更新 :$added 替换:$replaced 更新:$updated 移除:$removed")
             return true
         }
     }

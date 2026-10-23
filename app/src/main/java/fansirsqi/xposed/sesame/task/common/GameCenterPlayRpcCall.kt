@@ -4,6 +4,7 @@ import android.net.Uri
 import fansirsqi.xposed.sesame.hook.RequestManager
 import org.json.JSONArray
 import org.json.JSONObject
+import androidx.core.net.toUri
 
 enum class TaskRpcFailureType {
     TERMINAL_DONE,
@@ -43,6 +44,7 @@ object GameCenterPlayRpcCall {
     private const val METHOD_GAME_COMPONENT_QUERY =
         "com.alipay.gamecenteruprod.biz.rpc.queryGameComponent"
     private const val METHOD_GAME_EVENT = "com.alipay.gameevent.biz.rpc.submitEvent"
+    private const val METHOD_GAME_CACHE_CLEAR_QUERY = "com.alipay.gameflash.biz.rpc.cmdcleargamecache.query"
     private const val GAME_CENTER_GIT = "9e159d58cce04c13a"
 
     data class Contract(
@@ -333,7 +335,7 @@ object GameCenterPlayRpcCall {
         while (urlIndex < urlQueue.size) {
             val url = urlQueue[urlIndex++]
             if (!visitedUrls.add(url)) continue
-            val uri = runCatching { Uri.parse(url) }.getOrNull() ?: continue
+            val uri = runCatching { url.toUri() }.getOrNull() ?: continue
             uris.add(uri)
             listOf("url", "sourceUrl", "schema").forEach { key ->
                 runCatching { uri.getQueryParameter(key) }
@@ -410,6 +412,127 @@ object GameCenterPlayRpcCall {
             accepted = response?.let(::isAccepted) == true,
             failureType = classifyResponse(raw, response),
         )
+    }
+
+    /**
+     * 金豆页小游戏会话：按真机抓包顺序补发进游戏埋点、组件咨询与游戏内事件。
+     * 各跳之间无业务依赖，单跳失败不中断后续上报。
+     */
+    fun submitGoldenBeanGameEntry(gameAppId: String, source: String, playTimeSeconds: Int) {
+        var eventSeq = 0
+        fun eventAck(eventId: String, sourceTag: String, extra: (JSONObject.() -> Unit)? = null): FloatingBallAck =
+            requestAck(
+                METHOD_GAME_EVENT,
+                JSONObject()
+                    .put("appId", gameAppId)
+                    .put(
+                        "eventAttrMap",
+                        JSONObject()
+                            .put("CH_INFO", source)
+                            .put("CPS_ID", "unknown")
+                            .put("GAME_VERSION", "480.0.22")
+                            .put("PALADINX_VERSION", "2.2.11")
+                            .put("PLAY_SCENE", "NORMAL")
+                            .put("SCENE_ID", "goldenbean")
+                            .apply { extra?.invoke(this) },
+                    )
+                    .put("eventId", eventId)
+                    .put(
+                        "idempotentNo",
+                        "platform_${System.currentTimeMillis()}_${(0..Long.MAX_VALUE).random()}_${eventSeq++}",
+                    )
+                    .put("source", sourceTag),
+            )
+
+        val hops: List<() -> FloatingBallAck> = listOf(
+            // GAME_FIRST_FRAME 抓包 source 为 paladinx_auto，其余事件带 my.report* 归因
+            { eventAck("GAME_FIRST_FRAME", "paladinx_auto") { put("ALIVE_ENTER", "0") } },
+            {
+                requestAck(
+                    METHOD_GAME_USER_ACTION,
+                    JSONObject()
+                        .put("actionCode", "enterGame")
+                        .put("gameId", gameAppId)
+                        .put("paladinxVersion", "2.2.11")
+                        .put("source", "gameFramework"),
+                )
+            },
+            {
+                requestAck(
+                    METHOD_GAME_COMPONENT_CONSULT,
+                    JSONObject()
+                        .put("appId", gameAppId)
+                        .put("channel", "goldenbean")
+                        .put("scene", "GAME_TASK")
+                        .put("source", source),
+                )
+            },
+            {
+                requestAck(
+                    METHOD_GAME_ASSISTANT_CONSULT,
+                    JSONObject()
+                        .put("appId", gameAppId)
+                        .put("assistantVersion", "3.0.0")
+                        .put("deviceLevel", "high")
+                        .put("sceneCode", "GAME_MSG")
+                        .put("source", source),
+                )
+            },
+            {
+                requestAck(
+                    METHOD_GAME_COMPONENT_QUERY,
+                    JSONObject()
+                        .put("appId", gameAppId)
+                        .put("chInfo", source)
+                        .put("channel", "goldenbean")
+                        .put("closeAd", false)
+                        .put("closeCntMap", JSONObject())
+                        .put("dayAdViewCnt", 0)
+                        .put("deviceLevel", "high")
+                        .put("monthAdViewCnt", 0)
+                        .put("notUnityDeviceLevel", "high")
+                        .put(
+                            "panelLaunchableCheckMap",
+                            JSONObject()
+                                .put("SET_HEAD_TASK", false)
+                                .put("SUBSCRIBE_TASK", true)
+                                .put("THIRD_PARTY_GAME_ADD_DESKTOP", true),
+                        )
+                        .put("reqType", "START_APP_FIRST_REQ")
+                        .put("setHead", true)
+                        .put("sourceTab", "buoy")
+                        .put("unityDeviceLevel", "high")
+                        .put("virtualActivity", false),
+                )
+            },
+            { eventAck("authorized", "my.reportAuthorized") },
+            {
+                requestAck(
+                    METHOD_GAME_CACHE_CLEAR_QUERY,
+                    JSONObject()
+                        .put("appId", gameAppId)
+                        .put("cleared", false)
+                        .put("minigameVersion", "480.0.22"),
+                )
+            },
+            { eventAck("loading_completed", "my.reportLoadingCompleted") },
+            {
+                eventAck("game_character_created", "my.reportGameCharacterCreated") {
+                    put("INIT_CREATE_CHARACTER", true)
+                }
+            },
+            {
+                eventAck("game_play", "my.reportGamePlay") {
+                    put("GAME_ELAPASED_TIME", playTimeSeconds * 1000L)
+                }
+            },
+        )
+        for ((index, hop) in hops.withIndex()) {
+            if (index > 0) {
+                Thread.sleep(400 + (0..300).random().toLong())
+            }
+            runCatching { hop() }
+        }
     }
 
     fun submitP2eDurationForAck(contract: P2eFloatingBallContract): DurationBatchAck {

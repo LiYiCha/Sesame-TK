@@ -1,13 +1,21 @@
 package fansirsqi.xposed.sesame.data;
 /**
- * 类实用工具类。
- * 提供了一些常量，这些常量代表了项目中使用的一些关键类的完整名称。
+ * 通用常量类。
+ * 提供项目级共享常量，如包名、广播 action、关键类的完整名称。
  */
 public class General {
     /**
      * 支付宝客户端的包名。
      */
     public static final String PACKAGE_NAME = "com.eg.android.AlipayGphone";
+    /**
+     * 模块 UI 向支付宝查询模块状态的广播 action。
+     */
+    public static final String ACTION_STATUS_QUERY = "com.eg.android.AlipayGphone.sesame.status";
+    /**
+     * 支付宝向模块 UI 回执模块状态的广播 action。
+     */
+    public static final String ACTION_STATUS_REPLY = "fansirsqi.xposed.sesame.status";
     /**
      * 当前使用的服务类名。
      */

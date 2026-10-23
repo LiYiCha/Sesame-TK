@@ -42,14 +42,14 @@ class OtherTask0 : ModelTask() {
 
     override fun getFields(): ModelFields {
         val fields = ModelFields()
-        // 新增好家无忧卡开关
+        // 好家无忧卡开关
         fields.addField(
             BooleanModelField(
                 "haojiaWuyou", "好家无忧卡", false
             ).apply { haojiaWuyou = this }
         )
 
-        // 新增五福2026开关
+        // 五福2026开关
         fields.addField(
             BooleanModelField(
                 "wufu2026", "五福2026", false

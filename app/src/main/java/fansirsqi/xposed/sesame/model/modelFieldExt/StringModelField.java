@@ -13,6 +13,10 @@ public class StringModelField extends ModelField<String> {
     public StringModelField(String code, String name, String value) {
         super(code, name, value);
     }
+
+    public StringModelField(String code, String name, String value, String desc) {
+        super(code, name, value, desc);
+    }
     @Override
     public String getType() {
         return "STRING";

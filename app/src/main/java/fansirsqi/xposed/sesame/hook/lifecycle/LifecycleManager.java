@@ -13,6 +13,8 @@ import java.util.Objects;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicBoolean;
 
+import kotlin.Unit;
+
 import de.robv.android.xposed.XC_MethodHook;
 import de.robv.android.xposed.XposedHelpers;
 import fansirsqi.xposed.sesame.data.Config;
@@ -961,16 +963,19 @@ public class LifecycleManager {
      * 抓包开关初始化：DataStore 热监听驱动 hook 装卸，切换开关不触发模块重载
      */
     public static void initCaptureSwitches() {
-        DataStore.init(Files.CONFIG_DIR);
+        DataStore.INSTANCE.init(Files.CONFIG_DIR);
         // onChange 在 DataStore 写锁内触发，派发到线程池再装卸 hook
-        DataStore.setOnChangeListener(() -> GlobalThreadPools.execute(LifecycleManager::applyCaptureSwitches));
+        DataStore.INSTANCE.setOnChangeListener(() -> {
+            GlobalThreadPools.INSTANCE.execute(LifecycleManager::applyCaptureSwitches);
+            return Unit.INSTANCE;
+        });
         applyCaptureSwitches();
     }
 
     private static void applyCaptureSwitches() {
         synchronized (captureSwitchLock) {
             // 单值三态互斥：锁内读最新模式，与已应用状态比对后装卸
-            RpcTrafficCapture.CaptureMode mode = RpcTrafficCapture.getCaptureMode();
+            RpcTrafficCapture.CaptureMode mode = RpcTrafficCapture.INSTANCE.getCaptureMode();
             boolean debugOn = mode == RpcTrafficCapture.CaptureMode.RPC_DEBUG;
             if (debugOn != debugSwitchApplied) {
                 if (debugOn) {
@@ -985,24 +990,24 @@ public class LifecycleManager {
             boolean engineOn = mode == RpcTrafficCapture.CaptureMode.HTTPS_DEBUG;
             if (engineOn != captureSwitchApplied) {
                 if (engineOn) {
-                    captureSwitchApplied = RpcTrafficCapture.install(AppContext.getClassLoader());
+                    captureSwitchApplied = RpcTrafficCapture.INSTANCE.install(AppContext.getClassLoader());
                 } else {
-                    RpcTrafficCapture.uninstall();
+                    RpcTrafficCapture.INSTANCE.uninstall();
                     captureSwitchApplied = false;
                 }
             }
             // 加解密子开关：仅 HTTPS 调试模式下生效，独立装卸
-            boolean decryptOn = engineOn && RpcTrafficCapture.isContentEncryptEnabled();
+            boolean decryptOn = engineOn && RpcTrafficCapture.INSTANCE.isContentEncryptEnabled();
             if (decryptOn != decryptSwitchApplied) {
-                RpcTrafficCapture.applyContentEncrypt(decryptOn);
+                RpcTrafficCapture.INSTANCE.applyContentEncrypt(decryptOn);
                 decryptSwitchApplied = decryptOn;
             }
             // 回写实际运行态供设置页状态卡跨进程读取（安装失败时 applied 仍为旧值，UI 如实显示未生效）
             RpcTrafficCapture.CaptureMode actual = debugSwitchApplied
                     ? RpcTrafficCapture.CaptureMode.RPC_DEBUG
                     : (captureSwitchApplied ? RpcTrafficCapture.CaptureMode.HTTPS_DEBUG : RpcTrafficCapture.CaptureMode.OFF);
-            if (RpcTrafficCapture.getAppliedMode() != actual) {
-                RpcTrafficCapture.setAppliedMode(actual);
+            if (RpcTrafficCapture.INSTANCE.getAppliedMode() != actual) {
+                RpcTrafficCapture.INSTANCE.setAppliedMode(actual);
             }
         }
     }

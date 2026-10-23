@@ -11,6 +11,7 @@ import androidx.annotation.NonNull;
 
 import java.util.Objects;
 
+import fansirsqi.xposed.sesame.data.General;
 import fansirsqi.xposed.sesame.hook.ExtendHandle;
 import fansirsqi.xposed.sesame.hook.lifecycle.LifecycleManager;
 import fansirsqi.xposed.sesame.hook.rpc.debug.DebugRpc;
@@ -78,9 +79,9 @@ public class SesameReceiver extends BroadcastReceiver {
                         callback.onReLogin();
                     }
                     break;
-                case "com.eg.android.AlipayGphone.sesame.status":
+                case General.ACTION_STATUS_QUERY:
                     try {
-                        context.sendBroadcast(new Intent("fansirsqi.xposed.sesame.status"));
+                        context.sendBroadcast(new Intent(General.ACTION_STATUS_REPLY));
                     } catch (Throwable th) {
                         Log.runtime(TAG, "sesame sendBroadcast status err:");
                         Log.printStackTrace(TAG, th);
@@ -197,7 +198,7 @@ public class SesameReceiver extends BroadcastReceiver {
         intentFilter.addAction("com.eg.android.AlipayGphone.sesame.restart"); // 重启支付宝服务的动作
         intentFilter.addAction("com.eg.android.AlipayGphone.sesame.execute"); // 执行特定命令的动作
         intentFilter.addAction("com.eg.android.AlipayGphone.sesame.reLogin"); // 重新登录支付宝的动作
-        intentFilter.addAction("com.eg.android.AlipayGphone.sesame.status"); // 查询支付宝状态的动作
+        intentFilter.addAction(General.ACTION_STATUS_QUERY); // 查询支付宝状态的动作
         intentFilter.addAction("com.eg.android.AlipayGphone.sesame.rpctest"); // 调试RPC的动作
         intentFilter.addAction("com.eg.android.AlipayGphone.sesame.rpcresponse"); // 调试RPC的动作
         intentFilter.addAction("com.eg.android.AlipayGphone.sesame.rerun"); // 重新执行任务

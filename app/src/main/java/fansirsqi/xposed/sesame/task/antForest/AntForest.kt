@@ -270,7 +270,7 @@ class AntForest : ModelTask(), EnergyCollectCallback {
     private var cachedBagObject: JSONObject? = null
     private var lastQueryPropListTime: Long = 0
 
-    // {{ 新增接口定义：收自己能量的方式 }}
+    // {{接口定义：收自己能量的方式 }}
     interface CollectSelfType {
         companion object {
             const val ALL = 0
@@ -1712,7 +1712,7 @@ class AntForest : ModelTask(), EnergyCollectCallback {
     }
 
     /**
-     * {{ 新增辅助方法：统一判断是否满足收自己能量的阈值条件 }}
+     * {{ 辅助方法：统一判断是否满足收自己能量的阈值条件 }}
      * @param bubbleCount 能量球数值
      * @param canBeRobbedAgain 是否可被再次偷取（保底状态为false）
      */

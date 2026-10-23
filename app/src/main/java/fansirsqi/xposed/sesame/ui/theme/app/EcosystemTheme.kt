@@ -27,7 +27,7 @@ object EcosystemManager {
     var allLines: List<String> = emptyList()
     var allPlants: List<String> = emptyList()
 
-    // 新增：全局生态守护舱开关
+    //  全局生态守护舱开关
     var isEcoEnabled by mutableStateOf(true)
 
     fun saveEcoEnabled(enabled: Boolean) {

@@ -719,7 +719,7 @@ class LogViewerViewModel : ViewModel() {
         viewModelScope.launch(Dispatchers.IO) {
             try {
                 raf = RandomAccessFile(file, "r").apply {
-                    // 从文件末尾开始（只看新增内容）
+                    // 从文件末尾开始（只看内容）
                     seek(file.length())
                 }
 

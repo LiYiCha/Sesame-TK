@@ -63,7 +63,6 @@ public class OtherTask extends ModelTask {
     private final BooleanModelField goldenBeanPark = new BooleanModelField("goldenBeanPark", "金豆夺宝", false);
     private final IntegerModelField goldenBeanManureExchangeAmount = new IntegerModelField("goldenBeanManureExchangeAmount", "金豆夺宝 | 肥料换豆量(0关/-1全换)", 0);
     public static final IntegerModelField goldenBeanSesameExchangeAmount = new IntegerModelField("goldenBeanSesameExchangeAmount", "金豆夺宝 | 芝麻粒换豆量(0关/-1全换)", 0);
-    private final BooleanModelField goldTicket = new BooleanModelField("goldTicket", "黄金票", false);
     @Getter
     private final static BooleanModelField huabeijin = new BooleanModelField("huabeijin", "花呗金", false);
     private final BooleanModelField travelDeals = new BooleanModelField("travelDeals", "出行特惠", false);
@@ -88,7 +87,6 @@ public class OtherTask extends ModelTask {
         modelFields.addField(goldenBeanPark);  // 金豆夺宝
         modelFields.addField(goldenBeanManureExchangeAmount);  // 金豆夺宝|肥料换豆量(0关/-1全换)
         modelFields.addField(goldenBeanSesameExchangeAmount);  // 金豆夺宝|芝麻粒换豆量(0关/-1全换)
-        modelFields.addField(goldTicket);  // 黄金票
         modelFields.addField(huabeijin);  // 花呗金
         modelFields.addField(travelDeals);  // 出行特惠
         modelFields.addField(jobRight);  // 工作中心积分
@@ -337,17 +335,6 @@ public class OtherTask extends ModelTask {
                 }
             } catch (Exception e) {
                 Log.error(TAG + "金豆夺宝--error:" + e);
-            }
-
-            try {
-                // 黄金票
-                if (goldTicket.getValue()) {
-                    if (!Status.hasFlagToday("GoldTicket_TaskCompleted")) {
-                        new GoldTicket().handle();
-                    }
-                }
-            } catch (Exception e) {
-                Log.error(TAG + "黄金票--error:" + e);
             }
 
 

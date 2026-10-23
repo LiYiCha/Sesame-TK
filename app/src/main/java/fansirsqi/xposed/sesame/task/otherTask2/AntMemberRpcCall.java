@@ -114,19 +114,19 @@ public class AntMemberRpcCall {
         return RequestManager.requestString("alipay.mrchservbase.mrchbusiness.sign.transcode.check", "[{}]");
     }
 
-    // 新增：批量查询配置
+    // ：批量查询配置
     public static String batchQueryCommonDeliveryInfo() {
         return RequestManager.requestString("com.alipay.alipaymember.biz.rpc.config.h5.batchQueryCommonDeliveryInfo",
                 "[{\"previewCopyDbId\":\"\",\"requestMap\":{\"MORE_POINTS_BUTTON\":{\"limit\":1,\"relatedChannel\":\"MORE_POINTS_BUTTON\",\"targetCode\":\"SIGN_GUIDE_CONFIG\"}},\"sourcePassMap\":{\"innerSource\":\"\",\"source\":\"myTab\",\"unid\":\"\"}}]");
     }
 
-    // 新增：订阅信息查询
+    // ：订阅信息查询
     public static String querySubscribeInfo() {
         return RequestManager.requestString("com.alipay.alipaymember.biz.rpc.member.h5.CommonSubscribeFacade.querySubscribeInfo",
                 "[{\"bizSubType\":\"MEMBER_SIGN_REMIND\",\"bizType\":\"MEMBER_SIGN\",\"source\":\"SIGN_IN_COMPLETE\",\"sourcePassMap\":{\"innerSource\":\"\",\"source\":\"myTab\",\"unid\":\"\"}}]");
     }
 
-    // 新增：游戏入口查询
+    // ：游戏入口查询
     public static String queryGameEntranceInfo() {
         return RequestManager.requestString("com.alipay.amic.biz.rpc.game.h5.GameCenterQueryFacade.queryGameEntranceInfo",
                 "[{\"sourcePassMap\":{\"innerSource\":\"\",\"source\":\"myTab\",\"unid\":\"\"}}]");
@@ -185,31 +185,31 @@ public class AntMemberRpcCall {
                 "[{\"operation\":\"consultGameCenter\",\"params\":{\"deviceLevel\":\"high\",\"unityDeviceLevel\":\"high\"},\"playId\":\"PLAY202404281383002382\",\"sourcePassMap\":{\"innerSource\":\"\",\"source\":\"myTab\",\"unid\":\"\"}}]");
     }
 
-    // 新增：多活动投放咨询
+    // ：多活动投放咨询
     public static String queryMultiActivityDelivery() {
         return RequestManager.requestString("com.alipay.amic.biz.rpc.activity.h5.MultiActivityDeliveryFacade.consult",
                 "[{\"deliveryScene\":\"MEMBER_HOME\",\"sourcePassMap\":{\"innerSource\":\"\",\"source\":\"myTab\",\"unid\":\"\"}}]");
     }
 
-    // 新增：积分旅行咨询
+    // ：积分旅行咨询
     public static String queryPointsTravelActivity() {
         return RequestManager.requestString("com.alipay.amic.biz.rpc.activity.h5.PointsTravelActivityFacade.consult",
                 "[{\"activityType\":\"TRAVEL_ACTIVITY\",\"sourceChannel\":\"MEMBER_HOME\",\"sourcePassMap\":{\"innerSource\":\"\",\"source\":\"myTab\",\"unid\":\"\"}}]");
     }
 
-    // 新增：积分联运咨询
+    // ：积分联运咨询
     public static String queryPointsJointActivity() {
         return RequestManager.requestString("com.alipay.amic.biz.rpc.activity.h5.PointsJointActivityFacade.consult",
                 "[{\"activityType\":\"FOOD_CARD_ACTIVITY\",\"sourceChannel\":\"MEMBER_HOME\",\"sourcePassMap\":{\"innerSource\":\"\",\"source\":\"myTab\",\"unid\":\"\"}}]");
     }
 
-    // 新增：支付活动咨询 (SCHOOL_PAY_ACTIVITY)
+    // ：支付活动咨询 (SCHOOL_PAY_ACTIVITY)
     public static String querySchoolPayActivity() {
         return RequestManager.requestString("com.alipay.amic.biz.rpc.activity.h5.PayActivityFacade.consult",
                 "[{\"activitySceneType\":\"SCHOOL_PAY_ACTIVITY\",\"scene\":\"MEMBER_HOME\",\"sourcePassMap\":{\"innerSource\":\"\",\"source\":\"myTab\",\"unid\":\"\"}}]");
     }
 
-    // 新增：支付活动咨询 (PAY_ACTIVITY)
+    // ：支付活动咨询 (PAY_ACTIVITY)
     public static String queryPayActivity() {
         return RequestManager.requestString("com.alipay.amic.biz.rpc.activity.h5.PayActivityFacade.consult",
                 "[{\"activitySceneType\":\"PAY_ACTIVITY\",\"scene\":\"MEMBER_HOME\",\"sourcePassMap\":{\"innerSource\":\"\",\"source\":\"myTab\",\"unid\":\"\"}}]");

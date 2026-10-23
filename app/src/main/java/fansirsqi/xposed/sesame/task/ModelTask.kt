@@ -224,7 +224,7 @@ abstract class ModelTask : Model() {
      * @return 任务已被用户停止时返回 false，否则返回 true
      */
     fun addChildTask(childTask: ChildModelTask): Boolean {
-        // 停止状态下拒绝新增子任务，防止已停止/取消的任务通过子任务复活
+        // 停止状态下拒绝子任务，防止已停止/取消的任务通过子任务复活
         if (TaskScheduler.isStopped()) {
             Log.runtime(TAG, "⏸ 任务已被用户停止，拒绝添加子任务: ${childTask.id}")
             return false

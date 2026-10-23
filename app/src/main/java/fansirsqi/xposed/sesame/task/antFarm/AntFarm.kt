@@ -221,7 +221,7 @@ class AntFarm : ModelTask() {
     private var receiveFarmTaskAward: BooleanModelField? = null
     private var useAccelerateTool: BooleanModelField? = null
     private var ignoreAcceLimit: BooleanModelField? = null
-    private var useBigEaterTool: BooleanModelField? = null // ✅ 新增加饭卡
+    private var useBigEaterTool: BooleanModelField? = null //  加饭卡
     private var useAccelerateToolContinue: BooleanModelField? = null
     private var useAccelerateToolWhenMaxEmotion: BooleanModelField? = null
 

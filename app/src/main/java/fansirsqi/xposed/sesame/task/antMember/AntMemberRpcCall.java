@@ -128,8 +128,40 @@ public class AntMemberRpcCall {
 
     /* 商家服务任务 */
     public static String taskFinish(String bizId) {
-        return RequestManager.requestString("com.alipay.adtask.biz.mobilegw.service.task.finish",
-                "[{\"bizId\":\"" + bizId + "\"}]");
+        return taskFinish(bizId, false);
+    }
+
+    /**
+     * 广告任务完成上报
+     *
+     * @param includeExtendInfo 是否附带空 extInfo 字段
+     */
+    public static String taskFinish(String bizId, boolean includeExtendInfo) {
+        try {
+            JSONObject args = new JSONObject();
+            args.put("bizId", bizId);
+            if (includeExtendInfo) {
+                args.put("extendInfo", new JSONObject());
+            }
+            return RequestManager.requestString("com.alipay.adtask.biz.mobilegw.service.task.finish",
+                    new JSONArray().put(args).toString());
+        } catch (Exception e) {
+            return "";
+        }
+    }
+
+    /**
+     * 广告任务浏览层配置查询
+     */
+    public static String adTaskApplayerQuery(String spaceCode) {
+        try {
+            JSONObject args = new JSONObject();
+            args.put("spaceCode", spaceCode);
+            return RequestManager.requestString("com.alipay.adtask.biz.mobilegw.service.applayer.query",
+                    new JSONArray().put(args).toString());
+        } catch (Exception e) {
+            return "";
+        }
     }
 
     public static String taskReceive(String taskCode) {
@@ -314,6 +346,25 @@ public class AntMemberRpcCall {
     }
 
     /**
+     * 芝麻信用首页（V8）
+     */
+    public static String queryHomeV8() {
+        try {
+            JSONObject args = new JSONObject();
+            args.put("invokeSource", "zmHome");
+            args.put("miniZmGrayInside", "");
+            args.put("switchNavigation", true);
+            args.put("switchNewPage", true);
+            args.put("version", "week");
+            return RequestManager.requestString(
+                    "com.antgroup.zmxy.zmcustprod.biz.rpc.home.api.HomeV8RpcManager.queryHome",
+                    new JSONArray().put(args).toString());
+        } catch (Exception e) {
+            return "";
+        }
+    }
+
+    /**
      * 芝麻信用首页 - 服务卡片（含芝麻粒签到卡片）
      * 对应: com.antgroup.zmxy.zmcustprod.biz.rpc.home.api.HomeV8RpcManager.queryServiceCard
      */
@@ -336,27 +387,89 @@ public class AntMemberRpcCall {
     }
 
     /**
+     * 芝麻粒福利签到任务列表查询（支持补签）
+     */
+    public static String zmlCheckInQueryTaskLists() {
+        return RequestManager.requestString(
+                "com.antgroup.zmxy.zmmemberop.biz.rpc.pointtask.CheckInTaskRpcManager.queryTaskLists",
+                "[{\"supportMakeUp\":true,\"version\":\"2025-10-22\"}]");
+    }
+
+    /**
      * 获取芝麻信用任务列表
      */
     public static String queryAvailableSesameTask() {
-        return RequestManager.requestString("com.antgroup.zmxy.zmmemberop.biz.rpc.creditaccumulate.CreditAccumulateStrategyRpcManager.queryListV3", "[{}]");
+        return RequestManager.requestString("com.antgroup.zmxy.zmmemberop.biz.rpc.creditaccumulate.CreditAccumulateStrategyRpcManager.queryListV3",
+                "[{\"chInfo\":\"ch_zhimahome__chsub_zml_doudi\",\"deliverStatus\":\"\",\"deliveryTemplateId\":\"\",\"sceneCode\":\"DAILY_MUST_DO_CARD\",\"searchAddToHomeTask\":true,\"searchGuidePopFlag\":true,\"searchShareAssistTask\":true,\"searchSubscribeTask\":true,\"supportJumpAuth\":true,\"version\":\"new\"}]");
     }
 
     /**
      * 芝麻信用领取任务
      */
     public static String joinSesameTask(String taskTemplateId) {
-        return RequestManager.requestString("com.antgroup.zmxy.zmmemberop.biz.rpc.promise.PromiseRpcManager.joinActivity",
-                "[{\"chInfo\":\"seasameList\",\"joinFromOuter\":false,\"templateId\":\"" + taskTemplateId + "\"}]");
+        return joinSesameTask(taskTemplateId, null);
+    }
+
+    /**
+     * 芝麻信用领取任务
+     *
+     * @param sceneCode 可选业务场景标识，空则不携带该字段
+     */
+    public static String joinSesameTask(String taskTemplateId, String sceneCode) {
+        try {
+            JSONObject args = new JSONObject();
+            args.put("chInfo", "seasameList");
+            args.put("joinFromOuter", false);
+            if (sceneCode != null && !sceneCode.isEmpty()) {
+                args.put("sceneCode", sceneCode);
+            }
+            args.put("templateId", taskTemplateId);
+            return RequestManager.requestString("com.antgroup.zmxy.zmmemberop.biz.rpc.promise.PromiseRpcManager.joinActivity",
+                    new JSONArray().put(args).toString());
+        } catch (Exception e) {
+            return "";
+        }
     }
 
     /**
      * 芝麻信用获取任务回调
      */
     public static String feedBackSesameTask(String taskTemplateId) {
-        return RequestManager.requestString("com.antgroup.zmxy.zmmemberop.biz.rpc.creditaccumulate.CreditAccumulateStrategyRpcManager.taskFeedback",
-                "[{\"actionType\":\"TO_COMPLETE\",\"templateId\":\"" + taskTemplateId + "\"}]",
-                "zmmemberop", "taskFeedback", "CreditAccumulateStrategyRpcManager");
+        return feedBackSesameTask(taskTemplateId, null, null, null, null);
+    }
+
+    /**
+     * 芝麻信用获取任务回调
+     *
+     * @param bizType         可选业务类型
+     * @param sceneCode       可选业务场景标识
+     * @param version         可选任务列表版本标识
+     * @param changeRewardType 可选奖励变更类型
+     */
+    public static String feedBackSesameTask(String taskTemplateId, String bizType, String sceneCode,
+                                            String version, String changeRewardType) {
+        try {
+            JSONObject args = new JSONObject();
+            args.put("actionType", "TO_COMPLETE");
+            if (bizType != null && !bizType.isEmpty()) {
+                args.put("bizType", bizType);
+            }
+            if (sceneCode != null && !sceneCode.isEmpty()) {
+                args.put("sceneCode", sceneCode);
+            }
+            args.put("templateId", taskTemplateId);
+            if (version != null && !version.isEmpty()) {
+                args.put("version", version);
+            }
+            if (changeRewardType != null && !changeRewardType.isEmpty()) {
+                args.put("changeRewardType", changeRewardType);
+            }
+            return RequestManager.requestString("com.antgroup.zmxy.zmmemberop.biz.rpc.creditaccumulate.CreditAccumulateStrategyRpcManager.taskFeedback",
+                    new JSONArray().put(args).toString(),
+                    "zmmemberop", "taskFeedback", "CreditAccumulateStrategyRpcManager");
+        } catch (Exception e) {
+            return "";
+        }
     }
 
     /**
@@ -368,12 +481,61 @@ public class AntMemberRpcCall {
     }
 
     /**
+     * 领取广告任务炼金次数奖励
+     */
+    public static String adRewardLjcs(String adTaskBizId) {
+        return RequestManager.requestString("com.antgroup.zmxy.zmmemberop.biz.rpc.promise.PromiseRpcManager.adRewardLjcs",
+                "[{\"adTaskBizId\":\"" + adTaskBizId + "\"}]");
+    }
+
+    /**
+     * 查询最近一次被操作的芝麻任务
+     */
+    public static String queryLastOperateTask(String version) {
+        return RequestManager.requestString(
+                "com.antgroup.zmxy.zmmemberop.biz.rpc.creditaccumulate.CreditAccumulateStrategyRpcManager.queryLastOperateTask",
+                "[{\"version\":\"" + (version == null ? "" : version) + "\"}]");
+    }
+
+    /**
+     * 芝麻租赁任务动作提交
+     */
+    public static String submitSesameRentAction() {
+        try {
+            JSONObject args = new JSONObject();
+            args.put("chInfo", "chInfo=ch_zmzltf__chsub_zmlrw");
+            args.put("type", "actionSubmit");
+            return RequestManager.requestString("com.alipay.creditapollon.biz.rpc.api.rent.RentRpcService.actionSubmit",
+                    new JSONArray().put(args).toString(),
+                    "creditapollon", "actionSubmit", "RentRpcService");
+        } catch (Exception e) {
+            return "";
+        }
+    }
+
+    /**
      * 查询可收取的芝麻粒
      */
     public static String queryCreditFeedback() {
         return RequestManager.requestString(
                 "com.antgroup.zmxy.zmcustprod.biz.rpc.home.creditaccumulate.api.CreditAccumulateRpcManager.queryCreditFeedback",
                 "[{\"queryPotential\":false,\"size\":20,\"status\":\"UNCLAIMED\"}]");
+    }
+
+    /**
+     * 查询芝麻粒积分宝箱：data.hasBox=true 且 data.status=WAIT_CLAIM 时可开启
+     */
+    public static String queryPointTreasureBox() {
+        return RequestManager.requestString(
+                "com.antgroup.zmxy.zmmemberop.biz.rpc.PointHomeRpcManager.queryTreasureBox", "[{}]");
+    }
+
+    /**
+     * 开启芝麻粒积分宝箱：成功返回 data.rewardAmount，开启后状态转为 HANGING（进入冷却）
+     */
+    public static String openPointTreasureBox() {
+        return RequestManager.requestString(
+                "com.antgroup.zmxy.zmmemberop.biz.rpc.PointHomeRpcManager.openTreasureBox", "[{}]");
     }
 
     /**
@@ -640,12 +802,37 @@ public class AntMemberRpcCall {
      * @param pageSize 每页数量
      */
     public static String queryExchangeList(int page, int pageSize) {
-        // 参数构造参考抓包: [{"currentPage":1,"formDelivery":"false","pageSize":20,"privilegeSource":"","privilegeTab":"","tabList":[]}]
-        String args = "[{\"currentPage\":" + page + ",\"formDelivery\":\"false\",\"pageSize\":" + pageSize + ",\"privilegeSource\":\"\",\"privilegeTab\":\"\",\"tabList\":[]}]";
-        return RequestManager.requestString(
-                "com.antgroup.zmxy.zmmemberop.biz.rpc.award.AwardRpcManager.queryListV2",
-                args
-        );
+        return queryExchangeList(page, pageSize, null);
+    }
+
+    /**
+     * 查询芝麻粒兑换商品列表
+     * 对应接口: com.antgroup.zmxy.zmmemberop.biz.rpc.award.AwardRpcManager.queryListV2
+     *
+     * @param page     页码
+     * @param pageSize 每页数量
+     * @param tab      可选分类标签，空则查询全部
+     */
+    public static String queryExchangeList(int page, int pageSize, String tab) {
+        try {
+            JSONArray tabList = new JSONArray();
+            if (tab != null && !tab.isEmpty()) {
+                tabList.put(tab);
+            }
+            JSONObject args = new JSONObject();
+            args.put("currentPage", page);
+            args.put("formDelivery", "false");
+            args.put("pageSize", pageSize);
+            args.put("privilegeSource", "");
+            args.put("privilegeTab", "");
+            args.put("tabList", tabList);
+            return RequestManager.requestString(
+                    "com.antgroup.zmxy.zmmemberop.biz.rpc.award.AwardRpcManager.queryListV2",
+                    new JSONArray().put(args).toString()
+            );
+        } catch (Exception e) {
+            return "";
+        }
     }
 
     /**
@@ -661,6 +848,26 @@ public class AntMemberRpcCall {
                 "com.antgroup.zmxy.zmmemberop.biz.rpc.award.AwardRpcManager.obtainAward",
                 args
         );
+    }
+
+    /**
+     * 查询兑换商品详情（兑换前复核）
+     */
+    public static String queryAwardDetail(String templateId) {
+        return RequestManager.requestString(
+                "com.antgroup.zmxy.zmmemberop.biz.rpc.award.AwardRpcManager.queryDetail",
+                "[{\"awardTemplateId\":\"" + templateId + "\"}]");
+    }
+
+    /**
+     * 查询兑换记录详情（兑换后回查）
+     *
+     * @param awardId 兑换返回的 awardRecordId
+     */
+    public static String queryMyAwardDetail(String awardId) {
+        return RequestManager.requestString(
+                "com.antgroup.zmxy.zmmemberop.biz.rpc.award.AwardRpcManager.queryMyAwardDetail",
+                "[{\"awardId\":\"" + awardId + "\"}]");
     }
 
     // ================= 年度回顾（任务中心） =================
@@ -802,8 +1009,9 @@ public class AntMemberRpcCall {
     }
 
     // ================= 芝麻树 =================
-    private static final String ZHIMATREE_PLAY_INFO = "SwbtxJSo8OOUrymAU%2FHnY2jyFRc%2BkCJ3";
-    private static final String ZHIMATREE_REFER = "https://render.alipay.com/p/yuyan/180020010001269849/zmTree.html?caprMode=sync&chInfo=chInfo=ch_zmzltf__chsub_xinyongsyyingxiaowei";
+    static final String ZHIMATREE_PLAY_INFO = "SwbtxJSo8OOUrymAU%2FHnY2jyFRc%2BkCJ3";
+    static final String ZHIMATREE_CH_INFO = "ch_url-https://2021002135657012.hybrid.alipay-eco.com/index.html";
+    static final String ZHIMATREE_REFER = "https://render.alipay.com/p/yuyan/180020010001288004/zmTree.html?caprMode=sync&chInfo=ch_zmzlzms__chsub_zlsy_icon";
 
     /**
      * 查询芝麻树首页
@@ -826,7 +1034,7 @@ public class AntMemberRpcCall {
     /**
      * 净化芝麻树 (消耗净化值)
      */
-    public static String zhimaTreeCleanAndPush(String treeCode) {
+    public static String zhimaTreeCleanAndPush(String treeCode, String clearArea) {
         try {
             JSONObject args = new JSONObject();
             args.put("operation", "ZHIMA_TREE_CLEAN_AND_PUSH");
@@ -834,6 +1042,7 @@ public class AntMemberRpcCall {
             args.put("refer", ZHIMATREE_REFER);
 
             JSONObject extInfo = new JSONObject();
+            extInfo.put("clearArea", clearArea);
             extInfo.put("clickNum", "1");
             extInfo.put("treeCode", treeCode);
 
@@ -857,7 +1066,7 @@ public class AntMemberRpcCall {
             args.put("refer", ZHIMATREE_REFER);
 
             JSONObject extInfo = new JSONObject();
-            extInfo.put("chInfo", "ch_share__chsub_ALPContact");
+            extInfo.put("chInfo", ZHIMATREE_CH_INFO);
             extInfo.put("batchId", "");
             args.put("extInfo", extInfo);
 
@@ -873,19 +1082,213 @@ public class AntMemberRpcCall {
      * @param stageCode "send" 表示去完成/开始, "receive" 表示领取奖励
      */
     public static String rentGreenTaskFinish(String taskId, String stageCode) {
+        return rentGreenTaskFinish(taskId, stageCode, ZHIMATREE_CH_INFO, ZHIMATREE_REFER, ZHIMATREE_PLAY_INFO, "", "");
+    }
+
+    /**
+     * 完成/领取净化值任务（支持自定义跳转参数）
+     */
+    public static String rentGreenTaskFinish(String taskId, String stageCode, String chInfo, String refer,
+                                            String playInfo, String appletId, String userId) {
         try {
-            JSONObject args = new JSONObject();
-            args.put("operation", "RENT_GREEN_TASK_FINISH");
-            args.put("playInfo", ZHIMATREE_PLAY_INFO);
-            args.put("refer", ZHIMATREE_REFER);
+            String safeChInfo = (chInfo == null || chInfo.trim().isEmpty()) ? ZHIMATREE_CH_INFO : chInfo;
+            String safeRefer = (refer == null || refer.trim().isEmpty()) ? ZHIMATREE_REFER : refer;
+            String safePlayInfo = (playInfo == null || playInfo.trim().isEmpty()) ? ZHIMATREE_PLAY_INFO : playInfo;
+            String safeAppletId = appletId == null ? "" : appletId.trim();
+            String safeUserId = userId == null ? "" : userId.trim();
 
             JSONObject extInfo = new JSONObject();
-            extInfo.put("chInfo", "ch_share__chsub_ALPContact");
+            extInfo.put("chInfo", safeChInfo);
             extInfo.put("taskId", taskId);
             extInfo.put("stageCode", stageCode);
+            if (!safeAppletId.isEmpty()) {
+                extInfo.put("appId", safeAppletId);
+                extInfo.put("appletId", safeAppletId);
+            }
+            if (!safeUserId.isEmpty()) {
+                extInfo.put("userId", safeUserId);
+            }
+
+            JSONObject args = new JSONObject();
+            args.put("operation", "RENT_GREEN_TASK_FINISH");
+            args.put("playInfo", safePlayInfo);
+            args.put("refer", safeRefer);
+            args.put("taskId", taskId);
+            args.put("stageCode", stageCode);
+            if (!safeAppletId.isEmpty()) {
+                args.put("appId", safeAppletId);
+                args.put("appletId", safeAppletId);
+            }
+            if (!safeUserId.isEmpty()) {
+                args.put("userId", safeUserId);
+            }
             args.put("extInfo", extInfo);
 
             return RequestManager.requestString("alipay.promoprod.play.trigger",
+                    new JSONArray().put(args).toString());
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    // ================= 芝麻信用成就勋章 =================
+
+    /**
+     * 查询成就勋章首页（tabCode 为空时返回全部页签）
+     */
+    public static String queryAccomplishmentHome(String tabCode) {
+        try {
+            JSONObject args = new JSONObject();
+            if (tabCode != null && !tabCode.isEmpty()) {
+                args.put("tabCode", tabCode);
+            }
+            return RequestManager.requestString(
+                    "com.antgroup.zmxy.zmcustprod.biz.rpc.creditidentity.api.CreditIdentityAchievementRpcManager.queryAccomplishmentHomeV2",
+                    new JSONArray().put(args).toString());
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /**
+     * 查询成就勋章系列详情
+     */
+    public static String enterAccomplishmentDetailV2(String medalSeriesCode) {
+        try {
+            JSONObject args = new JSONObject();
+            args.put("medalSeriesCode", medalSeriesCode);
+            return RequestManager.requestString(
+                    "com.antgroup.zmxy.zmcustprod.biz.rpc.creditidentity.api.CreditIdentityAchievementRpcManager.enterAccomplishmentDetailV2",
+                    new JSONArray().put(args).toString());
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /**
+     * 领取成就勋章
+     */
+    public static String claimAccomplishmentV2(String medalSeriesCode) {
+        try {
+            JSONObject args = new JSONObject();
+            args.put("medalSeriesCode", medalSeriesCode);
+            return RequestManager.requestString(
+                    "com.antgroup.zmxy.zmcustprod.biz.rpc.creditidentity.api.CreditIdentityAchievementRpcManager.claimAccomplishmentV2",
+                    new JSONArray().put(args).toString());
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    // ================= 芝麻信用通行证 =================
+
+    /**
+     * 查询通行证场景列表
+     */
+    public static String queryPassageScenes() {
+        try {
+            JSONObject args = new JSONObject();
+            args.put("queryVersion", "V3");
+            return RequestManager.requestString(
+                    "com.antgroup.zmxy.zmcustprod.biz.rpc.creditidentity.api.CreditIdentityPassageRpcManager.queryPassageScenes",
+                    new JSONArray().put(args).toString());
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /**
+     * 查询通行证开通面板
+     */
+    public static String queryPassageActivationPanel(String sceneCode) {
+        try {
+            JSONObject args = new JSONObject();
+            args.put("sceneCode", sceneCode);
+            return RequestManager.requestString(
+                    "com.antgroup.zmxy.zmcustprod.biz.rpc.creditidentity.api.CreditIdentityPassageRpcManager.queryPassageActivationPanel",
+                    new JSONArray().put(args).toString());
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /**
+     * 激活通行证
+     */
+    public static String activatePassage(String sceneCode) {
+        try {
+            JSONObject args = new JSONObject();
+            args.put("sceneCode", sceneCode);
+            args.put("requestId", String.valueOf(System.currentTimeMillis()));
+            return RequestManager.requestString(
+                    "com.antgroup.zmxy.zmcustprod.biz.rpc.creditidentity.api.CreditIdentityPassageRpcManager.activatePassage",
+                    new JSONArray().put(args).toString());
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    // ================= 芝麻信用新任务中心 =================
+
+    /**
+     * 查询新任务中心模块配置
+     */
+    public static String queryNewTaskCenterModuleConfigs() {
+        try {
+            JSONObject args = new JSONObject();
+            args.put("bizType", "NEW_TASK_CENTER");
+            args.put("chInfo", "zhimaxinyong");
+            return RequestManager.requestString(
+                    "alipay.membertangram.biz.rpc.common.queryModuleConfigs",
+                    new JSONArray().put(args).toString());
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /**
+     * 查询新任务中心签到状态
+     */
+    public static String newTaskCenterSignStatusQuery() {
+        try {
+            JSONObject args = new JSONObject();
+            args.put("activityId", "SIGN_TASK_CENTER");
+            args.put("source", "zhimaxinyong");
+            return RequestManager.requestString(
+                    "alipay.membertangram.biz.rpc.newtaskcenter.signStatusQuery",
+                    new JSONArray().put(args).toString());
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /**
+     * 查询新任务中心任务列表
+     */
+    public static String newTaskCenterQueryTaskList() {
+        try {
+            JSONObject args = new JSONObject();
+            args.put("activityId", "SIGN_TASK_CENTER");
+            args.put("source", "zhimaxinyong");
+            args.put("topTaskCodeList", new JSONArray());
+            args.put("xlightTaskDegrade", false);
+            return RequestManager.requestString(
+                    "alipay.membertangram.biz.rpc.newtaskcenter.queryTaskList",
+                    new JSONArray().put(args).toString());
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /**
+     * 查询新任务中心弹窗
+     */
+    public static String newTaskCenterQueryPop() {
+        try {
+            JSONObject args = new JSONObject();
+            args.put("activityId", "SIGN_TASK_CENTER");
+            return RequestManager.requestString(
+                    "alipay.membertangram.biz.rpc.newtaskcenter.queryPop",
                     new JSONArray().put(args).toString());
         } catch (Exception e) {
             return null;
@@ -954,7 +1357,7 @@ public class AntMemberRpcCall {
     }
 
     /**
-     * [新增] 查询黄金票提取页信息
+     * 查询黄金票提取页信息
      * 用于获取最新的可用数量、基金ID (productId) 和 赠送份数 (bonusAmount)
      */
     public static String queryConsumeHome() {
@@ -971,7 +1374,7 @@ public class AntMemberRpcCall {
     }
 
     /**
-     * [新增] 提交提取黄金
+     * 提交提取黄金
      * @param amount 提取数量 (如 100, 200, 2900)
      * @param productId 基金ID
      * @param bonusAmount 额外赠送数量
@@ -1122,16 +1525,17 @@ public class AntMemberRpcCall {
          * @param invokeVersion   抓包中的 invokeVersion，例如 "1.0.2025.10.27"
          */
         public static String queryGrowthGuideToDoList(String guideBehaviorId, String invokeVersion) {
-            if (guideBehaviorId == null || guideBehaviorId.isEmpty()) {
-                guideBehaviorId = "yuebao_7d";
+            if (guideBehaviorId == null) {
+                guideBehaviorId = "";
             }
             if (invokeVersion == null || invokeVersion.isEmpty()) {
-                // 默认使用抓包中观察到的版本号，避免服务端按版本做限流/灰度
                 invokeVersion = "1.0.2025.10.27";
             }
             String data = "[{" +
                     "\"guideBehaviorId\":\"" + guideBehaviorId + "\"," +
+                    "\"hitExperiment\":true," +
                     "\"invokeVersion\":\"" + invokeVersion + "\"," +
+                    "\"newSpecialRecommend\":true," +
                     "\"switchNewPage\":true" +
                     "}]";
             return RequestManager.requestString(
@@ -1271,7 +1675,6 @@ public class AntMemberRpcCall {
         public static String queryScoreProgress() {
             try {
                 JSONObject args = new JSONObject();
-                args.put("channelCode", "");
                 args.put("hitExperiment", true);
                 args.put("needTotalProcess", "TRUE");
                 args.put("queryGuideInfo", true);
@@ -1524,7 +1927,7 @@ public class AntMemberRpcCall {
         }
     }
 
-    // ========== 会员任务 V2 新增方法==========
+    // ========== 会员任务 V2 方法==========
 
     /**
      * 查询会员任务列表
@@ -1710,7 +2113,7 @@ public class AntMemberRpcCall {
         }
     }
 
-    // ========== MemberPoint 新增方法 ==========
+    // ========== MemberPoint方法 ==========
 
     /**
      * 查询积分证书 V2
@@ -1750,7 +2153,7 @@ public class AntMemberRpcCall {
         }
     }
 
-    // ========== Bean/安心豆 新增方法 ==========
+    // ========== Bean/安心豆方法 ==========
 
     /**
      * 过滤有效权益
@@ -1768,7 +2171,7 @@ public class AntMemberRpcCall {
         }
     }
 
-    // ========== GoldTicket/黄金票 V2 新增方法 ==========
+    // ========== GoldTicket/黄金票 V2 方法 ==========
 
     /**
      * 黄金票收取 V2 (带自定义参数拼接)

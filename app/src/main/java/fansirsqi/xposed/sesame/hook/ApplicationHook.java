@@ -173,6 +173,9 @@ public class ApplicationHook implements IXposedHookLoadPackage {
             // 最早期安装宿主崩溃记录器，覆盖启动窗口（早于任何模块 hook 与配置加载）
             CrashRecorder.install();
 
+            // MTOP 实例捕获 hook：独立于抓包开关无条件安装，供游乐记等主动发 MTOP 的任务复用宿主实例
+            MtopSender.installCaptureHook(classLoader);
+
             // 1. 立即分发模块 LoadPackage 与 Hook Application.attach，确保 AppContext 与生命周期在启动时 100% 挂载成功
             XC_LoadPackage.LoadPackageParam lpparam = newLoadPackageParam(packageName, processName, classLoader);
             HookModuleManager.INSTANCE.dispatchHandleLoadPackage(lpparam);

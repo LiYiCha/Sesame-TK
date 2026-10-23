@@ -17,6 +17,8 @@ import fansirsqi.xposed.sesame.task.other.OtherTask0
 import fansirsqi.xposed.sesame.task.otherTask.OtherTask
 import fansirsqi.xposed.sesame.task.otherTask2.OtherTask2
 import fansirsqi.xposed.sesame.task.reserve.Reserve
+import fansirsqi.xposed.sesame.task.sesameDog.SesameDog
+import fansirsqi.xposed.sesame.task.sesameSports.SesameSports
 import fansirsqi.xposed.sesame.task.welfareCenter.WelfareCenter
 
 object ModelOrder {
@@ -57,6 +59,10 @@ object ModelOrder {
                 //蚂蚁新村
                 GreenFinance ::class.java,
                 //绿色经营
+                SesameDog ::class.java,
+                //芝麻粒游乐记
+                SesameSports ::class.java,
+                //体育游乐记
                 AnswerAI ::class.java //AI答题
 
 

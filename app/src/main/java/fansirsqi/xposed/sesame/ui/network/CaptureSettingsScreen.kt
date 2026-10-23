@@ -1,5 +1,6 @@
 package fansirsqi.xposed.sesame.ui.network
 
+import android.annotation.SuppressLint
 import android.content.Intent
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
@@ -53,6 +54,7 @@ import fansirsqi.xposed.sesame.util.CaptureFilter
 import fansirsqi.xposed.sesame.util.Files
 import fansirsqi.xposed.sesame.util.ToastUtil
 
+@SuppressLint("MutableCollectionMutableState")
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CaptureSettingsScreen(onBack: () -> Unit) {
@@ -318,7 +320,7 @@ fun CaptureSettingsScreen(onBack: () -> Unit) {
             }
             item {
                 Text(
-                    text = "记录写入 capture 日志；黑名单同时作用于两种模式。",
+                    text = "抓包日志可查看；黑名单同时作用于两种模式。",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )

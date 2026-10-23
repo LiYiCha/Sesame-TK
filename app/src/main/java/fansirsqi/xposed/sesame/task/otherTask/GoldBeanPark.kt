@@ -106,7 +106,10 @@ class GoldBeanPark @JvmOverloads constructor(
 
     private suspend fun handleGoldBeanPark() {
         try {
-            // 1. 首页初始化与数据同步
+            // 1. 首页初始化与数据同步（金豆页配置下发为真机进页首个请求）
+            if (scene == BeanScene.FARM) {
+                deliverGoldenBeanPage()
+            }
             val indexRes = goldenBeanIndex()
             handleMarketingPopup(indexRes)
             if (scene == BeanScene.FARM) {
@@ -341,21 +344,22 @@ class GoldBeanPark @JvmOverloads constructor(
                         val spmExtend = task.optJSONObject("spmExtend")
                         val xlightMap = spmExtend?.optJSONObject("xlightLogExtMap")
                         val bizId = xlightMap?.optString("bizId")
-                        if (bizId.isNullOrEmpty()) continue
-
-                        val adRes = finishAdTask(bizId, xlightMap?.optJSONObject("extendInfo"))
-                        if (adRes.optBoolean("success")) {
-                            val reward = adRes.optJSONObject("extendInfo")?.optJSONObject("rewardInfo")
-                            val amount = reward?.optString("rewardAmount", "0") ?: "0"
-                            val taskTitle = adRes.optJSONObject("extendInfo")?.optJSONObject("taskInfo")?.optString("taskTitle", title) ?: title
-                            Log.other(TAG, "广告完成[$taskTitle]+$amount 金豆")
-                            hasWorkDone = true
-                            break
-                        } else {
-                            Log.other(TAG, "广告任务失败[$title]: ${adRes.optString("errMsg", "未知错误")}")
+                        if (!bizId.isNullOrEmpty()) {
+                            val adRes = finishAdTask(bizId, xlightMap?.optJSONObject("extendInfo"))
+                            if (adRes.optBoolean("success")) {
+                                val reward = adRes.optJSONObject("extendInfo")?.optJSONObject("rewardInfo")
+                                val amount = reward?.optString("rewardAmount", "0") ?: "0"
+                                val taskTitle = adRes.optJSONObject("extendInfo")?.optJSONObject("taskInfo")?.optString("taskTitle", title) ?: title
+                                Log.other(TAG, "广告完成[$taskTitle]+$amount 金豆")
+                                hasWorkDone = true
+                                break
+                            } else {
+                                Log.other(TAG, "广告任务失败[$title]: ${adRes.optString("errMsg", "未知错误")}")
+                            }
+                            delay(13000 + (0..1000).random().toLong())
+                            continue
                         }
-                        delay(13000 + (0..1000).random().toLong())
-                        continue
+                        // 无 bizId（如 XLIGHT_MIXED 混合任务）：落到下方统一 TODO 链路走时长上报 + finishTask
                     }
 
                     // 4. 未打卡状态：finishTask + 领奖后 re-sync
@@ -364,11 +368,18 @@ class GoldBeanPark @JvmOverloads constructor(
 
                         val gameContract = GameCenterPlayRpcCall.resolveContract(task, displayConfig)
                         if (gameContract != null) {
-                            val ack = GameCenterPlayRpcCall.submitForAck(gameContract)
-                            Log.other(TAG, "小游戏[$title]时长上报${if (ack.accepted) "成功" else "未受理"}(${gameContract.playTime}s)")
+                            // 进游戏埋点 + 组件咨询 + 游戏内事件，按真机抓包顺序补发
+                            GameCenterPlayRpcCall.submitGoldenBeanGameEntry(
+                                gameContract.gameAppId,
+                                gameContract.source,
+                                gameContract.playTime,
+                            )
+                            val reportedContract = gameContract.copy(playTime = gameContract.playTime + 1)
+                            val ack = GameCenterPlayRpcCall.submitForAck(reportedContract)
+                            Log.other(TAG, "小游戏[$title]时长上报${if (ack.accepted) "成功" else "未受理"}(${reportedContract.playTime}s)")
                             delay(1500 + (0..500).random().toLong())
-                        } else if (title.contains("小游戏")) {
-                            // 非时长类小游戏任务（解析不出时长契约），禁止 RPC 强完，需真实游玩
+                        } else if (title.contains("小游戏") || type == "xlight") {
+                            // 解析不出时长契约（非时长类小游戏 / 无 floatBall 配置的 xlight），禁止 RPC 强完
                             //Log.other(TAG, "跳过小游戏任务[$title]#非时长类，等待真实游玩")
                             continue
                         }
@@ -377,6 +388,13 @@ class GoldBeanPark @JvmOverloads constructor(
                         val finishRes = finishTaskAntOrchard(taskType, userId, taskSceneCode)
 
                         if (finishRes.optBoolean("success")) {
+                            // 奖励随 finish 内联返回（如浏览精选小游戏），按抓包不再调 receive
+                            if (finishRes.optJSONObject("awardInfo") != null) {
+                                val incCount = extractAwardBeanCount(finishRes)
+                                Log.other(TAG, "领取任务[$title]+$incCount 金豆")
+                                hasWorkDone = true
+                                break
+                            }
                             delay(1000 + (0..1000).random().toLong())
                             var awardRes = receiveTaskAwardAntOrchard(taskType, taskSceneCode)
                             if (!awardRes.optBoolean("success") && taskSceneCode != scene.defaultSceneCode) {
@@ -384,7 +402,7 @@ class GoldBeanPark @JvmOverloads constructor(
                             }
                             if (awardRes.optBoolean("success")) {
                                 val incCount = extractAwardBeanCount(awardRes)
-                                Log.other(TAG, "领取任务[$title]+$incCount 金豆")
+                                Log.other(TAG, "领取[$title]+$incCount 金豆")
                                 hasWorkDone = true
                                 break
                             } else {
@@ -394,10 +412,10 @@ class GoldBeanPark @JvmOverloads constructor(
                         } else {
                             val desc = finishRes.optString("desc", finishRes.optString("resultDesc", ""))
                             if (desc.isNotEmpty()) {
-                                Log.error(TAG, "完成任务[$title]响应: $desc")
+                                Log.error(TAG, "完成任务失败[$title]响应: $desc")
                             }
                             // 不支持rpc调用等不可恢复错误自动加入通用黑名单，当日不再重复尝试
-                            val errorCode = finishRes.optString("code", "")
+                            val errorCode = finishRes.optString("code", finishRes.optString("resultCode", ""))
                             TaskBlacklist.autoAddToBlacklist(taskId, title, errorCode, desc)
                         }
                         delay(2000 + (0..1000).random().toLong())
@@ -414,6 +432,19 @@ class GoldBeanPark @JvmOverloads constructor(
     }
 
     // --- 金豆夺宝 RPC 调方 ---
+
+    private fun deliverGoldenBeanPage(): JSONObject {
+        val method = "com.alipay.promofrontcenter.deliver.deliverByPageId"
+        val req = JSONObject()
+        req.put("extInfo", JSONObject())
+        req.put("pageCode", "@alipay/golden-beans/index")
+        val params = JSONArray().put(req).toString()
+        return try {
+            JSONObject(RequestManager.requestString(method, params))
+        } catch (e: Exception) {
+            JSONObject()
+        }
+    }
 
     private fun goldenBeanIndex(): JSONObject {
         val method = "com.alipay.goldenbean.index"
@@ -636,7 +667,8 @@ class GoldBeanPark @JvmOverloads constructor(
         if (TaskBlacklist.isTaskInBlacklist(taskId) || TaskBlacklist.isTaskInBlacklist(title)) return true
 
         // 1. 行为与类型黑名单 (外部跳转、支付、理财)
-        if (actionType == "VISIT" || actionType == "JUMP_APP" || type.contains("APP") ||
+        // xlight 混合任务（如浏览精选小游戏）actionType 也是 VISIT，但可 RPC 完成，豁免 VISIT 拦截
+        if ((actionType == "VISIT" && type != "xlight") || actionType == "JUMP_APP" || type.contains("APP") ||
             type == "XIANSHANGZHIFU" || type == "XIANXIAZHIFU" || type == "YUEBAO") {
             return true
         }
@@ -786,7 +818,7 @@ class GoldBeanPark @JvmOverloads constructor(
         }
     }
 
-    // --- 新增 RPC 方法 ---
+    // ---  RPC 方法 ---
 
     private fun goldenBeanManureExchange(exchangeBeanAmount: Int): JSONObject {
         val method = "com.alipay.goldenbean.manureExchange"
