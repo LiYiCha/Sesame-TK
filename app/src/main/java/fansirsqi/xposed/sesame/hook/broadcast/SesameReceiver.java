@@ -81,7 +81,11 @@ public class SesameReceiver extends BroadcastReceiver {
                     break;
                 case General.ACTION_STATUS_QUERY:
                     try {
-                        context.sendBroadcast(new Intent(General.ACTION_STATUS_REPLY));
+                        Intent reply = new Intent(General.ACTION_STATUS_REPLY);
+                        try {
+                            reply.putExtra("framework", fansirsqi.xposed.sesame.util.XpFrameworkDetector.getFrameworkSummary());
+                        } catch (Throwable ignored) {}
+                        context.sendBroadcast(reply);
                     } catch (Throwable th) {
                         Log.runtime(TAG, "sesame sendBroadcast status err:");
                         Log.printStackTrace(TAG, th);
