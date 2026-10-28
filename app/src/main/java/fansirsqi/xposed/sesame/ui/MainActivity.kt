@@ -138,6 +138,14 @@ class MainActivity : BaseActivity() {
                             ViewAppInfo.veriftag = true
                             updateSubTitle(RunType.LOADED.nickName)
                         }
+                        runCatching {
+                            val fw = intent.getStringExtra("framework")
+                            if (!fw.isNullOrBlank()) {
+                                ViewAppInfo.xpFrameworkVersion = fw
+                                val currentUser = deviceInfoState.value["当前账号"] ?: "未登录"
+                                deviceInfoState.value = DeviceInfoUtil.showInfo(verifyId, currentUser)
+                            }
+                        }
                         viewHandler.removeCallbacks(titleRunner)
                     }
                 }

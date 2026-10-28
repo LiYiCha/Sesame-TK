@@ -26,9 +26,15 @@ class LibXposedRuntime : XposedModule() {
         }
         loaded = true
         processName = param.processName
-        val frameworkName = runCatching { frameworkName }.getOrDefault("Unknown")
-        val apiVersion = runCatching { apiVersion }.getOrDefault(0)
-        log(Log.INFO, TAG, "Loaded process=${param.processName} framework=$frameworkName api=$apiVersion")
+        val fwName = runCatching { frameworkName }.getOrDefault("Unknown")
+        val fwVer = runCatching { frameworkVersion }.getOrDefault("")
+        val apiVer = runCatching { apiVersion }.getOrDefault(0)
+        log(Log.INFO, TAG, "Loaded process=${param.processName} framework=$fwName api=$apiVer")
+
+        runCatching {
+            fansirsqi.xposed.sesame.util.XpFrameworkDetector.setLibXposedFramework(fwName, fwVer, apiVer)
+            fansirsqi.xposed.sesame.util.Log.runtime(TAG, fansirsqi.xposed.sesame.util.XpFrameworkDetector.getLogDescription() + " | 进程: ${param.processName}")
+        }
     }
 
     override fun onPackageReady(param: PackageReadyParam) {

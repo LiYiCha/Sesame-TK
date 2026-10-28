@@ -22,6 +22,8 @@ object ViewAppInfo {
     var appBuildNumber: String = ""
     var verifyId: String = ""
     var veriftag: Boolean = false
+    @JvmField
+    @Volatile
     var xpFrameworkVersion: String = ""
 
     @SuppressLint("HardwareIds")

@@ -30,6 +30,7 @@ import fansirsqi.xposed.sesame.hook.rpc.bridge.RpcVersion;
 import fansirsqi.xposed.sesame.hook.scheduler.AlarmScheduler;
 import fansirsqi.xposed.sesame.util.GlobalThreadPools;
 import fansirsqi.xposed.sesame.util.Log;
+import fansirsqi.xposed.sesame.util.XpFrameworkDetector;
 
 public class ApplicationHook implements IXposedHookLoadPackage {
     static final String TAG = ApplicationHook.class.getSimpleName();
@@ -141,21 +142,37 @@ public class ApplicationHook implements IXposedHookLoadPackage {
 
     @Override
     public void handleLoadPackage(XC_LoadPackage.LoadPackageParam lpparam) {
-        startHook(lpparam.packageName, lpparam.processName, lpparam.classLoader);
+        startHook(lpparam.packageName, lpparam.processName, lpparam.classLoader, lpparam);
+    }
+
+    /**
+     * 现代入口（LibXposedRuntime）或其他未直接提供 lpparam 的入口调用。
+     */
+    public void startHook(String packageName, String processName, ClassLoader classLoader) {
+        startHook(packageName, processName, classLoader, null);
     }
 
     /**
      * 两个入口（传统 xposed_init 与 libxposed 现代管线）共用的启动路径。
-     * 现代入口由 LibXposedRuntime 合成参数后调用；静态 hooked 旗标防止双入口重复安装。
+     * 优先使用外部传入的 authentic lpparam；当且仅当 originParam 为 null 时回退尝试合成。
      */
-    public void startHook(String packageName, String processName, ClassLoader classLoader) {
+    public void startHook(String packageName, String processName, ClassLoader classLoader, XC_LoadPackage.LoadPackageParam originParam) {
         registerModules();
         if ("fansirsqi.xposed.sesame".equals(packageName)) {
             try {
+                try {
+                    String fw = XpFrameworkDetector.detectTraditional(classLoader, null);
+                    fansirsqi.xposed.sesame.data.ViewAppInfo.xpFrameworkVersion = fw;
+                } catch (Throwable ignored) {}
+
                 // 首先尝试使用目标应用的ClassLoader加载
                 Class<?> viewAppInfoClass = classLoader.loadClass("fansirsqi.xposed.sesame.data.ViewAppInfo");
                 // 注意：ViewAppInfo.kt 中的方法是 setRunType，而不是 setRunTypeByCode
                 XposedHelpers.callStaticMethod(viewAppInfoClass, "setRunType", fansirsqi.xposed.sesame.data.RunType.ACTIVE);
+                try {
+                    String fw = XpFrameworkDetector.detectTraditional(classLoader, null);
+                    XposedHelpers.setStaticObjectField(viewAppInfoClass, "xpFrameworkVersion", fw);
+                } catch (Throwable ignored) {}
             } catch (ClassNotFoundException e) {
                 // 如果找不到类，直接使用当前模块的类
                 try {
@@ -173,43 +190,106 @@ public class ApplicationHook implements IXposedHookLoadPackage {
             // 最早期安装宿主崩溃记录器，覆盖启动窗口（早于任何模块 hook 与配置加载）
             CrashRecorder.install();
 
+            // 识别并输出 XP 框架环境（绝不抛出任何未捕获异常）
+            try {
+                if (originParam != null) {
+                    XpFrameworkDetector.detectTraditional(classLoader, null);
+                }
+                Log.runtime(TAG, XpFrameworkDetector.getLogDescription() + " | 宿主: " + packageName);
+            } catch (Throwable ignored) {}
+
             // MTOP 实例捕获 hook：独立于抓包开关无条件安装，供游乐记等主动发 MTOP 的任务复用宿主实例
-            MtopSender.installCaptureHook(classLoader);
+            try {
+                MtopSender.installCaptureHook(classLoader);
+            } catch (Throwable t) {
+                Log.runtime(TAG, "MtopSender installCaptureHook 异常: " + t.getMessage());
+                Log.printStackTrace(TAG, t);
+            }
 
             // 1. 立即分发模块 LoadPackage 与 Hook Application.attach，确保 AppContext 与生命周期在启动时 100% 挂载成功
-            XC_LoadPackage.LoadPackageParam lpparam = newLoadPackageParam(packageName, processName, classLoader);
-            HookModuleManager.INSTANCE.dispatchHandleLoadPackage(lpparam);
-            performAlipayHook(lpparam);
+            XC_LoadPackage.LoadPackageParam lpparam = originParam != null ? originParam : newLoadPackageParam(packageName, processName, classLoader);
+            try {
+                if (lpparam != null) {
+                    HookModuleManager.INSTANCE.dispatchHandleLoadPackage(lpparam);
+                }
+                performAlipayHook(lpparam, packageName, processName, classLoader);
+            } catch (Throwable t) {
+                Log.runtime(TAG, "dispatchHandleLoadPackage / performAlipayHook 失败: " + t.getMessage());
+                Log.printStackTrace(TAG, t);
+            }
 
             // 移除 ClassChecker.waitForClasses 轮询死循环，避免冷启动类加载锁争用与超时自杀
         }
     }
 
     private XC_LoadPackage.LoadPackageParam newLoadPackageParam(String packageName, String processName, ClassLoader classLoader) {
+        XC_LoadPackage.LoadPackageParam param = null;
+
+        // 尝试 1: 扫描并调用已声明的构造函数（适配不同 Xposed 运行时与 Stub）
         try {
-            // api-82 的 LoadPackageParam 构造器为包私有，需放开可见性；字段公开，下游仅消费这三个字段
-            java.lang.reflect.Constructor<XC_LoadPackage.LoadPackageParam> ctor =
-                    XC_LoadPackage.LoadPackageParam.class.getDeclaredConstructor();
-            ctor.setAccessible(true);
-            XC_LoadPackage.LoadPackageParam param = ctor.newInstance();
+            java.lang.reflect.Constructor<?>[] ctors = XC_LoadPackage.LoadPackageParam.class.getDeclaredConstructors();
+            for (java.lang.reflect.Constructor<?> ctor : ctors) {
+                try {
+                    ctor.setAccessible(true);
+                    Class<?>[] paramTypes = ctor.getParameterTypes();
+                    Object[] args = new Object[paramTypes.length];
+                    for (int i = 0; i < paramTypes.length; i++) {
+                        if (paramTypes[i].isPrimitive()) {
+                            if (paramTypes[i] == boolean.class) args[i] = false;
+                            else if (paramTypes[i] == int.class) args[i] = 0;
+                            else if (paramTypes[i] == long.class) args[i] = 0L;
+                            else args[i] = (byte) 0;
+                        } else {
+                            args[i] = null;
+                        }
+                    }
+                    param = (XC_LoadPackage.LoadPackageParam) ctor.newInstance(args);
+                    if (param != null) break;
+                } catch (Throwable ignored) {
+                }
+            }
+        } catch (Throwable ignored) {
+        }
+
+        // 尝试 2: 构造函数皆不可用时，通过反射 Unsafe.allocateInstance 绕过构造器分配（Android ART 原生支持）
+        if (param == null) {
+            try {
+                Class<?> unsafeClass = Class.forName("sun.misc.Unsafe");
+                java.lang.reflect.Field field = unsafeClass.getDeclaredField("theUnsafe");
+                field.setAccessible(true);
+                Object unsafe = field.get(null);
+                if (unsafe != null) {
+                    java.lang.reflect.Method allocateMethod = unsafeClass.getMethod("allocateInstance", Class.class);
+                    param = (XC_LoadPackage.LoadPackageParam) allocateMethod.invoke(unsafe, XC_LoadPackage.LoadPackageParam.class);
+                }
+            } catch (Throwable ignored) {
+            }
+        }
+
+        if (param != null) {
             param.packageName = packageName;
             param.processName = processName;
             param.classLoader = classLoader;
             return param;
-        } catch (ReflectiveOperationException e) {
-            throw new IllegalStateException("create LoadPackageParam failed", e);
         }
+
+        Log.runtime(TAG, "警告: 无法合成 LoadPackageParam 实例");
+        return null;
     }
 
-    private void performAlipayHook(XC_LoadPackage.LoadPackageParam lpparam) {
+    private void performAlipayHook(XC_LoadPackage.LoadPackageParam lpparam, String packageName, String processName, ClassLoader classLoader) {
+        ClassLoader cl = (lpparam != null && lpparam.classLoader != null) ? lpparam.classLoader : classLoader;
+        String pkg = (lpparam != null && lpparam.packageName != null) ? lpparam.packageName : packageName;
+        String proc = (lpparam != null && lpparam.processName != null) ? lpparam.processName : processName;
+
         try {
             // Hook Application.attach
-            XposedHelpers.findAndHookMethod("android.app.Application", lpparam.classLoader, "attach", Context.class,
+            XposedHelpers.findAndHookMethod("android.app.Application", cl, "attach", Context.class,
                     new XC_MethodHook() {
                         @Override
                         protected void beforeHookedMethod(MethodHookParam param) throws Throwable {
                             Context context = (Context) param.args[0];
-                            HookModuleManager.INSTANCE.dispatchPreAppAttach(context, lpparam.classLoader);
+                            HookModuleManager.INSTANCE.dispatchPreAppAttach(context, cl);
                         }
 
                         @Override
@@ -219,6 +299,11 @@ public class ApplicationHook implements IXposedHookLoadPackage {
                             CrashRecorder.ensureInstalled();
                             AppContext.setContext(context);
                             AppContext.setMainHandler(new Handler(Looper.getMainLooper()));
+
+                            // context 现已可用，二次增强探测 NPatch/LSPatch PackageManager metadata（安全防御）
+                            try {
+                                XpFrameworkDetector.detectTraditional(cl, context);
+                            } catch (Throwable ignored) {}
 
                             // 跨进程 IPC (getPackageInfo) 延后到后台线程，确保宿主 attach 0 毫秒放行不卡死
                             GlobalThreadPools.INSTANCE.execute(() -> {
@@ -230,11 +315,11 @@ public class ApplicationHook implements IXposedHookLoadPackage {
                                 }
                             });
 
-                            HookModuleManager.INSTANCE.dispatchPostAppAttach(context, lpparam.classLoader);
+                            HookModuleManager.INSTANCE.dispatchPostAppAttach(context, cl);
 
                             // 子进程处理：根据各自开关开启网络及RPC调试抓包
                             // attach 在主线程，Config.load 有磁盘 IO，连同 hook 安装一起移到后台执行
-                            if (!General.PACKAGE_NAME.equals(lpparam.processName)) {
+                            if (!General.PACKAGE_NAME.equals(proc)) {
                                 GlobalThreadPools.INSTANCE.execute(() -> {
                                     try {
                                         if (!Config.isLoaded()) {
@@ -260,6 +345,6 @@ public class ApplicationHook implements IXposedHookLoadPackage {
         }
 
         hooked = true;
-        Log.runtime(TAG, "load success: " + lpparam.packageName);
+        Log.runtime(TAG, "load success: " + pkg);
     }
 }

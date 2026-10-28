@@ -452,7 +452,7 @@ fun DeviceInfoCard(info: Map<String, String>, oneWord: String? = null) {
                             }
                         }
                         1 -> {
-                            Column(modifier = Modifier.padding(16.dp)) {
+                            Column(modifier = Modifier.fillMaxSize().padding(16.dp).verticalScroll(rememberScrollState())) {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     Surface(
                                         color = containerColor,
@@ -1225,6 +1225,10 @@ object DeviceInfoUtil {
 
         val infoMap = LinkedHashMap<String, String>()
         infoMap["当前账号"] = activeUser
+        val xpFramework = runCatching {
+            fansirsqi.xposed.sesame.util.XpFrameworkDetector.getFrameworkSummary()
+        }.getOrDefault("未激活 / 未检测到")
+        infoMap["XP 框架"] = xpFramework
         infoMap["Product"] = "${Build.MANUFACTURER} ${Build.PRODUCT}"
         infoMap["Device"] = getDeviceName()
         infoMap["Android Version"] = "${Build.VERSION.RELEASE} SDK (${Build.VERSION.SDK_INT})"
