@@ -17,6 +17,12 @@ import kotlin.random.Random
 object EnergyRainCoroutine {
     private const val TAG = "EnergyRain"
 
+    /** 能量雨结束任务所属场景（与 initTask 保持一致） */
+    private const val SCENE_ENERGY_RAIN_TASK = "ANTFOREST_ENERGY_RAIN_TASK"
+
+    /** 森林救援队任务类型 */
+    private const val TASK_SLJYD = "GAME_DONE_SLJYD"
+
     /**
      * 上次执行能量雨的时间戳
      */
@@ -203,7 +209,7 @@ object EnergyRainCoroutine {
             // 2. 先处理“有新任务可以接”的情况
             if (jo.optBoolean("needInitTask", false)) {
                 // Log.runtime(TAG, "检测到新任务，准备接入[森林救援队]...")
-                val initRes = JSONObject(AntForestRpcCall.initTask("GAME_DONE_SLJYD"))
+                val initRes = JSONObject(AntForestRpcCall.initTask(TASK_SLJYD))
                 if (ResChecker.checkRes("$TAG[initEndGame]", initRes)) {
                     // Log.runtime(TAG, "[森林救援队] 任务接入成功")
                     // 接入后需要重新请求一次列表来获取最新的 taskStatus，或者直接去执行
@@ -230,10 +236,16 @@ object EnergyRainCoroutine {
                             // 执行上报逻辑
                             GameTask.Forest_sljyd.report(1)
 
-                            // 完成后可以根据需要决定是否 break，或者继续检查其他
+                            // 上报只负责把游戏玩够，宝箱额度需要服务端结算后单独领取
+                            delay(1500)
+                            ForestGameCenter.openAvailableBoxes()
+
+                            // 上报后任务状态会转为已完成，重新拉一次列表做领奖
+                            receiveEndGameTaskAward()
                             break
                         } else if (taskStatus == "FINISHED" || taskStatus == "DONE") {
-                            // Log.runtime(TAG, "任务[$taskType]已完成，无需重复执行")
+                            // 任务已完成：上报侧只负责完成，奖励需要单独领取
+                            receiveEndGameTaskAward()
                         }
                     }
                 }
@@ -248,6 +260,23 @@ object EnergyRainCoroutine {
             //Log.printStackTrace(TAG, "执行能量雨后续任务出错:", th)
         }
     }
+    /**
+     * 领取能量雨结束任务（救援队）的奖励。
+     * 上报只是让任务变为已完成，奖励必须再调一次领奖接口才会到账。
+     */
+    private suspend fun receiveEndGameTaskAward() {
+        try {
+            val res = JSONObject(AntForestRpcCall.receiveTaskAward(SCENE_ENERGY_RAIN_TASK, TASK_SLJYD))
+            if (ResChecker.checkRes("$TAG[receiveEndGameAward]", res)) {
+                Log.forest("森林救援队🎁[能量雨任务奖励领取成功]")
+            } else {
+                Log.runtime(TAG, "森林救援队任务奖励领取失败: ${res.optString("desc")}")
+            }
+        } catch (th: Throwable) {
+            Log.printStackTrace(TAG, "receiveEndGameTaskAward err:", th)
+        }
+    }
+
     /**
      * 兼容Java调用的包装方法
      */

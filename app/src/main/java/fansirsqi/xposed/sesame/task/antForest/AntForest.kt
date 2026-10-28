@@ -11,7 +11,6 @@ import fansirsqi.xposed.sesame.entity.OtherEntityProvider.listEcoLifeOptions
 import fansirsqi.xposed.sesame.entity.OtherEntityProvider.listHealthcareOptions
 import fansirsqi.xposed.sesame.entity.VitalityStore
 import fansirsqi.xposed.sesame.entity.VitalityStore.Companion.getNameById
-import fansirsqi.xposed.sesame.task.antOrchard.GameTask
 import fansirsqi.xposed.sesame.hook.RequestManager.requestString
 import fansirsqi.xposed.sesame.hook.Toast
 import fansirsqi.xposed.sesame.hook.core.ModuleScope
@@ -4708,84 +4707,30 @@ class AntForest : ModelTask(), EnergyCollectCallback {
 
     fun doforestgame() {
         try {
-            val response = AntForestRpcCall.queryGameList()
-            val jo = JSONObject(response)
+            val rights = ForestGameCenter.queryDrawRights() ?: return
 
-            // 验证请求是否成功
-            if (!ResChecker.checkRes("$TAG[queryGameList]", jo)) {
-                Log.error(TAG, "queryGameList 失败: ${jo.optString("desc")}")
-                return
+            //Log.runtime(TAG, "游戏中心状态: 待开 ${rights.canUse} 个, 已得 ${rights.used}/${rights.limit}")
+
+            // 1. 处理待开启奖励 (批量开启)
+            if (rights.canUse > 0) {
+                Log.runtime(TAG, "正在一次性开启 ${rights.canUse} 个宝箱...")
+                ForestGameCenter.openBoxes(rights.canUse)
             }
 
-            val drawRights = jo.optJSONObject("gameCenterDrawRights")
-            if (drawRights != null) {
-                val perTime = drawRights.optInt("quotaPerTime", 100)
-
-                // 换算实际宝箱次数
-                val canUseCount = drawRights.optInt("quotaCanUse") / perTime
-                val limitCount = drawRights.optInt("quotaLimit") / perTime
-                val usedCount = drawRights.optInt("usedQuota") / perTime
-
-                //Log.runtime(TAG, "游戏中心状态: 待开 $canUseCount 个, 已得 $usedCount/$limitCount")
-
-                // 1. 处理待开启奖励 (批量开启)
-                if (canUseCount > 0) {
-                    Log.runtime(TAG, "正在一次性开启 $canUseCount 个宝箱...")
-                    val drawResStr = AntForestRpcCall.drawGameCenterAward(canUseCount)
-                    if(!ResChecker.checkRes("$TAG[drawAward]", drawResStr)){
-                        //Log.error(TAG,"开启宝箱失败 Res:$drawResStr")
-                        return
-                    }
-                    val drawJo = JSONObject(drawResStr)
-                    val resData = drawJo.optJSONObject("resData") ?: drawJo
-                    if (resData.optString("desc") == "success") {
-                        val awardList = resData.optJSONArray("gameCenterDrawAwardList")
-
-                        var totalEnergy = 0
-                        val otherAwards = mutableListOf<String>()
-
-                        if (awardList != null) {
-                            for (i in 0 until awardList.length()) {
-                                val award = awardList.getJSONObject(i)
-                                val type = award.optString("awardType")
-                                val name = award.optString("awardName")
-                                val count = award.optInt("awardCount")
-
-                                if (type == "ENERGY") {
-                                    totalEnergy += count
-                                } else {
-                                    otherAwards.add("${name}x${count}")
-                                }
-                            }
-                        }
-
-                        // 输出统计结果
-                        val logMsg = StringBuilder("[开宝箱] ")
-                        if (totalEnergy > 0) logMsg.append("获得能量: ${totalEnergy}g")
-                        if (otherAwards.isNotEmpty()) {
-                            if (totalEnergy > 0) logMsg.append(", ")
-                            logMsg.append("其他: ${otherAwards.joinToString("/")}")
-                        }
-                        Log.forest(logMsg.toString())
-                    } else {
-                        //Log.error(TAG, "领奖请求失败: $drawResStr")
+            // 2. 额度不足则上报小游戏补齐；上报后必须再领取一次，否则新产生的额度会一直挂着
+            val remainToTask = rights.remain
+            if (remainToTask > 0) {
+                // 使用后台协程异步执行，避免阻塞森林主流程
+                GlobalThreadPools.execute(Dispatchers.IO) {
+                    try {
+                        ForestGameCenter.reportAndDraw(remainToTask)
+                    } catch (_: CancellationException) {
+                    } catch (e: Exception) {
+                        Log.error(TAG, "森林小游戏上报异常: ${e.message}")
                     }
                 }
-
-                // 2. 判断是否需要刷任务 (接你之前的逻辑，使用后台协程异步执行，避免阻塞森林主流程)
-                val remainToTask = limitCount - usedCount
-                if (remainToTask > 0) {
-                    GlobalThreadPools.execute(Dispatchers.IO) {
-                        try {
-                            GameTask.Forest_slxcc.report(remainToTask)
-                        } catch (_: CancellationException) {
-                        } catch (e: Exception) {
-                            Log.error(TAG, "森林小车车上报异常: ${e.message}")
-                        }
-                    }
-                } else {
-                    // Log.runtime(TAG, "今日游戏中心任务已满额")
-                }
+            } else {
+                // Log.runtime(TAG, "今日游戏中心任务已满额")
             }
 
         } catch (e: CancellationException) {
