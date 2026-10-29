@@ -4,6 +4,7 @@ import android.content.Context;
 import android.os.Handler;
 import android.os.Looper;
 
+import org.json.JSONArray;
 import org.json.JSONObject;
 
 import java.lang.reflect.Constructor;
@@ -25,6 +26,7 @@ import de.robv.android.xposed.XC_MethodHook;
 import de.robv.android.xposed.XposedBridge;
 import de.robv.android.xposed.XposedHelpers;
 import fansirsqi.xposed.sesame.hook.context.AppContext;
+import fansirsqi.xposed.sesame.hook.network.capture.RpcTrafficCapture;
 import fansirsqi.xposed.sesame.util.Log;
 import fansirsqi.xposed.sesame.util.StringUtil;
 
@@ -125,6 +127,8 @@ public final class MtopSender {
                     @Override
                     protected void afterHookedMethod(MethodHookParam param) {
                         captureBuilder(param.thisObject, param.args);
+                        feedCapture(param.thisObject, param.getResult(),
+                                param.hasThrowable() ? "sync/async_threw" : null);
                     }
                 });
                 hooked++;
@@ -156,6 +160,7 @@ public final class MtopSender {
                             if (param.args != null && param.args.length > 0 && param.args[0] != null
                                     && CLS_BUILDER.equals(param.args[0].getClass().getName())) {
                                 captureBuilder(param.args[0], param.args);
+                                feedCapture(param.args[0], null, "mtop_build_fallback");
                             }
                         }
                     });
@@ -301,6 +306,60 @@ public final class MtopSender {
             if (n <= 3) {
                 Log.runtime(TAG, "捕获 builder 失败(第" + n + "次): " + t);
             }
+        }
+    }
+
+    /**
+     * 把 MtopBuilder 上真实发出的请求/响应喂给统一抓包管线（RpcTrafficCapture.MTOP_NATIVE 来源）。
+     * 只读不改、不抛异常；引擎未安装或来源被关闭时管线内部直接短路。
+     * syncRequest 走完整事件对（请求+响应），asyncRequest / Mtop.build 兜底只有请求事件（响应为 null）。
+     * 本基座自己的请求（SELF_CALL）也照记——alisports 活动流量正是靠这里进统一 capture 通道。
+     */
+    private static void feedCapture(Object builder, Object response, String note) {
+        try {
+            if (builder == null || !RpcTrafficCapture.INSTANCE.isEngineInstalled()) {
+                return;
+            }
+            String api = readApi(builder);
+            if (StringUtil.isEmpty(api)) {
+                return;
+            }
+            Object req = findRequest(builder);
+            Object data = req == null ? null : tryInvoke(req, "getData");
+            if (data == null && req != null) {
+                data = tryInvoke(req, "getDataText");
+            }
+            if (data == null) {
+                data = tryInvoke(builder, "getData");
+            }
+            String requestPayload = data == null ? null : String.valueOf(data);
+            String responsePayload = null;
+            if (response != null) {
+                JSONObject d = asJsonObject(tryInvoke(response, "getDataJsonObject"));
+                if (d == null) {
+                    d = asJsonObject(tryInvoke(response, "getData"));
+                }
+                String[] retArr = asStringArray(tryInvoke(response, "getRet"));
+                if (retArr == null) {
+                    retArr = asStringArray(readFieldByName(response, "ret"));
+                }
+                if (d != null || retArr != null) {
+                    JSONObject out = new JSONObject();
+                    if (retArr != null) {
+                        JSONArray retJson = new JSONArray();
+                        for (String s : retArr) {
+                            retJson.put(s);
+                        }
+                        out.put("ret", retJson);
+                    }
+                    if (d != null) {
+                        out.put("data", d);
+                    }
+                    responsePayload = out.toString();
+                }
+            }
+            RpcTrafficCapture.INSTANCE.recordMtopNative(api, requestPayload, responsePayload, -1L, note);
+        } catch (Throwable ignore) {
         }
     }
 

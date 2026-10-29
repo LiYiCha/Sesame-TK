@@ -1,28 +1,19 @@
 package fansirsqi.xposed.sesame.task.sesameSports;
 
-import android.content.Context;
-
 import org.json.JSONArray;
 import org.json.JSONObject;
 
-import java.io.File;
-import java.io.FileOutputStream;
-import java.io.OutputStreamWriter;
-import java.text.SimpleDateFormat;
 import java.util.ArrayList;
-import java.util.Date;
 import java.util.List;
 import java.util.Locale;
 
 import fansirsqi.xposed.sesame.hook.MtopSender;
 import fansirsqi.xposed.sesame.hook.SesameDogAuth;
-import fansirsqi.xposed.sesame.hook.context.AppContext;
 import fansirsqi.xposed.sesame.model.ModelFields;
 import fansirsqi.xposed.sesame.model.ModelGroup;
 import fansirsqi.xposed.sesame.model.modelFieldExt.BooleanModelField;
 import fansirsqi.xposed.sesame.model.modelFieldExt.IntegerModelField;
 import fansirsqi.xposed.sesame.task.ModelTask;
-import fansirsqi.xposed.sesame.util.Files;
 import fansirsqi.xposed.sesame.util.Log;
 import fansirsqi.xposed.sesame.util.StringUtil;
 import fansirsqi.xposed.sesame.util.TimeUtil;
@@ -41,13 +32,11 @@ public class SesameSports extends ModelTask {
 
     private static final String TAG = SesameSports.class.getSimpleName();
 
-    private static final String DEBUG_FILE = "sesame_sports_debug.log";
     /** 单轮前进次数的默认保护上限(每 1.2~2.6s 一次请求)。 */
     private static final int DEFAULT_FORWARD_LIMIT = 200;
     /** 保护上限的硬顶, 避免误填导致长时间连续请求 */
     private static final int HARD_FORWARD_LIMIT = 2000;
     private static final int MAX_RECORDS_PER_ROUND = 20;
-    private static final int MAX_DEBUG_CHARS = 20000;
     /** 每前进 N 次拉一次 index, 校准体力余额并判断该城市是否走完(省请求) */
     private static final int CALIBRATE_EVERY = 5;
     private static final long SWITCH_INTERVAL_MS = 800L;
@@ -63,9 +52,6 @@ public class SesameSports extends ModelTask {
     private BooleanModelField autoSwitchRecord;
     /** 单轮前进次数上限保护 */
     private IntegerModelField maxForwardPerRun;
-
-    private StringBuilder debugDump;
-    private int debugWarnCount;
 
     @Override
     public String getName() {
@@ -104,63 +90,46 @@ public class SesameSports extends ModelTask {
     @Override
     protected void runJava() {
         try {
-            // 任务对象跨轮复用, 排障缓冲区必须每轮重置, 否则第二轮起会被 MAX_DEBUG_CHARS 掐掉
-            debugDump = null;
-            debugWarnCount = 0;
             Log.other("体育游乐记: 开始 | " + MtopSender.stateText() + " " + SesameDogAuth.stateText());
-            debug("base", MtopSender.stateText() + " " + SesameDogAuth.stateText());
 
             // 0) 路由探测: 活动改版/下线就别跑了
             MtopSender.Result pageroute = SesameSportsRpcCall.pageroute();
-            debug("pageroute", describeRaw(pageroute));
             if (pageroute == null) {
                 Log.other("体育游乐记⏸️ 活动探测失败: 无可用的授权 token");
-                flushDebug(0, 0, -1);
                 return;
             }
             if (!pageroute.ok) {
-                warn("pageroute", pageroute);
                 Log.other("体育游乐记⏸️ 活动探测失败: " + pageroute.brief() + " | " + pageroute.note);
-                flushDebug(0, 0, -1);
                 return;
             }
             JSONObject routeBody = pageroute.body();
             String route = routeBody == null ? "" : routeBody.optString("routeRedirectType");
             if (!StringUtil.isEmpty(route) && !"DOG_HOME".equals(route)) {
                 Log.other("体育游乐记⏸️ 活动路由=" + route + "(非 DOG_HOME), 本次不执行");
-                flushDebug(0, 0, -1);
                 return;
             }
 
             // 1) 活动状态: 非 PLAYING 不前进
             MtopSender.Result stateResult = SesameSportsRpcCall.playState();
-            debug("playState", describeRaw(stateResult));
             String playState = playStateOf(stateResult);
             if (StringUtil.isEmpty(playState)) {
-                warn("playState", stateResult);
                 Log.other("体育游乐记⏸️ 活动状态读取失败: "
                         + (stateResult == null ? "无响应" : stateResult.brief() + " | " + stateResult.note));
-                flushDebug(0, 0, -1);
                 return;
             }
             if (!"PLAYING".equals(playState)) {
                 Log.other("体育游乐记⏸️ 活动状态=" + playState + "(非 PLAYING), 本次不前进");
-                flushDebug(0, 0, -1);
                 return;
             }
 
             // 2) 首页: 当前城市/记录/节点状态/体力
             MtopSender.Result index = SesameSportsRpcCall.index();
-            debug("index", describeRaw(index));
             if (index == null) {
                 Log.other("体育游乐记⏸️ 未取到 alisports 授权 token, 本轮无法前进");
-                flushDebug(0, 0, -1);
                 return;
             }
             if (!index.ok) {
-                warn("index", index);
                 Log.other("体育游乐记⏸️ 首页返回失败: " + index.brief() + " | " + index.note);
-                flushDebug(0, 0, -1);
                 return;
             }
             JSONObject indexBody = index.body();
@@ -183,7 +152,6 @@ public class SesameSports extends ModelTask {
                     + (currentProgress < 0 ? "" : " 城市进度=" + percent(currentProgress)));
             if (!"PLAYING".equals(nodeState)) {
                 Log.other("体育游乐记⏸️ 当前节点状态=" + nodeState + ", 本次不前进");
-                flushDebug(0, 0, points);
                 return;
             }
 
@@ -197,7 +165,6 @@ public class SesameSports extends ModelTask {
             if (points >= 0 && points < unit) {
                 Log.other("体育游乐记⏸️ 体力不足(" + points + " < " + unit + "), 请先在活动页完成任务并在"
                         + "任务中心领取体力, 领取后重跑本任务");
-                flushDebug(0, 0, points);
                 return;
             }
 
@@ -205,7 +172,6 @@ public class SesameSports extends ModelTask {
             List<Record> records = listRecords(playingId, cityName);
             if (records.isEmpty()) {
                 Log.other("体育游乐记⏸️ 没有可用的游玩记录");
-                flushDebug(0, 0, points);
                 return;
             }
             logRecords(records);
@@ -240,9 +206,7 @@ public class SesameSports extends ModelTask {
                 }
                 if (!rec.playingId.equals(currentId)) {
                     MtopSender.Result change = SesameSportsRpcCall.changeRecord(rec.playingId);
-                    debug("change:" + rec.playingId, describeRaw(change));
                     if (change == null || !change.ok) {
-                        warn("change", change);
                         Log.other("体育游乐记⚠️ 切换到 " + rec.label() + " 失败: "
                                 + (change == null ? "无响应" : change.brief()));
                         continue;
@@ -272,7 +236,6 @@ public class SesameSports extends ModelTask {
             // 5) 跑完切回用户原来的当前城市, 免得活动页停在最后一个被刷的城市
             if (autoSwitchRecord.getValue() && !StringUtil.isEmpty(playingId) && !playingId.equals(currentId)) {
                 MtopSender.Result back = SesameSportsRpcCall.changeRecord(playingId);
-                debug("restore:" + playingId, describeRaw(back));
                 if (back != null && back.ok) {
                     Log.other("体育游乐记: 已切回原当前城市记录 " + playingId);
                 }
@@ -287,11 +250,8 @@ public class SesameSports extends ModelTask {
                         + " → " + (points < 0 ? "?" : String.valueOf(points)));
                 Log.other("体育游乐记: 记录情况 " + remainText(records));
             }
-            flushDebug(totalForward, switched, points);
         } catch (Throwable t) {
             Log.printStackTrace(TAG, "run err:", t);
-            debug("exception", String.valueOf(t));
-            flushDebug(-1, -1, -1);
         }
     }
 
@@ -305,11 +265,9 @@ public class SesameSports extends ModelTask {
         Log.other("体育游乐记: 跑前补给体力(刷新结算) | 当前体力=" + (points < 0 ? "?" : String.valueOf(points)));
         int result = -1;
         MtopSender.Result r = SesameSportsRpcCall.refreshPoints();
-        debug("refreshPoints", describeRaw(r));
         if (r == null) {
             Log.other("体育游乐记⚠️ 刷新体力无响应(授权 token 不可用)");
         } else if (!r.ok) {
-            warn("refreshPoints", r);
             Log.other("体育游乐记⚠️ 刷新体力失败: " + r.brief() + " | " + r.note);
         } else {
             JSONObject body = r.body();
@@ -332,9 +290,7 @@ public class SesameSports extends ModelTask {
     /** 任务中心盘点(只读) + 可选领取; 返回领取后再结算的体力, 取不到 -1。 */
     private int supplyByTaskCenter() {
         MtopSender.Result r = SesameSportsRpcCall.taskModuleInfo();
-        debug("taskModuleInfo", describeRaw(r));
         if (r == null || !r.ok) {
-            warn("taskModuleInfo", r);
             Log.other("体育游乐记: 任务中心读取失败("
                     + (r == null ? "无响应" : r.brief() + " | " + r.note) + "), 跳过任务体力盘点");
             return -1;
@@ -366,9 +322,6 @@ public class SesameSports extends ModelTask {
                 + SesameSportsRpcCall.finishedToday(r) + " 个) | 已完成待领取 " + pending + " 个(约"
                 + pendingPoints + "体力) | 已领取 " + claimed + " 个 | 未完成 " + todo + " 个(约"
                 + todoPoints + "体力)");
-        for (SesameSportsRpcCall.TaskItem task : tasks) {
-            Log.debug(TAG, "task " + task);
-        }
         if (claimable.isEmpty()) {
             return -1;
         }
@@ -382,7 +335,6 @@ public class SesameSports extends ModelTask {
         int failed = 0;
         for (SesameSportsRpcCall.TaskItem task : claimable) {
             MtopSender.Result claim = SesameSportsRpcCall.claimTaskReward(task.taskId);
-            debug("claim:" + task.taskId, describeRaw(claim));
             if (claim != null && claim.ok) {
                 int p = SesameSportsRpcCall.claimedPoints(claim);
                 int k = SesameSportsRpcCall.claimedKabi(claim);
@@ -400,7 +352,6 @@ public class SesameSports extends ModelTask {
                 Log.other("体育游乐记: 任务已领取过, 跳过(" + task.title + ")");
             } else {
                 failed++;
-                warn("claim", claim);
                 Log.other("体育游乐记⚠️ 领取任务奖励失败(" + task.title + "): "
                         + (claim == null ? "无响应" : claim.brief() + " | " + claim.note));
             }
@@ -411,7 +362,6 @@ public class SesameSports extends ModelTask {
                     + (failed > 0 ? ", 失败 " + failed + " 个(详见模块日志)" : ""));
         }
         MtopSender.Result again = SesameSportsRpcCall.refreshPoints();
-        debug("refreshPoints2", describeRaw(again));
         if (again != null && again.ok) {
             int p = pointsOf(again.body());
             Log.other("体育游乐记: 领取后再结算 体力=" + (p < 0 ? "?" : String.valueOf(p)));
@@ -458,11 +408,9 @@ public class SesameSports extends ModelTask {
                 } else if (balance >= 0) {
                     balance -= unit;
                 }
-                debug("forward:" + rec.playingId, describeRaw(r));
                 if (out.done % CALIBRATE_EVERY == 0) {
                     // 周期性校准: 体力余额以服务端为准, 顺带看该城市是否走完
                     MtopSender.Result cal = SesameSportsRpcCall.index();
-                    debug("calibrate", describeRaw(cal));
                     if (cal != null && cal.ok) {
                         int p = pointsOf(cal.body());
                         if (p >= 0) {
@@ -488,18 +436,14 @@ public class SesameSports extends ModelTask {
                 out.reachedLimit = true;
                 rec.finished = true;
                 Log.other("体育游乐记: " + rec.label() + " 已达服务端上限(本次前进 " + out.done + " 次)");
-                debug("forward:limit:" + rec.playingId, describeRaw(r));
                 break;
             } else if (r.isPointsNotEnough()) {
                 out.stopByPoints = true;
                 Log.other("体育游乐记: " + rec.label() + " 前进被拒(体力不足): " + r.brief());
-                debug("forward:points:" + rec.playingId, describeRaw(r));
                 break;
             } else {
                 out.hardFail = true;
-                warn("forward", r);
                 Log.other("体育游乐记⚠️ " + rec.label() + " 前进失败: " + r.brief() + " | " + r.note);
-                debug("forward:fail:" + rec.playingId, describeRaw(r));
                 break;
             }
             if (i + 1 < budget) {
@@ -525,9 +469,7 @@ public class SesameSports extends ModelTask {
     private List<Record> listRecords(String fallbackId, String fallbackCity) {
         List<Record> list = new ArrayList<>();
         MtopSender.Result r = SesameSportsRpcCall.listRecords();
-        debug("listRecords", describeRaw(r));
         if (r == null || !r.ok) {
-            warn("listRecords", r);
             Log.other("体育游乐记⚠️ 城市记录拉取失败: "
                     + (r == null ? "无响应" : r.brief() + " | " + r.note));
         } else {
@@ -563,11 +505,6 @@ public class SesameSports extends ModelTask {
 
     private void logRecords(List<Record> records) {
         Log.other("体育游乐记: 城市记录 " + records.size() + " 条 | " + remainText(records));
-        for (Record rec : records) {
-            Log.debug(TAG, "record " + rec.playingId + " " + rec.cityName + "/" + rec.siteName
-                    + " progress=" + rec.progress + " used=" + rec.usedPoints + " unlock=" + rec.unlockPoints
-                    + " current=" + rec.selectFlag + " finished=" + rec.finished);
-        }
     }
 
     private static String remainText(List<Record> records) {
@@ -719,102 +656,6 @@ public class SesameSports extends ModelTask {
     private static long randomDelay() {
         return FORWARD_INTERVAL_MIN_MS
                 + (long) (Math.random() * (FORWARD_INTERVAL_MAX_MS - FORWARD_INTERVAL_MIN_MS));
-    }
-
-    // ═══════════════════════════ 调试落盘 ═══════════════════════════
-
-    private void debug(String label, String text) {
-        if (debugDump == null) {
-            debugDump = new StringBuilder();
-        }
-        if (debugDump.length() >= MAX_DEBUG_CHARS) {
-            return;
-        }
-        debugDump.append("\n[").append(label).append("] ").append(truncate(text, 900));
-    }
-
-    private void warn(String label, MtopSender.Result result) {
-        debugWarnCount++;
-        debug("warn:" + label, describeRaw(result));
-    }
-
-    private static String describeRaw(MtopSender.Result r) {
-        if (r == null) {
-            return "null";
-        }
-        return "ok=" + r.ok + " ret=" + r.retText + " code=" + r.retCode
-                + " reason=" + r.failReason + " note=" + r.note
-                + " data=" + truncate(String.valueOf(r.data), 700);
-    }
-
-    /**
-     * 把本轮请求参数/响应转储到文件, 便于真机定位(尤其是 wua/asac 是否被宿主自动注入、
-     * 以及任务体力领取接口是否可用)。有异常时才在模块日志里提示文件位置, 正常轮次静默落盘。
-     */
-    private void flushDebug(int totalForward, int switched, int points) {
-        if (debugDump == null || debugDump.length() == 0) {
-            return;
-        }
-        try {
-            File dir = logDir();
-            if (dir == null) {
-                return;
-            }
-            if (!dir.exists() && !dir.mkdirs()) {
-                return;
-            }
-            File file = new File(dir, DEBUG_FILE);
-            StringBuilder sb = new StringBuilder();
-            sb.append("\n===== ")
-                    .append(new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US).format(new Date()))
-                    .append(" 体育游乐记 | 前进=").append(totalForward).append(" 切换城市=").append(switched)
-                    .append(" 剩余体力=").append(points)
-                    .append(" 开关[跑前领体力=").append(autoSupplyPoints.getValue())
-                    .append(", 自动领任务体力=").append(autoClaimTaskReward.getValue())
-                    .append(", 自动换城市=").append(autoSwitchRecord.getValue())
-                    .append(", 单轮上限=").append(maxForwardPerRun.getValue()).append("] =====");
-            sb.append(debugDump);
-            FileOutputStream fos = new FileOutputStream(file, true);
-            try {
-                OutputStreamWriter writer = new OutputStreamWriter(fos, "UTF-8");
-                writer.write(sb.toString());
-                writer.flush();
-            } finally {
-                fos.close();
-            }
-            if (debugWarnCount > 0) {
-                Log.other("体育游乐记: 本轮有 " + debugWarnCount + " 处异常, 排障转储 → " + file.getAbsolutePath());
-            }
-        } catch (Throwable t) {
-            Log.printStackTrace(TAG, "flushDebug err:", t);
-        }
-    }
-
-    /** 优先写到模块日志目录, 拿不到时退化到应用私有目录。 */
-    private static File logDir() {
-        try {
-            File dir = Files.LOG_DIR;
-            if (dir != null) {
-                return dir;
-            }
-        } catch (Throwable ignore) {
-        }
-        Context ctx = AppContext.getAppContext();
-        if (ctx == null) {
-            return null;
-        }
-        File dir = ctx.getExternalFilesDir(null);
-        if (dir == null) {
-            dir = ctx.getFilesDir();
-        }
-        return dir;
-    }
-
-    private static String truncate(String text, int max) {
-        if (text == null) {
-            return "";
-        }
-        return text.length() > max ? text.substring(0, max) + "..." : text;
     }
 
     // ═══════════════════════════ 内部模型 ═══════════════════════════

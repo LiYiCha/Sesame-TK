@@ -31,7 +31,8 @@ object RpcTrafficCapture {
     enum class TrafficSource(val title: String) {
         ARIVER_RPC("RPC"),
         H5_RPC("H5 RPC"),
-        MINI_HTTP("HTTP/小程序")
+        MINI_HTTP("HTTP/小程序"),
+        MTOP_NATIVE("MTOP")
     }
 
     enum class TrafficPhase { REQUEST, RESPONSE, ERROR }
@@ -175,6 +176,9 @@ object RpcTrafficCapture {
 
     fun newRequestId(): String = UUID.randomUUID().toString()
 
+    /** 引擎是否已安装。供 MtopSender 的发送 hook 回调低成本早退用（关闭态不做任何反射探测）。 */
+    fun isEngineInstalled(): Boolean = installed
+
     // ==================== 来源开关（抓包设置页使用） ====================
 
     fun getDisabledSources(): Set<String> = readDisabledSources()
@@ -280,6 +284,48 @@ object RpcTrafficCapture {
         val responsePayload = readAriverResponseField(callback)
         if (!responsePayload.isNullOrBlank() && responsePayload != pending.responseBeforeRequest) {
             recordPendingResponse(callback, responsePayload)
+        }
+    }
+
+    /**
+     * MTOP 原生层（mtopsdk MtopBuilder sync/async 发送 hook）事件入口，由 [fansirsqi.xposed.sesame.hook.MtopSender] 调用。
+     *
+     * 与 JS 桥层不同，这里是同步调用且请求/响应在手，无需经 PendingRegistry 关联：
+     * responsePayload 非空发 REQUEST+RESPONSE 事件对；为空（asyncRequest 或 build 兜底）只发 REQUEST 事件。
+     * 引擎未安装时直接返回，零开销。
+     */
+    fun recordMtopNative(
+        apiName: String?,
+        requestPayload: String?,
+        responsePayload: String?,
+        elapsedMs: Long = -1L,
+        note: String? = null
+    ) {
+        if (!installed || apiName.isNullOrBlank()) return
+        if (!isSourceEnabled(TrafficSource.MTOP_NATIVE)) return
+        val requestId = newRequestId()
+        emitEvent(
+            RpcTrafficEvent(
+                phase = TrafficPhase.REQUEST,
+                source = TrafficSource.MTOP_NATIVE,
+                method = apiName,
+                requestId = requestId,
+                payload = requestPayload,
+                note = note
+            )
+        )
+        if (responsePayload != null) {
+            emitEvent(
+                RpcTrafficEvent(
+                    phase = TrafficPhase.RESPONSE,
+                    source = TrafficSource.MTOP_NATIVE,
+                    method = apiName,
+                    requestId = requestId,
+                    payload = responsePayload,
+                    elapsedMs = elapsedMs,
+                    correlationStatus = "MATCHED"
+                )
+            )
         }
     }
 
