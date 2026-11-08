@@ -388,10 +388,40 @@ class NpcChicken {
         }
 
         /**
-         * 获取全量 NPC 配置字典（DataStore.json 中由 enterFarm 同步来的配置）
+         * 经典权威 NPC 配置字典（保证芝麻大表鸽、黄金鸡、农场小鸡、淘金币小鸡始终完整）
+         */
+        private val DEFAULT_NPC_CONFIGS = linkedMapOf(
+            "芝麻大表鸽" to NpcSmartConfig("20250901105101013088000000000006", "zhimaxiaoji_lianjin", "芝麻大表鸽", "ANTFARM_ZHIMA_NPC_TASK", coolDownDays = 1, rewardThreshold = 88.0),
+            "黄金鸡" to NpcSmartConfig("20250725105101013088000000000004", "licaixiaoji_2025_1", "黄金鸡", "", coolDownDays = 1, rewardThreshold = 0.0),
+            "农场小鸡" to NpcSmartConfig("20250613105101013088000000000002", "feiliaoji_202507", "农场小鸡", "", coolDownDays = 1, rewardThreshold = 0.0),
+            "淘金币小鸡" to NpcSmartConfig("202609201051013088000000000018", "H5", "淘金币小鸡", "ANTFARM_TAOJINBI_NPC_TASK", coolDownDays = 1, rewardThreshold = 0.0)
+        )
+
+        /**
+         * 获取全量 NPC 配置字典（合并本地存储 + 经典默认配置 + 别名映射）
          */
         fun getMergedNpcConfigs(): MutableMap<String, NpcSmartConfig> {
             val result = loadLocalNpcConfigs()
+            DEFAULT_NPC_CONFIGS.forEach { (k, v) ->
+                if (!result.containsKey(k)) {
+                    result[k] = v
+                }
+            }
+            // 别名双向兼容注入，确保按别名也能正常索引到配置
+            val zhima = result["芝麻大表鸽"] ?: DEFAULT_NPC_CONFIGS["芝麻大表鸽"]!!
+            result["大表鸽"] = zhima
+            result["芝麻粒"] = zhima
+
+            val gold = result["黄金鸡"] ?: DEFAULT_NPC_CONFIGS["黄金鸡"]!!
+            result["黄金票"] = gold
+
+            val farm = result["农场小鸡"] ?: DEFAULT_NPC_CONFIGS["农场小鸡"]!!
+            result["肥料"] = farm
+            result["肥料小鸡"] = farm
+
+            val tao = result["淘金币小鸡"] ?: DEFAULT_NPC_CONFIGS["淘金币小鸡"]!!
+            result["淘金币"] = tao
+
             if (!result.containsKey("到店小鸡") && result.containsKey("到店红包")) {
                 result["到店小鸡"] = result["到店红包"]!!
             }
@@ -399,17 +429,19 @@ class NpcChicken {
         }
 
         /**
-         * 获取供 UI 设置页面展示的可选名称数组（排除别名键）
+         * 获取供 UI 设置页面展示的可选名称数组（过滤内部别名键，排序列出核心NPC）
          */
         fun getAvailableNpcNames(): Array<String> {
-            val names = getMergedNpcConfigs().keys.filter { it != "到店小鸡" }.toMutableList()
-            return names.toTypedArray()
+            val hiddenAliases = setOf("大表鸽", "芝麻粒", "黄金票", "肥料", "肥料小鸡", "淘金币", "到店小鸡")
+            val names = getMergedNpcConfigs().keys.filter { it !in hiddenAliases }.toMutableList()
+            val baseOrder = listOf("芝麻大表鸽", "黄金鸡", "农场小鸡", "淘金币小鸡")
+            val sorted = (baseOrder.filter { it in names } + names.filter { it !in baseOrder }).distinct()
+            return sorted.toTypedArray()
         }
 
         /**
-         * 以 enterFarm 返回的 hireNPCAnimalConfigInfoList 为权威全量列表，
-         * 整体覆盖 DataStore.json 中的 NPC 配置（内容一致时不写盘）
-         * @return 是否出现新配置（新名称，或同名但 animalId 变化；纯阈值/冷却微调不算）
+         * 将 enterFarm 返回的 hireNPCAnimalConfigInfoList 增量合并到本地配置，
+         * 绝不覆盖清除已有的经典NPC（大表鸽/黄金鸡等）
          */
         fun syncNpcConfigsWithRemote(hires: JSONArray?): Boolean {
             if (hires == null || hires.length() == 0) return false
@@ -420,10 +452,18 @@ class NpcChicken {
                 val animalId = hire.optString("animalId")
                 val bizRewardName = hire.optString("bizRewardName")
                 if (bizRewardName.isEmpty() || animalId.isEmpty()) continue
-                remoteMap[bizRewardName] = NpcSmartConfig(
+                // 规范化名称映射
+                val standardName = when {
+                    bizRewardName.contains("大表鸽") || bizRewardName.contains("芝麻") -> "芝麻大表鸽"
+                    bizRewardName.contains("黄金") -> "黄金鸡"
+                    bizRewardName.contains("农场") || bizRewardName.contains("肥料") -> "农场小鸡"
+                    bizRewardName.contains("淘金币") -> "淘金币小鸡"
+                    else -> bizRewardName
+                }
+                remoteMap[standardName] = NpcSmartConfig(
                     animalId = animalId,
                     source = hire.optString("source", "npc_task_source"),
-                    nickName = bizRewardName,
+                    nickName = standardName,
                     taskSceneCode = hire.optString("taskSceneCode"),
                     coolDownDays = hire.optInt("hireCoolDownDays", 1),
                     rewardThreshold = hire.optDouble("bizRewardThreshold", 0.0)
@@ -432,27 +472,29 @@ class NpcChicken {
             if (remoteMap.isEmpty()) return false
 
             val localMap = loadLocalNpcConfigs()
-            if (localMap == remoteMap) return false
+            val mergedMap = LinkedHashMap(localMap)
+            DEFAULT_NPC_CONFIGS.forEach { (k, v) ->
+                if (!mergedMap.containsKey(k)) {
+                    mergedMap[k] = v
+                }
+            }
+            mergedMap.putAll(remoteMap)
 
-            // 新配置判定：新名称，或同名但 animalId 变化（换了新配置对象）
-            val added = remoteMap.keys.filter { it !in localMap }
-            val replaced = remoteMap.filterKeys { it in localMap }
+            if (localMap == mergedMap) return false
+
+            val added = mergedMap.keys.filter { it !in localMap }
+            val replaced = mergedMap.filterKeys { it in localMap }
                 .filter { (key, value) -> localMap[key]?.animalId != value.animalId }.keys.toList()
 
             try {
-                DataStore.put(PREF_NPC_CONFIGS, remoteMap)
+                DataStore.put(PREF_NPC_CONFIGS, mergedMap)
             } catch (e: Exception) {
                 Log.error("NpcRepository", "保存NPC配置到 DataStore.json 失败: ${e.message}")
                 return false
             }
-            // 仅在出现新配置时打印，纯阈值/冷却等字段微调静默覆盖
-            if (added.isEmpty() && replaced.isEmpty()) return false
 
-            val removed = localMap.keys.filter { it !in remoteMap }
-            val updated = remoteMap.filterKeys { it in localMap }
-                .filter { (key, value) -> localMap[key] != value && localMap[key]?.animalId == value.animalId }
-                .keys.toList()
-            Log.farm("🐥NPC小鸡 NPC配置已覆盖更新 :$added 替换:$replaced 更新:$updated 移除:$removed")
+            if (added.isEmpty() && replaced.isEmpty()) return false
+            Log.farm("🐥NPC小鸡 NPC配置已增量更新: 新增:$added 替换:$replaced")
             return true
         }
     }
@@ -560,57 +602,60 @@ class NpcChicken {
             return
         }
 
-        // 场景2：当前有NPC
+        // 场景2：当前有NPC在场
         val currentAnimalId = currentNpc.optString("animalId")
-        val currentName = currentNpc.optString("name", "未知NPC")
+        val currentName = currentNpc.optString("name").ifBlank {
+            currentNpc.optJSONObject("masterUserInfoVO")?.optString("nickName") ?: "未知NPC"
+        }
         val currentReward = currentNpc.optDouble("npcBizReward", 0.0)
 
-        // 找到当前NPC的配置
-        val currentConfig = configs.find { it.animalId == currentAnimalId }
+        // 优先在用户选中配置中查找，兜底在全量配置中查找
+        val allConfigs = getNpcConfigs()
+        val currentConfig = configs.find {
+            it.animalId == currentAnimalId ||
+            it.nickName == currentName ||
+            (currentName.contains("大表鸽") && (it.nickName.contains("大表鸽") || it.nickName.contains("芝麻"))) ||
+            (currentName.contains("黄金") && it.nickName.contains("黄金")) ||
+            (currentName.contains("农场") && it.nickName.contains("农场")) ||
+            (currentName.contains("淘金币") && it.nickName.contains("淘金币"))
+        } ?: allConfigs.values.find {
+            it.animalId == currentAnimalId ||
+            it.nickName == currentName ||
+            (currentName.contains("大表鸽") && (it.nickName.contains("大表鸽") || it.nickName.contains("芝麻"))) ||
+            (currentName.contains("黄金") && it.nickName.contains("黄金")) ||
+            (currentName.contains("农场") && it.nickName.contains("农场")) ||
+            (currentName.contains("淘金币") && it.nickName.contains("淘金币"))
+        } ?: NpcSmartConfig(animalId = currentAnimalId, nickName = currentName)
 
-        if (currentConfig == null) {
-            // 当前NPC不在选中列表中，遣返并雇佣新的
-            Log.runtime(TAG, "智能调度🤖[当前NPC[$currentName]不在选中列表，执行遣返]")
-            sendBackNpcAndRecord(currentNpc, null)
-            GlobalThreadPools.sleep(2000)
-            hireNextAvailableNpc(configs, records)
-            return
-        }
-
-        // 检查是否满产：优先信任服务端标记 reachNpcBizRewardLimit；
-        // 阈值比较仅作兜底（rewardThreshold 为 0 时视为无阈值，避免恒满产误判）
+        // 检查是否满产：优先信任服务端标记 reachNpcBizRewardLimit；阈值大于0时比对
         val reachLimit = currentNpc.optBoolean("reachNpcBizRewardLimit", false)
-        val isFull = reachLimit || (currentConfig.rewardThreshold > 0.0 && currentReward >= currentConfig.rewardThreshold)
+        val threshold = currentConfig.rewardThreshold
+        val isFull = reachLimit || (threshold > 0.0 && currentReward >= threshold)
 
         if (isFull) {
-            Log.farm("智能调度🤖[$currentName 已满产($currentReward/${currentConfig.rewardThreshold})，领取并切换]")
-
-            // 遣返并记录时间
+            Log.farm("智能调度🤖[$currentName 已满产($currentReward/${threshold})，领取并切换]")
             sendBackNpcAndRecord(currentNpc, currentConfig)
-
-            // 重新加载记录
             val updatedRecords = loadNpcRecords(configs)
-
-            // 雇佣下一个可用的NPC
             GlobalThreadPools.sleep(2000)
             hireNextAvailableNpc(configs, updatedRecords)
         } else {
-            // 未满产，执行任务（进度无变化时不重复打印）
+            // 只要在场且未满产，不盲目遣返！正常工作并执行任务
             if (lastLoggedProgress[currentAnimalId] != currentReward) {
-                Log.runtime(TAG, "智能调度🤖[$currentName 工作中... 进度:$currentReward/${currentConfig.rewardThreshold}]")
+                Log.runtime(TAG, "智能调度🤖[$currentName 在场工作中... 进度:$currentReward/${threshold}]")
                 lastLoggedProgress[currentAnimalId] = currentReward
             }
 
-            // 执行对应的任务
             try {
-                completeGoldTask(currentConfig.taskSceneCode)
+                if (currentConfig.taskSceneCode.isNotEmpty()) {
+                    completeGoldTask(currentConfig.taskSceneCode)
+                }
 
                 // 任务完成后再次检查是否满产
                 val updatedNpc = getCurrentNpc()
                 if (updatedNpc != null) {
                     val updatedReward = updatedNpc.optDouble("npcBizReward", 0.0)
                     val updatedReachLimit = updatedNpc.optBoolean("reachNpcBizRewardLimit", false)
-                    if (updatedReachLimit || (currentConfig.rewardThreshold > 0.0 && updatedReward >= currentConfig.rewardThreshold)) {
+                    if (updatedReachLimit || (threshold > 0.0 && updatedReward >= threshold)) {
                         Log.farm("智能调度🤖[$currentName 完成任务后已满产，领取并切换]")
                         sendBackNpcAndRecord(updatedNpc, currentConfig)
                         GlobalThreadPools.sleep(2000)
@@ -634,7 +679,8 @@ class NpcChicken {
         if (animalCount >= 3) {
             Log.farm(TAG, "智能调度🤖[当前小鸡数已满 ($animalCount)，尝试赶走别人的小鸡释放位置]")
             trySendBackGuestChickens(animals)
-            // 赶走之后重新获取
+            // 赶走之后延时等待服务器状态同步，再重新获取
+            GlobalThreadPools.sleep(1500)
             animals = getFarmAnimals()
             animalCount = animals.length()
         }
@@ -763,35 +809,56 @@ class NpcChicken {
     }
 
     /**
-     * 驱赶别的窃食小鸡
+     * 驱赶别的窃食/蹭饭小鸡
      */
     private fun trySendBackGuestChickens(animals: JSONArray) {
         for (i in 0 until animals.length()) {
             val animal = animals.getJSONObject(i)
             val subAnimalType = animal.optString("subAnimalType")
             val masterFarmId = animal.optString("masterFarmId")
-            val animalInteractStatus = animal.optString("animalInteractStatus")
 
-            // 别人的小鸡：masterFarmId 不等于我们，且当前状态是偷吃，且不是 NPC 和工作小鸡
-            if (masterFarmId.isNotEmpty() && masterFarmId != ownerFarmId && 
-                subAnimalType != "NPC" && subAnimalType != "WORK" && 
-                animalInteractStatus == "STEALING") {
+            // 状态位于嵌套的 animalStatusVO 中
+            val statusVO = animal.optJSONObject("animalStatusVO")
+            val animalInteractStatus = statusVO?.optString("animalInteractStatus")
+                ?: animal.optString("animalInteractStatus")
+
+            // 用户昵称位于嵌套的 masterUserInfoVO 中
+            val masterUserVO = animal.optJSONObject("masterUserInfoVO")
+            val rawNick = masterUserVO?.optString("nickName")
+                ?.ifBlank { masterUserVO.optString("userName") }
+                ?: animal.optString("name")
+            val userId = masterUserVO?.optString("userId")
+                ?: AntFarmRpcCall.farmId2UserId(masterFarmId)
+            val nickname = if (!rawNick.isNullOrBlank()) rawNick else {
+                val mask = UserMap.getMaskName(userId)
+                if (mask.isNotBlank()) mask else "蹭饭小鸡"
+            }
+
+            // 别人的小鸡：masterFarmId 不为空且不等于自己，且不是 NPC 和工作小鸡
+            val isOtherChicken = masterFarmId.isNotEmpty() && masterFarmId != ownerFarmId &&
+                    subAnimalType != "NPC" && subAnimalType != "WORK"
+            val isGuestOrStealing = animalInteractStatus == "STEALING" ||
+                    subAnimalType == "GUEST" ||
+                    animalInteractStatus.isEmpty()
+
+            if (isOtherChicken && isGuestOrStealing) {
                 val animalId = animal.optString("animalId")
-                val currentFarmId = animal.optString("currentFarmId")
-                val nickname = animal.optString("name", "别人的小鸡")
-                Log.farm("$TAG 庄园位置不足，尝试驱赶: $nickname ($animalId)")
+                val currentFarmId = animal.optString("currentFarmId").ifEmpty { ownerFarmId }
+                Log.farm(TAG, "智能调度🤖[庄园位置不足，尝试驱赶蹭饭小鸡: $nickname (id=$animalId, 状态=$animalInteractStatus)]")
                 try {
-                    // 使用常规驱赶（sendType 必须是服务端枚举值 NORMAL/HIT，不能传中文显示名）
+                    // 使用常规驱赶（sendType 必须是服务端枚举值 NORMAL/HIT）
                     val s = AntFarmRpcCall.sendBackAnimal("NORMAL", animalId, currentFarmId, masterFarmId)
                     val result = JSONObject(s)
-                    if (result.optBoolean("success")) {
-                        Log.farm("$TAG 成功赶走小鸡: $nickname")
+                    if (ResChecker.checkRes("$TAG[sendBackGuestChicken]", result)) {
+                        Log.farm(TAG, "智能调度🤖[✅ 成功赶走蹭饭小鸡: $nickname]")
                     } else {
-                        Log.error(TAG, "赶小鸡失败: ${result}")
+                        val memo = result.optString("memo", result.toString())
+                        Log.error(TAG, "赶走蹭饭小鸡失败[$nickname]: $memo")
                     }
                 } catch (e: Exception) {
-                    Log.error("$TAG 赶小鸡异常: $e")
+                    Log.error(TAG, "赶走蹭饭小鸡异常[$nickname]: $e")
                 }
+                GlobalThreadPools.sleep(1000)
             }
         }
     }

@@ -48,8 +48,25 @@ internal object HttpHooks {
     private val responseHookCalls = ThreadLocal<IdentityHashMap<Any, Boolean>>()
     private val bodyAccessorCalls = ThreadLocal<IdentityHashMap<PendingHostRequest, Boolean>>()
 
+    private val MTOP_URL_REGEX = Regex("""/h5/(mtop\.[^/?#]+)""")
+
     private class CaptureSlot : ThreadLocal<ArrayDeque<Any?>>() {
         override fun initialValue(): ArrayDeque<Any?> = ArrayDeque()
+    }
+
+    internal fun extractApiOrUrl(url: String?): String? {
+        if (url.isNullOrBlank()) return null
+        val mtopMatch = MTOP_URL_REGEX.find(url)
+        if (mtopMatch != null) {
+            return mtopMatch.groupValues[1]
+        }
+        return runCatching {
+            val cleanUrl = url.substringBefore('?').substringBefore('#')
+            val uri = java.net.URI(cleanUrl)
+            val host = uri.host.orEmpty()
+            val path = uri.path.orEmpty()
+            if (host.isNotEmpty() && path.isNotEmpty()) "$host$path" else cleanUrl
+        }.getOrNull() ?: url.substringBefore('?').substringBefore('#')
     }
 
     private val hookSlot = CaptureSlot()
@@ -343,15 +360,40 @@ internal object HttpHooks {
                             var event: RpcTrafficCapture.RpcTrafficEvent? = null
                             runCatching {
                                 if (RpcTrafficCapture.isSourceEnabled(RpcTrafficCapture.TrafficSource.MINI_HTTP)) {
-                                    event = RpcTrafficCapture.RpcTrafficEvent(
-                                        phase = if (isRequest) RpcTrafficCapture.TrafficPhase.REQUEST else RpcTrafficCapture.TrafficPhase.RESPONSE,
-                                        source = RpcTrafficCapture.TrafficSource.MINI_HTTP,
-                                        method = "${targetClass.name}#${method.name}",
-                                        requestId = if (isRequest) RpcTrafficCapture.newRequestId() else null,
-                                        payload = HttpSnapshot.arguments(method, param.args.toList()),
-                                        note = if (isRequest) "response_correlation_unavailable" else null,
-                                        correlationStatus = if (isRequest) null else "UNMATCHED"
-                                    ).also { RpcTrafficCapture.emitEvent(it) }
+                                    if (isRequest) {
+                                        val reqJson = param.args.getOrNull(1) as? Map<*, *>
+                                        val url = reqJson?.get("url")?.toString()
+                                        if (fansirsqi.xposed.sesame.util.CaptureFilter.isNoiseUrl(url)) {
+                                            hookSlot.get()!!.addLast(null)
+                                            return
+                                        }
+                                        val methodLabel = extractApiOrUrl(url) ?: "${targetClass.name}#${method.name}"
+                                        event = RpcTrafficCapture.RpcTrafficEvent(
+                                            phase = RpcTrafficCapture.TrafficPhase.REQUEST,
+                                            source = RpcTrafficCapture.TrafficSource.MINI_HTTP,
+                                            method = methodLabel,
+                                            requestId = RpcTrafficCapture.newRequestId(),
+                                            payload = HttpSnapshot.arguments(method, param.args.toList()),
+                                            note = "response_correlation_unavailable",
+                                            correlationStatus = null
+                                        ).also { RpcTrafficCapture.emitEvent(it) }
+                                    } else {
+                                        val url = param.args.getOrNull(0) as? String
+                                        if (fansirsqi.xposed.sesame.util.CaptureFilter.isNoiseUrl(url)) {
+                                            return
+                                        }
+                                        val methodLabel = extractApiOrUrl(url) ?: url ?: "${targetClass.name}#${method.name}"
+                                        val responseBody = param.args.getOrNull(1) as? String
+                                        event = RpcTrafficCapture.RpcTrafficEvent(
+                                            phase = RpcTrafficCapture.TrafficPhase.RESPONSE,
+                                            source = RpcTrafficCapture.TrafficSource.MINI_HTTP,
+                                            method = methodLabel,
+                                            requestId = null,
+                                            payload = responseBody ?: HttpSnapshot.arguments(method, param.args.toList()),
+                                            note = null,
+                                            correlationStatus = "UNMATCHED"
+                                        ).also { RpcTrafficCapture.emitEvent(it) }
+                                    }
                                 }
                             }
                             if (isRequest) hookSlot.get()!!.addLast(event)
@@ -417,13 +459,21 @@ internal object HttpHooks {
                                 if (requestObject != null &&
                                     RpcTrafficCapture.isSourceEnabled(RpcTrafficCapture.TrafficSource.MINI_HTTP)
                                 ) {
+                                    val url = (HttpSnapshot.findMethod(requestObject.javaClass, "getUrl", 0)?.invoke(requestObject) as? String)
+                                        ?: (HttpSnapshot.findField(requestObject.javaClass, "mUrl")?.get(requestObject) as? String)
+                                        ?: (HttpSnapshot.findField(requestObject.javaClass, "url")?.get(requestObject) as? String)
+                                    if (fansirsqi.xposed.sesame.util.CaptureFilter.isNoiseUrl(url)) {
+                                        hookSlot.get()!!.addLast(null)
+                                        return
+                                    }
                                     val payload = HttpSnapshot.arguments(method, param.args.toList(), setOf(0))
                                     val httpMethod = HttpSnapshot.findField(requestObject.javaClass, "requestMethod")
                                         ?.get(requestObject) as? String
                                     val existing = PendingRegistry.peek(requestObject)
+                                    val methodLabel = extractApiOrUrl(url) ?: "${targetClass.name}#enqueue"
                                     val request = existing ?: PendingHostRequest(
                                         requestId = RpcTrafficCapture.newRequestId(),
-                                        method = "${targetClass.name}#enqueue",
+                                        method = methodLabel,
                                         requestPayload = payload,
                                         startedAtMs = System.currentTimeMillis(),
                                         source = RpcTrafficCapture.TrafficSource.MINI_HTTP

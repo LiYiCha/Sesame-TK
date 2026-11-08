@@ -671,7 +671,7 @@ object ThemeManager {
         sendThemeUpdatedBroadcast(mergedJson)
 
         // 成功链路合并为一行，失败分支各自单独报错
-        Log.runtime(TAG, "✅ 已应用主题到官方链路 (重载=$reloaded, notify=$notified, 门检=$gateOk)")
+        Log.runtime(TAG, "🎨 当前主题生效中")
     }
 
     /**

@@ -25,7 +25,7 @@ import java.util.concurrent.atomic.AtomicLong
  */
 object RpcTrafficCapture {
     private const val TAG = "RpcTrafficCapture"
-    private const val MAX_PAYLOAD_CHARS = 16_000
+    private const val MAX_PAYLOAD_CHARS = 64_000
     private const val DISABLED_SOURCES_KEY = "RpcTrafficCapture_DisabledSources"
 
     enum class TrafficSource(val title: String) {
@@ -481,7 +481,7 @@ object RpcTrafficCapture {
         if (payload.isNullOrBlank()) return null
         return runCatching {
             val root = JSONObject(payload)
-            listOf("apiName", "params.apiName", "fetchedData.params.apiName")
+            listOf("api", "apiName", "params.apiName", "data.api", "fetchedData.params.apiName")
                 .firstNotNullOfOrNull { path -> stringAtPath(root, path) }
         }.getOrNull()
     }

@@ -1511,6 +1511,10 @@ class AntForest : ModelTask(), EnergyCollectCallback {
     private fun queryFriendHome(userId: String?, fromAct: String?): JSONObject? {
         var friendHomeObj: JSONObject? = null
         try {
+            if (userId.isNullOrEmpty()) return null
+            if (emptyForestCache.containsKey(userId)) {
+                return null
+            }
             val start = System.currentTimeMillis()
             val response = AntForestRpcCall.queryFriendHomePage(userId, fromAct)
             if (response.trim { it <= ' ' }.isEmpty()) {
@@ -1518,6 +1522,14 @@ class AntForest : ModelTask(), EnergyCollectCallback {
                 return null
             }
             friendHomeObj = JSONObject(response)
+            val resultCode = friendHomeObj.optString("resultCode", "")
+            val resultDesc = friendHomeObj.optString("resultDesc", "")
+            if (resultCode == "FRIEND_NOT_FOREST_USER" || resultCode == "TARGET_USER_QUIT_FOREST"
+                || resultDesc.contains("未开通") || resultDesc.contains("还没有开通")
+            ) {
+                emptyForestCache[userId] = System.currentTimeMillis()
+                return null
+            }
             // 检查响应是否成功
             if (!ResChecker.checkRes(TAG + "查询好友主页失败:", friendHomeObj)) {
                 // 检测并记录"手速太快"错误，避免日志刷屏
@@ -2531,6 +2543,9 @@ class AntForest : ModelTask(), EnergyCollectCallback {
            // Log.runtime(TAG, "  正在查询PK好友 [$userName$userId] 的主页...")
             collectEnergy(userId, queryFriendHome(userId, "PKContest"), "pk")
         } else { // 普通好友
+            if (!userId.isNullOrEmpty() && emptyForestCache.containsKey(userId)) {
+                return
+            }
             val needCollectEnergy =
                 collectEnergy!!.value && !jsonCollectMap.contains(userId)
             val needHelpProtect = helpFriendCollectType!!.value != HelpFriendCollectType.NONE && obj.optBoolean("canProtectBubble") && Status.canProtectBubbleToday(selfId)
@@ -2746,6 +2761,13 @@ class AntForest : ModelTask(), EnergyCollectCallback {
                 val jo = JSONObject(responseString)
                 val resultCode = jo.getString("resultCode")
                 if (!"SUCCESS".equals(resultCode, ignoreCase = true)) {
+                    val desc = jo.optString("resultDesc", "")
+                    if ("TARGET_USER_QUIT_FOREST" == resultCode || "FRIEND_NOT_FOREST_USER" == resultCode || desc.contains("还没有开通") || desc.contains("未开通")) {
+                        if (!userId.isNullOrEmpty()) {
+                            emptyForestCache[userId] = System.currentTimeMillis()
+                        }
+                        return@Runnable
+                    }
                     if ("PARAM_ILLEGAL2" == resultCode) {
                         Log.runtime(TAG, "[" + getAndCacheUserName(userId) + "]" + "能量已被收取,取消重试 错误:" + jo.getString("resultDesc"))
                         return@Runnable

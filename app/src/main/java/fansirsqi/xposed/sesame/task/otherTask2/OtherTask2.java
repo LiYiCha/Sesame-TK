@@ -62,6 +62,43 @@ public class OtherTask2 extends ModelTask {
     private BooleanModelField playConsultFacade = new BooleanModelField("playConsultFacade","会员|转盘",false);
     private IntegerModelField playConsultFacadeNum = new IntegerModelField("playConsultFacadeNum","会员|转盘-次数",10);
     private BooleanModelField topUpGoldTask = new BooleanModelField("topUpGoldTask", "充值金任务", false);
+    @Getter
+    private static final BooleanModelField elemeLuckyStar = new BooleanModelField("elemeLuckyStar", "饿了么|幸运星", false);
+    @Getter
+    private static final BooleanModelField elemeFreeOrder = new BooleanModelField("elemeFreeOrder", "饿了么|抽免单", false);
+    @Getter
+    private static final BooleanModelField elemeBurstRed = new BooleanModelField("elemeBurstRed", "饿了么|爆红包", false);
+
+    public static void disableElemeLuckyStar(String reason) {
+        Log.runtime(TAG, "饿了么幸运星不可用(" + reason + ")，自动关闭【饿了么|幸运星】开关");
+        try {
+            elemeLuckyStar.setValue(false);
+            fansirsqi.xposed.sesame.data.Config.save(fansirsqi.xposed.sesame.util.maps.UserMap.getCurrentUid(), true);
+        } catch (Throwable t) {
+            Log.error(TAG, "关闭饿了么幸运星开关异常: " + t.getMessage());
+        }
+    }
+
+    public static void disableElemeFreeOrder(String reason) {
+        Log.runtime(TAG, "饿了么免单不可用(" + reason + ")，自动关闭【饿了么|抽免单】开关");
+        try {
+            elemeFreeOrder.setValue(false);
+            fansirsqi.xposed.sesame.data.Config.save(fansirsqi.xposed.sesame.util.maps.UserMap.getCurrentUid(), true);
+        } catch (Throwable t) {
+            Log.error(TAG, "关闭饿了么抽免单开关异常: " + t.getMessage());
+        }
+    }
+
+    public static void disableElemeBurstRed(String reason) {
+        Log.runtime(TAG, "饿了么爆红包不可用(" + reason + ")，自动关闭【饿了么|爆红包】开关");
+        try {
+            elemeBurstRed.setValue(false);
+            fansirsqi.xposed.sesame.data.Config.save(fansirsqi.xposed.sesame.util.maps.UserMap.getCurrentUid(), true);
+        } catch (Throwable t) {
+            Log.error(TAG, "关闭饿了么爆红包开关异常: " + t.getMessage());
+        }
+    }
+
     @Override
     public ModelFields getFields() {
         ModelFields modelFields = new ModelFields();
@@ -83,6 +120,9 @@ public class OtherTask2 extends ModelTask {
         modelFields.addField(playConsultFacade);
         modelFields.addField(playConsultFacadeNum);
         modelFields.addField(topUpGoldTask);
+        modelFields.addField(elemeLuckyStar);
+        modelFields.addField(elemeFreeOrder);
+        modelFields.addField(elemeBurstRed);
         return modelFields;
     }
 
@@ -218,6 +258,24 @@ public class OtherTask2 extends ModelTask {
                         new TaskWrapper("充值金任务", () -> {
                             if (topUpGoldTask.getValue()) {
                                 new TopUpGold().handle();
+                            }
+                        }),
+
+                        new TaskWrapper("饿了么抽免单", () -> {
+                            if (elemeFreeOrder.getValue() && !Status.hasFlagToday("Eleme_FreeOrder_Done")) {
+                                fansirsqi.xposed.sesame.task.otherTask2.eleme.FreeOrderTask.INSTANCE.handle();
+                            }
+                        }),
+
+                        new TaskWrapper("饿了么爆红包", () -> {
+                            if (elemeBurstRed.getValue() && !Status.hasFlagToday("Eleme_BurstRed_Done")) {
+                                fansirsqi.xposed.sesame.task.otherTask2.eleme.BurstRedTask.INSTANCE.handle();
+                            }
+                        }),
+
+                        new TaskWrapper("饿了么幸运星", () -> {
+                            if (elemeLuckyStar.getValue() && !Status.hasFlagToday("Eleme_LuckyStar_Done")) {
+                                fansirsqi.xposed.sesame.task.otherTask2.eleme.LuckyStarTask.INSTANCE.handle();
                             }
                         })
                 )));

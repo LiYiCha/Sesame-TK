@@ -1,0 +1,66 @@
+package fansirsqi.xposed.sesame.task.otherTask2.eleme
+
+import fansirsqi.xposed.sesame.data.Status
+import fansirsqi.xposed.sesame.util.Log
+import java.util.concurrent.locks.ReentrantLock
+
+/**
+ * 饿了么外卖专享爆红包领取任务（独立于免单活动）
+ * 单例设计与并发互斥锁保护，防止多线程冲突
+ */
+object BurstRedTask {
+    private const val TAG = "BurstRedTask"
+    private const val FLAG_TODAY = "Eleme_BurstRed_Done"
+    private val lock = ReentrantLock()
+
+    fun handle() {
+        if (Status.hasFlagToday(FLAG_TODAY)) {
+            Log.runtime(TAG, "今日饿了么爆红包已领取，跳过执行")
+            return
+        }
+
+        if (!lock.tryLock()) {
+            Log.runtime(TAG, "已有饿了么爆红包任务正在执行中，跳过本次并发调用")
+            return
+        }
+
+        try {
+            Log.runtime(TAG, "==== 开始执行饿了么爆红包任务 ====")
+            val cookie = ElemeAuth.ensureCookie()
+            if (cookie.isEmpty() || !ElemeAuth.isBound()) {
+                val reason = if (cookie.isEmpty()) "未获取到有效登录凭据(未授权或换票失败)" else "当前支付宝未绑定饿了么账号(bindTag!=existed)"
+                Log.error(TAG, "$reason，自动关闭【饿了么|爆红包】开关并退出")
+                fansirsqi.xposed.sesame.task.otherTask2.OtherTask2.disableElemeBurstRed(reason)
+                return
+            }
+            Log.runtime(TAG, "当前账号: ${ElemeAuth.getAccountSummary()}")
+
+            // 领取外卖小程序首页/进站专享 3 张 5 元爆红包
+            val sendResp = FreeOrderRpcCall.sendBet(cookie)
+            if (sendResp != null) {
+                val data = sendResp.optJSONObject("data") ?: sendResp
+                val coupon = data.optJSONObject("resultObj")
+                    ?.optJSONObject("eatPluginResult")
+                    ?.optJSONObject("EAT_PAID_COUPON_SEND")
+
+                if (coupon != null) {
+                    val count = coupon.optString("count", "3")
+                    val reduction = coupon.optString("reductionYuan", "5")
+                    val name = coupon.optString("rightName", "爆红包")
+                    Log.runtime(TAG, "🎉 成功领取外卖专享爆红包: $count 张 $reduction 元 $name")
+                } else {
+                    Log.runtime(TAG, "外卖爆红包已领取或今日无待领权益")
+                }
+            } else {
+                Log.runtime(TAG, "外卖爆红包领取请求未返回有效数据")
+            }
+
+            Status.setFlagToday(FLAG_TODAY)
+            Log.runtime(TAG, "==== 饿了么爆红包任务执行完毕 ====")
+        } catch (t: Throwable) {
+            Log.error(TAG, "执行饿了么爆红包任务异常: ${t.message}")
+        } finally {
+            lock.unlock()
+        }
+    }
+}

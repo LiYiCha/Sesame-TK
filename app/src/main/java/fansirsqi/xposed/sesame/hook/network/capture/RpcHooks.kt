@@ -220,16 +220,21 @@ internal object RpcHooks {
                                 RpcTrafficCapture.recordPendingResponse(callback, responsePayload, terminal = !kept)
                             val links = PendingRegistry.linksSnapshot(callback)
                             if (!matched && links?.first != true && responsePayload != null) {
-                                RpcTrafficCapture.emitEvent(
-                                    RpcTrafficCapture.RpcTrafficEvent(
-                                        phase = RpcTrafficCapture.TrafficPhase.RESPONSE,
-                                        source = RpcTrafficCapture.TrafficSource.ARIVER_RPC,
-                                        method = RpcTrafficCapture.extractMtopApiName(responsePayload) ?: "unknown",
-                                        payload = responsePayload,
-                                        note = if (links?.second == true) "ambiguous_callback: ${links.third}" else null,
-                                        correlationStatus = if (links?.second == true) "AMBIGUOUS" else "UNMATCHED"
+                                val mtopApi = RpcTrafficCapture.extractMtopApiName(responsePayload)
+                                if (mtopApi == null && fansirsqi.xposed.sesame.util.CaptureFilter.isNoisePayload(responsePayload)) {
+                                    // 丢弃设备电量、网络、安全区域等频繁轮询的系统噪音
+                                } else {
+                                    RpcTrafficCapture.emitEvent(
+                                        RpcTrafficCapture.RpcTrafficEvent(
+                                            phase = RpcTrafficCapture.TrafficPhase.RESPONSE,
+                                            source = RpcTrafficCapture.TrafficSource.ARIVER_RPC,
+                                            method = mtopApi ?: "unknown",
+                                            payload = responsePayload,
+                                            note = if (links?.second == true) "ambiguous_callback: ${links.third}" else null,
+                                            correlationStatus = if (links?.second == true) "AMBIGUOUS" else "UNMATCHED"
+                                        )
                                     )
-                                )
+                                }
                             }
                         }
                     }

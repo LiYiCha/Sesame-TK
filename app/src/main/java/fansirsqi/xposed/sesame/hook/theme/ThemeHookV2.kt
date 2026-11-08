@@ -246,7 +246,7 @@ object ThemeHookV2 {
             // 注入到内存缓存
             cacheMap["theme"] = customCache
 
-            Log.runtime(TAG, "✅ 已注入动态主题缓存: ${themeInfo.name} (skinId=${themeInfo.skinId}, md5=${themeInfo.md5})")
+            Log.runtime(TAG, "🎨 动态主题生效中: ${themeInfo.name}")
 
             // 持久化到磁盘：防止支付宝清理缓存后主题丢失需重新设置
             persistCacheToDisk(classLoader, cacheMap)

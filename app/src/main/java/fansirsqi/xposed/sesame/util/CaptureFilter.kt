@@ -31,8 +31,63 @@ object CaptureFilter {
         "telemetry",
         "alipay.client.interfere.config.get",
         "alipay.client.getDynamicBundle",
-        "alipay.client.getUnionResource"
+        "alipay.client.getUnionResource",
+        "app-monitor.ele.me",
+        "metis-er.ele.me",
+        "gm.mmstat.com",
+        "ynuf.aliapp.org",
+        "arms-retcode.aliyuncs.com",
+        "w-he51.ele.me"
     )
+
+    private val STATIC_EXTENSIONS = setOf(
+        ".png", ".jpg", ".jpeg", ".webp", ".gif", ".svg", ".ico",
+        ".css", ".woff", ".woff2", ".ttf", ".otf", ".mp3", ".mp4"
+    )
+
+    private val NOISE_PAYLOAD_KEYS = listOf(
+        "\"currentBattery\"",
+        "\"isCharging\"",
+        "\"brightness\"",
+        "\"appMode\"",
+        "\"safeArea\"",
+        "\"locationAuthorized\"",
+        "\"bluetoothAuthorized\"",
+        "\"microphoneAuthorized\"",
+        "\"cameraAuthorized\"",
+        "\"notificationAuthorized\"",
+        "\"phoneCalendarAuthorized\"",
+        "\"signalStrength\"",
+        "\"networkAvailable\"",
+        "\"statusBarHeight\""
+    )
+
+    /**
+     * 判断 URL 是否为静态资源（图片、字体、多媒体等）
+     */
+    fun isStaticResource(url: String?): Boolean {
+        if (url.isNullOrEmpty()) return false
+        val clean = url.substringBefore('?').substringBefore('#').lowercase()
+        return STATIC_EXTENSIONS.any { clean.endsWith(it) }
+    }
+
+    /**
+     * 判断 URL 是否为噪音上报或监控请求
+     */
+    fun isNoiseUrl(url: String?): Boolean {
+        if (url.isNullOrEmpty()) return false
+        if (isStaticResource(url)) return true
+        val lower = url.lowercase()
+        return DEFAULT_NOISE.any { lower.contains(it) } || isFiltered(url)
+    }
+
+    /**
+     * 判断 Payload 是否为设备传感器/状态轮询噪音
+     */
+    fun isNoisePayload(payload: String?): Boolean {
+        if (payload.isNullOrBlank()) return false
+        return NOISE_PAYLOAD_KEYS.any { payload.contains(it) }
+    }
 
     /**
      * 获取当前生效的过滤关键词列表（首次使用默认加载 DEFAULT_NOISE）
