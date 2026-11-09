@@ -4,16 +4,16 @@ import fansirsqi.xposed.sesame.hook.RequestManager.requestString
 
 object baoguoRpcCall {
     //=============================
-    // 包裹游历
+    // 包裹游历 RPC 接口集
 
-    // 任务查询
+    // 通用任务中心查询
     fun queryTaskList(taskCenInfo: String): String {
         val method = "alipay.promoprod.task.listQuery"
         val params = "[{\"consultAccessFlag\":true,\"taskCenInfo\":\"$taskCenInfo\"}]"
         return requestString(method, params)
     }
 
-    // 任务处理 (报名/完成)
+    // 任务处理 (报名 signup / 完成 send)
     fun handleTask(appletId: String, stageCode: String, taskCenInfo: String): String {
         val method = "alipay.promoprod.applet.trigger"
         val params = "[{\"appletId\":\"$appletId\",\"retryFlag\":\"true\"," +
@@ -28,7 +28,28 @@ object baoguoRpcCall {
         return requestString(method, params)
     }
 
-    // 收取获取全部奖励
+    // 查询包裹主任务列表
+    fun queryMainTaskList(): String {
+        val method = "alipay.mobile.logisticinteraction.game.mainTask.list"
+        val params = "[{}]"
+        return requestString(method, params)
+    }
+
+    // 查询棋盘最新状态
+    fun queryLatestBoard(): String {
+        val method = "alipay.mobile.logisticsinteraction.game.board.queryLatest"
+        val params = "[{}]"
+        return requestString(method, params)
+    }
+
+    // 棋盘掷骰子游历
+    fun rollBoard(orderId: String): String {
+        val method = "alipay.mobile.logisticsinteraction.game.board.roll"
+        val params = "[{\"orderId\":\"$orderId\"}]"
+        return requestString(method, params)
+    }
+
+    // 领取全部奖励
     fun receiveAllRewards(): String {
         val method = "alipay.mobile.logisticsinteraction.game.parcelMap.receiveAllRewards"
         val params = "[{}]"
@@ -69,4 +90,4 @@ object baoguoRpcCall {
         val params = "[{\"pageNum\":1,\"pageSize\":50}]"
         return requestString(method, params)
     }
-}
+}

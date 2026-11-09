@@ -363,6 +363,11 @@ internal object HttpHooks {
                                     if (isRequest) {
                                         val reqJson = param.args.getOrNull(1) as? Map<*, *>
                                         val url = reqJson?.get("url")?.toString()
+                                        val headersMap = reqJson?.get("headers") as? Map<*, *>
+                                        val cookie = headersMap?.get("cookie")?.toString() ?: headersMap?.get("Cookie")?.toString()
+                                        if (!cookie.isNullOrEmpty() && (url?.contains("ele.me") == true || url?.contains("2021005151656223") == true)) {
+                                            fansirsqi.xposed.sesame.task.otherTask2.eleme.ElemeAuth.saveCapturedCookie(cookie)
+                                        }
                                         if (fansirsqi.xposed.sesame.util.CaptureFilter.isNoiseUrl(url)) {
                                             hookSlot.get()!!.addLast(null)
                                             return

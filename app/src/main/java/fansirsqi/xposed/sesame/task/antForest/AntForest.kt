@@ -3229,6 +3229,7 @@ class AntForest : ModelTask(), EnergyCollectCallback {
 
                         // 判断任务状态
                         if (TaskStatus.FINISHED.name == taskStatus) {
+                            if (TaskBlacklist.isTaskInBlacklist(taskType) || TaskBlacklist.isTaskInBlacklist(taskTitle)) continue
                             // 领取任务奖励
                             val joAward = JSONObject(
                                 AntForestRpcCall.receiveTaskAward(
@@ -3241,13 +3242,16 @@ class AntForest : ModelTask(), EnergyCollectCallback {
                                 sumawardCount += awardCount
                                 doubleCheck = true // 标记需要重新检查任务
                             } else {
+                                val errorCode = joAward.optString("code", "")
+                                val errorDesc = joAward.optString("desc", joAward.optString("errorMessage", ""))
+                                TaskBlacklist.autoAddToBlacklist(taskType, taskTitle, errorCode, errorDesc)
                                 Log.error(TAG, "领取失败: $taskTitle") // 记录领取失败信息
                                 Log.error(joAward.toString()) // 打印奖励响应
                             }
                             GlobalThreadPools.sleepCompat(500)
                         } else if (TaskStatus.TODO.name == taskStatus) {
                             // 跳过已在黑名单中的任务
-                            if (TaskBlacklist.isTaskInBlacklist(taskType)) continue
+                            if (TaskBlacklist.isTaskInBlacklist(taskType) || TaskBlacklist.isTaskInBlacklist(taskTitle)) continue
                             // 执行待完成任务
                             val bizKey = sceneCode + "_" + taskType
                             val count = forestTaskTryCount

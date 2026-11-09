@@ -38,9 +38,9 @@ object LuckyStarTask {
             Log.runtime(TAG, "==== 开始执行饿了么幸运星任务 ====")
             val cookie = ElemeAuth.ensureCookie()
             if (cookie.isEmpty() || !ElemeAuth.isBound()) {
-                val reason = if (cookie.isEmpty()) "未获取到有效登录凭证(未授权或换票失败)" else "当前支付宝未绑定饿了么账号(bindTag!=existed)"
-                Log.error(TAG, "$reason，自动关闭【饿了么|幸运星】开关并退出")
-                fansirsqi.xposed.sesame.task.otherTask2.OtherTask2.disableElemeLuckyStar(reason)
+                val reason = if (cookie.isEmpty()) "未获取到有效登录凭据(换票待确认或请在支付宝进入一次饿了么小程序)" else "当前未关联有效饿了么账号"
+                Log.runtime(TAG, "$reason，跳过今日饿了么幸运星任务")
+                Status.setFlagToday(FLAG_TODAY)
                 return
             }
             Log.runtime(TAG, "当前账号: ${ElemeAuth.getAccountSummary()}")

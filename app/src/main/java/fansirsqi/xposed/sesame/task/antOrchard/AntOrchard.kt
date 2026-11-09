@@ -593,8 +593,7 @@ class AntOrchard : ModelTask() {
                     "未知任务"
                 }
 
-                if (TaskBlacklist.isTaskInBlacklist(taskId)) {
-                    //Log.runtime(TAG, "跳过黑名单任务[$title] taskId=$taskId")
+                if (TaskBlacklist.isTaskInBlacklist(taskId) || TaskBlacklist.isTaskInBlacklist(title)) {
                     continue
                 }
 

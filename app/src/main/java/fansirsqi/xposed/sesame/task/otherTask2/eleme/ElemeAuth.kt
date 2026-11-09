@@ -42,6 +42,28 @@ object ElemeAuth {
     }
 
     /**
+     * 外部网络捕获注入真实 Cookie
+     */
+    @Synchronized
+    fun saveCapturedCookie(captured: String) {
+        if (captured.isBlank()) return
+        if (!captured.contains("SID=") && !captured.contains("sid=") && !captured.contains("user_id=")) return
+
+        val keyCookie = getUidKey(KEY_COOKIE)
+        val keyExpires = getUidKey(KEY_EXPIRES)
+        val now = System.currentTimeMillis()
+        val expires = now + 72 * 3600 * 1000L
+
+        memoryCookie = captured
+        memoryExpiresAt = expires
+        memoryUid = UserMap.currentUid
+
+        DataStore.put(keyCookie, captured)
+        DataStore.put(keyExpires, expires)
+        Log.runtime(TAG, "已自动同步捕获的真机饿了么会话凭据")
+    }
+
+    /**
      * 获取有效的 Cookie，若过期或不存在则自动刷新（支持多账号数据隔离）
      */
     @Synchronized
@@ -87,7 +109,11 @@ object ElemeAuth {
         }
 
         // 刷新失败时尽力而为返回现有 Cookie
-        return memoryCookie.ifEmpty { DataStore.get(keyCookie, String::class.java).orEmpty() }
+        val fallback = memoryCookie.ifEmpty { DataStore.get(keyCookie, String::class.java).orEmpty() }
+        if (fallback.isNotEmpty()) {
+            return fallback
+        }
+        return ""
     }
 
     /**
@@ -109,11 +135,11 @@ object ElemeAuth {
     }
 
     /**
-     * 判断当前账号是否已绑定饿了么外卖账号（依据真实抓包中 bindTag=existed 与 USERID 判定）
+     * 判断当前账号是否具备有效饿了么凭据
      */
     fun isBound(): Boolean {
         val cookie = peekCookie()
-        return cookie.contains("USERID=") || cookie.contains("user_id=") || cookie.contains("bindTag=existed")
+        return cookie.contains("USERID=") || cookie.contains("user_id=") || cookie.contains("SID=") || cookie.contains("sid=") || cookie.contains("bindTag=existed")
     }
 
     /**
@@ -181,13 +207,21 @@ object ElemeAuth {
             val contentObj = json?.optJSONObject("content")
             val dataObj = contentObj?.optJSONObject("data") ?: json?.optJSONObject("data")
 
+            // 如果返回了 iframeRedirectUrl，尝试跟随请求获取跳转 Cookie
+            val iframeRedirect = dataObj?.optBoolean("iframeRedirect", false) ?: false
+            val iframeUrl = dataObj?.optString("iframeRedirectUrl").orEmpty()
+            if (iframeRedirect && iframeUrl.isNotEmpty()) {
+                Log.runtime(TAG, "检测到绑定验证引导，跟随链接获取凭据...")
+                followRedirectForCookies(iframeUrl, cookieMap)
+            }
+
             // 从 content.data 提取所有票据并压入 Cookie
             if (dataObj != null) {
                 val it = dataObj.keys()
                 while (it.hasNext()) {
                     val key = it.next()
                     val value = dataObj.optString(key)
-                    if (value.isNotEmpty() && value != "null") {
+                    if (value.isNotEmpty() && value != "null" && !key.contains("Redirect")) {
                         cookieMap[key] = value
                     }
                 }
@@ -210,7 +244,7 @@ object ElemeAuth {
             }
 
             val finalCookie = cookieMap.entries.joinToString("; ") { "${it.key}=${it.value}" }
-            if (finalCookie.isNotEmpty() && (cookieMap.containsKey("SID") || cookieMap.containsKey("sid") || cookieMap.containsKey("USERID"))) {
+            if (finalCookie.isNotEmpty() && (cookieMap.containsKey("SID") || cookieMap.containsKey("sid") || cookieMap.containsKey("USERID") || cookieMap.containsKey("user_id"))) {
                 memoryCookie = finalCookie
                 memoryExpiresAt = expires
                 val keyCookie = getUidKey(KEY_COOKIE)
@@ -227,7 +261,7 @@ object ElemeAuth {
                 Log.runtime(TAG, "已成功刷新饿了么登录态，有效期至: ${java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.getDefault()).format(java.util.Date(expires))}")
                 return finalCookie
             } else {
-                Log.error(TAG, "换取登录态未返回有效 Cookie: $respText")
+                Log.runtime(TAG, "换取登录态未解析出新 SID，保留现有缓存凭据: $respText")
             }
         } catch (t: Throwable) {
             Log.error(TAG, "刷新饿了么登录态异常: ${t.message}")
@@ -235,6 +269,36 @@ object ElemeAuth {
             conn?.disconnect()
         }
         return ""
+    }
+
+    private fun followRedirectForCookies(urlStr: String, cookieMap: MutableMap<String, String>) {
+        var conn: HttpURLConnection? = null
+        try {
+            val url = URL(urlStr)
+            conn = (url.openConnection() as HttpURLConnection).apply {
+                requestMethod = "GET"
+                connectTimeout = 10000
+                readTimeout = 10000
+                instanceFollowRedirects = false
+                setRequestProperty("User-Agent", DEFAULT_UA)
+                if (cookieMap.isNotEmpty()) {
+                    setRequestProperty("Cookie", cookieMap.entries.joinToString("; ") { "${it.key}=${it.value}" })
+                }
+            }
+            val headers = conn.headerFields["Set-Cookie"] ?: conn.headerFields["set-cookie"] ?: emptyList()
+            for (header in headers) {
+                val parts = header.split(";")
+                if (parts.isNotEmpty()) {
+                    val kv = parts[0].trim().split("=", limit = 2)
+                    if (kv.size == 2) {
+                        cookieMap[kv[0].trim()] = kv[1].trim()
+                    }
+                }
+            }
+        } catch (_: Throwable) {
+        } finally {
+            conn?.disconnect()
+        }
     }
 
     private fun getWebviewCookie(): String? {
@@ -258,7 +322,7 @@ object ElemeAuth {
     }
 
     /**
-     * 获取当前账号运行摘要信息（包含支付宝脱敏昵称/UID与饿了么账号/UID）
+     * 获取当前账号运行摘要信息
      */
     fun getAccountSummary(): String {
         val alipayMask = UserMap.getCurrentMaskName().ifEmpty { "当前用户" }

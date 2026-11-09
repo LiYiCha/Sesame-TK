@@ -68,6 +68,16 @@ public class OtherTask2 extends ModelTask {
     private static final BooleanModelField elemeFreeOrder = new BooleanModelField("elemeFreeOrder", "饿了么|抽免单", false);
     @Getter
     private static final BooleanModelField elemeBurstRed = new BooleanModelField("elemeBurstRed", "饿了么|爆红包", false);
+    public static final BooleanModelField gameCenterGoldCashExchange = new BooleanModelField("gameCenterGoldCashExchange", "游戏金币|兑换现金", false);
+    public static final IntegerModelField gameCenterGoldCashExchangeAmount = new IntegerModelField("gameCenterGoldCashExchangeAmount", "游戏金币|提现金额(元,0为任意)", 10);
+
+    public static BooleanModelField getGameCenterGoldCashExchange() {
+        return gameCenterGoldCashExchange;
+    }
+
+    public static IntegerModelField getGameCenterGoldCashExchangeAmount() {
+        return gameCenterGoldCashExchangeAmount;
+    }
 
     public static void disableElemeLuckyStar(String reason) {
         Log.runtime(TAG, "饿了么幸运星不可用(" + reason + ")，自动关闭【饿了么|幸运星】开关");
@@ -123,6 +133,8 @@ public class OtherTask2 extends ModelTask {
         modelFields.addField(elemeLuckyStar);
         modelFields.addField(elemeFreeOrder);
         modelFields.addField(elemeBurstRed);
+        modelFields.addField(gameCenterGoldCashExchange);
+        modelFields.addField(gameCenterGoldCashExchangeAmount);
         return modelFields;
     }
 

@@ -5,9 +5,9 @@ import fansirsqi.xposed.sesame.hook.RequestManager
 import fansirsqi.xposed.sesame.hook.core.ModuleScope
 import fansirsqi.xposed.sesame.task.otherTask.BaseCommTask
 import fansirsqi.xposed.sesame.task.otherTask.CompletedKeyEnum
+import fansirsqi.xposed.sesame.util.DataStore
 import fansirsqi.xposed.sesame.util.Log
 import fansirsqi.xposed.sesame.util.RandomUtil
-import fansirsqi.xposed.sesame.util.DataStore
 import fansirsqi.xposed.sesame.util.TimeUtil
 import fansirsqi.xposed.sesame.util.maps.UserMap
 import kotlinx.coroutines.CancellationException
@@ -21,6 +21,12 @@ import org.json.JSONObject
 class GameCenterGold : BaseCommTask() {
 
     companion object {
+        private const val GIT = "9e159d58cce04c13a"
+        private const val APP_ID = "2021003125685383"
+        private const val SOURCE = "yxzx_mc_xiutxz04"
+        private const val FRONT_END_VERSION = "20260820"
+        private const val P2E_VERSION = ""
+
         @Volatile
         private var playJob: Job? = null
 
@@ -44,12 +50,12 @@ class GameCenterGold : BaseCommTask() {
 
     override fun handle() {
         try {
-            // 分别检查各项任务是否需要执行
             val needSignIn = !Status.hasFlagToday("GameCenterGold_SignIn_Completed")
             val needBrowse = !Status.hasTemporaryStatusValid("GameCenterGold_Browse_Limit")
             val needPlay = !Status.hasFlagToday("GameCenterGold_Play60s_Completed")
+            val needExchange = OtherTask2.getGameCenterGoldCashExchange().value && !Status.hasFlagToday("GameCenterGold_CashExchange_Completed")
 
-            if (!needSignIn && !needBrowse && !needPlay) {
+            if (!needSignIn && !needBrowse && !needPlay && !needExchange) {
                 return
             }
 
@@ -78,44 +84,25 @@ class GameCenterGold : BaseCommTask() {
             handleDrawGoldCoin(homeData)
             TimeUtil.sleep(RandomUtil.nextLong(2000, 3000))
 
-            // 2. 获取任务列表 - queryTaskList
-            val taskListRes = queryTaskList()
-            if (taskListRes.isNullOrEmpty()) {
-                Log.error(TAG, "获取任务列表为空")
-                return
-            }
-
-            val taskListJson = JSONObject(taskListRes)
-            if (!taskListJson.optBoolean("success")) {
-                Log.error(TAG, "获取任务列表失败: $taskListRes")
-                return
-            }
-
-            val data = taskListJson.optJSONObject("data") ?: return
-
-            // 搜集并上报 exposedTaskList (模拟客户端行为，放在做任务之前处理)
-            val exposedTaskModuleVO = data.optJSONObject("exposedTaskModuleVO")
-            if (exposedTaskModuleVO != null) {
-                val exposedTaskList = exposedTaskModuleVO.optJSONArray("exposedTaskList")
-                if (exposedTaskList != null && exposedTaskList.length() > 0) {
-                    reportExposedTasks(exposedTaskList)
-                }
-            }
-
-            // 3. 处理浏览任务 (VIEW_TASK)
+            // 2. 处理浏览任务 (VIEW_TASK) - 每次做任务前先刷新列表
             if (needBrowse) {
                 processViewTasks()
                 // 限制浏览任务频率为每1小时执行一次
                 Status.setTemporaryStatusWithExpiry("GameCenterGold_Browse_Limit", 1000 * 60 * 60)
             }
 
-            // 4. 处理玩游戏60秒任务 (改用协程后台异步执行，不阻塞主任务队列)
+            // 3. 处理玩游戏60秒任务 (协程后台异步执行，不阻塞主任务队列)
             if (needPlay) {
                 launchPlay60sTasksAsync()
             }
 
-            // 5. 领取阶段奖励里程碑（快速检查一次）
+            // 4. 领取阶段里程碑奖励
             handleMilestoneRewards()
+
+            // 5. 自动兑换提现现金红包 (独立开关控制)
+            if (needExchange) {
+                handleCashExchange()
+            }
 
         } catch (e: Exception) {
             Log.error(TAG, "执行异常: ${e.message}")
@@ -124,26 +111,26 @@ class GameCenterGold : BaseCommTask() {
     }
 
     /**
-     * 1. 访问首页 RPC
+     * 1. 访问首页 RPC (全面对齐最新真机抓包参数)
      */
     private fun queryHomePage(): String {
         val method = "com.alipay.gamecenteruprod.biz.rpc.p2e.queryHomePage"
-        val params = "[{\"canAddHome\":false,\"deviceLevel\":\"high\",\"screenType\":10,\"source\":\"ch_appcenter__chsub_9patch\",\"unityDeviceLevel\":\"high\"}]"
+        val params = "[{\"__git\":\"$GIT\",\"appId\":\"$APP_ID\",\"canAddHome\":false,\"deviceLevel\":\"high\",\"frontEndVersion\":\"$FRONT_END_VERSION\",\"p2eVersion\":\"$P2E_VERSION\",\"screenType\":10,\"source\":\"$SOURCE\",\"subscribePanelCheck\":false,\"unityDeviceLevel\":\"high\"}]"
         return RequestManager.requestString(method, params)
     }
 
     /**
-     * 2. 获取任务列表 RPC
+     * 2. 获取任务列表 RPC (对齐最新 sessionId、frontEndVersion、source 与 appId)
      */
     private fun queryTaskList(): String {
         val method = "com.alipay.gamecenteruprod.biz.rpc.p2e.queryTaskList"
         val sessionId = System.currentTimeMillis().toString()
-        val params = "[{\"deviceLevel\":\"high\",\"panelLaunchableCheckMap\":{\"SET_HEAD_TASK\":false},\"sessionId\":\"$sessionId\",\"setHeadPanelCheck\":false,\"source\":\"ch_appcenter__chsub_9patch\",\"unityDeviceLevel\":\"high\"}]"
+        val params = "[{\"__git\":\"$GIT\",\"appId\":\"$APP_ID\",\"deviceLevel\":\"high\",\"frontEndVersion\":\"$FRONT_END_VERSION\",\"p2eVersion\":\"$P2E_VERSION\",\"panelLaunchableCheckMap\":{\"SET_HEAD_TASK\":false},\"sessionId\":\"$sessionId\",\"setHeadPanelCheck\":false,\"source\":\"$SOURCE\",\"subscribePanelCheck\":false,\"unityDeviceLevel\":\"high\"}]"
         return RequestManager.requestString(method, params)
     }
 
     /**
-     * 3. 上报展示的任务 RPC (做任务之前上报，模拟客户端可见行为)
+     * 3. 上报展示的任务 RPC
      */
     private fun reportExposedTasks(exposedTaskList: JSONArray) {
         try {
@@ -168,7 +155,7 @@ class GameCenterGold : BaseCommTask() {
      */
     private fun platformTaskSignUp(taskId: String, taskToken: String, actionChannel: String): String {
         val method = "com.alipay.gamecenteruprod.biz.rpc.platformTaskSignUp"
-        val params = "[{\"actionChannel\":\"$actionChannel\",\"activityId\":\"P2E_PLATFORM_TASK\",\"source\":\"ch_appcenter__chsub_9patch\",\"taskId\":\"$taskId\",\"taskToken\":\"$taskToken\"}]"
+        val params = "[{\"actionChannel\":\"$actionChannel\",\"activityId\":\"P2E_PLATFORM_TASK\",\"source\":\"$SOURCE\",\"taskId\":\"$taskId\",\"taskToken\":\"$taskToken\"}]"
         return RequestManager.requestString(method, params)
     }
 
@@ -177,16 +164,18 @@ class GameCenterGold : BaseCommTask() {
      */
     private fun platformTaskComplete(taskId: String, taskToken: String, actionChannel: String): String {
         val method = "com.alipay.gamecenteruprod.biz.rpc.platformTaskComplete"
-        val params = "[{\"actionChannel\":\"$actionChannel\",\"activityId\":\"P2E_PLATFORM_TASK\",\"source\":\"ch_appcenter__chsub_9patch\",\"taskId\":\"$taskId\",\"taskToken\":\"$taskToken\"}]"
+        val params = "[{\"actionChannel\":\"$actionChannel\",\"activityId\":\"P2E_PLATFORM_TASK\",\"source\":\"$SOURCE\",\"taskId\":\"$taskId\",\"taskToken\":\"$taskToken\"}]"
         return RequestManager.requestString(method, params)
     }
 
     /**
-     * 6. 领取浏览任务奖励
+     * 6. 领取浏览任务奖励 (对齐最新 appId、p2eVersion 与 oriChInfo)
      */
-    private fun gameP2eTaskReceive(taskId: String, taskToken: String): String {
+    private fun gameP2eTaskReceive(taskId: String, taskToken: String, taskType: String): String {
         val method = "com.alipay.gamecenteruprod.biz.rpc.p2e.gameP2eTaskReceive"
-        val params = "[{\"actionChannel\":\"taskList\",\"activityId\":\"P2E_PLATFORM_TASK\",\"oriChInfo\":\"ch_appcenter__chsub_9patch\",\"source\":\"ch_appcenter__chsub_9patch\",\"taskId\":\"$taskId\",\"taskToken\":\"$taskToken\",\"taskType\":\"PLATFORM_TRAN_TASK\"}]"
+        val type = if (taskType.isNotEmpty()) taskType else "PLATFORM_TRAN_TASK"
+        val tokenParam = if (taskToken.isNotEmpty()) ",\"taskToken\":\"$taskToken\"" else ""
+        val params = "[{\"__git\":\"$GIT\",\"actionChannel\":\"taskList\",\"activityId\":\"P2E_PLATFORM_TASK\",\"appId\":\"$APP_ID\",\"oriChInfo\":\"$SOURCE\",\"p2eVersion\":\"$P2E_VERSION\",\"source\":\"$SOURCE\",\"taskId\":\"$taskId\"$tokenParam,\"taskType\":\"$type\"}]"
         return RequestManager.requestString(method, params)
     }
 
@@ -195,7 +184,7 @@ class GameCenterGold : BaseCommTask() {
      */
     private fun receiveTaskMileStoneReward(taskMileStoneId: String, outBizNo: String, sign: String): String {
         val method = "com.alipay.gamecenteruprod.biz.rpc.p2e.receiveTaskMileStoneReward"
-        val params = "[{\"__git\":\"9e159d58cce04c13a\",\"oriChInfo\":\"ch_appcenter__chsub_9patch\",\"outBizNo\":\"$outBizNo\",\"sign\":\"$sign\",\"source\":\"ch_appcenter__chsub_9patch\",\"taskMileStoneId\":\"$taskMileStoneId\"}]"
+        val params = "[{\"__git\":\"$GIT\",\"oriChInfo\":\"$SOURCE\",\"outBizNo\":\"$outBizNo\",\"sign\":\"$sign\",\"source\":\"$SOURCE\",\"taskMileStoneId\":\"$taskMileStoneId\"}]"
         return RequestManager.requestString(method, params)
     }
 
@@ -204,30 +193,71 @@ class GameCenterGold : BaseCommTask() {
      */
     private fun gameP2eFloatingBallConsult(gameId: String, gameModuleId: String): String {
         val method = "com.alipay.gamecenteruprod.biz.rpc.p2e.gameP2eFloatingBallConsult"
-        val params = "[{\"__git\":\"9e159d58cce04c13a\",\"gameId\":\"$gameId\",\"gameModuleId\":\"$gameModuleId\",\"source\":\"ch_appcenter__chsub_9patch\",\"trafficDriverId\":\"\"}]"
+        val params = "[{\"__git\":\"$GIT\",\"appId\":\"$APP_ID\",\"gameId\":\"$gameId\",\"gameModuleId\":\"$gameModuleId\",\"p2eVersion\":\"$P2E_VERSION\",\"source\":\"$SOURCE\",\"trafficDriverId\":\"\"}]"
         return RequestManager.requestString(method, params)
     }
 
     /**
-     * 处理所有的浏览任务 (每次做完自动刷新列表以防遗漏)
+     * 8. 60秒游戏结算 RPC
+     */
+    private fun gameP2eFloatingBallComplete(gameId: String, gameModuleId: String): String {
+        val method = "com.alipay.gamecenteruprod.biz.rpc.p2e.gameP2eFloatingBallComplete"
+        val params = "[{\"appId\":\"$APP_ID\",\"floatingBallTypeList\":[\"P2E_GAME_BROWSE_TASK_FLOATING_BALL\"],\"gameId\":\"$gameId\",\"gameModuleId\":\"$gameModuleId\",\"oriChInfo\":\"$SOURCE\",\"p2eVersion\":\"$P2E_VERSION\",\"source\":\"$SOURCE\",\"trafficDriverId\":\"\"}]"
+        return RequestManager.requestString(method, params)
+    }
+
+    /**
+     * 9. 时长上报 RPC
+     */
+    private fun submitUserPlayDurationAction(gameAppId: String, playTime: Int): String {
+        val method = "com.alipay.gamecenteruprod.biz.rpc.v3.submitUserPlayDurationAction"
+        val params = "[{\"gameAppId\":\"$gameAppId\",\"playTime\":$playTime,\"source\":\"yxzx_mc_xasqsr68\",\"statisticTag\":\"\"}]"
+        return RequestManager.requestString(method, params)
+    }
+
+    /**
+     * 10. 查询金币兑换/提现页面
+     */
+    private fun queryGoldExgPrizePage(): String {
+        val method = "com.alipay.gamecenteruprod.biz.rpc.p2e.queryGoldExgPrizePage"
+        val params = "[{\"__git\":\"$GIT\",\"appId\":\"$APP_ID\",\"p2eVersion\":\"$P2E_VERSION\"}]"
+        return RequestManager.requestString(method, params)
+    }
+
+    /**
+     * 11. 兑换提现现金红包 RPC
+     */
+    private fun doGoldExchangePrize(prizeConfigId: String, outBizNo: String, sendSign: String, sendSignNew: String): String {
+        val method = "com.alipay.gamecenteruprod.biz.rpc.p2e.doGoldExchangePrize"
+        val params = "[{\"__git\":\"$GIT\",\"appId\":\"$APP_ID\",\"outBizNo\":\"$outBizNo\",\"p2eVersion\":\"$P2E_VERSION\",\"prizeConfigId\":\"$prizeConfigId\",\"sendSign\":\"$sendSign\",\"sendSignNew\":\"$sendSignNew\"}]"
+        return RequestManager.requestString(method, params)
+    }
+
+    /**
+     * 处理所有的浏览任务 (做任务前先刷新列表，完成后再次刷新，动态响应状态)
      */
     private fun processViewTasks() {
-        val maxIterations = 15
+        val maxIterations = 20
         var loopCount = 0
         val completedTaskIds = mutableSetOf<String>()
 
         while (loopCount < maxIterations) {
             loopCount++
             try {
+                // 每次循环重新拉取最新的任务列表
                 val listRes = queryTaskList()
                 if (listRes.isNullOrEmpty()) break
                 val listJson = JSONObject(listRes)
                 if (!listJson.optBoolean("success")) break
                 val data = listJson.optJSONObject("data") ?: break
 
-                val platformTaskList = data.optJSONArray("platformTaskList")
                 val exposedTaskModuleVO = data.optJSONObject("exposedTaskModuleVO")
                 val exposedTaskList = exposedTaskModuleVO?.optJSONArray("exposedTaskList")
+                if (loopCount == 1 && exposedTaskList != null && exposedTaskList.length() > 0) {
+                    reportExposedTasks(exposedTaskList)
+                }
+
+                val platformTaskList = data.optJSONArray("platformTaskList")
 
                 // 找出一个可做的 VIEW_TASK
                 var targetTask: JSONObject? = null
@@ -248,7 +278,7 @@ class GameCenterGold : BaseCommTask() {
                     }
                 }
 
-                // 如果没找到，从 exposedTaskList 找
+                // 若没找到，从 exposedTaskList 找
                 if (targetTask == null && exposedTaskList != null) {
                     for (i in 0 until exposedTaskList.length()) {
                         val task = exposedTaskList.getJSONObject(i)
@@ -271,16 +301,17 @@ class GameCenterGold : BaseCommTask() {
                 val taskToken = targetTask.optString("taskToken")
                 val title = targetTask.optString("title")
                 val taskStatus = targetTask.optString("taskStatus")
+                val taskType = targetTask.optString("taskType", "PLATFORM_TRAN_TASK")
                 val goldCoinAmount = targetTask.optInt("goldCoinAmount", 0)
 
                 var success = false
                 if (taskStatus == "UN_SIGNUP") {
                     val signupRes = platformTaskSignUp(taskId, taskToken, actionChannel)
-                    if (signupRes != null && JSONObject(signupRes).optBoolean("success")) {
+                    if (signupRes.isNotEmpty() && JSONObject(signupRes).optBoolean("success")) {
                         val sleepTime = RandomUtil.nextLong(16000, 18000)
                         TimeUtil.sleep(sleepTime)
                         val completeRes = platformTaskComplete(taskId, taskToken, actionChannel)
-                        if (completeRes != null && JSONObject(completeRes).optBoolean("success")) {
+                        if (completeRes.isNotEmpty() && JSONObject(completeRes).optBoolean("success")) {
                             success = true
                         }
                     }
@@ -288,7 +319,7 @@ class GameCenterGold : BaseCommTask() {
                     val sleepTime = RandomUtil.nextLong(16000, 18000)
                     TimeUtil.sleep(sleepTime)
                     val completeRes = platformTaskComplete(taskId, taskToken, actionChannel)
-                    if (completeRes != null && JSONObject(completeRes).optBoolean("success")) {
+                    if (completeRes.isNotEmpty() && JSONObject(completeRes).optBoolean("success")) {
                         success = true
                     }
                 } else if (taskStatus == "COMPLETED") {
@@ -297,13 +328,13 @@ class GameCenterGold : BaseCommTask() {
 
                 if (success) {
                     TimeUtil.sleep(RandomUtil.nextLong(1000, 1500))
-                    val receiveRes = gameP2eTaskReceive(taskId, taskToken)
-                    if (receiveRes != null) {
+                    val receiveRes = gameP2eTaskReceive(taskId, taskToken, taskType)
+                    if (receiveRes.isNotEmpty()) {
                         val receiveJson = JSONObject(receiveRes)
                         if (receiveJson.optBoolean("success")) {
                             val rData = receiveJson.optJSONObject("data")
                             val earned = rData?.optInt("coinAmount", goldCoinAmount) ?: goldCoinAmount
-                            Log.other("$displayName: 任务[$title]已完成, 获得金币🪙: $earned")
+                            Log.other("$displayName: 浏览任务[$title]已完成✅, 获得金币🪙: $earned")
                         }
                     }
                 }
@@ -317,7 +348,7 @@ class GameCenterGold : BaseCommTask() {
     }
 
     /**
-     * 启动60s玩游戏与时长上报后台协程（异步非阻塞，不占用主任务队列）
+     * 启动60s玩游戏后台协程
      */
     private fun launchPlay60sTasksAsync() {
         if (playJob?.isActive == true) {
@@ -329,13 +360,11 @@ class GameCenterGold : BaseCommTask() {
             try {
                 Log.runtime(TAG, "$displayName: 启动60s游戏任务后台协程")
                 processPlay60sTasks()
-                // 完成全部槽位后，领取最终阶段奖励
                 handleMilestoneRewards()
             } catch (_: CancellationException) {
                 Log.runtime(TAG, "$displayName: 60s游戏任务后台协程已取消")
             } catch (e: Exception) {
                 Log.error(TAG, "$displayName: 60s游戏任务协程异常: ${e.message}")
-                Log.printStackTrace(e)
             } finally {
                 playJob = null
             }
@@ -343,10 +372,10 @@ class GameCenterGold : BaseCommTask() {
     }
 
     /**
-     * 处理玩游戏60秒任务（协程挂起版本，非阻塞）
+     * 处理玩游戏60秒任务（协程挂起非阻塞）
      */
     private suspend fun processPlay60sTasks() {
-        val maxIterations = 20 // 扩大单次循环上限，支持在后台连续跑完当天所有槽位
+        val maxIterations = 20
         var loopCount = 0
 
         while (loopCount < maxIterations) {
@@ -365,10 +394,8 @@ class GameCenterGold : BaseCommTask() {
                 val taskProgress = adTaskModule.optJSONObject("taskProgress") ?: break
                 val slots = taskProgress.optJSONArray("slots") ?: break
 
-                // 检查是否所有槽位都已经完成
                 var allFinished = true
                 var targetSlotIdx = -1
-                var slotStatus = ""
                 for (i in 0 until slots.length()) {
                     val slot = slots.getJSONObject(i)
                     val status = slot.optString("status")
@@ -376,7 +403,6 @@ class GameCenterGold : BaseCommTask() {
                         allFinished = false
                         if (targetSlotIdx == -1) {
                             targetSlotIdx = i
-                            slotStatus = status
                         }
                     }
                 }
@@ -391,7 +417,7 @@ class GameCenterGold : BaseCommTask() {
 
                 val slotDesc = slots.getJSONObject(targetSlotIdx).optString("desc")
 
-                // 搜集可玩游戏列表
+                // 收集可玩游戏列表
                 val gameIds = mutableListOf<String>()
                 val gameIdToAppId = mutableMapOf<String, String>()
                 val platformGameTaskModule = data.optJSONObject("platformGameTaskModule")
@@ -403,25 +429,20 @@ class GameCenterGold : BaseCommTask() {
                             val gameId = game.optString("gameId")
                             val appId = game.optString("appId")
                             if (gameId.isNotEmpty()) {
-                                if (!gameIds.contains(gameId)) {
-                                    gameIds.add(gameId)
-                                }
-                                if (appId.isNotEmpty()) {
-                                    gameIdToAppId[gameId] = appId
-                                }
+                                if (!gameIds.contains(gameId)) gameIds.add(gameId)
+                                if (appId.isNotEmpty()) gameIdToAppId[gameId] = appId
                             }
                         }
                     }
                 }
 
-                // 获取 DataStore 中的游戏完成记录 map 并自动清理历史日期，实现数据自清理
                 val storeKey = "GameCenterGold_Play60s_UsedGamesMap"
                 val today = TimeUtil.getFormatDate()
                 val uid = UserMap.currentUid ?: ""
                 val mapKey = "${uid}_$today"
                 val usedMap = DataStore.getOrCreate<MutableMap<String, List<String>>>(storeKey)
 
-                // 清理历史日期数据，实现自清理 (只保留各账号今天的数据)
+                // 移除历史天数据
                 val iterator = usedMap.entries.iterator()
                 while (iterator.hasNext()) {
                     val entry = iterator.next()
@@ -430,10 +451,7 @@ class GameCenterGold : BaseCommTask() {
                     }
                 }
 
-                // 获取今天已玩的游戏列表
                 val todayPlayedGames = (usedMap[mapKey] ?: emptyList()).toMutableList()
-
-                // 选择一个今天未曾使用过的 gameId，模拟玩不同游戏
                 var selectedGameId = ""
                 for (gid in gameIds) {
                     if (!todayPlayedGames.contains(gid)) {
@@ -443,141 +461,180 @@ class GameCenterGold : BaseCommTask() {
                 }
 
                 if (selectedGameId.isEmpty()) {
-                    Log.other("$displayName: 没有今天可玩的未玩过游戏 (游戏列表: $gameIds)，结束60s任务")
+                    Log.other("$displayName: 今日暂无可用的新游戏，结束60s任务")
                     break
                 }
 
                 val appId = gameIdToAppId[selectedGameId] ?: ""
                 if (appId.isEmpty()) {
-                    Log.error(TAG, "游戏 $selectedGameId 的 appId 为空，跳过并标记已使用")
                     todayPlayedGames.add(selectedGameId)
                     usedMap[mapKey] = todayPlayedGames
                     DataStore.put(storeKey, usedMap)
                     continue
                 }
 
-                Log.other("$displayName: 游戏[$selectedGameId] (Slot: $slotDesc)...")
+                Log.other("$displayName: 启动游戏[$selectedGameId] (槽位: $slotDesc)...")
 
-                // 发起 consult
                 val consultRes = gameP2eFloatingBallConsult(selectedGameId, gameModuleId)
-                if (consultRes != null && JSONObject(consultRes).optBoolean("success")) {
-                    // 模拟在游戏中玩 30 秒（协程挂起，不阻塞线程）
+                if (consultRes.isNotEmpty() && JSONObject(consultRes).optBoolean("success")) {
                     delay(30000)
-                    
-                    // 上报第一阶段时长 30s
                     submitUserPlayDurationAction(appId, 30)
-                    
-                    // 模拟再玩 32-35 秒以符合 60s 倒计时
+
                     val remainTime = RandomUtil.nextLong(32000, 35000)
                     val playTimeSec = (remainTime / 1000).toInt()
                     delay(remainTime)
-                    
-                    // 上报第二阶段增量时长 (如 32-35s)
                     submitUserPlayDurationAction(appId, playTimeSec)
-                    
-                    // 提交任务完成 (FloatingBallComplete)
+
                     val completeRes = gameP2eFloatingBallComplete(selectedGameId, gameModuleId)
-                    if (completeRes != null && JSONObject(completeRes).optBoolean("success")) {
-                        Log.other("$displayName: 槽位[$slotDesc]玩游戏60s任务成功✅")
-                        // 标记该游戏ID今天已完成，防重复运行
+                    if (completeRes.isNotEmpty() && JSONObject(completeRes).optBoolean("success")) {
+                        Log.other("$displayName: 槽位[$slotDesc]玩游戏60s任务完成✅")
                         todayPlayedGames.add(selectedGameId)
                         usedMap[mapKey] = todayPlayedGames
                         DataStore.put(storeKey, usedMap)
-
-                        // 槽位完成后，及时尝试领取阶段里程碑奖励
                         handleMilestoneRewards()
                     } else {
                         Log.error(TAG, "槽位[$slotDesc]提交完成RPC失败: $completeRes")
                     }
-                    
-                    // 60s游戏结束，触发下发金币和气泡奖励曝光
+
                     queryHomePage()
                     delay(RandomUtil.nextLong(1000, 2000))
-                    queryBySpaceCodeList()
-                    delay(RandomUtil.nextLong(1000, 1500))
-                    spaceFeedback()
-                    delay(RandomUtil.nextLong(1000, 2000))
                 } else {
-                    Log.error(TAG, "启动游戏 $selectedGameId 咨询失败: $consultRes")
-                    Log.other("$displayName: 游戏 $selectedGameId 启动咨询失败，今天跳过该游戏")
+                    Log.other("$displayName: 游戏 $selectedGameId 启动咨询失败，跳过该游戏")
                     todayPlayedGames.add(selectedGameId)
                     usedMap[mapKey] = todayPlayedGames
                     DataStore.put(storeKey, usedMap)
-                    delay(5000)
+                    delay(3000)
                 }
 
             } catch (_: CancellationException) {
                 throw CancellationException()
             } catch (e: Exception) {
                 Log.error(TAG, "$displayName: 处理60s游戏任务单次异常: ${e.message}")
-                delay(5000)
+                delay(3000)
             }
         }
     }
 
     /**
+     * 自动兑换提现现金红包 (独立开关: gameCenterGoldCashExchange)
+     */
+    private fun handleCashExchange() {
+        try {
+            val exgRes = queryGoldExgPrizePage()
+            if (exgRes.isNullOrEmpty()) return
+            val exgJson = JSONObject(exgRes)
+            if (!exgJson.optBoolean("success")) return
+
+            val dataObj = exgJson.optJSONObject("data") ?: return
+            val assetModule = dataObj.optJSONObject("assetModuleVO")
+            val currentGold = assetModule?.optString("goldAmount") ?: "0"
+            val rmbAmount = assetModule?.optString("rmbAmount") ?: "0"
+
+            val cashModule = dataObj.optJSONObject("cashExchangeModule") ?: return
+            val hasExchangeable = cashModule.optBoolean("hasExchangeablePrize", false)
+            if (!hasExchangeable) {
+                Log.runtime(TAG, "当前金币($currentGold)暂无可提现的现金红包")
+                Status.setFlagToday("GameCenterGold_CashExchange_Completed")
+                return
+            }
+
+            val prizesArray = cashModule.optJSONArray("prizes") ?: return
+            val targetAmount = OtherTask2.getGameCenterGoldCashExchangeAmount().value
+
+            var exchangedCount = 0
+            for (i in 0 until prizesArray.length()) {
+                val prize = prizesArray.getJSONObject(i)
+                val prizeStatus = prize.optString("prizeStatus")
+                if (prizeStatus != "CAN_EXG") continue
+
+                val prizeAmountStr = prize.optString("prizeAmount", "0")
+                val prizeAmount = prizeAmountStr.toDoubleOrNull() ?: 0.0
+                val consumeGold = prize.optString("consumeGold", "0")
+
+                // 匹配金额条件：若用户设置金额大于0，则兑换匹配该金额的奖品；若为0则兑换所有可提现奖品
+                if (targetAmount > 0 && prizeAmount != targetAmount.toDouble()) {
+                    continue
+                }
+
+                val prizeConfigId = prize.optString("prizeConfigId")
+                val outBizNo = prize.optString("outBizNo")
+                val sendSign = prize.optString("sendSign")
+                val sendSignNew = prize.optString("sendSignNew")
+
+                if (prizeConfigId.isNotEmpty() && outBizNo.isNotEmpty()) {
+                    Log.other("$displayName: 发现可提现金额【${prizeAmountStr}元】(消耗金币: $consumeGold)，正在发起提现...")
+                    val doRes = doGoldExchangePrize(prizeConfigId, outBizNo, sendSign, sendSignNew)
+                    if (doRes.isNotEmpty()) {
+                        val doJson = JSONObject(doRes)
+                        if (doJson.optBoolean("success")) {
+                            val resData = doJson.optJSONObject("data")
+                            val arrivalTips = resData?.optString("arrivalTips", "现金已发放至【支付宝-余额】")
+                            Log.other("$displayName: 现金提现成功🎉 [${prizeAmountStr}元] $arrivalTips")
+                            exchangedCount++
+                            TimeUtil.sleep(2000)
+                        } else {
+                            val errorMsg = doJson.optString("errorMsg", doRes)
+                            Log.error(TAG, "提现[${prizeAmountStr}元]失败: $errorMsg")
+                        }
+                    }
+                }
+            }
+
+            if (exchangedCount > 0) {
+                Status.setFlagToday("GameCenterGold_CashExchange_Completed")
+            }
+        } catch (e: Exception) {
+            Log.error(TAG, "处理金币提现兑换异常: ${e.message}")
+        }
+    }
+
+    /**
      * 处理游戏中心金币签到
-     * 先通过 queryHomePage 返回的 signUpModuleVO 查询签到状态，确认未签到且参数齐全后才执行签到
-     * 签到功能下架、参数缺失等情况直接标记跳过，避免反复无效重试
      */
     private fun handleSignIn(homeData: JSONObject) {
         try {
-            if (Status.hasFlagToday("GameCenterGold_SignIn_Completed")) {
-                return
-            }
+            if (Status.hasFlagToday("GameCenterGold_SignIn_Completed")) return
 
-            // 1. 查询签到模块，判断签到功能是否可用
             val signUpModuleVO = homeData.optJSONObject("signUpModuleVO")
             if (signUpModuleVO == null) {
-                Log.other("$displayName: 签到模块不存在（可能已下架），跳过今日签到")
                 Status.setFlagToday("GameCenterGold_SignIn_Completed")
                 return
             }
 
-            // 2. 检查 popupStatus（在 signUpPopupModuleVO 子对象里，不是 signUpModuleVO 顶层）
             val popupStatus = signUpModuleVO.optJSONObject("signUpPopupModuleVO")?.optString("popupStatus") ?: ""
             if (popupStatus == "COMPLETE_TODAY_RECORD" || popupStatus == "RECEIVED_TODAY_RECORD") {
-                Log.other("$displayName: 查询到今日已签到(popupStatus=$popupStatus)")
+                Log.other("$displayName: 查询到今日已签到")
                 Status.setFlagToday("GameCenterGold_SignIn_Completed")
                 return
             }
 
-            // 2b. 额外检查 signRecordVOList，找到今天已签到的记录
             val signRecordList = signUpModuleVO.optJSONArray("signRecordVOList")
             if (signRecordList != null) {
                 for (i in 0 until signRecordList.length()) {
                     val record = signRecordList.optJSONObject(i) ?: continue
                     if (record.optBoolean("isToday", false) && record.optString("signUpStatus") == "SIGNED") {
-                        Log.other("$displayName: signRecord 显示今日已签到")
                         Status.setFlagToday("GameCenterGold_SignIn_Completed")
                         return
                     }
                 }
             }
 
-            // 3. 检查签到参数是否齐全
             val date = signUpModuleVO.optString("date")
             val index = signUpModuleVO.optInt("index", -1)
             val signSequenceId = signUpModuleVO.optString("signSequenceId")
 
             if (date.isEmpty() || index == -1 || signSequenceId.isEmpty()) {
-                Log.other("$displayName: 签到参数不完整（签到暂不可用），跳过今日签到")
                 Status.setFlagToday("GameCenterGold_SignIn_Completed")
                 return
             }
 
-            // 4. 参数齐全，执行签到
-            Log.runtime(TAG, "开始游戏中心签到: date=$date, index=$index")
             val res = signIn(date, index, signSequenceId)
             if (!res.isNullOrEmpty()) {
                 val resJson = JSONObject(res)
                 if (resJson.optBoolean("success")) {
                     Log.other("$displayName: 签到成功✅")
-                } else {
-                    Log.error(TAG, "签到失败: $res")
                 }
             }
-            // 无论执行结果如何，标记已处理，避免反复重试
             Status.setFlagToday("GameCenterGold_SignIn_Completed")
         } catch (e: Exception) {
             Log.error(TAG, "签到异常: ${e.message}")
@@ -585,42 +642,29 @@ class GameCenterGold : BaseCommTask() {
         }
     }
 
-    /**
-     * 8. 签到 RPC
-     */
     private fun signIn(date: String, index: Int, signSequenceId: String): String {
         val method = "com.alipay.gamecenteruprod.biz.rpc.p2e.signIn"
-        val params = "[{\"__git\":\"9e159d58cce04c13a\",\"date\":\"$date\",\"index\":$index,\"signSequenceId\":\"$signSequenceId\",\"source\":\"ch_appcenter__chsub_9patch\"}]"
+        val params = "[{\"__git\":\"$GIT\",\"date\":\"$date\",\"index\":$index,\"signSequenceId\":\"$signSequenceId\",\"source\":\"$SOURCE\"}]"
         return RequestManager.requestString(method, params)
     }
 
-    /**
-     * 8b. 金币抽奖/重新抽奖 RPC
-     */
     private fun drawGold(): String {
         val method = "com.alipay.gamecenteruprod.biz.rpc.p2e.drawGold"
-        val params = "[{\"__git\":\"9e159d58cce04c13a\"}]"
+        val params = "[{\"__git\":\"$GIT\"}]"
         return RequestManager.requestString(method, params)
     }
 
-    /**
-     * 处理金币抽奖与重新抽奖
-     */
     private fun handleDrawGoldCoin(homeData: JSONObject) {
         try {
             val drawGoldCoinModuleVO = homeData.optJSONObject("drawGoldCoinModuleVO") ?: return
             val status = drawGoldCoinModuleVO.optString("status") ?: ""
             if (status == "INIT" || status == "NOT_DRAWN" || status == "FULFILL_FAILED") {
-                Log.other("$displayName: 开始金币抽奖/重新抽奖, 当前状态: $status")
                 val res = drawGold()
                 if (!res.isNullOrEmpty()) {
                     val resJson = JSONObject(res)
                     if (resJson.optBoolean("success")) {
-                        val dataObj = resJson.optJSONObject("data")
-                        val mainTitle = dataObj?.optJSONObject("popupInfoVO")?.optString("mainTitle") ?: ""
+                        val mainTitle = resJson.optJSONObject("data")?.optJSONObject("popupInfoVO")?.optString("mainTitle") ?: ""
                         Log.other("$displayName: 金币抽奖成功🎉 $mainTitle")
-                    } else {
-                        Log.error(TAG, "金币抽奖失败: $res")
                     }
                 }
             }
@@ -629,45 +673,6 @@ class GameCenterGold : BaseCommTask() {
         }
     }
 
-    /**
-     * 9. 查询 Space 气泡奖励 (关键: 触发和得到任务奖励)
-     */
-    private fun queryBySpaceCodeList(): String {
-        val method = "com.alipay.gameucdp.space.queryBySpaceCodeList"
-        val params = "[{\"deviceLevel\":\"high\",\"source\":\"ch_appcenter__chsub_9patch\",\"sourceTab\":\"p2e\",\"spaceCodeList\":[\"p2e_ucdp_layer\"],\"unityDeviceLevel\":\"high\"}]"
-        return RequestManager.requestString(method, params)
-    }
-
-    /**
-     * 10. 上报 Space 曝光反馈
-     */
-    private fun spaceFeedback(): String {
-        val method = "com.alipay.gameucdp.space.feedback"
-        val params = "[{\"feedBackList\":[{\"creativeId\":\"p2e_browse_task_complete\",\"deliverUnitId\":\"p2e#p2e\",\"spaceCode\":\"p2e_ucdp_layer\",\"type\":\"EXPOSE\"}]}]"
-        return RequestManager.requestString(method, params)
-    }
-
-    /**
-     * 11. 时长上报 RPC
-     */
-    private fun submitUserPlayDurationAction(gameAppId: String, playTime: Int): String {
-        val method = "com.alipay.gamecenteruprod.biz.rpc.v3.submitUserPlayDurationAction"
-        val params = "[{\"gameAppId\":\"$gameAppId\",\"playTime\":$playTime,\"source\":\"yxzx_mc_xasqsr68\",\"statisticTag\":\"\"}]"
-        return RequestManager.requestString(method, params)
-    }
-
-    /**
-     * 12. 60秒游戏结算 RPC
-     */
-    private fun gameP2eFloatingBallComplete(gameId: String, gameModuleId: String): String {
-        val method = "com.alipay.gamecenteruprod.biz.rpc.p2e.gameP2eFloatingBallComplete"
-        val params = "[{\"floatingBallTypeList\":[\"P2E_GAME_BROWSE_TASK_FLOATING_BALL\"],\"gameId\":\"$gameId\",\"gameModuleId\":\"$gameModuleId\",\"oriChInfo\":\"ch_appcenter__chsub_9patch\",\"source\":\"ch_appcenter__chsub_9patch\",\"trafficDriverId\":\"\"}]"
-        return RequestManager.requestString(method, params)
-    }
-
-    /**
-     * 获取最新任务列表并领取可领取的阶段里程碑奖励
-     */
     private fun handleMilestoneRewards() {
         try {
             val listRes = queryTaskList()
@@ -688,14 +693,11 @@ class GameCenterGold : BaseCommTask() {
                     val sign = milestone.optString("sign")
                     val goldCoinAmount = milestone.optInt("goldCoinAmount", 0)
                     if (taskMileStoneId.isNotEmpty() && outBizNo.isNotEmpty() && sign.isNotEmpty()) {
-                        Log.other("$displayName: 发现可领取的阶段奖励[$taskMileStoneId]")
                         val rewardRes = receiveTaskMileStoneReward(taskMileStoneId, outBizNo, sign)
-                        if (rewardRes != null) {
+                        if (rewardRes.isNotEmpty()) {
                             val resJson = JSONObject(rewardRes)
                             if (resJson.optBoolean("success")) {
                                 Log.other("$displayName: 阶段奖励[$taskMileStoneId]领取成功✅, 获得金币🪙: $goldCoinAmount")
-                            } else {
-                                Log.error(TAG, "阶段奖励[$taskMileStoneId]领取失败: $rewardRes")
                             }
                         }
                         TimeUtil.sleep(RandomUtil.nextLong(1500, 2500))
