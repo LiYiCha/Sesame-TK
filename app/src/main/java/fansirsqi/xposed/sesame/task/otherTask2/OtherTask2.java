@@ -46,7 +46,7 @@ public class OtherTask2 extends ModelTask {
     private final StringModelField startTime = new StringModelField("startTime", "开始执行时间(关闭:-1)", "0700");
     private BooleanModelField memberTaskNew = new BooleanModelField("memberTaskNew", "会员任务", false);
     private BooleanModelField privilegeTask = new BooleanModelField("privilegeTask", "青春特权", true);
-    private BooleanModelField gameCenterGold = new BooleanModelField("gameCenterGold", "游戏中心金币任务", false);
+    private static final BooleanModelField gameCenterGold = new BooleanModelField("gameCenterGold", "游戏中心金币任务", false);
     private BooleanModelField monthTRA = new BooleanModelField("monthTRA", "月月赚转账红包", false);
     private BooleanModelField scholarship = new BooleanModelField("scholarship", "奖学金", false);
     private BooleanModelField touchPay = new BooleanModelField("touchpay", "碰一碰街区", false);
@@ -69,14 +69,24 @@ public class OtherTask2 extends ModelTask {
     @Getter
     private static final BooleanModelField elemeBurstRed = new BooleanModelField("elemeBurstRed", "饿了么|爆红包", false);
     public static final BooleanModelField gameCenterGoldCashExchange = new BooleanModelField("gameCenterGoldCashExchange", "游戏金币|兑换现金", false);
-    public static final IntegerModelField gameCenterGoldCashExchangeAmount = new IntegerModelField("gameCenterGoldCashExchangeAmount", "游戏金币|提现金额(元,0为任意)", 10);
+
+
+    public static BooleanModelField getGameCenterGold() {
+        return gameCenterGold;
+    }
 
     public static BooleanModelField getGameCenterGoldCashExchange() {
         return gameCenterGoldCashExchange;
     }
 
-    public static IntegerModelField getGameCenterGoldCashExchangeAmount() {
-        return gameCenterGoldCashExchangeAmount;
+    public static void disableGameCenterGoldCashExchange(String reason) {
+        Log.runtime(TAG, "游戏金币兑换现金不可用(" + reason + ")，自动关闭【游戏金币|兑换现金】开关");
+        try {
+            gameCenterGoldCashExchange.setValue(false);
+            fansirsqi.xposed.sesame.data.Config.save(fansirsqi.xposed.sesame.util.maps.UserMap.getCurrentUid(), true);
+        } catch (Throwable t) {
+            Log.error(TAG, "关闭游戏金币兑换现金开关异常: " + t.getMessage());
+        }
     }
 
     public static void disableElemeLuckyStar(String reason) {
@@ -134,7 +144,6 @@ public class OtherTask2 extends ModelTask {
         modelFields.addField(elemeFreeOrder);
         modelFields.addField(elemeBurstRed);
         modelFields.addField(gameCenterGoldCashExchange);
-        modelFields.addField(gameCenterGoldCashExchangeAmount);
         return modelFields;
     }
 
@@ -230,7 +239,7 @@ public class OtherTask2 extends ModelTask {
                             }
                         }),
                         new TaskWrapper("游戏中心金币任务", () -> {
-                            if (gameCenterGold.getValue()) {
+                            if (gameCenterGold.getValue() || gameCenterGoldCashExchange.getValue()) {
                                 new GameCenterGold().handle();
                             }
                         })

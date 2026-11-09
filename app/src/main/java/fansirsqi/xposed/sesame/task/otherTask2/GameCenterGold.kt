@@ -50,10 +50,13 @@ class GameCenterGold : BaseCommTask() {
 
     override fun handle() {
         try {
-            val needSignIn = !Status.hasFlagToday("GameCenterGold_SignIn_Completed")
-            val needBrowse = !Status.hasTemporaryStatusValid("GameCenterGold_Browse_Limit")
-            val needPlay = !Status.hasFlagToday("GameCenterGold_Play60s_Completed")
-            val needExchange = OtherTask2.getGameCenterGoldCashExchange().value && !Status.hasFlagToday("GameCenterGold_CashExchange_Completed")
+            val isTaskEnabled = OtherTask2.getGameCenterGold().value
+            val isCashExchangeEnabled = OtherTask2.getGameCenterGoldCashExchange().value
+
+            val needSignIn = isTaskEnabled && !Status.hasFlagToday("GameCenterGold_SignIn_Completed")
+            val needBrowse = isTaskEnabled && !Status.hasTemporaryStatusValid("GameCenterGold_Browse_Limit")
+            val needPlay = isTaskEnabled && !Status.hasFlagToday("GameCenterGold_Play60s_Completed")
+            val needExchange = isCashExchangeEnabled
 
             if (!needSignIn && !needBrowse && !needPlay && !needExchange) {
                 return
@@ -74,6 +77,17 @@ class GameCenterGold : BaseCommTask() {
 
             val homeData = homePageJson.optJSONObject("data") ?: return
 
+            // 每日一次打印当前金币资产额度
+            if (!Status.hasFlagToday("GameCenterGold_Asset_Logged")) {
+                val asset = homeData.optJSONObject("assetModuleVO")
+                if (asset != null) {
+                    val goldAmount = asset.optLong("goldCoinAmount", 0L)
+                    val cashAmount = asset.optString("afterCashAmount", "0")
+                    Log.other("$displayName: 当前金币余额: $goldAmount (约${cashAmount}元现金)")
+                    Status.setFlagToday("GameCenterGold_Asset_Logged")
+                }
+            }
+
             // 处理签到
             if (needSignIn) {
                 handleSignIn(homeData)
@@ -81,8 +95,10 @@ class GameCenterGold : BaseCommTask() {
             }
 
             // 处理金币抽奖与重新抽奖
-            handleDrawGoldCoin(homeData)
-            TimeUtil.sleep(RandomUtil.nextLong(2000, 3000))
+            if (isTaskEnabled) {
+                handleDrawGoldCoin(homeData)
+                TimeUtil.sleep(RandomUtil.nextLong(2000, 3000))
+            }
 
             // 2. 处理浏览任务 (VIEW_TASK) - 每次做任务前先刷新列表
             if (needBrowse) {
@@ -97,10 +113,12 @@ class GameCenterGold : BaseCommTask() {
             }
 
             // 4. 领取阶段里程碑奖励
-            handleMilestoneRewards()
+            if (isTaskEnabled) {
+                handleMilestoneRewards()
+            }
 
-            // 5. 自动兑换提现现金红包 (独立开关控制)
-            if (needExchange) {
+            // 5. 主流程联动自动兑换：读取兑换开关状态判断是否自动兑换
+            if (OtherTask2.getGameCenterGoldCashExchange().value) {
                 handleCashExchange()
             }
 
@@ -517,45 +535,58 @@ class GameCenterGold : BaseCommTask() {
 
     /**
      * 自动兑换提现现金红包 (独立开关: gameCenterGoldCashExchange)
+     * 若金额不全或金币不足以兑换，自动关闭开关并退出
      */
     private fun handleCashExchange() {
+        if (!OtherTask2.getGameCenterGoldCashExchange().value) return
         try {
             val exgRes = queryGoldExgPrizePage()
-            if (exgRes.isNullOrEmpty()) return
+            if (exgRes.isNullOrEmpty()) {
+                Log.error(TAG, "$displayName: 查询金币提现页面失败")
+                return
+            }
             val exgJson = JSONObject(exgRes)
-            if (!exgJson.optBoolean("success")) return
+            if (!exgJson.optBoolean("success")) {
+                val errorMsg = exgJson.optString("errorMsg", "接口返回失败")
+                Log.error(TAG, "$displayName: 查询金币提现页面失败: $errorMsg")
+                return
+            }
 
             val dataObj = exgJson.optJSONObject("data") ?: return
             val assetModule = dataObj.optJSONObject("assetModuleVO")
             val currentGold = assetModule?.optString("goldAmount") ?: "0"
             val rmbAmount = assetModule?.optString("rmbAmount") ?: "0"
 
-            val cashModule = dataObj.optJSONObject("cashExchangeModule") ?: return
-            val hasExchangeable = cashModule.optBoolean("hasExchangeablePrize", false)
-            if (!hasExchangeable) {
-                Log.runtime(TAG, "当前金币($currentGold)暂无可提现的现金红包")
-                Status.setFlagToday("GameCenterGold_CashExchange_Completed")
+            val cashModule = dataObj.optJSONObject("cashExchangeModule")
+            val hasExchangeable = cashModule?.optBoolean("hasExchangeablePrize", false) ?: false
+            val prizesArray = cashModule?.optJSONArray("prizes")
+
+            if (!hasExchangeable || prizesArray == null || prizesArray.length() == 0) {
+                Log.runtime(TAG, "当前金币($currentGold，约${rmbAmount}元)无可兑换金额(金额不全或金币不足)，自动关闭【游戏金币|兑换现金】开关并退出")
+                OtherTask2.disableGameCenterGoldCashExchange("当前无可兑换金额(金额不全或金币不足)")
                 return
             }
 
-            val prizesArray = cashModule.optJSONArray("prizes") ?: return
-            val targetAmount = OtherTask2.getGameCenterGoldCashExchangeAmount().value
-
-            var exchangedCount = 0
+            // 筛选当前处于 CAN_EXG 状态的奖品
+            val canExgPrizes = mutableListOf<JSONObject>()
             for (i in 0 until prizesArray.length()) {
                 val prize = prizesArray.getJSONObject(i)
                 val prizeStatus = prize.optString("prizeStatus")
-                if (prizeStatus != "CAN_EXG") continue
-
-                val prizeAmountStr = prize.optString("prizeAmount", "0")
-                val prizeAmount = prizeAmountStr.toDoubleOrNull() ?: 0.0
-                val consumeGold = prize.optString("consumeGold", "0")
-
-                // 匹配金额条件：若用户设置金额大于0，则兑换匹配该金额的奖品；若为0则兑换所有可提现奖品
-                if (targetAmount > 0 && prizeAmount != targetAmount.toDouble()) {
-                    continue
+                if (prizeStatus == "CAN_EXG") {
+                    canExgPrizes.add(prize)
                 }
+            }
 
+            if (canExgPrizes.isEmpty()) {
+                Log.runtime(TAG, "当前金币($currentGold)无可兑换现金奖品(金额不全)，自动关闭【游戏金币|兑换现金】开关并退出")
+                OtherTask2.disableGameCenterGoldCashExchange("当前无可兑换现金奖品(金额不全)")
+                return
+            }
+
+            var exchangedCount = 0
+            for (prize in canExgPrizes) {
+                val prizeAmountStr = prize.optString("prizeAmount", "0")
+                val consumeGold = prize.optString("consumeGold", "0")
                 val prizeConfigId = prize.optString("prizeConfigId")
                 val outBizNo = prize.optString("outBizNo")
                 val sendSign = prize.optString("sendSign")
@@ -582,6 +613,11 @@ class GameCenterGold : BaseCommTask() {
 
             if (exchangedCount > 0) {
                 Status.setFlagToday("GameCenterGold_CashExchange_Completed")
+                Log.runtime(TAG, "已成功兑换 $exchangedCount 笔现金红包，已无更多可提现金额，自动关闭【游戏金币|兑换现金】开关并退出")
+                OtherTask2.disableGameCenterGoldCashExchange("已完成兑换，已无剩余可提现金额")
+            } else {
+                Log.runtime(TAG, "未完成任何现金提现，自动关闭【游戏金币|兑换现金】开关并退出")
+                OtherTask2.disableGameCenterGoldCashExchange("未完成提现或无可提现金额")
             }
         } catch (e: Exception) {
             Log.error(TAG, "处理金币提现兑换异常: ${e.message}")

@@ -28,9 +28,9 @@ object BurstRedTask {
             Log.runtime(TAG, "==== 开始执行饿了么爆红包任务 ====")
             val cookie = ElemeAuth.ensureCookie()
             if (cookie.isEmpty() || !ElemeAuth.isBound()) {
-                val reason = if (cookie.isEmpty()) "未获取到有效登录凭据(换票待确认或请在支付宝进入一次饿了么小程序)" else "当前未关联有效饿了么账号"
-                Log.runtime(TAG, "$reason，跳过今日饿了么爆红包任务")
-                Status.setFlagToday(FLAG_TODAY)
+                val reason = if (cookie.isEmpty()) "未获取到有效登录凭证(账号未绑定或换票失败)" else "当前未关联有效饿了么账号"
+                Log.runtime(TAG, "$reason，自动关闭【饿了么|爆红包】开关并退出")
+                fansirsqi.xposed.sesame.task.otherTask2.OtherTask2.disableElemeBurstRed(reason)
                 return
             }
             Log.runtime(TAG, "当前账号: ${ElemeAuth.getAccountSummary()}")

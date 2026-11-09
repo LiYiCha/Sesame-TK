@@ -92,9 +92,9 @@ object FreeOrderTask {
             Log.runtime(TAG, "==== 开始执行饿了么抽免单任务 ====")
             val cookie = ElemeAuth.ensureCookie()
             if (cookie.isEmpty() || !ElemeAuth.isBound()) {
-                val reason = if (cookie.isEmpty()) "未获取到有效登录凭据(换票待确认或请在支付宝进入一次饿了么小程序)" else "当前未关联有效饿了么账号"
-                Log.runtime(TAG, "$reason，跳过今日饿了么抽免单任务")
-                Status.setFlagToday(FLAG_TODAY)
+                val reason = if (cookie.isEmpty()) "未获取到有效登录凭证(账号未绑定或换票失败)" else "当前未关联有效饿了么账号"
+                Log.runtime(TAG, "$reason，自动关闭【饿了么|抽免单】开关并退出")
+                fansirsqi.xposed.sesame.task.otherTask2.OtherTask2.disableElemeFreeOrder(reason)
                 return
             }
             Log.runtime(TAG, "当前账号: ${ElemeAuth.getAccountSummary()}")
@@ -134,8 +134,32 @@ object FreeOrderTask {
                 currentChance = parseDrawChance(homepageResp)
                 val tipsText = if (mainCardTips.isNotEmpty()) "，开奖提示: [$mainCardTips]" else ""
                 Log.runtime(TAG, "淘免单主页拉取成功，当前可用抽奖机会: $currentChance$tipsText")
+            } else {
+                Log.runtime(TAG, "淘免单主页拉取未返回有效数据(网络超时或异常)，跳过本次执行")
+                return
             }
             Thread.sleep(RandomUtil.nextGaussianLong(800, 1500))
+
+            val homeErrorCode = homepageResp?.optString("errorCode").orEmpty()
+            val homeErrorMsg = homepageResp?.optString("errorMessage").orEmpty()
+            val isActivityClosed = homeErrorCode == "ACTIVITY_CLOSED" ||
+                    homeErrorCode == "ACTIVITY_NOT_EXIST" ||
+                    homeErrorMsg.contains("活动已结束") ||
+                    homeErrorMsg.contains("活动未开启") ||
+                    homeErrorMsg.contains("业务未开启")
+            if (isActivityClosed) {
+                val reason = if (homeErrorMsg.isNotEmpty()) homeErrorMsg else "活动已结束或未开启"
+                Log.runtime(TAG, "淘免单活动不可用($reason)，自动关闭【饿了么|抽免单】开关并退出")
+                fansirsqi.xposed.sesame.task.otherTask2.OtherTask2.disableElemeFreeOrder(reason)
+                Status.setFlagToday(FLAG_TODAY)
+                return
+            }
+
+            if (currentChance <= 0) {
+                Log.runtime(TAG, "今日暂无可用抽免单机会，结束今日抽免单任务")
+                Status.setFlagToday(FLAG_TODAY)
+                return
+            }
 
             // 4. 执行淘免单抽奖（对齐真机交互接口 mtop.ele.growth.fission.client.etmd.et.icondraw）
             for (attempt in 1..MAX_DRAW_ATTEMPTS) {
@@ -150,6 +174,14 @@ object FreeOrderTask {
                 val data = drawResp.optJSONObject("data") ?: drawResp
                 val errorCode = data.optString("errorCode", "")
                 val errorMessage = data.optString("errorMessage", "")
+                val isDrawClosed = errorCode == "ACTIVITY_CLOSED" || errorCode == "ACTIVITY_NOT_EXIST" || errorMessage.contains("活动已结束") || errorMessage.contains("活动未开启")
+                if (isDrawClosed) {
+                    val reason = if (errorMessage.isNotEmpty()) errorMessage else "活动已结束或未开启"
+                    Log.runtime(TAG, "淘免单活动不可用($reason)，自动关闭【饿了么|抽免单】开关并退出")
+                    fansirsqi.xposed.sesame.task.otherTask2.OtherTask2.disableElemeFreeOrder(reason)
+                    Status.setFlagToday(FLAG_TODAY)
+                    return
+                }
                 val floatIcon = data.optJSONObject("floatIcon")
                 val typeEnum = floatIcon?.optString("typeEnum").orEmpty()
                 val popup = extractPopup(drawResp)

@@ -261,7 +261,12 @@ object ElemeAuth {
                 Log.runtime(TAG, "已成功刷新饿了么登录态，有效期至: ${java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.getDefault()).format(java.util.Date(expires))}")
                 return finalCookie
             } else {
-                Log.runtime(TAG, "换取登录态未解析出新 SID，保留现有缓存凭据: $respText")
+                if (iframeRedirect) {
+                    invalidate()
+                    Log.runtime(TAG, "换取登录态失败(当前账号未绑定饿了么或存在冲突待确认)，自动关闭任务: 响应: $respText")
+                } else {
+                    Log.runtime(TAG, "换取登录态未返回有效 Cookie: $respText")
+                }
             }
         } catch (t: Throwable) {
             Log.error(TAG, "刷新饿了么登录态异常: ${t.message}")
