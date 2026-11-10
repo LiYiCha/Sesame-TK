@@ -18,6 +18,8 @@ import fansirsqi.xposed.sesame.util.Log
 import fansirsqi.xposed.sesame.util.RandomUtil
 import fansirsqi.xposed.sesame.util.ResChecker
 import fansirsqi.xposed.sesame.util.TaskBlacklist
+import fansirsqi.xposed.sesame.task.other.game.GameTask
+import fansirsqi.xposed.sesame.task.other.OtherTask0
 import fansirsqi.xposed.sesame.util.maps.UserMap
 import org.json.JSONArray
 import org.json.JSONObject
@@ -150,24 +152,29 @@ class AntOrchard : ModelTask() {
             tryReceiveSpreadManureActivityAward(indexJson)
 
             // 砸金蛋
-            val goldenEggInfo = indexJson.optJSONObject("goldenEggInfo")
-            if (goldenEggInfo != null) {
-                var unsmashed = goldenEggInfo.optInt("unsmashedGoldenEggs")
-                val limit = goldenEggInfo.optInt("goldenEggLimit")
-                var smashed = goldenEggInfo.optInt("smashedGoldenEggs")
+            if (OtherTask0.gameOrchard.value) {
+                val goldenEggInfo = indexJson.optJSONObject("goldenEggInfo")
+                if (goldenEggInfo != null) {
+                    var unsmashed = goldenEggInfo.optInt("unsmashedGoldenEggs")
+                    val limit = goldenEggInfo.optInt("goldenEggLimit")
+                    var smashed = goldenEggInfo.optInt("smashedGoldenEggs")
 
-                if (unsmashed > 0) {
-                    // 现成的蛋先砸了
-                    smashedGoldenEgg(unsmashed)
-                    smashed += unsmashed
-                    unsmashed = 0
-                }
+                    if (unsmashed > 0) {
+                        // 现成的蛋先砸了
+                        smashedGoldenEgg(unsmashed)
+                        smashed += unsmashed
+                        unsmashed = 0
+                    }
 
-                val remain = limit - smashed
-                if (remain > 0) {
-                    GameTask.Orchard_ncscc.report(remain)
-                    // 上报完成后，由于整个过程有延时，机会已就绪，直接砸掉对应数量的金蛋
-                    smashedGoldenEgg(remain)
+                    val remain = limit - smashed
+                    if (remain > 0) {
+                        val reportOk = GameTask.Orchard_ncscc.report(remain)
+                        if (reportOk) {
+                            CoroutineUtils.sleepCompat(1500)
+                            // 上报成功后，机会已就绪，直接砸掉对应数量的金蛋
+                            smashedGoldenEgg(remain)
+                        }
+                    }
                 }
             }
 
@@ -622,14 +629,17 @@ class AntOrchard : ModelTask() {
                     val taskSource = if (taskId in setOf(TASK_JINDOU_TREASURE, TASK_FORTUNE_TREE)) "ch_appcenter__chsub_9patch" else "ch_appcenter__chsub_commonapp"
                     for (cnt in 0 until timesToDo) {
                         val finishResponse = JSONObject(AntOrchardRpcCall.finishTask(userId, sceneCode, taskId, taskSource))
-                        if (ResChecker.checkRes("$TAG[finishAdTask][$title]", finishResponse)) {
+                        val success = finishResponse.optBoolean("success", false)
+                        if (success) {
                             Log.farm("农场广告任务📺[$title] 第${rightsTimes + cnt + 1}次")
                         } else {
                             val errorCode = finishResponse.optString("code", "")
                             val errorDesc = finishResponse.optString("desc", "")
-                            // 过滤不支持rpc和任务全局配置不存在
-                            if (errorCode.equals("400000040")||errorCode.equals("400000001")) {
+                            if (errorCode == "400000040" || errorCode == "400000001" || errorDesc.contains("不支持rpc") || errorDesc.contains("配置不存在")) {
+                                Log.runtime(TAG, "农场广告任务[$title] 不支持RPC或配置不存在，加入黑名单")
                                 TaskBlacklist.autoAddToBlacklist(taskId, title, errorCode, errorDesc)
+                            } else {
+                                Log.error(TAG, "农场广告任务[$title] 完成失败: $finishResponse")
                             }
                             break
                         }
@@ -854,9 +864,16 @@ class AntOrchard : ModelTask() {
     }
 
     private fun smashedGoldenEgg(count: Int) {
+        if (count <= 0) return
         try {
             val response = AntOrchardRpcCall.smashedGoldenEgg(count)
             val jo = JSONObject(response)
+            val resultCode = jo.optString("resultCode")
+            val resultDesc = jo.optString("resultDesc")
+            if (resultCode == "G01" || resultDesc.contains("没有可砸蛋机会")) {
+                Log.runtime(TAG, "暂无可砸蛋机会")
+                return
+            }
 
             if (ResChecker.checkRes("$TAG[smashEgg]", jo)) {
                 val batchSmashedList = jo.getJSONArray("batchSmashedList")

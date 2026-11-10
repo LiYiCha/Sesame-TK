@@ -190,12 +190,14 @@ public class ApplicationHook implements IXposedHookLoadPackage {
             // 最早期安装宿主崩溃记录器，覆盖启动窗口（早于任何模块 hook 与配置加载）
             CrashRecorder.install();
 
-            // 识别并输出 XP 框架环境（绝不抛出任何未捕获异常）
+            // 识别并输出 XP 框架环境（传统管线主进程仅输出一次，现代管线已由LibXposedRuntime输出）
             try {
                 if (originParam != null) {
                     XpFrameworkDetector.detectTraditional(classLoader, null);
+                    if (General.PACKAGE_NAME.equals(packageName)) {
+                        Log.runtime(TAG, XpFrameworkDetector.getLogDescription() + " | 宿主: " + packageName);
+                    }
                 }
-                Log.runtime(TAG, XpFrameworkDetector.getLogDescription() + " | 宿主: " + packageName);
             } catch (Throwable ignored) {}
 
             // MTOP 实例捕获 hook：独立于抓包开关无条件安装，供游乐记等主动发 MTOP 的任务复用宿主实例

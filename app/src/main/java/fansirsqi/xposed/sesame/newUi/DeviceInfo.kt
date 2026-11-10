@@ -1,6 +1,7 @@
 package fansirsqi.xposed.sesame.newui
 
 import android.os.Build
+import fansirsqi.xposed.sesame.data.ViewAppInfo
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -1225,15 +1226,13 @@ object DeviceInfoUtil {
 
         val infoMap = LinkedHashMap<String, String>()
         infoMap["当前账号"] = activeUser
-        val xpFramework = runCatching {
-            fansirsqi.xposed.sesame.util.XpFrameworkDetector.getFrameworkSummary()
-        }.getOrDefault("未激活 / 未检测到")
-        infoMap["XP 框架"] = xpFramework
+        val xpEnv = ViewAppInfo.xpEnvSummary.takeIf { it.isNotBlank() }
+            ?: runCatching { fansirsqi.xposed.sesame.util.XpFrameworkDetector.getEnvironmentSummary() }.getOrDefault("未激活 / 未检测到")
+        infoMap["XP 环境"] = xpEnv
         infoMap["Product"] = "${Build.MANUFACTURER} ${Build.PRODUCT}"
         infoMap["Device"] = getDeviceName()
         infoMap["Android Version"] = "${Build.VERSION.RELEASE} SDK (${Build.VERSION.SDK_INT})"
         infoMap["OS Build"] = "${Build.DISPLAY}"
-        infoMap["Verify ID"] = vid
         infoMap["Module Version"] = "${BuildConfig.VERSION}.${BuildConfig.BUILD_TYPE} 📦"
         infoMap["Module Build"] = "${BuildConfig.BUILD_DATE} ${BuildConfig.BUILD_TIME} ⏰"
         return infoMap

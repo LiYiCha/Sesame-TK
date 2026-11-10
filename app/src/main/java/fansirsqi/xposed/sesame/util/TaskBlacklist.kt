@@ -190,11 +190,19 @@ object TaskBlacklist {
                 errorMsg.contains("任务报名记录不存在")
 
         // 4. 事件模板不存在或参数非法
-        val isTemplateNotExist = errorCode == "PROMISE_TEMPLATE_NOT_EXIST" || errorMsg.contains("事件模板不存在")
-        val isInvalidArgument = errorCode == "ILLEGAL_ARGUMENT" || errorCode == "TASK_ID_INVALID" || errorMsg.contains("参数错误")
+        val isTemplateNotExist = errorCode == "PROMISE_TEMPLATE_NOT_EXIST" ||
+                errorMsg.contains("事件模板不存在") ||
+                errorMsg.contains("模板不存在") ||
+                errorMsg.contains("生活记录模板不存在")
+        val isInvalidArgument = errorCode == "ILLEGAL_ARGUMENT" ||
+                errorCode == "TASK_ID_INVALID" ||
+                errorMsg.contains("参数错误") ||
+                errorMsg.contains("不是有效的入参")
 
         // 5. 安全策略或无配置
-        val isSecurityReject = errorCode == "400000001" || errorMsg.contains("安全策略拦截")
+        val isSecurityReject = errorCode == "400000001" ||
+                errorMsg.contains("安全策略拦截") ||
+                errorMsg.contains("任务全局配置不存在")
 
         // 6. 频率限制（当日限频，次日可重试）
         val isRateLimit = errorCode == "OP_REPEAT_CHECK" || errorMsg.contains("操作太频繁")

@@ -140,11 +140,15 @@ class MainActivity : BaseActivity() {
                         }
                         runCatching {
                             val fw = intent.getStringExtra("framework")
+                            val env = intent.getStringExtra("xp_env")
+                            if (!env.isNullOrBlank()) {
+                                ViewAppInfo.xpEnvSummary = env
+                            }
                             if (!fw.isNullOrBlank()) {
                                 ViewAppInfo.xpFrameworkVersion = fw
-                                val currentUser = deviceInfoState.value["当前账号"] ?: "未登录"
-                                deviceInfoState.value = DeviceInfoUtil.showInfo(verifyId, currentUser)
                             }
+                            val currentUser = deviceInfoState.value["当前账号"] ?: "未登录"
+                            deviceInfoState.value = DeviceInfoUtil.showInfo(verifyId, currentUser)
                         }
                         viewHandler.removeCallbacks(titleRunner)
                     }

@@ -77,7 +77,7 @@ object XpFrameworkDetector {
      * 获取环境完整日志描述（用于冷启动日志输出）
      */
     @JvmStatic
-    fun getLogDescription(): String {
+    fun getEnvironmentSummary(): String {
         return runCatching {
             val pipeline = when (detectedPipeline) {
                 "libxposed" -> "现代管线 (libxposed)"
@@ -85,7 +85,15 @@ object XpFrameworkDetector {
                 else -> "自动探测"
             }
             val fw = getFrameworkSummary()
-            "[XP环境] 入口: $pipeline | 框架: $fw"
+            "$pipeline | $fw"
+        }.getOrDefault("未激活 / 未检测到")
+    }
+
+    @JvmStatic
+    fun getLogDescription(): String {
+        return runCatching {
+            val summary = getEnvironmentSummary()
+            "[XP环境] $summary"
         }.getOrDefault("[XP环境] 未检测到活跃框架")
     }
 

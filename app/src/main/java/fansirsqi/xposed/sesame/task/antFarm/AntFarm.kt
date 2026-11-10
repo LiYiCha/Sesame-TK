@@ -31,7 +31,8 @@ import fansirsqi.xposed.sesame.task.antFarm.AntFarmFamily.familySign
 import fansirsqi.xposed.sesame.task.antForest.TaskTimeChecker
 import fansirsqi.xposed.sesame.util.CoroutineUtils
 import fansirsqi.xposed.sesame.util.DataStore
-import fansirsqi.xposed.sesame.task.antOrchard.GameTask
+import fansirsqi.xposed.sesame.task.other.game.GameTask
+import fansirsqi.xposed.sesame.task.other.OtherTask0
 import fansirsqi.xposed.sesame.util.JsonUtil
 import fansirsqi.xposed.sesame.util.ListUtil
 import fansirsqi.xposed.sesame.util.Log
@@ -906,7 +907,7 @@ class AntFarm : ModelTask() {
                 tc.countDebug("家庭任务")
             }
             // 开宝箱
-            if (enableDdrawGameCenterAward!!.value) {
+            if (OtherTask0.gameFarm.value || enableDdrawGameCenterAward!!.value) {
                 drawGameCenterAward()
                 tc.countDebug("开宝箱")
             }
@@ -1967,9 +1968,11 @@ class AntFarm : ModelTask() {
                 if (!Status.hasFlagToday(CACHED_FLAG)) {
                     val jo = JSONObject(DadaDailyRpcCall.home(activityId))
                     if (ResChecker.checkRes(TAG + "查询答题活动失败:", jo)) {
-                        val operationConfigList = jo.getJSONArray("operationConfigList")
-                        updateTomorrowAnswerCache(operationConfigList, tomorrow)
-                        Status.setFlagToday(CACHED_FLAG)
+                        val operationConfigList = jo.optJSONArray("operationConfigList")
+                        if (operationConfigList != null) {
+                            updateTomorrowAnswerCache(operationConfigList, tomorrow)
+                            Status.setFlagToday(CACHED_FLAG)
+                        }
                     }
                 }
                 return
@@ -2033,9 +2036,11 @@ class AntFarm : ModelTask() {
                 val extInfo = joDailySubmit.getJSONObject("extInfo")
                 val correct = joDailySubmit.getBoolean("correct")
                 Log.farm("饲料任务答题：" + (if (correct) "正确" else "错误") + "领取饲料［" + extInfo.getString("award") + "g］")
-                val operationConfigList = joDailySubmit.getJSONArray("operationConfigList")
-                updateTomorrowAnswerCache(operationConfigList, tomorrow)
-                Status.setFlagToday(CACHED_FLAG)
+                val operationConfigList = joDailySubmit.optJSONArray("operationConfigList")
+                if (operationConfigList != null) {
+                    updateTomorrowAnswerCache(operationConfigList, tomorrow)
+                    Status.setFlagToday(CACHED_FLAG)
+                }
             }
         } catch (e: Exception) {
             Log.printStackTrace(TAG, "答题出错", e)
@@ -4396,22 +4401,24 @@ class AntFarm : ModelTask() {
                 if (remainToTask > 0 && quotaCanUse == 0) {
                     Log.runtime(TAG, "宝箱进度: $used/$limit，开始自动刷任务补齐...")
                     // 根据游戏类型选择上报任务
-                    GameTask.Farm_ddply.report(remainToTask)
-                    
-                    // 上报完成后，直接一次性开启所有的宝箱奖励（由于GameTask上报包含延时，此时机会已生成）
-                    val drawRes = JSONObject(AntFarmRpcCall.drawGameCenterAward(remainToTask))
-                    if (drawRes.optBoolean("success")) {
-                        val awardList = drawRes.optJSONArray("gameCenterDrawAwardList")
-                        val awardStrings = mutableListOf<String>()
-                        if (awardList != null) {
-                            for (i in 0 until awardList.length()) {
-                                val item = awardList.getJSONObject(i)
-                                awardStrings.add("${item.optString("awardName")}*${item.optInt("awardCount")}")
+                    val reportOk = GameTask.Farm_ddply.report(remainToTask)
+                    if (reportOk) {
+                        delay(1500)
+                        // 上报成功后，直接一次性开启所有的宝箱奖励
+                        val drawRes = JSONObject(AntFarmRpcCall.drawGameCenterAward(remainToTask))
+                        if (drawRes.optBoolean("success")) {
+                            val awardList = drawRes.optJSONArray("gameCenterDrawAwardList")
+                            val awardStrings = mutableListOf<String>()
+                            if (awardList != null) {
+                                for (i in 0 until awardList.length()) {
+                                    val item = awardList.getJSONObject(i)
+                                    awardStrings.add("${item.optString("awardName")}*${item.optInt("awardCount")}")
+                                }
                             }
+                            Log.farm("庄园小鸡🎁[获得奖品: ${awardStrings.joinToString(",")}]")
+                        } else {
+                            Log.runtime(TAG, "开启宝箱失败: ${drawRes.optString("desc")}")
                         }
-                        Log.farm("庄园小鸡🎁[获得奖品: ${awardStrings.joinToString(",")}]")
-                    } else {
-                        Log.runtime(TAG, "开启宝箱失败: ${drawRes.optString("desc")}")
                     }
                     break
                 } else {

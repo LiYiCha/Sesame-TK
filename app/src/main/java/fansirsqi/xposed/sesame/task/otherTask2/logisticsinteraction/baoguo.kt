@@ -92,7 +92,7 @@ object baoguo {
                     }
 
                     // 过滤无法通过 RPC 模拟的下单/真实交易事件规则任务
-                    if (taskType == "TRANSFORMER" && (title.contains("订单") || title.contains("搬家") || title.contains("跑腿") || title.contains("拉货") || title.contains("通关"))) {
+                    if (taskType == "TRANSFORMER" && (title.contains("订单") || title.contains("搬家") || title.contains("跑腿") || title.contains("拉货") || title.contains("通关") || title.contains("玩一玩") || title.contains("消除") || title.contains("游戏"))) {
                         TaskBlacklist.autoAddToBlacklist(taskId, title, "10000005", "promoprod不允许完成事件规则任务")
                         continue
                     }

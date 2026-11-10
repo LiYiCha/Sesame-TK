@@ -1,4 +1,4 @@
-package fansirsqi.xposed.sesame.task.antOrchard
+package fansirsqi.xposed.sesame.task.other.game
 
 import fansirsqi.xposed.sesame.hook.ApplicationHook
 import fansirsqi.xposed.sesame.hook.internal.AlipayMiniMarkHelper
@@ -18,13 +18,12 @@ enum class GameTask(
     val action: String,
     val channel: String,
     val version: String,
-    val requestsPerEgg: Int, //完成1个🥚要多少次 为了防止网络崩溃 多加1次
+    val requestsPerEgg: Int,
     val pf: String = "zfb"
 ) {
     Orchard_ncscc("农场-上车车", "2060170000356601", "zfb_ncscc", "ncscc_game_kaiche_every_10", "nongchangleyuan", "1.0.2", 2),
     Farm_ddply("农场-对对碰乐园", "2021004149679303", "zfb_ddply", "ddply_game_xiaochu_every_5", "zhuangyuan", "1.0.14", 2),
-
-    Forest_slxcc("森林-小车车","2060170000363691","zfb_slxcc","slxcc_game_kaiche_every_10","lianyun_senlin_leyuan","1.0.1",3),
+    Forest_slxcc("森林-小车车", "2060170000363691", "zfb_slxcc", "slxcc_game_kaiche_every_10", "lianyun_senlin_leyuan", "1.0.1", 3),
     Forest_sljyd("森林-救援队(能量雨)", "2021005113684028", "zfb_sljydx", "sljyd_game_xiaochu_every_10", "lianyun_senlin_leyuan", "1.0.1", 3),
     GoldenBean_ddply("金豆-对对碰", "2021004149679303", "zfb_ddply", "ddply_game_xiaochu_every_5", "goldenbean", "1.0.15", 3, "alipay"),
     Member_ddply("会员-对对碰", "2021004149679303", "zfb_ddply", "ddply_game_xiaochu_every_5", "xlyy_WJCNJT", "1.0.15", 3, "alipay"),
@@ -32,15 +31,41 @@ enum class GameTask(
 
     private var cachedToken: String? = null
 
-    /**
-     * 第一步：登录获取 Token 并缓存
-     */
+    private fun postJson(urlString: String, jsonBody: String, authToken: String? = null): Pair<Int, String> {
+        val mark = AlipayMiniMarkHelper.getAlipayMiniMark(appId, version)
+        val conn = (URL(urlString).openConnection() as HttpURLConnection).apply {
+            requestMethod = "POST"
+            doOutput = true
+            connectTimeout = 10000
+            readTimeout = 10000
+            setRequestProperty("Content-Type", "application/json")
+            setRequestProperty("alipayMiniMark", mark)
+            setRequestProperty("User-Agent", getDynamicUA())
+            setRequestProperty("x-release-type", "ONLINE")
+            setRequestProperty("referer", "https://$appId.hybrid.alipay-eco.com/$appId/$version/index.html")
+            if (!authToken.isNullOrEmpty()) {
+                setRequestProperty("authorization", authToken)
+            }
+        }
+        return try {
+            OutputStreamWriter(conn.outputStream, StandardCharsets.UTF_8).use { it.write(jsonBody) }
+            val respCode = conn.responseCode
+            val stream = if (respCode in 200..299) conn.inputStream else conn.errorStream
+            val responseText = stream?.bufferedReader()?.use { it.readText() } ?: "EMPTY"
+            Pair(respCode, responseText)
+        } finally {
+            conn.disconnect()
+        }
+    }
+
     private fun login(): String? {
         return try {
             val authCode = AuthCodeHelper.getAuthCode(appId)
-            val mark = AlipayMiniMarkHelper.getAlipayMiniMark(appId, version)
+            if (authCode.isNullOrEmpty()) {
+                Log.error(title, "❌ 无法获取授权码(authCode为空)，appId: $appId，请确认是否已在支付宝手动打开并授权过该小游戏")
+                return null
+            }
             val reqId = "${System.currentTimeMillis()}_${(1..350).random()}"
-
             val body = JSONObject().apply {
                 put("v", version); put("code", authCode); put("pf", pf)
                 put("reqId", reqId); put("gid", gid); put("version", version)
@@ -50,64 +75,44 @@ enum class GameTask(
                 put("scene", "")
             }.toString()
 
-            val conn = (URL("https://gamesapi2.aslk2018.com/v2/game/login").openConnection() as HttpURLConnection).apply {
-                requestMethod = "POST"; doOutput = true
-                setRequestProperty("Content-Type", "application/json")
-                setRequestProperty("alipayMiniMark", mark)
-                setRequestProperty("User-Agent", getDynamicUA())
-                setRequestProperty("x-release-type", "ONLINE")
-                setRequestProperty("referer", "https://$appId.hybrid.alipay-eco.com/$appId/$version/index.html")
-            }
-
-            OutputStreamWriter(conn.outputStream, StandardCharsets.UTF_8).use { it.write(body) }
-
-            // 💡 改进：登录失败也要读错误流
-            val respCode = conn.responseCode
-            val stream = if (respCode in 200..299) conn.inputStream else conn.errorStream
-            val responseText = stream?.bufferedReader()?.use { it.readText() } ?: "EMPTY"
-
+            val (respCode, responseText) = postJson("https://gamesapi2.aslk2018.com/v2/game/login", body)
             val resJson = JSONObject(responseText)
             if (resJson.optInt("code") == 1) {
-                val token = resJson.optJSONObject("data")?.optString("token")
-                //Log.runtime(title, "✅ 登录成功，Token 已获取")
-                token
+                resJson.optJSONObject("data")?.optString("token")
             } else {
-                // Log.runtime(title, "❌ 登录接口报错 (Code $respCode): $responseText")
+                Log.error(title, "❌ 登录接口报错 (HTTP $respCode): $responseText")
                 null
             }
         } catch (e: Exception) {
-            //Log.runtime(title, "🚨 登录过程抛出异常: ${e.message}")
+            Log.printStackTrace(title, "🚨 登录过程抛出异常: ${e.message}", e)
             null
         }
     }
 
-    /**
-     * 外部调用：执行上报任务（同步阻塞，保证主任务顺序不乱）
-     */
-    fun report(eggCount: Int) {
+    fun report(eggCount: Int): Boolean {
+        if (eggCount <= 0) return true
         val totalNeeded = eggCount * requestsPerEgg
         Log.runtime(title, "🚀 开始执行上报任务：目标 $eggCount 个蛋，需请求 $totalNeeded 次")
-        
+
         cachedToken = login()
         if (cachedToken.isNullOrEmpty()) {
             Log.runtime(title, "⚠️ 无法获取有效的 Token，放弃上报任务")
-            return
+            return false
         }
 
         var successCount = 0
         for (i in 1..totalNeeded) {
-            // 执行单次上报，包含重试与Token失效重新登录逻辑
             if (!executeSingleReportWithRetry(i, totalNeeded)) {
                 Log.runtime(title, "⚠️ 上报任务在第 $i 次执行时中断")
                 break
             }
             successCount++
             if (i < totalNeeded) {
-                // 协程安全延迟，增加防风控随机间隔（由3秒缩短至1-2秒）
                 CoroutineUtils.sleepCompat((1000..2000).random().toLong())
             }
         }
         Log.runtime(title, "🏁 上报任务执行完毕，成功 $successCount/$totalNeeded 次")
+        return successCount > 0
     }
 
     private fun executeSingleReportWithRetry(current: Int, total: Int): Boolean {
@@ -116,15 +121,14 @@ enum class GameTask(
         while (attempts < maxAttempts) {
             attempts++
             val result = executeSingleReportResult(current, total)
-            if (result.success) {
-                return true
-            }
+            if (result.success) return true
 
             if (result.isTokenInvalid) {
                 Log.runtime(title, "🔑 检测到 Token 失效，尝试重新登录... (尝试次: $attempts)")
                 cachedToken = login()
                 if (cachedToken.isNullOrEmpty()) {
-                    Log.runtime(title, "🔑 重新登录获取 Token 失败")
+                    Log.runtime(title, "🔑 重新登录失败，终止重试")
+                    return false
                 }
             } else {
                 Log.runtime(title, "⚠️ 第 $current 次上报失败: ${result.errorMsg} (尝试次: $attempts/$maxAttempts)")
@@ -139,36 +143,19 @@ enum class GameTask(
 
     private fun executeSingleReportResult(current: Int, total: Int): ReportResult {
         return try {
-            val mark = AlipayMiniMarkHelper.getAlipayMiniMark(appId, version)
             val body = JSONObject().apply {
                 put("v", version); put("version", version)
                 put("reqId", "${System.currentTimeMillis()}_${(10..99).random()}")
                 put("gid", gid); put("action_code", action); put("action_finish_channel", channel)
             }.toString()
 
-            val conn = (URL("https://gamesapi2.aslk2018.com/v2/zfb/taskReport").openConnection() as HttpURLConnection).apply {
-                requestMethod = "POST"; doOutput = true
-                setRequestProperty("authorization", cachedToken)
-                setRequestProperty("alipayMiniMark", mark)
-                setRequestProperty("Content-Type", "application/json")
-                setRequestProperty("User-Agent", getDynamicUA())
-                setRequestProperty("x-release-type", "ONLINE")
-                setRequestProperty("referer", "https://$appId.hybrid.alipay-eco.com/$appId/$version/index.html")
-            }
-
-            OutputStreamWriter(conn.outputStream, StandardCharsets.UTF_8).use { it.write(body) }
-
-            // 读取响应码并捕获错误流
-            val respCode = conn.responseCode
-            val stream = if (respCode in 200..299) conn.inputStream else conn.errorStream
-            val responseText = stream?.bufferedReader()?.use { it.readText() } ?: "NULL_RESPONSE"
-
+            val (_, responseText) = postJson("https://gamesapi2.aslk2018.com/v2/zfb/taskReport", body, cachedToken)
             val resJson = JSONObject(responseText)
             val code = resJson.optInt("code")
             val msg = resJson.optString("msg", "")
 
             if (code == 1) {
-                if (current % requestsPerEgg == 0) Log.other(title, "📈 进度: $current/$total (已达成 ${current/requestsPerEgg} / ${total/requestsPerEgg} 个蛋)")
+                if (current % requestsPerEgg == 0) Log.other(title, "📈 进度: $current/$total (已达成 ${current / requestsPerEgg} / ${total / requestsPerEgg} 个蛋)")
                 ReportResult(success = true)
             } else {
                 val isTokenErr = msg.contains("token", ignoreCase = true) || msg.contains("auth", ignoreCase = true) || code == 401

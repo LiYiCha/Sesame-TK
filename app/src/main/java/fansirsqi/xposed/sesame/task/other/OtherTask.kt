@@ -4,25 +4,16 @@ import fansirsqi.xposed.sesame.model.ModelFields
 import fansirsqi.xposed.sesame.model.ModelGroup
 import fansirsqi.xposed.sesame.model.modelFieldExt.BooleanModelField
 import fansirsqi.xposed.sesame.task.ModelTask
-import fansirsqi.xposed.sesame.model.modelFieldExt.ChoiceModelField
-import fansirsqi.xposed.sesame.model.modelFieldExt.IntegerModelField
 import fansirsqi.xposed.sesame.task.other.haojia.HaoJiaWuyou
 import fansirsqi.xposed.sesame.task.other.wufu.WuFu2026
-import fansirsqi.xposed.sesame.task.other.gametest.GameTestTask
 import fansirsqi.xposed.sesame.util.Log
 
 class OtherTask0 : ModelTask() {
-    override fun getName(): String {
-        return "其他任务0"
-    }
+    override fun getName(): String = "其他任务0"
 
-    override fun getGroup(): ModelGroup {
-        return ModelGroup.OTHER
-    }
+    override fun getGroup(): ModelGroup = ModelGroup.OTHER
 
-    override fun getIcon(): String {
-        return ""
-    }
+    override fun getIcon(): String = ""
 
     /** @brief 好家无忧卡 开关 */
     private var haojiaWuyou: BooleanModelField? = null
@@ -30,77 +21,35 @@ class OtherTask0 : ModelTask() {
     /** @brief 五福2026 开关 */
     private var wufu2026: BooleanModelField? = null
 
-    /** @brief 游戏测试 开关 */
-    private var testGameTask: BooleanModelField? = null
-
-    /** @brief 游戏测试 类型选择 */
-    private var testGameSelect: ChoiceModelField? = null
-
-    /** @brief 游戏测试 上报蛋数 */
-    private var testGameEggCount: IntegerModelField? = null
-
-
     override fun getFields(): ModelFields {
         val fields = ModelFields()
-        // 好家无忧卡开关
         fields.addField(
             BooleanModelField(
                 "haojiaWuyou", "好家无忧卡", false
             ).apply { haojiaWuyou = this }
         )
-
-        // 五福2026开关
         fields.addField(
             BooleanModelField(
                 "wufu2026", "五福2026", false
             ).apply { wufu2026 = this }
         )
 
-        // 手动游戏 HTTP 上报测试控制选项
-        fields.addField(
-            BooleanModelField(
-                "testGameTask", "手动测试 | 游戏HTTP上报", false
-            ).apply { testGameTask = this }
-        )
-        fields.addField(
-            ChoiceModelField(
-                "testGameSelect", "测试游戏 | 选择目标类型", 0,
-                arrayOf(
-                    "金豆对对碰 (zfb_ddply)",
-                    "金豆吃草草 (zfb_nccmx)",
-                    "会员对对碰 (xlyy_WJCNJT)",
-                    "庄园对对碰 (zhuangyuan)",
-                    "农场上车车 (ncscc)",
-                    "森林小车车 (slxcc)",
-                    "森林救援队 (sljyd)"
-                ),
-                "选择要手动单步测试上报的小游戏"
-            ).apply { testGameSelect = this }
-        )
-        fields.addField(
-            IntegerModelField(
-                "testGameEggCount", "测试游戏 | 手动上报蛋数", 1
-            ).apply { testGameEggCount = this }
-        )
+        // 统一小游戏HTTP上报与开宝箱控制开关
+        fields.addField(gameForest)
+        fields.addField(gameFarm)
+        fields.addField(gameOrchard)
+        fields.addField(gameGoldenBean)
 
         return fields
     }
 
     override suspend fun runSuspend() {
         try {
-            // 执行好家无忧卡任务
-            if (haojiaWuyou!!.value) {
+            if (haojiaWuyou?.value == true) {
                 HaoJiaWuyou.start()
             }
-
-            // 2026五福
-            if(wufu2026!!.value){
+            if (wufu2026?.value == true) {
                 WuFu2026.start()
-            }
-
-            // 手动游戏 HTTP 上报测试
-            if (testGameTask?.value == true) {
-                GameTestTask.start(testGameTask, testGameSelect, testGameEggCount)
             }
         } catch (e: Exception) {
             Log.printStackTrace(TAG, e)
@@ -108,9 +57,18 @@ class OtherTask0 : ModelTask() {
     }
 
     companion object {
-        const val TAG = "OtherTask"
-        fun run() {
-            // TODO: 添加其他任务
-        }
+        const val TAG = "OtherTask0"
+
+        @JvmField
+        val gameForest = BooleanModelField("gameForest", "森林乐园小车车 (自动开宝箱)", false)
+
+        @JvmField
+        val gameFarm = BooleanModelField("gameFarm", "庄园乐园对对碰 (自动开宝箱)", false)
+
+        @JvmField
+        val gameOrchard = BooleanModelField("gameOrchard", "农场乐园上车车 (自动砸金蛋)", false)
+
+        @JvmField
+        val gameGoldenBean = BooleanModelField("gameGoldenBean", "金豆夺宝小游戏 (自动砸金蛋)", false)
     }
 }

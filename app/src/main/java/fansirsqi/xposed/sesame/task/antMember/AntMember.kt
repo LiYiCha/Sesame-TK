@@ -2840,8 +2840,8 @@ class AntMember : ModelTask() {
 
             if (finishFlag) continue
 
-            // 使用TaskBlacklist进行黑名单检查
-            if (isTaskInBlacklist(title)) {
+            // 使用TaskBlacklist进行黑名单检查（标题或模板ID命中均跳过）
+            if (isTaskInBlacklist(title) || isTaskInBlacklist(templateId)) {
                 // 只有在所有任务组中未处理过时才记录日志
                 if (!processedBlacklistTasks.contains(title)) {
                     //Log.runtime(TAG, "跳过黑名单任务: $title")
@@ -2921,7 +2921,9 @@ class AntMember : ModelTask() {
                 }
                 val joinRes = AntMemberRpcCall.joinSesameTask(templateId)
                 val joinJo = JSONObject(joinRes)
-                if (ResChecker.checkRes(TAG, joinJo)) {
+                val resultCode = joinJo.optString("resultCode", joinJo.optString("code", ""))
+                val resultView = joinJo.optString("resultView", joinJo.optString("desc", joinRes))
+                if (joinJo.optBoolean("success", false) || "SUCCESS" == resultCode) {
                     val joinData = joinJo.optJSONObject("data")
                     if (joinData != null) {
                         recordId = joinData.optString("recordId")
@@ -2929,9 +2931,10 @@ class AntMember : ModelTask() {
                     Log.runtime(TAG, "芝麻炼金-任务领取成功: $title")
                     delay(1000)
                 } else {
-                    Log.error(
-                        TAG, "任务领取失败: " + title + " - " + joinJo.optString("resultView", joinRes)
-                    )
+                    Log.error(TAG, "任务领取失败: $title - $resultView")
+                    if (resultCode == "ILLEGAL_ARGUMENT" || resultCode == "PROMISE_TEMPLATE_NOT_EXIST" || resultView.contains("不是有效的入参") || resultView.contains("模板不存在")) {
+                        autoAddToBlacklist(templateId, title, resultCode, resultView)
+                    }
                     continue
                 }
             }
@@ -2947,14 +2950,17 @@ class AntMember : ModelTask() {
             if (!recordId.isEmpty()) {
                 val finishRes = AntMemberRpcCall.finishSesameTask(recordId)
                 val finishJo = JSONObject(finishRes)
-                if (ResChecker.checkRes(TAG, finishJo)) {
+                val finishResultCode = finishJo.optString("resultCode", finishJo.optString("code", ""))
+                val finishResultView = finishJo.optString("resultView", finishJo.optString("desc", finishRes))
+                if (finishJo.optBoolean("success", false) || "SUCCESS" == finishResultCode) {
                     val reward = task.optInt("rewardAmount", 0)
                     Log.other("芝麻炼金⚗️[任务完成: " + title + "]#获得" + reward + "粒")
                 } else {
-                    val errorCode = finishJo.optString("resultCode", finishJo.optString("errorCode", ""))
-                    val errorMsg = finishJo.optString("resultView", finishJo.optString("errorMsg", ""))
+                    Log.error(TAG, "芝麻炼金任务完成失败: $title - $finishResultView")
+                    val errorCode = finishResultCode.ifEmpty { finishJo.optString("errorCode", "") }
+                    val errorMsg = finishResultView.ifEmpty { finishJo.optString("errorMsg", "") }
                     if (!errorCode.isEmpty() || !errorMsg.isEmpty()) {
-                        autoAddToBlacklist(title, title, errorCode, errorMsg)
+                        autoAddToBlacklist(templateId, title, errorCode, errorMsg)
                     }
                 }
             }

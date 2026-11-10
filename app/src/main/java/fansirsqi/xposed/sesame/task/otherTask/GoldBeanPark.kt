@@ -3,7 +3,8 @@ package fansirsqi.xposed.sesame.task.otherTask
 import fansirsqi.xposed.sesame.data.Status
 import fansirsqi.xposed.sesame.hook.ApplicationHook
 import fansirsqi.xposed.sesame.hook.RequestManager
-import fansirsqi.xposed.sesame.task.antOrchard.GameTask
+import fansirsqi.xposed.sesame.task.other.game.GameTask
+import fansirsqi.xposed.sesame.task.other.OtherTask0
 import fansirsqi.xposed.sesame.task.common.GameCenterPlayRpcCall
 import fansirsqi.xposed.sesame.util.GlobalThreadPools
 import fansirsqi.xposed.sesame.util.Log
@@ -144,7 +145,7 @@ class GoldBeanPark @JvmOverloads constructor(
                         val usedQuota = drawRights.optInt("usedQuota", 0)
 
                         val remainToTask = quotaLimit - usedQuota
-                        if (remainToTask > 0 && quotaCanUse < remainToTask) {
+                        if (remainToTask > 0 && quotaCanUse < remainToTask && OtherTask0.gameGoldenBean.value) {
                             Log.other(TAG, "金豆夺宝宝箱/金蛋进度 $usedQuota/$quotaLimit，自动执行【金豆对对碰/吃草草】上报补齐...")
                             try {
                                 GameTask.GoldenBean_ddply.report(remainToTask)

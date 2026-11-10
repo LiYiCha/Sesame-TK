@@ -1,7 +1,7 @@
 package fansirsqi.xposed.sesame.task.antForest
 
 import fansirsqi.xposed.sesame.hook.Toast
-import fansirsqi.xposed.sesame.task.antOrchard.GameTask
+import fansirsqi.xposed.sesame.task.other.game.GameTask
 import fansirsqi.xposed.sesame.util.Log
 import fansirsqi.xposed.sesame.util.ResChecker
 import fansirsqi.xposed.sesame.util.maps.UserMap
@@ -228,9 +228,18 @@ object EnergyRainCoroutine {
                             // Log.runtime(TAG, "发现待完成任务[$taskType]，当前状态: $taskStatus，开始执行...")
 
                             // 执行上报逻辑
-                            GameTask.Forest_sljyd.report(1)
-
-                            // 完成后可以根据需要决定是否 break，或者继续检查其他
+                            val reportOk = GameTask.Forest_sljyd.report(1)
+                            if (reportOk) {
+                                delay(1500)
+                                try {
+                                    val claimRes = JSONObject(AntForestRpcCall.receiveTaskAward("ANTFOREST_ENERGY_RAIN_TASK", "GAME_DONE_SLJYD"))
+                                    if (claimRes.optBoolean("success")) {
+                                        Log.forest("森林救援队能量雨🎖️[领取奖励成功]")
+                                    }
+                                } catch (e: Exception) {
+                                    Log.error(TAG, "领取森林救援队奖励异常: ${e.message}")
+                                }
+                            }
                             break
                         } else if (taskStatus == "FINISHED" || taskStatus == "DONE") {
                             // Log.runtime(TAG, "任务[$taskType]已完成，无需重复执行")

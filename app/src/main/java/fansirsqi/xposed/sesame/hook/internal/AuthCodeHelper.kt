@@ -89,8 +89,14 @@ object AuthCodeHelper {
                 // 直接从返回的 AuthSkipResultModel 获取 authExecuteResult
                 val authExecuteResult = callMethod(authSkipResult, "getAuthExecuteResult")
                 if (authExecuteResult != null) {
-                    return callMethod(authExecuteResult, "getAuthCode") as? String
+                    val code = callMethod(authExecuteResult, "getAuthCode") as? String
+                    if (!code.isNullOrEmpty()) {
+                        return code
+                    }
                 }
+                Log.error(TAG, "getAuthSkipResult 未返回有效 authCode [appId=$appId, result=$authSkipResult]，若为小游戏请先在支付宝内手动打开并授权过该游戏")
+            } else {
+                Log.error(TAG, "getAuthSkipResult 返回 null [appId=$appId]")
             }
 
             return null

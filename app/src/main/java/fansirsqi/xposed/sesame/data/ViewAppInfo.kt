@@ -25,6 +25,9 @@ object ViewAppInfo {
     @JvmField
     @Volatile
     var xpFrameworkVersion: String = ""
+    @JvmField
+    @Volatile
+    var xpEnvSummary: String = ""
 
     @SuppressLint("HardwareIds")
 

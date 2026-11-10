@@ -33,7 +33,10 @@ class LibXposedRuntime : XposedModule() {
 
         runCatching {
             fansirsqi.xposed.sesame.util.XpFrameworkDetector.setLibXposedFramework(fwName, fwVer, apiVer)
-            fansirsqi.xposed.sesame.util.Log.runtime(TAG, fansirsqi.xposed.sesame.util.XpFrameworkDetector.getLogDescription() + " | 进程: ${param.processName}")
+            // 仅在主进程输出一次环境描述，避免多进程反复刷屏
+            if (param.processName == General.PACKAGE_NAME) {
+                fansirsqi.xposed.sesame.util.Log.runtime(TAG, fansirsqi.xposed.sesame.util.XpFrameworkDetector.getLogDescription() + " | 进程: ${param.processName}")
+            }
         }
     }
 
