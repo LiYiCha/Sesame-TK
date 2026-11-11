@@ -31,6 +31,7 @@ object LuckyStarRpcCall {
      */
     fun queryTaskList(cookie: String, missionId: Long? = null, collectionId: String = COLLECTION_ID): JSONObject? {
         val (lat, lng) = getCoordinates()
+        val locInfo = "[\"{\\\"lng\\\":\\\"$lng\\\",\\\"lat\\\":\\\"$lat\\\"}\"]"
         val data = JSONObject().apply {
             put("missionCollectionId", collectionId)
             put("bizScene", BIZ_SCENE)
@@ -39,9 +40,14 @@ object LuckyStarRpcCall {
                 put("missionIds", "[$missionId]")
             }
             put("accountPlan", "HAVANA_COMMON")
+            val alipayVer = fansirsqi.xposed.sesame.hook.ApplicationHook.getAlipayVersion()?.versionString?.takeIf { it.isNotEmpty() } ?: "12.12.30.8000"
+            put("platform", "android")
+            put("product", "ap")
+            put("prodVersion", alipayVer)
+            put("ttid", ElemeMtopUtil.TTID)
             put("longitude", lng)
             put("latitude", lat)
-            put("locationInfos", "[{\"lng\":\"$lng\",\"lat\":\"$lat\"}]")
+            put("locationInfos", locInfo)
             put("spPageId", SP_PAGE_ID)
             put("instance", "INNER")
         }
@@ -58,6 +64,7 @@ object LuckyStarRpcCall {
         collectionId: String = COLLECTION_ID
     ): JSONObject? {
         val (lat, lng) = getCoordinates()
+        val locInfo = "[\"{\\\"lng\\\":\\\"$lng\\\",\\\"lat\\\":\\\"$lat\\\"}\"]"
         val data = JSONObject().apply {
             put("missionCollectionId", collectionId.toIntOrNull() ?: 3112)
             put("missionId", missionId)
@@ -66,13 +73,19 @@ object LuckyStarRpcCall {
             put("count", 1)
             put("bizScene", BIZ_SCENE)
             put("accountPlan", "HAVANA_COMMON")
+            val alipayVer = fansirsqi.xposed.sesame.hook.ApplicationHook.getAlipayVersion()?.versionString?.takeIf { it.isNotEmpty() } ?: "12.12.30.8000"
+            put("platform", "android")
+            put("product", "ap")
+            put("prodVersion", alipayVer)
+            put("ttid", ElemeMtopUtil.TTID)
             put("longitude", lng)
             put("latitude", lat)
-            put("locationInfos", "[{\"lng\":\"$lng\",\"lat\":\"$lat\"}]")
+            put("locationInfos", locInfo)
             put("spPageId", SP_PAGE_ID)
             put("instance", "INNER")
         }
-        return ElemeMtopUtil.send(API_RECEIVE_PRIZE, data.toString(), cookie, method = "GET")
+        val headers = mapOf("asac" to "alscadOjfleDPawx9zVoT0")
+        return ElemeMtopUtil.send(API_RECEIVE_PRIZE, data.toString(), cookie, method = "GET", extraHeaders = headers)
     }
 
     /**

@@ -60,7 +60,7 @@ object ElemeAuth {
 
         DataStore.put(keyCookie, captured)
         DataStore.put(keyExpires, expires)
-        Log.runtime(TAG, "已自动同步捕获的真机饿了么会话凭据")
+        Log.other("饿了么|授权", "已自动同步捕获的真机饿了么会话凭据")
     }
 
     /**
@@ -97,7 +97,7 @@ object ElemeAuth {
                 memoryExpiresAt = now + 72 * 3600 * 1000L
                 DataStore.put(keyCookie, memoryCookie)
                 DataStore.put(keyExpires, memoryExpiresAt)
-                Log.runtime(TAG, "已读取本地 WebView Cookie 并初始化缓存")
+                Log.other("饿了么|授权", "已读取本地 WebView Cookie 并初始化缓存")
                 return memoryCookie
             }
         }
@@ -148,24 +148,25 @@ object ElemeAuth {
     private fun refresh(): String {
         var conn: HttpURLConnection? = null
         try {
-            Log.runtime(TAG, "开始申请饿了么授权码 [$APP_ID]...")
+            Log.other("饿了么|授权", "开始申请饿了么授权码 [$APP_ID]...")
             val authCode = AuthCodeHelper.getAuthCode(APP_ID)
             if (authCode.isNullOrEmpty()) {
-                Log.error(TAG, "获取饿了么授权码失败")
+                Log.other("饿了么|授权", "获取饿了么授权码失败")
                 return ""
             }
 
-            Log.runtime(TAG, "获取授权码成功，换取会话凭据...")
+            Log.other("饿了么|授权", "获取授权码成功，换取会话凭据...")
             val postData = "appEntrance=alipay_sg&appId=$APP_ID&appName=eleme" +
                     "&authorizationCode=${URLEncoder.encode(authCode, "UTF-8")}" +
                     "&isMobile=true&lang=zh_CN&needPassWebViewCookie=false&returnUrl=&type=alipay_mini_program"
             val url = URL("https://ipassport.ele.me/mini_program/eaLogin.do")
             conn = (url.openConnection() as HttpURLConnection).apply {
                 requestMethod = "POST"
-                connectTimeout = 15000
-                readTimeout = 15000
+                connectTimeout = 10000
+                readTimeout = 10000
                 doOutput = true
                 doInput = true
+                setRequestProperty("Connection", "close")
                 setRequestProperty("Content-Type", "application/x-www-form-urlencoded;charset=UTF-8")
                 setRequestProperty("User-Agent", DEFAULT_UA)
                 setRequestProperty("Referer", "https://$APP_ID.hybrid.alipay-eco.com/")
@@ -211,7 +212,7 @@ object ElemeAuth {
             val iframeRedirect = dataObj?.optBoolean("iframeRedirect", false) ?: false
             val iframeUrl = dataObj?.optString("iframeRedirectUrl").orEmpty()
             if (iframeRedirect && iframeUrl.isNotEmpty()) {
-                Log.runtime(TAG, "检测到绑定验证引导，跟随链接获取凭据...")
+                Log.other("饿了么|授权", "检测到绑定验证引导，跟随链接获取凭据...")
                 followRedirectForCookies(iframeUrl, cookieMap)
             }
 
@@ -265,11 +266,11 @@ object ElemeAuth {
                     invalidate()
                     Log.runtime(TAG, "换取登录态失败(当前账号未绑定饿了么或存在冲突待确认)，自动关闭任务: 响应: $respText")
                 } else {
-                    Log.runtime(TAG, "换取登录态未返回有效 Cookie: $respText")
+                    Log.other("饿了么|授权", "换取登录态未返回有效 Cookie: $respText")
                 }
             }
         } catch (t: Throwable) {
-            Log.error(TAG, "刷新饿了么登录态异常: ${t.message}")
+            Log.other("饿了么|授权", "刷新饿了么登录态异常: ${t.message}")
         } finally {
             conn?.disconnect()
         }
@@ -285,6 +286,7 @@ object ElemeAuth {
                 connectTimeout = 10000
                 readTimeout = 10000
                 instanceFollowRedirects = false
+                setRequestProperty("Connection", "close")
                 setRequestProperty("User-Agent", DEFAULT_UA)
                 if (cookieMap.isNotEmpty()) {
                     setRequestProperty("Cookie", cookieMap.entries.joinToString("; ") { "${it.key}=${it.value}" })

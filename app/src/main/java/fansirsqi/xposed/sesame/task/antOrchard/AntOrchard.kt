@@ -636,7 +636,6 @@ class AntOrchard : ModelTask() {
                             val errorCode = finishResponse.optString("code", "")
                             val errorDesc = finishResponse.optString("desc", "")
                             if (errorCode == "400000040" || errorCode == "400000001" || errorDesc.contains("不支持rpc") || errorDesc.contains("配置不存在")) {
-                                Log.runtime(TAG, "农场广告任务[$title] 不支持RPC或配置不存在，加入黑名单")
                                 TaskBlacklist.autoAddToBlacklist(taskId, title, errorCode, errorDesc)
                             } else {
                                 Log.error(TAG, "农场广告任务[$title] 完成失败: $finishResponse")

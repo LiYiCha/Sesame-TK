@@ -26,6 +26,14 @@ public class AlipayVersion implements Comparable<AlipayVersion> {
             }
         }
     }
+    public String getVersionString() {
+        return versionString;
+    }
+
+    public Integer[] getVersionArray() {
+        return versionArray;
+    }
+
     /**
      * 实现版本比较逻辑。
      * @param alipayVersion 需要比较的另一个 AlipayVersion 实例

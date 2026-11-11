@@ -25,25 +25,25 @@ object LuckyStarTask {
 
     fun handle() {
         if (Status.hasFlagToday(FLAG_TODAY)) {
-            Log.runtime(TAG, "今日饿了么幸运星任务已完成，跳过执行")
+            Log.other("饿了么|幸运星", "今日饿了么幸运星任务已完成，跳过执行")
             return
         }
 
         if (!lock.tryLock()) {
-            Log.runtime(TAG, "已有饿了么幸运星任务正在执行中，跳过本次并发调用")
+            Log.other("饿了么|幸运星", "已有饿了么幸运星任务正在执行中，跳过本次并发调用")
             return
         }
 
         try {
-            Log.runtime(TAG, "==== 开始执行饿了么幸运星任务 ====")
+            Log.other("饿了么|幸运星", "==== 开始执行饿了么幸运星任务 ====")
             val cookie = ElemeAuth.ensureCookie()
             if (cookie.isEmpty() || !ElemeAuth.isBound()) {
                 val reason = if (cookie.isEmpty()) "未获取到有效登录凭证(账号未绑定或换票失败)" else "当前未关联有效饿了么账号"
-                Log.runtime(TAG, "$reason，自动关闭【饿了么|幸运星】开关并退出")
+                Log.other("饿了么|幸运星", "$reason，自动关闭【饿了么|幸运星】开关并退出")
                 fansirsqi.xposed.sesame.task.otherTask2.OtherTask2.disableElemeLuckyStar(reason)
                 return
             }
-            Log.runtime(TAG, "当前账号: ${ElemeAuth.getAccountSummary()}")
+            Log.other("饿了么|幸运星", "当前账号: ${ElemeAuth.getAccountSummary()}")
 
             // 1. 拟真环境初始化：会话校验、页面动效与气泡/弹窗组件加载、签到订阅弹窗查询
             LuckyStarRpcCall.checkLogin(cookie)
@@ -58,18 +58,19 @@ object LuckyStarTask {
             // 2. 查询初始资产
             val initProperty = LuckyStarRpcCall.queryProperty(cookie)
             val initialStars = extractStarAmount(initProperty)
-            Log.runtime(TAG, "当前幸运星余额: $initialStars")
+            Log.other("饿了么|幸运星", "当前幸运星余额: $initialStars")
 
             // 3. 查询全量任务列表
             val taskListResp = LuckyStarRpcCall.queryTaskList(cookie)
             if (taskListResp == null) {
-                Log.error(TAG, "获取任务列表失败")
+                val err = ElemeMtopUtil.lastError ?: "接口请求失败或未返回有效数据"
+                Log.other("饿了么|幸运星", "❌ 获取任务列表失败: $err")
                 return
             }
 
             val taskArray = extractTaskArray(taskListResp)
             if (taskArray == null || taskArray.length() == 0) {
-                Log.runtime(TAG, "当前无可执行任务")
+                Log.other("饿了么|幸运星", "当前无可执行任务 (响应报文: $taskListResp)")
                 return
             }
 
@@ -96,11 +97,11 @@ object LuckyStarTask {
                 val inGlobalBlacklist = TaskBlacklist.isTaskInBlacklist(title) || TaskBlacklist.isTaskInBlacklist(missionDefId.toString())
                 val inKeywordBlacklist = BLACKLIST_KEYWORDS.any { title.contains(it) }
                 if (inGlobalBlacklist || inKeywordBlacklist) {
-                    Log.runtime(TAG, "跳过黑名单/不支持的任务: [$title]")
+                    Log.other("饿了么|幸运星", "跳过黑名单/不支持的任务: [$title]")
                     continue
                 }
 
-                Log.runtime(TAG, "发现待处理任务: [$title] (DefId: $missionDefId, 状态: $status/$receiveStatus)")
+                Log.other("饿了么|幸运星", "发现待处理任务: [$title] (DefId: $missionDefId, 状态: $status/$receiveStatus)")
 
                 // 判断是否已达成可领奖状态
                 val isReadyToClaim = status == "FINISH" ||
@@ -112,11 +113,11 @@ object LuckyStarTask {
                     val prizeResp = LuckyStarRpcCall.receivePrize(cookie, missionDefId, missionXId)
                     val rewardDesc = extractPrizeDesc(prizeResp)
                     if (rewardDesc.isNotEmpty()) {
-                        Log.runtime(TAG, "成功领取任务奖励: [$title] -> $rewardDesc")
+                        Log.other("饿了么|幸运星", "成功领取任务奖励: [$title] -> $rewardDesc")
                         rewardedCount++
                         finishedCount++
                     } else {
-                        Log.runtime(TAG, "领取任务奖励返回: [$title] -> ${prizeResp?.optJSONArray("ret")?.optString(0) ?: "未知"}")
+                        Log.other("饿了么|幸运星", "领取任务奖励返回: [$title] -> ${prizeResp?.optJSONArray("ret")?.optString(0) ?: "未知"}")
                     }
                     Thread.sleep(RandomUtil.nextGaussianLong(1000, 2000))
                     continue
@@ -136,7 +137,7 @@ object LuckyStarTask {
                     var retry = 0
                     while (currentCount < targetCount && retry < targetCount + 2) {
                         retry++
-                        Log.runtime(TAG, "执行计数任务进度: [$title] ($currentCount/$targetCount)...")
+                        Log.other("饿了么|幸运星", "执行计数任务进度: [$title] ($currentCount/$targetCount)...")
                         Thread.sleep(RandomUtil.nextGaussianLong(1500, 2500))
 
                         // 精准刷新单任务状态获取最新进度与动态 missionXId
@@ -158,7 +159,7 @@ object LuckyStarTask {
                 } else {
                     // 普通浏览或跳转任务
                     val pageStageTime = actionValue?.optInt("pageStageTime") ?: if (title.contains("15秒")) 15 else 3
-                    Log.runtime(TAG, "执行浏览任务: [$title]，模拟浏览 ${pageStageTime} 秒...")
+                    Log.other("饿了么|幸运星", "执行浏览任务: [$title]，模拟浏览 ${pageStageTime} 秒...")
                     Thread.sleep(pageStageTime * 1000L + RandomUtil.nextGaussianLong(500, 1500))
 
                     // 刷新任务状态获取最新 missionXId
@@ -174,13 +175,13 @@ object LuckyStarTask {
                 val prizeResp = LuckyStarRpcCall.receivePrize(cookie, missionDefId, missionXId)
                 val rewardDesc = extractPrizeDesc(prizeResp)
                 if (rewardDesc.isNotEmpty()) {
-                    Log.runtime(TAG, "成功完成并领取奖励: [$title] -> $rewardDesc")
+                    Log.other("饿了么|幸运星", "成功完成并领取奖励: [$title] -> $rewardDesc")
                     rewardedCount++
                     finishedCount++
                 } else {
                     val retArray = prizeResp?.optJSONArray("ret")
                     val retMsg = retArray?.optString(0).orEmpty()
-                    Log.runtime(TAG, "任务未达成完成条件或暂不可领奖: [$title]${if (retMsg.isNotEmpty()) " -> $retMsg" else ""}")
+                    Log.other("饿了么|幸运星", "任务未达成完成条件或暂不可领奖: [$title]${if (retMsg.isNotEmpty()) " -> $retMsg" else ""}")
                     // 对明确不支持、失败或需人工介入的任务，自动记入当日黑名单阻止后续重复无效执行
                     if (retMsg.contains("FAIL") || retMsg.contains("NOT_SUPPORT") || retMsg.contains("LIMIT")) {
                         TaskBlacklist.autoAddToBlacklist(missionDefId.toString(), title, "RECEIVE_FAIL", retMsg)
@@ -194,10 +195,10 @@ object LuckyStarTask {
             val finalStars = extractStarAmount(finalProperty)
             val delta = finalStars - initialStars
 
-            Log.runtime(TAG, "==== 饿了么幸运星任务执行完毕: 完成 $finishedCount 个任务, 成功领奖 $rewardedCount 次, 当前星数: $finalStars (+$delta) ====")
+            Log.other("饿了么|幸运星", "==== 饿了么幸运星任务执行完毕: 完成 $finishedCount 个任务, 成功领奖 $rewardedCount 次, 当前星数: $finalStars (+$delta) ====")
             Status.setFlagToday(FLAG_TODAY)
         } catch (t: Throwable) {
-            Log.error(TAG, "执行饿了么幸运星任务异常: ${t.message}")
+            Log.other("饿了么|幸运星", "执行饿了么幸运星任务异常: ${t.message}")
         } finally {
             lock.unlock()
         }

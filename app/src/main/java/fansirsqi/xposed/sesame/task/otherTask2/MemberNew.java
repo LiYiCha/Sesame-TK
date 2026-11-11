@@ -79,10 +79,12 @@ public class MemberNew extends BaseCommTask {
         String errorMessage = response.optString("errorMessage", "");
         String resultDesc = response.optString("resultDesc", "");
         String errorTip = response.optString("errorTip", "");
-        if (errorMessage.contains("人气太旺") || errorMessage.contains("请稍后再试") ||
-            resultDesc.contains("人气太旺") || resultDesc.contains("请稍后再试") ||
+        String resultCode = response.optString("resultCode", "");
+        if (errorMessage.contains("人气太旺") || errorMessage.contains("请稍后再试") || errorMessage.contains("系统繁忙") ||
+            resultDesc.contains("人气太旺") || resultDesc.contains("请稍后再试") || resultDesc.contains("系统繁忙") ||
+            "PARAM_ILLEGAL".equals(resultCode) ||
             response.optInt("error", 0) == 1009 || "1009".equals(errorTip)) {
-            Log.error(TAG, "宝箱服务器限流，设置宝箱冷却3小时");
+            Log.error(TAG, "宝箱服务器限流/系统繁忙，设置宝箱冷却3小时");
             Status.setTemporaryStatusWithExpiry("MemberNew_Box_1009", 3 * 60 * 60 * 1000);
             return true;
         }
@@ -92,10 +94,15 @@ public class MemberNew extends BaseCommTask {
     @SuppressLint("SimpleDateFormat")
     @Override
     protected void handle() {
-        // 检查冷却时间
+        // 检查冷却时间或1009服务器限流
         if (Status.hasTemporaryStatusValid(MEMBER_EXECUTION_COOLDOWN_FLAG)) {
             long remainingTime = Status.getTemporaryStatusRemainingMinutes(MEMBER_EXECUTION_COOLDOWN_FLAG);
             Log.runtime(TAG, "距离上次执行间隔，还需等待" + remainingTime + "分钟，跳过本次调用");
+            return;
+        }
+        if (Status.hasTemporaryStatusValid("MemberNew_1009")) {
+            long remainingTime = Status.getTemporaryStatusRemainingMinutes("MemberNew_1009");
+            Log.runtime(TAG, "服务器限流冷却中，还需等待" + remainingTime + "分钟，跳过本次调用");
             return;
         }
 
@@ -582,7 +589,7 @@ public class MemberNew extends BaseCommTask {
             
             JSONObject taskConfig = taskItem.optJSONObject("taskConfigInfo");
             if (taskConfig == null) {
-                Log.error(TAG, "任务配置信息为空");
+                Log.runtime(TAG, "任务配置信息为空，跳过非配置项");
                 return null;
             }
             
@@ -1125,6 +1132,7 @@ public class MemberNew extends BaseCommTask {
             
             if (!response.optBoolean("success")) {
                 Log.error(TAG, "会员任务列表请求失败: " + response);
+                checkResponseError1009(response);
                 GlobalThreadPools.sleep(RandomUtil.nextInt(1000, 2000));
                 return;
             }

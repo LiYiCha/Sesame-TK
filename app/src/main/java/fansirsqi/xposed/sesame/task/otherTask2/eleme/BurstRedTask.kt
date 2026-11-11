@@ -15,25 +15,25 @@ object BurstRedTask {
 
     fun handle() {
         if (Status.hasFlagToday(FLAG_TODAY)) {
-            Log.runtime(TAG, "今日饿了么爆红包已领取，跳过执行")
+            Log.other("饿了么|爆红包", "今日饿了么爆红包已领取，跳过执行")
             return
         }
 
         if (!lock.tryLock()) {
-            Log.runtime(TAG, "已有饿了么爆红包任务正在执行中，跳过本次并发调用")
+            Log.other("饿了么|爆红包", "已有饿了么爆红包任务正在执行中，跳过本次并发调用")
             return
         }
 
         try {
-            Log.runtime(TAG, "==== 开始执行饿了么爆红包任务 ====")
+            Log.other("饿了么|爆红包", "==== 开始执行饿了么爆红包任务 ====")
             val cookie = ElemeAuth.ensureCookie()
             if (cookie.isEmpty() || !ElemeAuth.isBound()) {
                 val reason = if (cookie.isEmpty()) "未获取到有效登录凭证(账号未绑定或换票失败)" else "当前未关联有效饿了么账号"
-                Log.runtime(TAG, "$reason，自动关闭【饿了么|爆红包】开关并退出")
+                Log.other("饿了么|爆红包", "$reason，自动关闭【饿了么|爆红包】开关并退出")
                 fansirsqi.xposed.sesame.task.otherTask2.OtherTask2.disableElemeBurstRed(reason)
                 return
             }
-            Log.runtime(TAG, "当前账号: ${ElemeAuth.getAccountSummary()}")
+            Log.other("饿了么|爆红包", "当前账号: ${ElemeAuth.getAccountSummary()}")
 
             // 领取外卖小程序首页/进站专享 3 张 5 元爆红包
             val sendResp = FreeOrderRpcCall.sendBet(cookie)
@@ -47,18 +47,18 @@ object BurstRedTask {
                     val count = coupon.optString("count", "3")
                     val reduction = coupon.optString("reductionYuan", "5")
                     val name = coupon.optString("rightName", "爆红包")
-                    Log.runtime(TAG, "🎉 成功领取外卖专享爆红包: $count 张 $reduction 元 $name")
+                    Log.other("饿了么|爆红包", "🎉 成功领取外卖专享爆红包: $count 张 $reduction 元 $name")
                 } else {
-                    Log.runtime(TAG, "外卖爆红包已领取或今日无待领权益")
+                    Log.other("饿了么|爆红包", "外卖爆红包已领取或今日无待领权益")
                 }
             } else {
-                Log.runtime(TAG, "外卖爆红包领取请求未返回有效数据")
+                Log.other("饿了么|爆红包", "外卖爆红包领取请求未返回有效数据")
             }
 
             Status.setFlagToday(FLAG_TODAY)
-            Log.runtime(TAG, "==== 饿了么爆红包任务执行完毕 ====")
+            Log.other("饿了么|爆红包", "==== 饿了么爆红包任务执行完毕 ====")
         } catch (t: Throwable) {
-            Log.error(TAG, "执行饿了么爆红包任务异常: ${t.message}")
+            Log.other("饿了么|爆红包", "执行饿了么爆红包任务异常: ${t.message}")
         } finally {
             lock.unlock()
         }

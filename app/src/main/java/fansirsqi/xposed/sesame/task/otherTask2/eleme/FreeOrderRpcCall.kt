@@ -88,7 +88,8 @@ object FreeOrderRpcCall {
             put("longitude", lng)
             put("instance", "INNER")
         }
-        return ElemeMtopUtil.send(API_ICON_DRAW, data.toString(), cookie, method = "GET")
+        val headers = mapOf("asac" to "alsc6AD8Rni21gsqJ5rceg")
+        return ElemeMtopUtil.send(API_ICON_DRAW, data.toString(), cookie, method = "GET", extraHeaders = headers)
     }
 
     /**
@@ -106,7 +107,8 @@ object FreeOrderRpcCall {
             put("spPageId", "26090924198822617")
             put("instance", "INNER")
         }
-        return ElemeMtopUtil.send(API_CONSULT_UNIT, data.toString(), cookie, method = "POST")
+        val headers = mapOf("asac" to "3A25826AHO2X78TBM3QXTQ")
+        return ElemeMtopUtil.send(API_CONSULT_UNIT, data.toString(), cookie, method = "POST", extraHeaders = headers)
     }
 
     /**
@@ -131,7 +133,8 @@ object FreeOrderRpcCall {
             put("latitude", lat)
             put("instance", "INNER")
         }
-        return ElemeMtopUtil.send(API_TBET_SEND, data.toString(), cookie, method = "GET")
+        val headers = mapOf("asac" to "alscIEHa9RGen8cRSFu1rN")
+        return ElemeMtopUtil.send(API_TBET_SEND, data.toString(), cookie, method = "GET", extraHeaders = headers)
     }
 
     /**

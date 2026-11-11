@@ -90,7 +90,7 @@ public class OtherTask2 extends ModelTask {
     }
 
     public static void disableElemeLuckyStar(String reason) {
-        Log.runtime(TAG, "饿了么幸运星不可用(" + reason + ")，自动关闭【饿了么|幸运星】开关");
+        Log.other("饿了么|幸运星", "饿了么幸运星不可用(" + reason + ")，自动关闭【饿了么|幸运星】开关");
         try {
             elemeLuckyStar.setValue(false);
             fansirsqi.xposed.sesame.data.Config.save(fansirsqi.xposed.sesame.util.maps.UserMap.getCurrentUid(), true);
@@ -100,7 +100,7 @@ public class OtherTask2 extends ModelTask {
     }
 
     public static void disableElemeFreeOrder(String reason) {
-        Log.runtime(TAG, "饿了么免单不可用(" + reason + ")，自动关闭【饿了么|抽免单】开关");
+        Log.other("饿了么|淘免单", "饿了么免单不可用(" + reason + ")，自动关闭【饿了么|抽免单】开关");
         try {
             elemeFreeOrder.setValue(false);
             fansirsqi.xposed.sesame.data.Config.save(fansirsqi.xposed.sesame.util.maps.UserMap.getCurrentUid(), true);
@@ -110,7 +110,7 @@ public class OtherTask2 extends ModelTask {
     }
 
     public static void disableElemeBurstRed(String reason) {
-        Log.runtime(TAG, "饿了么爆红包不可用(" + reason + ")，自动关闭【饿了么|爆红包】开关");
+        Log.other("饿了么|爆红包", "饿了么爆红包不可用(" + reason + ")，自动关闭【饿了么|爆红包】开关");
         try {
             elemeBurstRed.setValue(false);
             fansirsqi.xposed.sesame.data.Config.save(fansirsqi.xposed.sesame.util.maps.UserMap.getCurrentUid(), true);

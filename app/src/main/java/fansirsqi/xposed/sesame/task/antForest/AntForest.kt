@@ -3348,6 +3348,7 @@ class AntForest : ModelTask(), EnergyCollectCallback {
                     val awardCount = taskRights.optInt("awardCount", 0)
 
                     if (TaskStatus.FINISHED.name == taskStatus) {
+                        if (TaskBlacklist.isTaskInBlacklist(taskType) || TaskBlacklist.isTaskInBlacklist(taskTitle)) continue
                         val joAward = JSONObject(
                             AntForestRpcCall.receiveTaskAward(sceneCode, taskType)
                         )
@@ -3360,7 +3361,7 @@ class AntForest : ModelTask(), EnergyCollectCallback {
                         }
                         GlobalThreadPools.sleepCompat(500)
                     } else if (TaskStatus.TODO.name == taskStatus) {
-                        if (TaskBlacklist.isTaskInBlacklist(taskType)) continue
+                        if (TaskBlacklist.isTaskInBlacklist(taskType) || TaskBlacklist.isTaskInBlacklist(taskTitle)) continue
                         val bizKey = sceneCode + "_" + taskType
                         val count = forestTaskTryCount
                             .computeIfAbsent(bizKey) { AtomicInteger(0) }

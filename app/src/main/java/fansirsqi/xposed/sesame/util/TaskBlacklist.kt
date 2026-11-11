@@ -2,6 +2,7 @@ package fansirsqi.xposed.sesame.util
 
 import com.fasterxml.jackson.core.type.TypeReference
 import fansirsqi.xposed.sesame.newutil.defaultBlacklist
+import java.util.concurrent.ConcurrentHashMap
 
 /**
  * 通用任务黑名单管理器
@@ -12,27 +13,53 @@ object TaskBlacklist {
     private const val PERMANENT_KEY = "task_blacklist_permanent"
     private const val DAILY_KEY = "task_blacklist_daily"
 
+    private val cachedPermanent = ConcurrentHashMap.newKeySet<String>()
+    private val cachedDaily = ConcurrentHashMap.newKeySet<String>()
+    @Volatile
+    private var cachedDailyDate: String = ""
+    @Volatile
+    private var isCacheLoaded: Boolean = false
+
     private fun today(): String =
         java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.CHINA).format(java.util.Date())
+
+    private fun ensureInit() {
+        try {
+            if (!DataStore.isLoaded()) {
+                DataStore.init(Files.CONFIG_DIR)
+            }
+        } catch (_: Throwable) {}
+    }
 
     /**
      * 读取永久黑名单集合
      */
     private fun loadPermanent(): MutableSet<String> {
+        if (isCacheLoaded && cachedPermanent.isNotEmpty()) {
+            return cachedPermanent.toMutableSet()
+        }
+        ensureInit()
         return try {
             val raw = DataStore.getOrCreate(PERMANENT_KEY, object : TypeReference<Any>() {})
-            when (raw) {
-                is Set<*> -> raw.map { it.toString() }.toMutableSet()
-                is List<*> -> raw.map { it.toString() }.toMutableSet()
+            val set = when (raw) {
+                is Set<*> -> raw.map { it.toString().trim() }.filter { it.isNotEmpty() }.toMutableSet()
+                is List<*> -> raw.map { it.toString().trim() }.filter { it.isNotEmpty() }.toMutableSet()
                 else -> mutableSetOf()
             }
+            cachedPermanent.clear()
+            cachedPermanent.addAll(set)
+            isCacheLoaded = true
+            set
         } catch (e: Exception) {
             mutableSetOf()
         }
     }
 
     private fun savePermanent(entries: Set<String>) {
+        ensureInit()
         try {
+            cachedPermanent.clear()
+            cachedPermanent.addAll(entries)
             DataStore.put(PERMANENT_KEY, entries)
         } catch (e: Exception) {
             Log.error(TAG, "保存永久黑名单失败: ${e.message}")
@@ -43,18 +70,29 @@ object TaskBlacklist {
      * 读取当日黑名单集合（跨天自动清理临时限频任务）
      */
     private fun loadDaily(): MutableSet<String> {
+        val curToday = today()
+        if (isCacheLoaded && cachedDailyDate == curToday) {
+            return cachedDaily.toMutableSet()
+        }
+        ensureInit()
         return try {
             val raw = DataStore.getOrCreate(DAILY_KEY, object : TypeReference<Any>() {})
             if (raw is Map<*, *>) {
                 val date = raw["date"]?.toString() ?: return mutableSetOf()
-                if (date != today()) {
+                if (date != curToday) {
+                    cachedDaily.clear()
+                    cachedDailyDate = curToday
                     return mutableSetOf()
                 }
-                when (val entries = raw["entries"]) {
-                    is Set<*> -> entries.map { it.toString() }.toMutableSet()
-                    is List<*> -> entries.map { it.toString() }.toMutableSet()
+                val set = when (val entries = raw["entries"]) {
+                    is Set<*> -> entries.map { it.toString().trim() }.filter { it.isNotEmpty() }.toMutableSet()
+                    is List<*> -> entries.map { it.toString().trim() }.filter { it.isNotEmpty() }.toMutableSet()
                     else -> mutableSetOf()
                 }
+                cachedDaily.clear()
+                cachedDaily.addAll(set)
+                cachedDailyDate = curToday
+                set
             } else {
                 mutableSetOf()
             }
@@ -64,8 +102,13 @@ object TaskBlacklist {
     }
 
     private fun saveDaily(entries: Set<String>) {
+        ensureInit()
+        val curToday = today()
         try {
-            DataStore.put(DAILY_KEY, mapOf("date" to today(), "entries" to entries))
+            cachedDaily.clear()
+            cachedDaily.addAll(entries)
+            cachedDailyDate = curToday
+            DataStore.put(DAILY_KEY, mapOf("date" to curToday, "entries" to entries))
         } catch (e: Exception) {
             Log.error(TAG, "保存当日黑名单失败: ${e.message}")
         }
@@ -95,19 +138,12 @@ object TaskBlacklist {
         val allBlacklist = getBlacklist()
         for (item in allBlacklist) {
             if (item.isBlank()) continue
+            // 1. 完全匹配
             if (cleanInfo.equals(item, ignoreCase = true)) return true
 
-            // 中文字符串双向包含判定
-            val itemHasChinese = item.any { it in '\u4e00'..'\u9fa5' }
-            val infoHasChinese = cleanInfo.any { it in '\u4e00'..'\u9fa5' }
-
-            if (itemHasChinese && infoHasChinese) {
-                if (cleanInfo.contains(item) || item.contains(cleanInfo)) return true
-            } else if (itemHasChinese) {
-                if (cleanInfo.contains(item)) return true
-            } else {
-                // 纯英文/数字（如任务ID匹配）
-                if (cleanInfo.contains(item, ignoreCase = true) || item.contains(cleanInfo, ignoreCase = true)) return true
+            // 2. 双向模糊匹配（标题或关键词互相包含）
+            if (cleanInfo.contains(item, ignoreCase = true) || item.contains(cleanInfo, ignoreCase = true)) {
+                return true
             }
         }
         return false
@@ -119,14 +155,23 @@ object TaskBlacklist {
     @JvmStatic
     @JvmOverloads
     fun addToBlacklist(taskId: String, taskTitle: String = "") {
-        if (taskId.isBlank() && taskTitle.isBlank()) return
+        val cleanId = taskId.trim()
+        val cleanTitle = taskTitle.trim()
+        if (cleanId.isBlank() && cleanTitle.isBlank()) return
+
+        val idIn = cleanId.isNotEmpty() && isTaskInBlacklist(cleanId)
+        val titleIn = cleanTitle.isNotEmpty() && isTaskInBlacklist(cleanTitle)
+        if ((cleanId.isEmpty() || idIn) && (cleanTitle.isEmpty() || titleIn)) {
+            return
+        }
+
         val current = loadPermanent()
         var changed = false
-        if (taskId.isNotBlank() && current.add(taskId.trim())) changed = true
-        if (taskTitle.isNotBlank() && current.add(taskTitle.trim())) changed = true
+        if (cleanId.isNotBlank() && current.add(cleanId)) changed = true
+        if (cleanTitle.isNotBlank() && current.add(cleanTitle)) changed = true
         if (changed) {
             savePermanent(current)
-            val info = if (taskTitle.isNotBlank()) "$taskId - $taskTitle" else taskId
+            val info = if (cleanTitle.isNotBlank()) "$cleanId - $cleanTitle" else cleanId
             Log.runtime(TAG, "任务[$info]已加入永久黑名单")
         }
     }
@@ -172,7 +217,16 @@ object TaskBlacklist {
     @JvmStatic
     @JvmOverloads
     fun autoAddToBlacklist(taskId: String, taskTitle: String = "", errorCode: String, errorMsg: String = "") {
-        if (taskId.isBlank() && taskTitle.isBlank()) return
+        val cleanId = taskId.trim()
+        val cleanTitle = taskTitle.trim()
+        if (cleanId.isBlank() && cleanTitle.isBlank()) return
+
+        // 核心：若任务ID或标题已经在黑名单中，直接退出，不写盘、不输出重复日志
+        val idIn = cleanId.isNotEmpty() && isTaskInBlacklist(cleanId)
+        val titleIn = cleanTitle.isNotEmpty() && isTaskInBlacklist(cleanTitle)
+        if ((cleanId.isEmpty() || idIn) && (cleanTitle.isEmpty() || titleIn)) {
+            return
+        }
 
         // 1. 不支持 RPC 调用（协议风控）
         val isUnsupportedRpc = errorCode == "400000040" ||
@@ -211,9 +265,6 @@ object TaskBlacklist {
         val shouldAdd = isPermanent || isRateLimit
 
         if (shouldAdd) {
-            val cleanId = taskId.trim()
-            val cleanTitle = taskTitle.trim()
-
             val reason = when {
                 isUnsupportedRpc -> "接口不支持RPC调用"
                 isPromoProdEvent -> "不允许RPC完成事件规则任务(需真实交易)"
@@ -225,22 +276,24 @@ object TaskBlacklist {
                 else -> "执行异常: $errorCode - $errorMsg"
             }
 
+            var updated = false
             if (isPermanent) {
                 val perm = loadPermanent()
-                var updated = false
                 if (cleanId.isNotBlank() && perm.add(cleanId)) updated = true
                 if (cleanTitle.isNotBlank() && perm.add(cleanTitle)) updated = true
                 if (updated) savePermanent(perm)
             } else {
                 val daily = loadDaily()
-                var updated = false
                 if (cleanId.isNotBlank() && daily.add(cleanId)) updated = true
                 if (cleanTitle.isNotBlank() && daily.add(cleanTitle)) updated = true
                 if (updated) saveDaily(daily)
             }
 
-            val display = if (cleanTitle.isNotBlank()) "$cleanId - $cleanTitle" else cleanId
-            Log.runtime(TAG, "🛡️ 任务[$display]因【$reason】已自动加入黑名单，后续跳过执行")
+            // 仅在真实产生新增时打印日志，避免每次启动刷屏
+            if (updated) {
+                val display = if (cleanTitle.isNotBlank()) "$cleanId - $cleanTitle" else cleanId
+                Log.runtime(TAG, "🛡️ 任务[$display]因【$reason】已自动加入黑名单，后续跳过执行")
+            }
         }
     }
 }
