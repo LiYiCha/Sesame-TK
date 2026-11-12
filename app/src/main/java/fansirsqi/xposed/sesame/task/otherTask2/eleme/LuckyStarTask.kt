@@ -25,64 +25,102 @@ object LuckyStarTask {
 
     fun handle() {
         if (Status.hasFlagToday(FLAG_TODAY)) {
-            Log.other("饿了么|幸运星", "今日饿了么幸运星任务已完成，跳过执行")
+            Log.other("饿了么", "[幸运星] 今日饿了么幸运星任务已完成，跳过执行")
             return
         }
 
         if (!lock.tryLock()) {
-            Log.other("饿了么|幸运星", "已有饿了么幸运星任务正在执行中，跳过本次并发调用")
+            Log.other("饿了么", "[幸运星] 已有饿了么幸运星任务正在执行中，跳过本次并发调用")
             return
         }
 
         try {
-            Log.other("饿了么|幸运星", "==== 开始执行饿了么幸运星任务 ====")
-            val cookie = ElemeAuth.ensureCookie()
-            if (cookie.isEmpty() || !ElemeAuth.isBound()) {
-                val reason = if (cookie.isEmpty()) "未获取到有效登录凭证(账号未绑定或换票失败)" else "当前未关联有效饿了么账号"
-                Log.other("饿了么|幸运星", "$reason，自动关闭【饿了么|幸运星】开关并退出")
+            Log.other("饿了么", "[幸运星] ==== 开始执行饿了么幸运星任务 ====")
+            val initCookie = ElemeAuth.ensureCookie()
+            if (initCookie.isEmpty() || !ElemeAuth.isBound()) {
+                val reason = if (initCookie.isEmpty()) "未获取到有效登录凭证(账号未绑定或换票失败)" else "当前未关联有效饿了么账号"
+                Log.other("饿了么", "[幸运星] $reason，自动关闭【饿了么|幸运星】开关并退出")
                 fansirsqi.xposed.sesame.task.otherTask2.OtherTask2.disableElemeLuckyStar(reason)
                 return
             }
-            Log.other("饿了么|幸运星", "当前账号: ${ElemeAuth.getAccountSummary()}")
 
-            // 1. 拟真环境初始化：会话校验、页面动效与气泡/弹窗组件加载、签到订阅弹窗查询
-            LuckyStarRpcCall.checkLogin(cookie)
-            Thread.sleep(RandomUtil.nextGaussianLong(400, 800))
+            // 1. 严格校验会话有效性，若已失效则自动换票自愈刷新
+            val cookie = ElemeAuth.validateOrRefreshCookie(initCookie)
+            if (cookie.isNullOrEmpty()) {
+                Log.other("饿了么", "[幸运星] ⚠️ 饿了么会话校验未通过且自动刷新失败，请在支付宝手动打开饿了么小程序完成授权")
+                return
+            }
+            Log.other("饿了么", "[幸运星] 当前账号: ${ElemeAuth.getAccountSummary()}")
 
-            LuckyStarRpcCall.initPageComponents(cookie)
-            Thread.sleep(RandomUtil.nextGaussianLong(600, 1200))
+            // 2. 拟真环境初始化：页面动效与签到组件加载
+            val hpResp = LuckyStarRpcCall.initPageComponents(cookie)
+            Thread.sleep(RandomUtil.nextGaussianLong(600, 1000))
 
-            LuckyStarRpcCall.querySubscribeRemind(cookie)
+            // 每日签到（自动从 homepage 解析并提交）
+            try {
+                val hpData = hpResp?.optJSONObject("data") ?: hpResp
+                val signInData = hpData?.optJSONObject("signIn")?.optJSONObject("data")
+                val dtos = signInData?.optJSONArray("signInQueryPrizeDTOS")
+                var todayDto: JSONObject? = null
+                if (dtos != null) {
+                    for (k in 0 until dtos.length()) {
+                        val d = dtos.optJSONObject(k)
+                        if (d?.optBoolean("today", false) == true) {
+                            todayDto = d
+                            break
+                        }
+                    }
+                }
+                val copyId = todayDto?.optJSONObject("extInfo")?.optString("copyId")
+                    ?: signInData?.optJSONObject("extInfo")?.optString("copyId").orEmpty()
+                val strategy = signInData?.optString("signInRewardStrategy").orEmpty()
+                val stageAwards = todayDto?.optJSONObject("extInfo")?.optJSONArray("stageAward")
+                val award = stageAwards?.optJSONObject(0)
+                val signedToday = todayDto?.optBoolean("signIn", false) == true
+
+                if (signedToday) {
+                    Log.other("饿了么", "[幸运星] 每日签到: 今日已签到")
+                } else {
+                    val (signSuccess, signMsg) = LuckyStarRpcCall.signIn(cookie, copyId, strategy, award)
+                    Log.other("饿了么", "[幸运星] 每日签到: $signMsg")
+                }
+            } catch (e: Exception) {
+                Log.other("饿了么", "[幸运星] 签到执行异常: ${e.message}")
+            }
             Thread.sleep(RandomUtil.nextGaussianLong(500, 900))
 
-            // 2. 查询初始资产
+            LuckyStarRpcCall.querySubscribeRemind(cookie)
+            Thread.sleep(RandomUtil.nextGaussianLong(400, 800))
+
+            // 3. 查询初始资产
             val initProperty = LuckyStarRpcCall.queryProperty(cookie)
             val initialStars = extractStarAmount(initProperty)
-            Log.other("饿了么|幸运星", "当前幸运星余额: $initialStars")
+            Log.other("饿了么", "[幸运星] 当前幸运星余额: $initialStars")
 
-            // 3. 查询全量任务列表
+            // 4. 查询全量任务列表
             val taskListResp = LuckyStarRpcCall.queryTaskList(cookie)
             if (taskListResp == null) {
                 val err = ElemeMtopUtil.lastError ?: "接口请求失败或未返回有效数据"
-                Log.other("饿了么|幸运星", "❌ 获取任务列表失败: $err")
+                Log.other("饿了么", "[幸运星] ❌ 获取任务列表失败: $err")
                 return
             }
 
             val taskArray = extractTaskArray(taskListResp)
             if (taskArray == null || taskArray.length() == 0) {
-                Log.other("饿了么|幸运星", "当前无可执行任务 (响应报文: $taskListResp)")
+                Log.other("饿了么", "[幸运星] 当前无可执行任务")
                 return
             }
 
             var finishedCount = 0
             var rewardedCount = 0
 
+            // ==== 第一轮: 遍历执行可自动化的浏览与点击任务 ====
+            Log.other("饿了么", "[幸运星] ==== 第一轮: 开始执行浏览与点击任务 ====")
             for (i in 0 until taskArray.length()) {
                 val task = taskArray.optJSONObject(i) ?: continue
                 val missionDefId = task.optLong("missionDefId").takeIf { it > 0 } ?: task.optLong("id")
-                var missionXId = task.optString("missionXId")
+                val missionXId = task.optString("missionXId")
                 val title = task.optString("showTitle").ifEmpty { task.optString("name") }
-                val status = task.optString("status")
                 val receiveStatus = task.optString("receiveStatus")
                 val rewardStatus = task.optString("rewardStatus")
 
@@ -97,97 +135,98 @@ object LuckyStarTask {
                 val inGlobalBlacklist = TaskBlacklist.isTaskInBlacklist(title) || TaskBlacklist.isTaskInBlacklist(missionDefId.toString())
                 val inKeywordBlacklist = BLACKLIST_KEYWORDS.any { title.contains(it) }
                 if (inGlobalBlacklist || inKeywordBlacklist) {
-                    Log.other("饿了么|幸运星", "跳过黑名单/不支持的任务: [$title]")
                     continue
                 }
 
-                Log.other("饿了么|幸运星", "发现待处理任务: [$title] (DefId: $missionDefId, 状态: $status/$receiveStatus)")
-
-                // 判断是否已达成可领奖状态
-                val isReadyToClaim = status == "FINISH" ||
-                        receiveStatus == "TORECEIVE" ||
-                        receiveStatus == "WAITRECEIVE" ||
-                        rewardStatus == "WAITING_RECEIVE"
-
-                if (isReadyToClaim) {
-                    val prizeResp = LuckyStarRpcCall.receivePrize(cookie, missionDefId, missionXId)
-                    val rewardDesc = extractPrizeDesc(prizeResp)
-                    if (rewardDesc.isNotEmpty()) {
-                        Log.other("饿了么|幸运星", "成功领取任务奖励: [$title] -> $rewardDesc")
-                        rewardedCount++
-                        finishedCount++
-                    } else {
-                        Log.other("饿了么|幸运星", "领取任务奖励返回: [$title] -> ${prizeResp?.optJSONArray("ret")?.optString(0) ?: "未知"}")
-                    }
-                    Thread.sleep(RandomUtil.nextGaussianLong(1000, 2000))
+                // 若任务已处于可领奖状态，无需重复做任务，留待第二轮统一领取
+                if (LuckyStarRpcCall.isTaskRewardable(task)) {
+                    Log.other("饿了么", "[幸运星] 任务已达成: [$title] (DefId: $missionDefId)，待第二轮统一领奖")
                     continue
                 }
 
-                // 计数型任务（如“在页面内点击3个店铺”）
                 val actionConfig = task.optJSONObject("actionConfig")
                 val actionType = actionConfig?.optString("actionType").orEmpty()
                 val actionValue = actionConfig?.optJSONObject("actionValue")
-                val targetCount = actionValue?.optInt("finalStageCount")?.takeIf { it > 1 }
-                    ?: task.optJSONObject("stage")?.optInt("targetCount")
-                    ?: if (title.contains("3个") || title.contains("3次")) 3 else 1
+                val pageSpm = actionValue?.optString("pageSpm").orEmpty()
+                val sceneCode = actionValue?.optString("scenceCode").orEmpty()
 
-                var currentCount = task.optJSONObject("stage")?.optInt("count") ?: 0
-
-                if (targetCount > 1) {
-                    var retry = 0
-                    while (currentCount < targetCount && retry < targetCount + 2) {
-                        retry++
-                        Log.other("饿了么|幸运星", "执行计数任务进度: [$title] ($currentCount/$targetCount)...")
-                        Thread.sleep(RandomUtil.nextGaussianLong(1500, 2500))
-
-                        // 精准刷新单任务状态获取最新进度与动态 missionXId
-                        val refreshed = LuckyStarRpcCall.queryTaskList(cookie, missionDefId)
-                        val refreshedTask = findTask(refreshed, missionDefId)
-                        if (refreshedTask != null) {
-                            currentCount = refreshedTask.optJSONObject("stage")?.optInt("count") ?: (currentCount + 1)
-                            val newXId = refreshedTask.optString("missionXId")
-                            if (newXId.isNotEmpty()) missionXId = newXId
-                            val curStatus = refreshedTask.optString("status")
-                            val curRecv = refreshedTask.optString("receiveStatus")
-                            if (curStatus == "FINISH" || curRecv == "TORECEIVE" || curRecv == "WAITRECEIVE") {
-                                break
-                            }
-                        } else {
-                            currentCount++
-                        }
-                    }
-                } else {
-                    // 普通浏览或跳转任务
-                    val pageStageTime = actionValue?.optInt("pageStageTime") ?: if (title.contains("15秒")) 15 else 3
-                    Log.other("饿了么|幸运星", "执行浏览任务: [$title]，模拟浏览 ${pageStageTime} 秒...")
+                if (actionType == "PAGEVIEW" && pageSpm.isNotEmpty()) {
+                    val pageStageTime = actionValue?.optInt("pageStageTime")?.takeIf { it > 0 } ?: if (title.contains("15秒")) 15 else 10
+                    Log.other("饿了么", "[幸运星] 执行浏览任务: [$title]，模拟浏览 ${pageStageTime} 秒...")
                     Thread.sleep(pageStageTime * 1000L + RandomUtil.nextGaussianLong(500, 1500))
 
-                    // 刷新任务状态获取最新 missionXId
-                    val refreshed = LuckyStarRpcCall.queryTaskList(cookie, missionDefId)
-                    val refreshedTask = findTask(refreshed, missionDefId)
-                    if (refreshedTask != null) {
-                        val newXId = refreshedTask.optString("missionXId")
-                        if (newXId.isNotEmpty()) missionXId = newXId
+                    val viewResp = LuckyStarRpcCall.reportPageView(
+                        cookie = cookie,
+                        missionDefId = missionDefId,
+                        pageSpm = pageSpm,
+                        viewTime = pageStageTime + RandomUtil.nextInt(0, 3),
+                        instanceId = task.optString("instanceId").takeIf { it.isNotEmpty() }
+                    )
+                    val ret = viewResp?.optJSONArray("ret")?.optString(0).orEmpty()
+                    if (ret.startsWith("SUCCESS")) {
+                        Log.other("饿了么", "[幸运星] 浏览上报成功: [$title]")
+                        finishedCount++
+                    } else {
+                        Log.other("饿了么", "[幸运星] 浏览上报响应: [$title] -> $ret")
                     }
-                }
-
-                // 尝试领取任务奖励
-                val prizeResp = LuckyStarRpcCall.receivePrize(cookie, missionDefId, missionXId)
-                val rewardDesc = extractPrizeDesc(prizeResp)
-                if (rewardDesc.isNotEmpty()) {
-                    Log.other("饿了么|幸运星", "成功完成并领取奖励: [$title] -> $rewardDesc")
-                    rewardedCount++
-                    finishedCount++
+                    Thread.sleep(RandomUtil.nextGaussianLong(1200, 2000))
+                } else if (actionType == "THIRD" && (sceneCode == "commercial_click" || sceneCode == "inter_change" || title.contains("点击") || title.contains("店铺"))) {
+                    val total = actionValue?.optInt("finalStageCount")?.takeIf { it > 0 }
+                        ?: task.optJSONObject("stage")?.optInt("targetCount")?.takeIf { it > 0 }
+                        ?: if (title.contains("3个") || title.contains("3次")) 3 else 1
+                    val done = task.optJSONObject("stage")?.optInt("count") ?: 0
+                    val need = (total - done).coerceAtLeast(0).coerceAtMost(3)
+                    Log.other("饿了么", "[幸运星] 执行动作任务: [$title]，总需 $total 次 / 已做 $done 次 / 需推进 $need 次")
+                    for (step in 1..need) {
+                        val triggerResp = LuckyStarRpcCall.reportTrigger(
+                            cookie = cookie,
+                            missionDefId = missionDefId,
+                            missionXId = missionXId
+                        )
+                        val ret = triggerResp?.optJSONArray("ret")?.optString(0).orEmpty()
+                        if (ret.startsWith("SUCCESS")) {
+                            Log.other("饿了么", "[幸运星] 动作推进成功: [$title] ($step/$need)")
+                        } else {
+                            Log.other("饿了么", "[幸运星] 动作推进响应: [$title] ($step/$need) -> $ret")
+                            break
+                        }
+                        Thread.sleep(RandomUtil.nextGaussianLong(1800, 2600))
+                    }
+                    if (need > 0) finishedCount++
                 } else {
-                    val retArray = prizeResp?.optJSONArray("ret")
-                    val retMsg = retArray?.optString(0).orEmpty()
-                    Log.other("饿了么|幸运星", "任务未达成完成条件或暂不可领奖: [$title]${if (retMsg.isNotEmpty()) " -> $retMsg" else ""}")
-                    // 对明确不支持、失败或需人工介入的任务，自动记入当日黑名单阻止后续重复无效执行
-                    if (retMsg.contains("FAIL") || retMsg.contains("NOT_SUPPORT") || retMsg.contains("LIMIT")) {
-                        TaskBlacklist.autoAddToBlacklist(missionDefId.toString(), title, "RECEIVE_FAIL", retMsg)
-                    }
+                    Log.other("饿了么", "[幸运星] 跳过非自动化任务: [$title] (actionType: $actionType)")
                 }
-                Thread.sleep(RandomUtil.nextGaussianLong(1200, 2200))
+            }
+
+            // ==== 第二轮: 重新刷新任务列表并批量领取奖励 ====
+            Log.other("饿了么", "[幸运星] ==== 第二轮: 刷新任务进度并领取奖励 ====")
+            Thread.sleep(RandomUtil.nextGaussianLong(1500, 2500))
+            val refreshedResp = LuckyStarRpcCall.queryTaskList(cookie)
+            val refreshedArray = extractTaskArray(refreshedResp) ?: taskArray
+
+            for (i in 0 until refreshedArray.length()) {
+                val task = refreshedArray.optJSONObject(i) ?: continue
+                val missionDefId = task.optLong("missionDefId").takeIf { it > 0 } ?: task.optLong("id")
+                val title = task.optString("showTitle").ifEmpty { task.optString("name") }
+
+                if (missionDefId <= 0) continue
+
+                // 仅对真正达成领奖条件的任务调用领奖（智能匹配阶段参数）
+                if (LuckyStarRpcCall.isTaskRewardable(task)) {
+                    val prizeResp = LuckyStarRpcCall.receivePrize(cookie, task)
+                    val rewardDesc = extractPrizeDesc(prizeResp)
+                    if (rewardDesc.isNotEmpty()) {
+                        Log.other("饿了么", "[幸运星] 成功领取任务奖励: [$title] -> $rewardDesc")
+                        rewardedCount++
+                    } else {
+                        val retMsg = prizeResp?.optJSONArray("ret")?.optString(0).orEmpty()
+                        Log.other("饿了么", "[幸运星] 领取任务奖励返回: [$title] -> ${if (retMsg.isNotEmpty()) retMsg else "未知"}")
+                        if (retMsg.contains("FAIL") || retMsg.contains("NOT_SUPPORT") || retMsg.contains("LIMIT")) {
+                            TaskBlacklist.autoAddToBlacklist(missionDefId.toString(), title, "RECEIVE_FAIL", retMsg)
+                        }
+                    }
+                    Thread.sleep(RandomUtil.nextGaussianLong(1200, 2200))
+                }
             }
 
             // 3. 统计最终资产并更新状态
@@ -195,16 +234,17 @@ object LuckyStarTask {
             val finalStars = extractStarAmount(finalProperty)
             val delta = finalStars - initialStars
 
-            Log.other("饿了么|幸运星", "==== 饿了么幸运星任务执行完毕: 完成 $finishedCount 个任务, 成功领奖 $rewardedCount 次, 当前星数: $finalStars (+$delta) ====")
+            Log.other("饿了么", "[幸运星] ==== 饿了么幸运星任务执行完毕: 完成 $finishedCount 个任务, 成功领奖 $rewardedCount 次, 当前星数: $finalStars (+$delta) ====")
             Status.setFlagToday(FLAG_TODAY)
         } catch (t: Throwable) {
-            Log.other("饿了么|幸运星", "执行饿了么幸运星任务异常: ${t.message}")
+            Log.other("饿了么", "[幸运星] 执行饿了么幸运星任务异常: ${t.message}")
         } finally {
             lock.unlock()
         }
     }
 
-    private fun extractTaskArray(root: JSONObject): JSONArray? {
+    private fun extractTaskArray(root: JSONObject?): JSONArray? {
+        if (root == null) return null
         val data = root.optJSONObject("data") ?: root
         return data.optJSONArray("mlist")
             ?: data.optJSONArray("missionStageDTOList")
@@ -229,14 +269,40 @@ object LuckyStarTask {
         val data = resp.optJSONObject("data") ?: resp
         val rlist = data.optJSONArray("rlist")
         if (rlist != null && rlist.length() > 0) {
-            val first = rlist.optJSONObject(0)
-            val upp = first?.optJSONObject("uppPrizeResult")
-            val title = upp?.optJSONObject("materialInfo")?.optString("title")
-            val discount = upp?.optJSONObject("discountInfo")?.optString("amount")
-            if (!title.isNullOrEmpty()) return title
-            if (!discount.isNullOrEmpty()) return "+$discount 幸运星"
-            val valStr = first?.optString("value")
-            if (!valStr.isNullOrEmpty()) return "+$valStr 幸运星"
+            val out = mutableListOf<String>()
+            for (i in 0 until rlist.length()) {
+                val it = rlist.optJSONObject(i) ?: continue
+                var title = it.optJSONObject("materialInfo")?.optString("title")
+                    ?: it.optJSONObject("rightMaterialInfoDTO")?.optString("title")
+                    ?: it.optJSONObject("prizeMaterialInfo")?.optString("title")
+                    ?: it.optJSONObject("uppPrizeResult")?.optJSONObject("materialInfo")?.optString("title")
+                    ?: it.optString("name")
+                val ptype = it.optString("prizeType")
+                if (title.isNullOrEmpty()) {
+                    title = when (ptype) {
+                        "STAR" -> "幸运星"
+                        "INTEGRAL_PROPERTY" -> "积分"
+                        "COUPON" -> "优惠券"
+                        "RED_PACKET" -> "红包"
+                        else -> if (ptype.isNotEmpty()) ptype else "奖励"
+                    }
+                }
+                val value = it.optString("prizeValue").ifEmpty {
+                    it.optString("equityValue").ifEmpty {
+                        it.optString("value").ifEmpty {
+                            it.optJSONObject("uppPrizeResult")?.optJSONObject("discountInfo")?.optString("amount").orEmpty()
+                        }
+                    }
+                }
+                if (value.isNotEmpty() && !title.contains(value)) {
+                    out.add("$title +$value")
+                } else if (title.isNotEmpty()) {
+                    out.add(title)
+                }
+            }
+            if (out.isNotEmpty()) {
+                return out.joinToString("、")
+            }
             return "成功"
         }
         val ret = resp.optJSONArray("ret")?.optString(0).orEmpty()

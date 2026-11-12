@@ -79,29 +79,32 @@ object FreeOrderTask {
 
     fun handle() {
         if (Status.hasFlagToday(FLAG_TODAY)) {
-            Log.other("饿了么|淘免单", "今日饿了么免单任务已完成，跳过执行")
+            Log.other("饿了么", "[抽免单] 今日饿了么免单任务已完成，跳过执行")
             return
         }
 
         if (!lock.tryLock()) {
-            Log.other("饿了么|淘免单", "已有饿了么抽免单任务正在执行中，跳过本次并发调用")
+            Log.other("饿了么", "[抽免单] 已有饿了么抽免单任务正在执行中，跳过本次并发调用")
             return
         }
 
         try {
-            Log.other("饿了么|淘免单", "==== 开始执行饿了么抽免单任务 ====")
-            val cookie = ElemeAuth.ensureCookie()
-            if (cookie.isEmpty() || !ElemeAuth.isBound()) {
-                val reason = if (cookie.isEmpty()) "未获取到有效登录凭证(账号未绑定或换票失败)" else "当前未关联有效饿了么账号"
-                Log.other("饿了么|淘免单", "$reason，自动关闭【饿了么|抽免单】开关并退出")
+            Log.other("饿了么", "[抽免单] ==== 开始执行饿了么抽免单任务 ====")
+            val initCookie = ElemeAuth.ensureCookie()
+            if (initCookie.isEmpty() || !ElemeAuth.isBound()) {
+                val reason = if (initCookie.isEmpty()) "未获取到有效登录凭证(账号未绑定或换票失败)" else "当前未关联有效饿了么账号"
+                Log.other("饿了么", "[抽免单] $reason，自动关闭【饿了么|抽免单】开关并退出")
                 fansirsqi.xposed.sesame.task.otherTask2.OtherTask2.disableElemeFreeOrder(reason)
                 return
             }
-            Log.other("饿了么|淘免单", "当前账号: ${ElemeAuth.getAccountSummary()}")
 
-            // 1. 会话校验（拟真网络环境第一步）
-            LuckyStarRpcCall.checkLogin(cookie)
-            Thread.sleep(RandomUtil.nextGaussianLong(400, 800))
+            // 1. 严格校验会话有效性，若已失效则自动换票自愈刷新
+            val cookie = ElemeAuth.validateOrRefreshCookie(initCookie)
+            if (cookie.isNullOrEmpty()) {
+                Log.other("饿了么", "[抽免单] ⚠️ 饿了么会话校验未通过且自动刷新失败，请在支付宝手动打开饿了么小程序完成授权")
+                return
+            }
+            Log.other("饿了么", "[抽免单] 当前账号: ${ElemeAuth.getAccountSummary()}")
 
             // 2. 淘免单签到打卡（每日签到赠送抽免单机会）
             val signInfoResp = FreeOrderRpcCall.querySignInfo(cookie)
@@ -115,12 +118,12 @@ object FreeOrderTask {
                 if (signResult != null) {
                     val rewardList = signResult.optJSONObject("data")?.optJSONObject("data")?.optJSONArray("stageReward")
                     val prizeCount = rewardList?.length() ?: 1
-                    Log.other("饿了么|淘免单", "🎉 淘免单今日签到成功，已获取 $prizeCount 次抽免单机会！")
+                    Log.other("饿了么", "[抽免单] 🎉 淘免单今日签到成功，已获取 $prizeCount 次抽免单机会！")
                 } else {
-                    Log.other("饿了么|淘免单", "淘免单签到请求完成")
+                    Log.other("饿了么", "[抽免单] 淘免单签到请求完成")
                 }
             } else if (isSigned) {
-                Log.other("饿了么|淘免单", "淘免单今日已签到打卡")
+                Log.other("饿了么", "[抽免单] 淘免单今日已签到打卡")
             }
             Thread.sleep(RandomUtil.nextGaussianLong(600, 1200))
 
@@ -133,9 +136,9 @@ object FreeOrderTask {
                 mainCardTips = popup?.optString("mainCardTips").orEmpty()
                 currentChance = parseDrawChance(homepageResp)
                 val tipsText = if (mainCardTips.isNotEmpty()) "，开奖提示: [$mainCardTips]" else ""
-                Log.other("饿了么|淘免单", "淘免单主页拉取成功，当前可用抽奖机会: $currentChance$tipsText")
+                Log.other("饿了么", "[抽免单] 淘免单主页拉取成功，当前可用抽奖机会: $currentChance$tipsText")
             } else {
-                Log.other("饿了么|淘免单", "淘免单主页拉取未返回有效数据(网络超时或异常)，跳过本次执行")
+                Log.other("饿了么", "[抽免单] 淘免单主页拉取未返回有效数据(网络超时或异常)，跳过本次执行")
                 return
             }
             Thread.sleep(RandomUtil.nextGaussianLong(800, 1500))
@@ -149,14 +152,14 @@ object FreeOrderTask {
                     homeErrorMsg.contains("业务未开启")
             if (isActivityClosed) {
                 val reason = if (homeErrorMsg.isNotEmpty()) homeErrorMsg else "活动已结束或未开启"
-                Log.other("饿了么|淘免单", "淘免单活动不可用($reason)，自动关闭【饿了么|抽免单】开关并退出")
+                Log.other("饿了么", "[抽免单] 淘免单活动不可用($reason)，自动关闭【饿了么|抽免单】开关并退出")
                 fansirsqi.xposed.sesame.task.otherTask2.OtherTask2.disableElemeFreeOrder(reason)
                 Status.setFlagToday(FLAG_TODAY)
                 return
             }
 
             if (currentChance <= 0) {
-                Log.other("饿了么|淘免单", "今日暂无可用抽免单机会，结束今日抽免单任务")
+                Log.other("饿了么", "[抽免单] 今日暂无可用抽免单机会，结束今日抽免单任务")
                 Status.setFlagToday(FLAG_TODAY)
                 return
             }
@@ -164,10 +167,10 @@ object FreeOrderTask {
             // 4. 执行淘免单抽奖（对齐真机交互接口 mtop.ele.growth.fission.client.etmd.et.icondraw）
             for (attempt in 1..MAX_DRAW_ATTEMPTS) {
                 val prevChance = currentChance
-                Log.other("饿了么|淘免单", "开始第 $attempt 次发起免单抽奖 (记录抽前机会: $prevChance)...")
+                Log.other("饿了么", "[抽免单] 开始第 $attempt 次发起免单抽奖 (记录抽前机会: $prevChance)...")
                 val drawResp = FreeOrderRpcCall.iconDraw(cookie)
                 if (drawResp == null) {
-                    Log.other("饿了么|淘免单", "第 $attempt 次抽免单未返回有效响应，终止本次抽奖")
+                    Log.other("饿了么", "[抽免单] 第 $attempt 次抽免单未返回有效响应，终止本次抽奖")
                     break
                 }
 
@@ -177,7 +180,7 @@ object FreeOrderTask {
                 val isDrawClosed = errorCode == "ACTIVITY_CLOSED" || errorCode == "ACTIVITY_NOT_EXIST" || errorMessage.contains("活动已结束") || errorMessage.contains("活动未开启")
                 if (isDrawClosed) {
                     val reason = if (errorMessage.isNotEmpty()) errorMessage else "活动已结束或未开启"
-                    Log.other("饿了么|淘免单", "淘免单活动不可用($reason)，自动关闭【饿了么|抽免单】开关并退出")
+                    Log.other("饿了么", "[抽免单] 淘免单活动不可用($reason)，自动关闭【饿了么|抽免单】开关并退出")
                     fansirsqi.xposed.sesame.task.otherTask2.OtherTask2.disableElemeFreeOrder(reason)
                     Status.setFlagToday(FLAG_TODAY)
                     return
@@ -216,7 +219,7 @@ object FreeOrderTask {
 
                 if (isTrueWin) {
                     val awardName = if (couponName.isNotEmpty()) couponName else "免单券"
-                    Log.other("闪购免单🎉[恭喜中奖!] 真正抽中免单券: $awardName (数量: $number)！今日免单任务完成")
+                    Log.other("饿了么", "[抽免单] 🎉[恭喜中奖!] 真正抽中免单券: $awardName (数量: $number)！今日免单任务完成")
                     Status.setFlagToday(FLAG_TODAY)
                     return
                 }
@@ -228,7 +231,7 @@ object FreeOrderTask {
                 if (nextChance >= prevChance) {
                     val reason = if (subBtnText.isNotEmpty()) subBtnText else if (errorMessage.isNotEmpty()) errorMessage else "无可用抽奖机会"
                     val tipsStr = if (currentTips.isNotEmpty()) " (提示: $currentTips)" else ""
-                    Log.other("饿了么|淘免单", "第 $attempt 次抽免单后可用次数未发生变化(抽前: $prevChance, 抽后: $nextChance, $reason$tipsStr)，自动关闭【饿了么|抽免单】开关并退出")
+                    Log.other("饿了么", "[抽免单] 第 $attempt 次抽免单后可用次数未发生变化(抽前: $prevChance, 抽后: $nextChance, $reason$tipsStr)，自动关闭【饿了么|抽免单】开关并退出")
                     fansirsqi.xposed.sesame.task.otherTask2.OtherTask2.disableElemeFreeOrder("抽奖后次数未变化(前:$prevChance,后:$nextChance,$reason)")
                     Status.setFlagToday(FLAG_TODAY)
                     return
@@ -237,12 +240,12 @@ object FreeOrderTask {
                 // (4) 次数正常减少（消耗了 1 次机会）
                 val awardText = if (couponName.isNotEmpty() && !isNotWon) "，获得奖品: [$couponName]" else ""
                 val subAward = if (subCouponName.isNotEmpty()) "，伴随获取: [$subCouponName - $subThreshold]" else ""
-                Log.other("饿了么|淘免单", "第 $attempt 次抽免单完成(已消耗1次机会，剩余次数: $nextChance)$awardText$subAward")
+                Log.other("饿了么", "[抽免单] 第 $attempt 次抽免单完成(已消耗1次机会，剩余次数: $nextChance)$awardText$subAward")
                 currentChance = nextChance
 
                 // 机会已用完，正常结束本次抽奖流程
                 if (currentChance <= 0) {
-                    Log.other("饿了么|淘免单", "可用抽免单机会已全部用完，结束本次抽奖")
+                    Log.other("饿了么", "[抽免单] 可用抽免单机会已全部用完，结束本次抽奖")
                     break
                 }
 
@@ -261,14 +264,14 @@ object FreeOrderTask {
                 val schedList = (consultResp.optJSONObject("data") ?: consultResp).optJSONObject("result")?.optJSONArray("scheduleInfoList")
                 if (schedList != null && schedList.length() > 0) {
                     val sched = schedList.optJSONObject(0)
-                    Log.other("饿了么|淘免单", "外卖限时秒杀排期巡检: ${sched?.optString("status")}, 场次ID: ${sched?.optString("scheduleId")}")
+                    Log.other("饿了么", "[抽免单] 外卖限时秒杀排期巡检: ${sched?.optString("status")}, 场次ID: ${sched?.optString("scheduleId")}")
                 }
             }
 
             Status.setFlagToday(FLAG_TODAY)
-            Log.other("饿了么|淘免单", "==== 饿了么免单任务执行完毕 ====")
+            Log.other("饿了么", "[抽免单] ==== 饿了么免单任务执行完毕 ====")
         } catch (t: Throwable) {
-            Log.other("饿了么|淘免单", "执行饿了么免单任务异常: ${t.message}")
+            Log.other("饿了么", "[抽免单] 执行饿了么免单任务异常: ${t.message}")
         } finally {
             lock.unlock()
         }

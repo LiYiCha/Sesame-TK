@@ -33,29 +33,40 @@ enum class GameTask(
 
     private fun postJson(urlString: String, jsonBody: String, authToken: String? = null): Pair<Int, String> {
         val mark = AlipayMiniMarkHelper.getAlipayMiniMark(appId, version)
-        val conn = (URL(urlString).openConnection() as HttpURLConnection).apply {
-            requestMethod = "POST"
-            doOutput = true
-            connectTimeout = 10000
-            readTimeout = 10000
-            setRequestProperty("Content-Type", "application/json")
-            setRequestProperty("alipayMiniMark", mark)
-            setRequestProperty("User-Agent", getDynamicUA())
-            setRequestProperty("x-release-type", "ONLINE")
-            setRequestProperty("referer", "https://$appId.hybrid.alipay-eco.com/$appId/$version/index.html")
-            if (!authToken.isNullOrEmpty()) {
-                setRequestProperty("authorization", authToken)
+        var lastException: Exception? = null
+        for (attempt in 1..2) {
+            var conn: HttpURLConnection? = null
+            try {
+                conn = (URL(urlString).openConnection() as HttpURLConnection).apply {
+                    requestMethod = "POST"
+                    doOutput = true
+                    connectTimeout = 15000
+                    readTimeout = 15000
+                    setRequestProperty("Connection", "close")
+                    setRequestProperty("Content-Type", "application/json")
+                    setRequestProperty("alipayMiniMark", mark)
+                    setRequestProperty("User-Agent", getDynamicUA())
+                    setRequestProperty("x-release-type", "ONLINE")
+                    setRequestProperty("referer", "https://$appId.hybrid.alipay-eco.com/$appId/$version/index.html")
+                    if (!authToken.isNullOrEmpty()) {
+                        setRequestProperty("authorization", authToken)
+                    }
+                }
+                OutputStreamWriter(conn.outputStream, StandardCharsets.UTF_8).use { it.write(jsonBody) }
+                val respCode = conn.responseCode
+                val stream = if (respCode in 200..299) conn.inputStream else conn.errorStream
+                val responseText = stream?.bufferedReader()?.use { it.readText() } ?: "EMPTY"
+                return Pair(respCode, responseText)
+            } catch (e: Exception) {
+                lastException = e
+                if (attempt < 2) {
+                    try { Thread.sleep(1000) } catch (_: InterruptedException) {}
+                }
+            } finally {
+                conn?.disconnect()
             }
         }
-        return try {
-            OutputStreamWriter(conn.outputStream, StandardCharsets.UTF_8).use { it.write(jsonBody) }
-            val respCode = conn.responseCode
-            val stream = if (respCode in 200..299) conn.inputStream else conn.errorStream
-            val responseText = stream?.bufferedReader()?.use { it.readText() } ?: "EMPTY"
-            Pair(respCode, responseText)
-        } finally {
-            conn.disconnect()
-        }
+        throw (lastException ?: RuntimeException("Network request failed"))
     }
 
     private fun login(): String? {
@@ -83,8 +94,14 @@ enum class GameTask(
                 Log.error(title, "❌ 登录接口报错 (HTTP $respCode): $responseText")
                 null
             }
+        } catch (e: java.net.SocketTimeoutException) {
+            Log.runtime(title, "⚠️ 登录网络请求超时(${e.message})，第三方小游戏服务器暂无响应")
+            null
+        } catch (e: java.io.IOException) {
+            Log.runtime(title, "⚠️ 登录网络连接异常(${e.message})，请检查网络环境")
+            null
         } catch (e: Exception) {
-            Log.printStackTrace(title, "🚨 登录过程抛出异常: ${e.message}", e)
+            Log.error(title, "🚨 登录过程异常: ${e.message}")
             null
         }
     }

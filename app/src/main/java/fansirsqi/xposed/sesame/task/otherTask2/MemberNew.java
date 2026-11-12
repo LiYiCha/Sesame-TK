@@ -589,7 +589,7 @@ public class MemberNew extends BaseCommTask {
             
             JSONObject taskConfig = taskItem.optJSONObject("taskConfigInfo");
             if (taskConfig == null) {
-                Log.runtime(TAG, "任务配置信息为空，跳过非配置项");
+                // 静默跳过非配置/广告展示项，杜绝循环中刷屏
                 return null;
             }
             
@@ -762,7 +762,7 @@ public class MemberNew extends BaseCommTask {
             
             JSONObject config = taskItem.optJSONObject("taskConfigInfo");
             if (config == null) {
-                Log.error(TAG, "OTHERS任务配置为空，跳过");
+                // 静默跳过非任务配置项（如 Banner、广告位）
                 return null;
             }
 
@@ -778,7 +778,7 @@ public class MemberNew extends BaseCommTask {
             // 获取目标业务数组
             info.targetBusinessArray = config.optJSONArray("targetBusiness");
             if (info.targetBusinessArray == null || info.targetBusinessArray.length() == 0) {
-                Log.error(TAG, "targetBusinessArray为空，跳过任务");
+                // 非目标可执行业务，静默跳过
                 return null;
             }
             

@@ -138,7 +138,11 @@ object baoguo {
         Thread.sleep(RandomUtil.nextLong(1500, 2500))
 
         // 4. 一键领取包裹地图所有奖励
-        val rewardRes = baoguoRpcCall.receiveAllRewards()
+        val rewardRes = if (hasDoneAnyTask) {
+            baoguoRpcCall.receiveAllRewards()
+        } else {
+            ""
+        }
         if (rewardRes.isNotEmpty()) {
             val rewardJo = runCatching { JSONObject(rewardRes) }.getOrNull()
             if (rewardJo != null && rewardJo.optBoolean("success")) {

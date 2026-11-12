@@ -60,7 +60,7 @@ object ElemeAuth {
 
         DataStore.put(keyCookie, captured)
         DataStore.put(keyExpires, expires)
-        Log.other("饿了么|授权", "已自动同步捕获的真机饿了么会话凭据")
+        Log.other("饿了么", "[授权] 已自动同步捕获的真机饿了么会话凭据")
     }
 
     /**
@@ -97,7 +97,7 @@ object ElemeAuth {
                 memoryExpiresAt = now + 72 * 3600 * 1000L
                 DataStore.put(keyCookie, memoryCookie)
                 DataStore.put(keyExpires, memoryExpiresAt)
-                Log.other("饿了么|授权", "已读取本地 WebView Cookie 并初始化缓存")
+                Log.other("饿了么", "[授权] 已读取本地 WebView Cookie 并初始化缓存")
                 return memoryCookie
             }
         }
@@ -108,10 +108,12 @@ object ElemeAuth {
             return refreshed
         }
 
-        // 刷新失败时尽力而为返回现有 Cookie
-        val fallback = memoryCookie.ifEmpty { DataStore.get(keyCookie, String::class.java).orEmpty() }
-        if (fallback.isNotEmpty()) {
-            return fallback
+        // 仅在非强制刷新模式下尽力而为返回现有 Cookie
+        if (!force) {
+            val fallback = memoryCookie.ifEmpty { DataStore.get(keyCookie, String::class.java).orEmpty() }
+            if (fallback.isNotEmpty()) {
+                return fallback
+            }
         }
         return ""
     }
@@ -126,12 +128,42 @@ object ElemeAuth {
     }
 
     /**
-     * 标记 Cookie 失效
+     * 标记 Cookie 失效并彻底清除磁盘与内存缓存
      */
+    @Synchronized
     fun invalidate() {
         memoryCookie = ""
         memoryExpiresAt = 0L
+        DataStore.put(getUidKey(KEY_COOKIE), "")
         DataStore.put(getUidKey(KEY_EXPIRES), 0L)
+    }
+
+    /**
+     * 校验会话状态并在失效时自动换票刷新自愈
+     * @return 有效的会话 Cookie，若刷新失败或仍未登录则返回 null（调用方应立即优雅退出）
+     */
+    fun validateOrRefreshCookie(initialCookie: String): String? {
+        val checkResult = LuckyStarRpcCall.checkLoginResult(initialCookie)
+        if (checkResult.isSuccess && !checkResult.isNotLogin) {
+            return initialCookie
+        }
+
+        Log.other("饿了么", "[授权] 检测到当前饿了么会话已失效，开始自动换票刷新自愈...")
+        invalidate()
+        val newCookie = ensureCookie(force = true)
+        if (newCookie.isEmpty()) {
+            Log.other("饿了么", "[授权] ⚠️ 自动换票刷新会话失败，请在支付宝手动打开并授权饿了么小程序")
+            return null
+        }
+
+        val recheckResult = LuckyStarRpcCall.checkLoginResult(newCookie)
+        if (recheckResult.isSuccess && !recheckResult.isNotLogin) {
+            Log.other("饿了么", "[授权] ✅ 饿了么会话已自动自愈刷新成功")
+            return newCookie
+        } else {
+            Log.other("饿了么", "[授权] ⚠️ 换票后会话校验仍未通过，请在支付宝手动打开饿了么小程序完成登录")
+            return null
+        }
     }
 
     /**
@@ -148,18 +180,18 @@ object ElemeAuth {
     private fun refresh(): String {
         var conn: HttpURLConnection? = null
         try {
-            Log.other("饿了么|授权", "开始申请饿了么授权码 [$APP_ID]...")
+            Log.other("饿了么", "[授权] 开始申请饿了么授权码 [$APP_ID]...")
             val authCode = AuthCodeHelper.getAuthCode(APP_ID)
             if (authCode.isNullOrEmpty()) {
-                Log.other("饿了么|授权", "获取饿了么授权码失败")
+                Log.other("饿了么", "[授权] 获取饿了么授权码失败")
                 return ""
             }
 
-            Log.other("饿了么|授权", "获取授权码成功，换取会话凭据...")
+            Log.other("饿了么", "[授权] 获取授权码成功，换取会话凭据...")
             val postData = "appEntrance=alipay_sg&appId=$APP_ID&appName=eleme" +
                     "&authorizationCode=${URLEncoder.encode(authCode, "UTF-8")}" +
                     "&isMobile=true&lang=zh_CN&needPassWebViewCookie=false&returnUrl=&type=alipay_mini_program"
-            val url = URL("https://ipassport.ele.me/mini_program/eaLogin.do")
+            val url = URL("https://ipassport.ele.me/mini_program/eaLogin.do?_bx-m=0.0.15")
             conn = (url.openConnection() as HttpURLConnection).apply {
                 requestMethod = "POST"
                 connectTimeout = 10000
@@ -212,7 +244,7 @@ object ElemeAuth {
             val iframeRedirect = dataObj?.optBoolean("iframeRedirect", false) ?: false
             val iframeUrl = dataObj?.optString("iframeRedirectUrl").orEmpty()
             if (iframeRedirect && iframeUrl.isNotEmpty()) {
-                Log.other("饿了么|授权", "检测到绑定验证引导，跟随链接获取凭据...")
+                Log.other("饿了么", "[授权] 检测到绑定验证引导，跟随链接获取凭据...")
                 followRedirectForCookies(iframeUrl, cookieMap)
             }
 
@@ -266,11 +298,11 @@ object ElemeAuth {
                     invalidate()
                     Log.runtime(TAG, "换取登录态失败(当前账号未绑定饿了么或存在冲突待确认)，自动关闭任务: 响应: $respText")
                 } else {
-                    Log.other("饿了么|授权", "换取登录态未返回有效 Cookie: $respText")
+                    Log.other("饿了么", "[授权] 换取登录态未返回有效 Cookie: $respText")
                 }
             }
         } catch (t: Throwable) {
-            Log.other("饿了么|授权", "刷新饿了么登录态异常: ${t.message}")
+            Log.other("饿了么", "[授权] 刷新饿了么登录态异常: ${t.message}")
         } finally {
             conn?.disconnect()
         }

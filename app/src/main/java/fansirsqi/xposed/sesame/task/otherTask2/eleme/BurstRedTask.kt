@@ -15,25 +15,32 @@ object BurstRedTask {
 
     fun handle() {
         if (Status.hasFlagToday(FLAG_TODAY)) {
-            Log.other("饿了么|爆红包", "今日饿了么爆红包已领取，跳过执行")
+            Log.other("饿了么", "[爆红包] 今日饿了么爆红包已领取，跳过执行")
             return
         }
 
         if (!lock.tryLock()) {
-            Log.other("饿了么|爆红包", "已有饿了么爆红包任务正在执行中，跳过本次并发调用")
+            Log.other("饿了么", "[爆红包] 已有饿了么爆红包任务正在执行中，跳过本次并发调用")
             return
         }
 
         try {
-            Log.other("饿了么|爆红包", "==== 开始执行饿了么爆红包任务 ====")
-            val cookie = ElemeAuth.ensureCookie()
-            if (cookie.isEmpty() || !ElemeAuth.isBound()) {
-                val reason = if (cookie.isEmpty()) "未获取到有效登录凭证(账号未绑定或换票失败)" else "当前未关联有效饿了么账号"
-                Log.other("饿了么|爆红包", "$reason，自动关闭【饿了么|爆红包】开关并退出")
+            Log.other("饿了么", "[爆红包] ==== 开始执行饿了么爆红包任务 ====")
+            val initCookie = ElemeAuth.ensureCookie()
+            if (initCookie.isEmpty() || !ElemeAuth.isBound()) {
+                val reason = if (initCookie.isEmpty()) "未获取到有效登录凭证(账号未绑定或换票失败)" else "当前未关联有效饿了么账号"
+                Log.other("饿了么", "[爆红包] $reason，自动关闭【饿了么|爆红包】开关并退出")
                 fansirsqi.xposed.sesame.task.otherTask2.OtherTask2.disableElemeBurstRed(reason)
                 return
             }
-            Log.other("饿了么|爆红包", "当前账号: ${ElemeAuth.getAccountSummary()}")
+
+            // 1. 严格校验会话有效性，若已失效则自动换票自愈刷新
+            val cookie = ElemeAuth.validateOrRefreshCookie(initCookie)
+            if (cookie.isNullOrEmpty()) {
+                Log.other("饿了么", "[爆红包] ⚠️ 饿了么会话校验未通过且自动刷新失败，请在支付宝手动打开饿了么小程序完成授权")
+                return
+            }
+            Log.other("饿了么", "[爆红包] 当前账号: ${ElemeAuth.getAccountSummary()}")
 
             // 领取外卖小程序首页/进站专享 3 张 5 元爆红包
             val sendResp = FreeOrderRpcCall.sendBet(cookie)
@@ -47,18 +54,18 @@ object BurstRedTask {
                     val count = coupon.optString("count", "3")
                     val reduction = coupon.optString("reductionYuan", "5")
                     val name = coupon.optString("rightName", "爆红包")
-                    Log.other("饿了么|爆红包", "🎉 成功领取外卖专享爆红包: $count 张 $reduction 元 $name")
+                    Log.other("饿了么", "[爆红包] 🎉 成功领取外卖专享爆红包: $count 张 $reduction 元 $name")
                 } else {
-                    Log.other("饿了么|爆红包", "外卖爆红包已领取或今日无待领权益")
+                    Log.other("饿了么", "[爆红包] 外卖爆红包已领取或今日无待领权益")
                 }
             } else {
-                Log.other("饿了么|爆红包", "外卖爆红包领取请求未返回有效数据")
+                Log.other("饿了么", "[爆红包] 外卖爆红包领取请求未返回有效数据")
             }
 
             Status.setFlagToday(FLAG_TODAY)
-            Log.other("饿了么|爆红包", "==== 饿了么爆红包任务执行完毕 ====")
+            Log.other("饿了么", "[爆红包] ==== 饿了么爆红包任务执行完毕 ====")
         } catch (t: Throwable) {
-            Log.other("饿了么|爆红包", "执行饿了么爆红包任务异常: ${t.message}")
+            Log.other("饿了么", "[爆红包] 执行饿了么爆红包任务异常: ${t.message}")
         } finally {
             lock.unlock()
         }
