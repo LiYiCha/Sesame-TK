@@ -15,10 +15,7 @@ object LuckyStarRpcCall {
     const val API_SUBSCRIBE_REMIND = "mtop.eleme.notify.subscribeRemindService.querySubscribeRemind"
     const val API_PAGEVIEW = "mtop.ele.biz.growth.task.event.pageview"
     const val API_TRIGGER = "mtop.ele.biz.growth.task.event.trigger"
-    const val API_SIGNIN = "mtop.alsc.interact.playapp.signin.component.signinandreceive"
-    const val API_RECORDSIGNIN = "mtop.alsc.interact.playapp.signin.component.recordsignin"
 
-    const val ASAC_SIGNIN = "alsc3Lhy681SA5TT4iHgL3"
     const val ASAC_PRIZE = "alscadOjfleDPawx9zVoT0"
     const val ASAC_PAGEVIEW = "alscFS8BNTO6jivYS7XOAM"
 
@@ -105,7 +102,7 @@ object LuckyStarRpcCall {
     /**
      * 智能领取任务奖励（自动适配多阶段 stageCount 与单节点参数）
      */
-    fun receivePrize(cookie: String, task: JSONObject): JSONObject? {
+    fun receivePrize(cookie: String, task: JSONObject): ElemeMtopUtil.MtopResult {
         val missionDefId = task.optLong("missionDefId").takeIf { it > 0 } ?: task.optLong("id")
         val missionXId = task.optString("missionXId")
         val collectionId = task.optString("missionCollectionId").ifEmpty {
@@ -146,7 +143,7 @@ object LuckyStarRpcCall {
             put("instance", "INNER")
         }
         val headers = mapOf("asac" to ASAC_PRIZE)
-        return ElemeMtopUtil.send(API_RECEIVE_PRIZE, data.toString(), cookie, method = "GET", extraHeaders = headers)
+        return ElemeMtopUtil.execute(API_RECEIVE_PRIZE, data.toString(), cookie, method = "GET", extraHeaders = headers)
     }
 
     /**
@@ -157,7 +154,7 @@ object LuckyStarRpcCall {
         missionId: Long,
         missionXId: String,
         collectionId: String = COLLECTION_ID
-    ): JSONObject? {
+    ): ElemeMtopUtil.MtopResult {
         val (lat, lng) = getCoordinates()
         val locInfo = "[\"{\\\"lng\\\":\\\"$lng\\\",\\\"lat\\\":\\\"$lat\\\"}\"]"
         val data = JSONObject().apply {
@@ -175,7 +172,7 @@ object LuckyStarRpcCall {
             put("instance", "INNER")
         }
         val headers = mapOf("asac" to ASAC_PRIZE)
-        return ElemeMtopUtil.send(API_RECEIVE_PRIZE, data.toString(), cookie, method = "GET", extraHeaders = headers)
+        return ElemeMtopUtil.execute(API_RECEIVE_PRIZE, data.toString(), cookie, method = "GET", extraHeaders = headers)
     }
 
     /**
@@ -188,7 +185,7 @@ object LuckyStarRpcCall {
         viewTime: Int = 15,
         instanceId: String? = null,
         collectionId: String = COLLECTION_ID
-    ): JSONObject? {
+    ): ElemeMtopUtil.MtopResult {
         val (lat, lng) = getCoordinates()
         val locInfo = "[\"{\\\"lng\\\":\\\"$lng\\\",\\\"lat\\\":\\\"$lat\\\"}\"]"
         val data = JSONObject().apply {
@@ -209,7 +206,7 @@ object LuckyStarRpcCall {
             put("instance", "INNER")
         }
         val headers = mapOf("asac" to "alscFS8BNTO6jivYS7XOAM")
-        return ElemeMtopUtil.send(API_PAGEVIEW, data.toString(), cookie, method = "GET", version = "1.1", extraHeaders = headers)
+        return ElemeMtopUtil.execute(API_PAGEVIEW, data.toString(), cookie, method = "GET", version = "1.1", extraHeaders = headers)
     }
 
     /**
@@ -220,7 +217,7 @@ object LuckyStarRpcCall {
         missionDefId: Long,
         missionXId: String,
         collectionId: String = COLLECTION_ID
-    ): JSONObject? {
+    ): ElemeMtopUtil.MtopResult {
         val (lat, lng) = getCoordinates()
         val now = System.currentTimeMillis()
         val data = JSONObject().apply {
@@ -239,7 +236,7 @@ object LuckyStarRpcCall {
             put("missionXId", missionXId)
             put("instance", "INNER")
         }
-        return ElemeMtopUtil.send(API_TRIGGER, data.toString(), cookie, method = "GET", version = "1.1")
+        return ElemeMtopUtil.execute(API_TRIGGER, data.toString(), cookie, method = "GET", version = "1.1")
     }
 
     /**
@@ -324,59 +321,5 @@ object LuckyStarRpcCall {
             put("instance", "INNER")
         }
         return ElemeMtopUtil.send(API_SUBSCRIBE_REMIND, data.toString(), cookie, method = "GET")
-    }
-
-    /**
-     * 幸运星签到并领取奖励（支持双协议自动回退与参数动态提取）
-     */
-    fun signIn(
-        cookie: String,
-        copyId: String = "",
-        strategy: String = "",
-        award: JSONObject? = null
-    ): Pair<Boolean, String> {
-        val (lat, lng) = getCoordinates()
-        val data = JSONObject().apply {
-            put("bizScene", BIZ_SCENE)
-            put("latitude", lat)
-            put("longitude", lng)
-            if (copyId.isNotEmpty()) {
-                put("copyId", copyId)
-            }
-            if (award != null) {
-                val actCode = award.optString("actCode")
-                val sceneCode = award.optString("sceneCode")
-                val prizeMark = award.optString("prizeMark")
-                val signInDay = award.optString("signInDay")
-                if (actCode.isNotEmpty()) put("actCode", actCode)
-                if (sceneCode.isNotEmpty()) put("sceneCode", sceneCode)
-                if (prizeMark.isNotEmpty()) put("prizeMark", prizeMark)
-                if (signInDay.isNotEmpty()) put("signInDay", signInDay)
-            }
-        }
-        val headers = mapOf("asac" to ASAC_SIGNIN)
-        val order = if (strategy == "SIGNIN_AND_RECEIVE") {
-            listOf(Pair(API_SIGNIN, "1.0"), Pair(API_RECORDSIGNIN, "1.1"))
-        } else {
-            listOf(Pair(API_RECORDSIGNIN, "1.1"), Pair(API_SIGNIN, "1.0"))
-        }
-
-        for ((api, ver) in order) {
-            val resp = ElemeMtopUtil.send(api, data.toString(), cookie, method = "GET", version = ver, extraHeaders = headers)
-            val ret = resp?.optJSONArray("ret")?.optString(0).orEmpty()
-            if (ret.startsWith("SUCCESS")) {
-                val rewards = resp?.optJSONObject("data")?.optJSONArray("rewards")
-                val total = if (rewards != null && rewards.length() > 0) {
-                    val r = rewards.optJSONObject(0)
-                    r?.optString("prizeValue")?.ifEmpty { r.optString("equityValue") } ?: ""
-                } else ""
-                val desc = if (total.isNotEmpty()) "+$total 幸运星" else "签到成功"
-                return Pair(true, desc)
-            }
-            if (ret.contains("已签到") || ret.contains("REPEAT") || ret.contains("ALREADY")) {
-                return Pair(true, "今日已签到")
-            }
-        }
-        return Pair(false, "签到未成功")
     }
 }

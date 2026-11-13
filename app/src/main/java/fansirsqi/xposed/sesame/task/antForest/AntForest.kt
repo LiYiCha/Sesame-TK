@@ -810,9 +810,6 @@ class AntForest : ModelTask(), EnergyCollectCallback {
     override suspend fun runSuspend() {
         val runStartTime = System.currentTimeMillis()
         Log.runtime(TAG, "🌲🌲🌲 森林主任务开始执行 🌲🌲🌲")
-        val authCode = AuthCodeHelper.getAuthCode("2060170000363691" )
-        val MiniMark = AlipayMiniMarkHelper.getAlipayMiniMark("2060170000363691" ,"1.0.1")
-        Log.runtime(TAG, "游戏 2060170000363691 获取到的 authCode: $authCode   Mark:$MiniMark")
         try {
             // 每次运行时检查并更新计数器
             checkAndUpdateCounters()
@@ -3223,8 +3220,8 @@ class AntForest : ModelTask(), EnergyCollectCallback {
                             }
                             GlobalThreadPools.sleepCompat(500)
                         } else if (TaskStatus.TODO.name == taskStatus) {
-                            // 跳过已在黑名单中的任务
-                            if (TaskBlacklist.isTaskInBlacklist(taskType)) continue
+                            // 跳过已在黑名单中的任务（支持任务Code与任务中文名称过滤）
+                            if (TaskBlacklist.isTaskInBlacklist(taskType) || TaskBlacklist.isTaskInBlacklist(taskTitle)) continue
                             // 执行待完成任务
                             val bizKey = sceneCode + "_" + taskType
                             val count = forestTaskTryCount
@@ -3330,7 +3327,7 @@ class AntForest : ModelTask(), EnergyCollectCallback {
                         }
                         GlobalThreadPools.sleepCompat(500)
                     } else if (TaskStatus.TODO.name == taskStatus) {
-                        if (TaskBlacklist.isTaskInBlacklist(taskType)) continue
+                        if (TaskBlacklist.isTaskInBlacklist(taskType) || TaskBlacklist.isTaskInBlacklist(taskTitle)) continue
                         val bizKey = sceneCode + "_" + taskType
                         val count = forestTaskTryCount
                             .computeIfAbsent(bizKey) { AtomicInteger(0) }

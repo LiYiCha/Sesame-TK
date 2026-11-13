@@ -59,8 +59,9 @@ object MyBankWelfareService {
             val result = response.optJSONObject("result")
             val pointBalance = result?.opt("pointBalance")?.toString()
                 ?: response.opt("pointBalance")?.toString() ?: ""
-            if (pointBalance.isNotBlank()) {
+            if (pointBalance.isNotBlank() && !Status.hasFlagToday("MyBank_PointBalance_Logged")) {
                 Log.runtime("$TAG 当前可用福利金: ${formatDecimalAmount(pointBalance)}")
+                Status.setFlagToday("MyBank_PointBalance_Logged")
             }
         } catch (e: Exception) {
             Log.error(TAG, "logPointBalance err: ${e.message}")

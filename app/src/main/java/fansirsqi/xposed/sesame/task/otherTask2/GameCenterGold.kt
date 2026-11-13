@@ -107,8 +107,8 @@ class GameCenterGold : BaseCommTask() {
                 Status.setTemporaryStatusWithExpiry("GameCenterGold_Browse_Limit", 1000 * 60 * 60)
             }
 
-            // 3. 处理玩游戏60秒任务 (协程后台异步执行，不阻塞主任务队列)
-            if (needPlay) {
+            // 3. 处理玩游戏60秒任务 (先判断是否有待完成任务，确认存在才拉起协程后台异步执行)
+            if (needPlay && hasPendingPlay60sTask()) {
                 launchPlay60sTasksAsync()
             }
 
@@ -362,6 +362,44 @@ class GameCenterGold : BaseCommTask() {
                 Log.error(TAG, "处理浏览任务单次异常: ${e.message}")
                 TimeUtil.sleep(3000)
             }
+        }
+    }
+
+    /**
+     * 检查是否存在待完成的60秒玩游戏任务槽位
+     * 若全部槽位已完成，自动设置当日完成标记并返回 false
+     */
+    private fun hasPendingPlay60sTask(): Boolean {
+        return try {
+            val listRes = queryTaskList()
+            if (listRes.isNullOrEmpty()) return false
+            val listJson = JSONObject(listRes)
+            if (!listJson.optBoolean("success")) return false
+            val data = listJson.optJSONObject("data") ?: return false
+            val adTaskModule = data.optJSONObject("adTaskModule") ?: return false
+            val gameModuleId = adTaskModule.optString("gameModuleId")
+            if (gameModuleId.isEmpty()) return false
+            val taskProgress = adTaskModule.optJSONObject("taskProgress") ?: return false
+            val slots = taskProgress.optJSONArray("slots") ?: return false
+
+            var hasUnfinished = false
+            for (i in 0 until slots.length()) {
+                val slot = slots.getJSONObject(i)
+                val status = slot.optString("status")
+                if (status != "FINISHED") {
+                    hasUnfinished = true
+                    break
+                }
+            }
+
+            if (!hasUnfinished && slots.length() > 0) {
+                Status.setFlagToday("GameCenterGold_Play60s_Completed")
+                return false
+            }
+            hasUnfinished
+        } catch (e: Exception) {
+            Log.error(TAG, "检查60s游戏任务状态失败: ${e.message}")
+            false
         }
     }
 

@@ -145,7 +145,7 @@ object ElemeMtopUtil {
                 val readableErr = if (errorMessage.isNotEmpty()) errorMessage else ret
                 val err = "[$api] 响应失败: $readableErr"
                 lastError = err
-                Log.other("饿了么", err)
+                Log.runtime("饿了么", err)
                 MtopResult(isSuccess = false, isNotLogin = false, errorCode = errorCode, errorMsg = readableErr, data = dataObj, rawJson = root)
             }
         }.onFailure {

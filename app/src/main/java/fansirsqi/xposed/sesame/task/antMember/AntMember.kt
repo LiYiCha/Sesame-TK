@@ -805,43 +805,17 @@ class AntMember : ModelTask() {
     }
 
     /**
-     * 解析签到状态，待签到时打印提示（签到含动态参数，暂不自动执行）
+     * 解析签到状态
      */
     private fun handleNewTaskCenterSign(signStatus: JSONObject) {
-        val signInfo = signStatus.optJSONObject("signInfo") ?: return
-        val action = signInfo.optString("buttonActionEnum")
-        val signed = signInfo.optBoolean("todaySignedFlag", false) ||
-            signInfo.optString("signStatus").equals("SIGNED", ignoreCase = true)
-        if (signed || !action.equals("DO_SIGN", ignoreCase = true)) {
-            val text = signInfo.optString("buttonText").ifBlank { action.ifBlank { "已处理" } }
-            Log.runtime(TAG, "新任务中心签到状态: $text")
-            return
-        }
-        Log.runtime(TAG, "新任务中心[待签到]#签到含动态bizNo/token，暂不自动签到")
+        // 新任务中心签到含动态bizNo/token校验，暂未开放自动签到，静默跳过
     }
 
     /**
      * 汇总新任务中心任务列表（暂未接入自动执行）
      */
     private fun inspectNewTaskCenterTaskList(taskListResponse: JSONObject) {
-        val taskGroupList = taskListResponse.optJSONArray("taskGroupList") ?: return
-        for (groupIndex in 0 until taskGroupList.length()) {
-            val group = taskGroupList.optJSONObject(groupIndex) ?: continue
-            val taskList = group.optJSONArray("taskList") ?: continue
-            val summaries = mutableListOf<String>()
-            for (taskIndex in 0 until taskList.length()) {
-                val task = taskList.optJSONObject(taskIndex) ?: continue
-                val taskCode = task.optString("taskCode")
-                val taskName = task.optString("taskName").ifBlank {
-                    task.optString("taskDesc").ifBlank { taskCode }
-                }
-                summaries.add("$taskName(taskCode=$taskCode,type=${task.optString("taskType")}," +
-                    "action=${task.optString("taskAction")},scene=${task.optString("taskScene")})")
-            }
-            if (summaries.isNotEmpty()) {
-                Log.runtime(TAG, "新任务中心[暂未接入自动执行]#${summaries.size}项: ${summaries.joinToString("；")}")
-            }
-        }
+        // 暂未开放自动执行，静默跳过
     }
 
     private fun newTaskCenterErrorDesc(response: JSONObject): String =

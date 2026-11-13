@@ -31,7 +31,7 @@ import fansirsqi.xposed.sesame.task.antFarm.AntFarmFamily.familySign
 import fansirsqi.xposed.sesame.task.antForest.TaskTimeChecker
 import fansirsqi.xposed.sesame.util.CoroutineUtils
 import fansirsqi.xposed.sesame.util.DataStore
-import fansirsqi.xposed.sesame.task.antOrchard.GameTask
+import fansirsqi.xposed.sesame.task.other.game.GameTask
 import fansirsqi.xposed.sesame.util.JsonUtil
 import fansirsqi.xposed.sesame.util.ListUtil
 import fansirsqi.xposed.sesame.util.Log
@@ -1369,12 +1369,6 @@ class AntFarm : ModelTask() {
 
         // 4. 判断是否需要使用加速道具（仅在正在吃饭时尝试）
         if (useAccelerateTool!!.value && AnimalFeedStatus.EATING.name == ownerAnimal.animalFeedStatus) {
-            // 记录调试日志：加速卡判定前的关键状态
-            Log.runtime(
-                TAG,
-                "加速卡判断⏩[动物状态=" + toFeedStatusName(ownerAnimal.animalFeedStatus) +
-                        ", 今日封顶=" + Status.hasFlagToday("farm::accelerateLimit") + "]"
-            )
             val accelerated = useAccelerateTool()
             if (accelerated) {
                 Log.farm("使用道具🎭[加速卡]⏩成功")
