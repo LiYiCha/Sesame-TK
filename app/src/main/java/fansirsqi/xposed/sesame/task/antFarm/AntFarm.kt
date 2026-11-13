@@ -31,8 +31,7 @@ import fansirsqi.xposed.sesame.task.antFarm.AntFarmFamily.familySign
 import fansirsqi.xposed.sesame.task.antForest.TaskTimeChecker
 import fansirsqi.xposed.sesame.util.CoroutineUtils
 import fansirsqi.xposed.sesame.util.DataStore
-import fansirsqi.xposed.sesame.task.other.game.GameTask
-import fansirsqi.xposed.sesame.task.other.OtherTask0
+import fansirsqi.xposed.sesame.task.antOrchard.GameTask
 import fansirsqi.xposed.sesame.util.JsonUtil
 import fansirsqi.xposed.sesame.util.ListUtil
 import fansirsqi.xposed.sesame.util.Log
@@ -907,7 +906,7 @@ class AntFarm : ModelTask() {
                 tc.countDebug("家庭任务")
             }
             // 开宝箱
-            if (OtherTask0.gameFarm.value || enableDdrawGameCenterAward!!.value) {
+            if (enableDdrawGameCenterAward!!.value) {
                 drawGameCenterAward()
                 tc.countDebug("开宝箱")
             }
@@ -1968,11 +1967,9 @@ class AntFarm : ModelTask() {
                 if (!Status.hasFlagToday(CACHED_FLAG)) {
                     val jo = JSONObject(DadaDailyRpcCall.home(activityId))
                     if (ResChecker.checkRes(TAG + "查询答题活动失败:", jo)) {
-                        val operationConfigList = jo.optJSONArray("operationConfigList")
-                        if (operationConfigList != null) {
-                            updateTomorrowAnswerCache(operationConfigList, tomorrow)
-                            Status.setFlagToday(CACHED_FLAG)
-                        }
+                        val operationConfigList = jo.getJSONArray("operationConfigList")
+                        updateTomorrowAnswerCache(operationConfigList, tomorrow)
+                        Status.setFlagToday(CACHED_FLAG)
                     }
                 }
                 return
@@ -2036,11 +2033,9 @@ class AntFarm : ModelTask() {
                 val extInfo = joDailySubmit.getJSONObject("extInfo")
                 val correct = joDailySubmit.getBoolean("correct")
                 Log.farm("饲料任务答题：" + (if (correct) "正确" else "错误") + "领取饲料［" + extInfo.getString("award") + "g］")
-                val operationConfigList = joDailySubmit.optJSONArray("operationConfigList")
-                if (operationConfigList != null) {
-                    updateTomorrowAnswerCache(operationConfigList, tomorrow)
-                    Status.setFlagToday(CACHED_FLAG)
-                }
+                val operationConfigList = joDailySubmit.getJSONArray("operationConfigList")
+                updateTomorrowAnswerCache(operationConfigList, tomorrow)
+                Status.setFlagToday(CACHED_FLAG)
             }
         } catch (e: Exception) {
             Log.printStackTrace(TAG, "答题出错", e)
@@ -4347,85 +4342,101 @@ class AntFarm : ModelTask() {
         }
     }
 
+    /**
+     * 庄园游戏中心额度（已按 quotaPerTime 归一化为"宝箱个数"）。
+     *
+     * quotaPerTime 存在时 quota 是额度单位，需要除以它才是宝箱个数；
+     * 字段缺失时 quota 本身就是宝箱个数，按 1 处理（与森林、金豆同一口径）。
+     */
+    private data class FarmDrawRights(
+        val canUse: Int,
+        val limit: Int,
+        val used: Int,
+    ) {
+        /** 今日还可以刷出多少个宝箱 */
+        val remain: Int get() = (limit - used).coerceAtLeast(0)
+    }
+
+    /** 查询庄园游戏中心额度 */
+    private fun queryFarmDrawRights(): FarmDrawRights? {
+        val jo = JSONObject(AntFarmRpcCall.queryGameList())
+        if (!jo.optBoolean("success")) {
+            Log.runtime(TAG, "queryGameList 失败: $jo")
+            return null
+        }
+        val drawRights = jo.optJSONObject("gameCenterDrawRights") ?: return null
+        val perTime = drawRights.optInt("quotaPerTime", 1).coerceAtLeast(1)
+        return FarmDrawRights(
+            canUse = drawRights.optInt("quotaCanUse", 0) / perTime,
+            limit = drawRights.optInt("quotaLimit", 0) / perTime,
+            used = drawRights.optInt("usedQuota", 0) / perTime,
+        )
+    }
+
+    /** 领取庄园宝箱：优先一次性批量开箱，失败时回退逐个开 */
+    private suspend fun openFarmGameCenterBoxes(count: Int): Int {
+        if (count <= 0) return 0
+        val batchRes = JSONObject(AntFarmRpcCall.drawGameCenterAward(count))
+        if (batchRes.optBoolean("success")) {
+            return logFarmGameCenterAwards(batchRes)
+        }
+        Log.runtime(TAG, "批量开启宝箱失败(${batchRes.optString("desc")})，回退逐个开启")
+        var opened = 0
+        var left = count
+        while (left > 0) {
+            val res = JSONObject(AntFarmRpcCall.drawGameCenterAward(1))
+            if (!res.optBoolean("success")) {
+                Log.runtime(TAG, "开启宝箱失败: ${res.optString("desc")}")
+                break
+            }
+            opened += logFarmGameCenterAwards(res)
+            delay(1500)
+            left--
+        }
+        return opened
+    }
+
+    /** 打印庄园宝箱奖励 */
+    private fun logFarmGameCenterAwards(drawRes: JSONObject): Int {
+        val awardList = drawRes.optJSONArray("gameCenterDrawAwardList")
+        val awardStrings = mutableListOf<String>()
+        if (awardList != null) {
+            for (i in 0 until awardList.length()) {
+                val item = awardList.getJSONObject(i)
+                awardStrings.add("${item.optString("awardName")}*${item.optInt("awardCount")}")
+            }
+        }
+        Log.farm("庄园小鸡🎁[获得奖品: ${awardStrings.joinToString(",")}]")
+        return awardList?.length() ?: 0
+    }
+
     private suspend fun drawGameCenterAward() {
         try {
-            var loopCount = 0
-            while (loopCount < 3) {
-                loopCount++
-                val response = AntFarmRpcCall.queryGameList()
-                val jo = JSONObject(response)
+            var rights = queryFarmDrawRights() ?: return
 
-                // 使用你的 ResChecker 工具类判断
-                if (!jo.optBoolean("success")) {
-                    Log.runtime(TAG, "queryGameList 失败: $jo")
-                    return
-                }
+            // 1. 先领取当前已经产生的宝箱
+            if (rights.canUse > 0) {
+                Log.runtime(TAG, "当前有 ${rights.canUse} 个宝箱待开启...")
+                openFarmGameCenterBoxes(rights.canUse)
+                rights = queryFarmDrawRights() ?: rights
+            }
 
-                // 核心改动：从 gameCenterDrawRights 获取权限数据
-                val drawRights = jo.optJSONObject("gameCenterDrawRights") ?: break
+            // 2. 额度未满且当前没有可领的宝箱时，上报小游戏补齐
+            if (rights.canUse == 0) {
+                val remainToTask = rights.remain
+                if (remainToTask > 0) {
+                    Log.runtime(TAG, "宝箱进度: ${rights.used}/${rights.limit}，开始自动刷任务补齐...")
+                    GameTask.Farm_ddply.report(remainToTask)
 
-                // 1. 处理当前可开的宝箱 (对应你说的 canUse)
-                var quotaCanUse = drawRights.optInt("quotaCanUse") // 当前手头的机会
-                if (quotaCanUse > 0) {
-                    Log.runtime(TAG, "当前有 $quotaCanUse 个宝箱待开启...")
-                    while (quotaCanUse > 0) {
-                        val drawRes = JSONObject(AntFarmRpcCall.drawGameCenterAward(1))
-                        if (drawRes.optBoolean("success")) {
-                            // 领取成功后，更新剩余可领取的 quotaCanUse
-                            val nextRights = drawRes.optJSONObject("gameCenterDrawRights")
-                            quotaCanUse = nextRights?.optInt("quotaCanUse") ?: (quotaCanUse - 1)
-
-                            val awardList = drawRes.optJSONArray("gameCenterDrawAwardList")
-                            val awardStrings = mutableListOf<String>()
-                            if (awardList != null) {
-                                for (i in 0 until awardList.length()) {
-                                    val item = awardList.getJSONObject(i)
-                                    awardStrings.add("${item.optString("awardName")}*${item.optInt("awardCount")}")
-                                }
-                            }
-                            Log.farm("庄园小鸡🎁[获得奖品: ${awardStrings.joinToString(",")}]")
-                            delay(3000)
-                        } else {
-                            Log.runtime(TAG, "开启宝箱失败: ${drawRes.optString("desc")}")
-                            break
-                        }
+                    // 上报只负责刷出额度，额度要重查后按真实数量领取，否则奖励会一直挂着
+                    delay(2000)
+                    val refreshed = queryFarmDrawRights()
+                    if (refreshed != null && refreshed.canUse > 0) {
+                        Log.runtime(TAG, "上报后领取 ${refreshed.canUse} 个宝箱...")
+                        openFarmGameCenterBoxes(refreshed.canUse)
                     }
-                }
-
-                // 2. 处理剩余任务 (判断是否需要去刷任务)
-                val limit = drawRights.optInt("quotaLimit") // 总上限，比如 10
-                val used = drawRights.optInt("usedQuota")   // 今日已获得的总数，比如 2
-
-                // 计算逻辑：如果 已获得 < 总上限，且当前没机会了，就去刷
-                val remainToTask = limit - used
-                if (remainToTask > 0 && quotaCanUse == 0) {
-                    Log.runtime(TAG, "宝箱进度: $used/$limit，开始自动刷任务补齐...")
-                    // 根据游戏类型选择上报任务
-                    val reportOk = GameTask.Farm_ddply.report(remainToTask)
-                    if (reportOk) {
-                        delay(1500)
-                        // 上报成功后，直接一次性开启所有的宝箱奖励
-                        val drawRes = JSONObject(AntFarmRpcCall.drawGameCenterAward(remainToTask))
-                        if (drawRes.optBoolean("success")) {
-                            val awardList = drawRes.optJSONArray("gameCenterDrawAwardList")
-                            val awardStrings = mutableListOf<String>()
-                            if (awardList != null) {
-                                for (i in 0 until awardList.length()) {
-                                    val item = awardList.getJSONObject(i)
-                                    awardStrings.add("${item.optString("awardName")}*${item.optInt("awardCount")}")
-                                }
-                            }
-                            Log.farm("庄园小鸡🎁[获得奖品: ${awardStrings.joinToString(",")}]")
-                        } else {
-                            Log.runtime(TAG, "开启宝箱失败: ${drawRes.optString("desc")}")
-                        }
-                    }
-                    break
                 } else {
-                    if (remainToTask <= 0) {
-                        Log.runtime(TAG, "今日 $limit 个金蛋任务已全部满额")
-                    }
-                    break
+                    Log.runtime(TAG, "今日 ${rights.limit} 个金蛋任务已全部满额")
                 }
             }
 

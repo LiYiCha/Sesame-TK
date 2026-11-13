@@ -1,13 +1,8 @@
 package fansirsqi.xposed.sesame.task.sesameDog;
 
-import android.content.Context;
-
 import org.json.JSONArray;
 import org.json.JSONObject;
 
-import java.io.File;
-import java.io.FileOutputStream;
-import java.io.OutputStreamWriter;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Date;
@@ -16,13 +11,11 @@ import java.util.Locale;
 
 import fansirsqi.xposed.sesame.hook.MtopSender;
 import fansirsqi.xposed.sesame.hook.SesameDogAuth;
-import fansirsqi.xposed.sesame.hook.context.AppContext;
 import fansirsqi.xposed.sesame.model.ModelFields;
 import fansirsqi.xposed.sesame.model.ModelGroup;
 import fansirsqi.xposed.sesame.model.modelFieldExt.BooleanModelField;
 import fansirsqi.xposed.sesame.model.modelFieldExt.IntegerModelField;
 import fansirsqi.xposed.sesame.task.ModelTask;
-import fansirsqi.xposed.sesame.util.Files;
 import fansirsqi.xposed.sesame.util.Log;
 import fansirsqi.xposed.sesame.util.StringUtil;
 import fansirsqi.xposed.sesame.util.TimeUtil;
@@ -51,7 +44,6 @@ public class SesameDog extends ModelTask {
     /** 保护上限的硬顶, 避免误填导致长时间连续请求 */
     private static final int HARD_FORWARD_LIMIT = 500;
     private static final int MAX_RECORDS_PER_ROUND = 40;
-    private static final int MAX_DEBUG_CHARS = 20000;
     private static final long SWITCH_INTERVAL_MS = 600L;
     /** 前进之间的随机间隔, 放慢避免风控 */
     private static final long FORWARD_INTERVAL_MIN_MS = 1200L;
@@ -61,9 +53,6 @@ public class SesameDog extends ModelTask {
     private BooleanModelField autoSwitchCity;
     /** 单城市前进次数上限保护 */
     private IntegerModelField maxForwardPerCity;
-
-    private StringBuilder debugDump;
-    private int debugWarnCount;
 
     @Override
     public String getName() {
@@ -97,46 +86,33 @@ public class SesameDog extends ModelTask {
     @Override
     protected void runJava() {
         try {
-            // 任务对象跨轮复用, 排障缓冲区必须每轮重置, 否则第二轮起会被 MAX_DEBUG_CHARS 掐掉
-            debugDump = null;
-            debugWarnCount = 0;
             Log.other("芝麻粒游乐记: 开始 | " + MtopSender.stateText() + " " + SesameDogAuth.stateText());
-            debug("base", MtopSender.stateText() + " " + SesameDogAuth.stateText());
 
             // 0) 路由探测: 活动改版/下线就别刷了
             MtopSender.Result pageroute = SesameDogRpcCall.pageroute();
-            debug("pageroute", describeRaw(pageroute));
             if (pageroute == null) {
                 Log.other("芝麻粒游乐记⏸️ 活动探测失败: 无可用的授权 token");
-                flushDebug(0, 0);
                 return;
             }
             if (!pageroute.ok) {
-                warn("pageroute", pageroute);
                 Log.other("芝麻粒游乐记⏸️ 活动探测失败: " + pageroute.brief() + " | " + pageroute.note);
-                flushDebug(0, 0);
                 return;
             }
             JSONObject routeBody = pageroute.body();
             String route = routeBody == null ? "" : routeBody.optString("routeRedirectType");
             if (!StringUtil.isEmpty(route) && !"DOG_HOME".equals(route)) {
                 Log.other("芝麻粒游乐记⏸️ 活动路由=" + route + "(非 DOG_HOME), 本次不执行");
-                flushDebug(0, 0);
                 return;
             }
 
             // 1) 首页: 当前城市/记录/节点状态/活动积分
             MtopSender.Result index = SesameDogRpcCall.index();
-            debug("index", describeRaw(index));
             if (index == null) {
                 Log.other("芝麻粒游乐记⏸️ 未取到 alisports 授权 token, 本轮无法前进");
-                flushDebug(0, 0);
                 return;
             }
             if (!index.ok) {
-                warn("index", index);
                 Log.other("芝麻粒游乐记⏸️ 首页返回失败: " + index.brief() + " | " + index.note);
-                flushDebug(0, 0);
                 return;
             }
             JSONObject indexBody = index.body();
@@ -156,12 +132,10 @@ public class SesameDog extends ModelTask {
                     + " 单次消耗=" + unit);
             if (!"PLAYING".equals(nodeState)) {
                 Log.other("芝麻粒游乐记⏸️ 当前节点状态=" + nodeState + ", 本次不前进");
-                flushDebug(0, 0);
                 return;
             }
             if (points >= 0 && points < unit) {
                 Log.other("芝麻粒游乐记⏸️ 活动积分不足(" + points + " < " + unit + "), 无法前进");
-                flushDebug(0, 0);
                 return;
             }
 
@@ -170,8 +144,7 @@ public class SesameDog extends ModelTask {
             if (records.isEmpty()) {
                 if (StringUtil.isEmpty(playingId)) {
                     Log.other("芝麻粒游乐记⏸️ 没有可用的游玩记录");
-                    flushDebug(0, 0);
-                    return;
+                        return;
                 }
                 records.add(new Record(playingId, cityName, "", -1, ""));
             }
@@ -204,9 +177,7 @@ public class SesameDog extends ModelTask {
                 }
                 if (!rec.playingId.equals(currentId)) {
                     MtopSender.Result change = SesameDogRpcCall.changeRecord(rec.playingId);
-                    debug("change:" + rec.playingId, describeRaw(change));
                     if (change == null || !change.ok) {
-                        warn("change", change);
                         Log.other("芝麻粒游乐记⚠️ 切换到 " + rec.label() + " 失败: "
                                 + (change == null ? "无响应" : change.brief()));
                         continue;
@@ -235,7 +206,6 @@ public class SesameDog extends ModelTask {
             // 3) 刷完后切回用户原来的当前记录, 免得活动页停在最后一个被刷的城市
             if (autoSwitchCity.getValue() && !StringUtil.isEmpty(playingId) && !playingId.equals(currentId)) {
                 MtopSender.Result back = SesameDogRpcCall.changeRecord(playingId);
-                debug("restore:" + playingId, describeRaw(back));
                 if (back != null && back.ok) {
                     Log.other("芝麻粒游乐记: 已切回原当前记录 " + playingId);
                 }
@@ -249,11 +219,8 @@ public class SesameDog extends ModelTask {
                         + " 次 | 消耗活动积分约 " + totalForward * unit);
                 Log.other("芝麻粒游乐记: 记录情况 " + remainText(records, ceiling));
             }
-            flushDebug(totalForward, switched);
         } catch (Throwable t) {
             Log.printStackTrace(TAG, "run err:", t);
-            debug("exception", String.valueOf(t));
-            flushDebug(-1, -1);
         }
     }
 
@@ -276,23 +243,18 @@ public class SesameDog extends ModelTask {
                 if (!StringUtil.isEmpty(state)) {
                     out.lastState = state;
                 }
-                debug("forward:" + rec.playingId, describeRaw(r));
             } else if (r.isDailyLimit()) {
                 out.reachedLimit = true;
                 rec.full = true;
                 Log.other("芝麻粒游乐记: " + rec.label() + " 已刷到今日上限(本次前进 " + out.done + " 次)");
-                debug("forward:limit:" + rec.playingId, describeRaw(r));
                 break;
             } else if (r.isPointsNotEnough()) {
                 out.stopByPoints = true;
                 Log.other("芝麻粒游乐记: " + rec.label() + " 前进被拒(活动积分不足): " + r.brief());
-                debug("forward:points:" + rec.playingId, describeRaw(r));
                 break;
             } else {
                 out.hardFail = true;
-                warn("forward", r);
                 Log.other("芝麻粒游乐记⚠️ " + rec.label() + " 前进失败: " + r.brief() + " | " + r.note);
-                debug("forward:fail:" + rec.playingId, describeRaw(r));
                 break;
             }
             if (i + 1 < remain) {
@@ -314,9 +276,7 @@ public class SesameDog extends ModelTask {
     private List<Record> listRecords() {
         List<Record> list = new ArrayList<>();
         MtopSender.Result r = SesameDogRpcCall.listRecords();
-        debug("listRecords", describeRaw(r));
         if (r == null || !r.ok) {
-            warn("listRecords", r);
             Log.other("芝麻粒游乐记⚠️ 参与记录拉取失败: " + (r == null ? "无响应" : r.brief()));
             return list;
         }
@@ -355,10 +315,6 @@ public class SesameDog extends ModelTask {
 
     private void logRecords(List<Record> records, int ceiling) {
         Log.other("芝麻粒游乐记: 参与记录 " + records.size() + " 条 | " + remainText(records, ceiling));
-        for (Record rec : records) {
-            Log.debug(TAG, "record " + rec.playingId + " " + rec.cityName + "/" + rec.siteName
-                    + " today=" + rec.todayCount + " last=" + rec.lastDate + " remain=" + rec.remain(ceiling));
-        }
     }
 
     private static String remainText(List<Record> records, int ceiling) {
@@ -482,98 +438,6 @@ public class SesameDog extends ModelTask {
         } catch (Throwable ignore) {
             return def;
         }
-    }
-
-    // ═══════════════════════════ 排障转储 ═══════════════════════════
-
-    private void debug(String label, String text) {
-        if (debugDump == null) {
-            debugDump = new StringBuilder();
-        }
-        if (debugDump.length() >= MAX_DEBUG_CHARS) {
-            return;
-        }
-        debugDump.append("\n[").append(label).append("] ").append(truncate(text, 900));
-    }
-
-    private void warn(String where, MtopSender.Result r) {
-        debugWarnCount++;
-        debug("warn:" + where, describeRaw(r));
-    }
-
-    private static String describeRaw(MtopSender.Result r) {
-        if (r == null) {
-            return "null";
-        }
-        return "ok=" + r.ok + " ret=" + r.retText + " code=" + r.retCode
-                + " reason=" + r.failReason + " note=" + r.note
-                + " data=" + truncate(String.valueOf(r.data), 700);
-    }
-
-    /**
-     * 把本轮请求参数/响应转储到文件, 便于真机定位(尤其是 wua/asac 是否被宿主自动注入)。
-     * 有异常时才在模块日志里提示文件位置, 正常轮次静默落盘。
-     */
-    private void flushDebug(int totalForward, int switched) {
-        if (debugDump == null || debugDump.length() == 0) {
-            return;
-        }
-        try {
-            File dir = logDir();
-            if (dir == null) {
-                return;
-            }
-            if (!dir.exists() && !dir.mkdirs()) {
-                return;
-            }
-            File file = new File(dir, "sesame_dog_debug.log");
-            StringBuilder sb = new StringBuilder();
-            sb.append("\n===== ").append(new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US).format(new Date()))
-                    .append(" 芝麻粒游乐记 | 前进=").append(totalForward).append(" 切换=").append(switched)
-                    .append(" 开关[autoSwitchCity=").append(autoSwitchCity.getValue())
-                    .append(", cap=").append(maxForwardPerCity.getValue()).append("] =====");
-            sb.append(debugDump);
-            FileOutputStream fos = new FileOutputStream(file, true);
-            try {
-                OutputStreamWriter writer = new OutputStreamWriter(fos, "UTF-8");
-                writer.write(sb.toString());
-                writer.flush();
-            } finally {
-                fos.close();
-            }
-            if (debugWarnCount > 0) {
-                Log.other("芝麻粒游乐记: 本轮有 " + debugWarnCount + " 处异常, 排障转储 → " + file.getAbsolutePath());
-            }
-        } catch (Throwable t) {
-            Log.printStackTrace(TAG, "flushDebug err:", t);
-        }
-    }
-
-    /** 优先写到模块日志目录, 拿不到时退化到应用私有目录。 */
-    private static File logDir() {
-        try {
-            File dir = Files.LOG_DIR;
-            if (dir != null) {
-                return dir;
-            }
-        } catch (Throwable ignore) {
-        }
-        Context ctx = AppContext.getAppContext();
-        if (ctx == null) {
-            return null;
-        }
-        File dir = ctx.getExternalFilesDir(null);
-        if (dir == null) {
-            dir = ctx.getFilesDir();
-        }
-        return dir;
-    }
-
-    private static String truncate(String text, int max) {
-        if (text == null) {
-            return "";
-        }
-        return text.length() > max ? text.substring(0, max) + "..." : text;
     }
 
     // ═══════════════════════════ 内部数据结构 ═══════════════════════════
