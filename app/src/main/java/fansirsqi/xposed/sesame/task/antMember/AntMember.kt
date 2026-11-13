@@ -772,13 +772,16 @@ class AntMember : ModelTask() {
                 }
             }
 
-            val signRaw = AntMemberRpcCall.newTaskCenterSignStatusQuery()
-            if (!signRaw.isNullOrEmpty()) {
-                val signJo = JSONObject(signRaw)
-                if (ResChecker.checkRes(TAG, signJo)) {
-                    handleNewTaskCenterSign(signJo)
-                } else {
-                    Log.runtime(TAG, "新任务中心签到状态查询失败: ${newTaskCenterErrorDesc(signJo)}")
+            val signFlag = "AntMember_NewTaskCenter_Sign_Done"
+            if (!hasFlagToday(signFlag)) {
+                val signRaw = AntMemberRpcCall.newTaskCenterSignStatusQuery()
+                if (!signRaw.isNullOrEmpty()) {
+                    val signJo = JSONObject(signRaw)
+                    if (ResChecker.checkRes(TAG, signJo)) {
+                        handleNewTaskCenterSign(signJo)
+                    } else {
+                        Log.runtime(TAG, "新任务中心签到状态查询失败: ${newTaskCenterErrorDesc(signJo)}")
+                    }
                 }
             }
 
@@ -805,10 +808,58 @@ class AntMember : ModelTask() {
     }
 
     /**
-     * 解析签到状态
+     * 解析签到状态并执行新任务中心签到
      */
     private fun handleNewTaskCenterSign(signStatus: JSONObject) {
-        // 新任务中心签到含动态bizNo/token校验，暂未开放自动签到，静默跳过
+        val signInfo = signStatus.optJSONObject("signInfo") ?: return
+        val action = signInfo.optString("buttonActionEnum")
+        val signed = signInfo.optBoolean("todaySignedFlag", false) ||
+            signInfo.optString("signStatus").equals("SIGNED", ignoreCase = true)
+        if (signed || !action.equals("DO_SIGN", ignoreCase = true)) {
+            val text = signInfo.optString("buttonText").ifBlank { action.ifBlank { "已签到" } }
+            Log.runtime(TAG, "新任务中心签到状态: $text")
+            setFlagToday("AntMember_NewTaskCenter_Sign_Done")
+            return
+        }
+
+        // 解析动态签到参数并尝试发起真实签到
+        val activityId = signInfo.optString("activityId").ifEmpty { "SIGN_TASK_CENTER" }
+        val source = signInfo.optString("source").ifEmpty { "zhimaxinyong" }
+        val extInfo = signInfo.optJSONObject("extInfo")
+        val bizNo = signInfo.optString("bizNo")
+            .ifEmpty { signInfo.optString("signBizNo") }
+            .ifEmpty { extInfo?.optString("bizNo").orEmpty() }
+        val token = signInfo.optString("token")
+            .ifEmpty { signInfo.optString("signToken") }
+            .ifEmpty { signInfo.optString("verifyToken") }
+            .ifEmpty { extInfo?.optString("token").orEmpty() }
+
+        val doSignRes = AntMemberRpcCall.newTaskCenterDoSign(activityId, source, bizNo, token)
+        if (doSignRes.isNullOrEmpty()) {
+            Log.error(TAG, "新任务中心签到未收到有效响应")
+            return
+        }
+
+        try {
+            val signResJo = JSONObject(doSignRes)
+            if (ResChecker.checkRes(TAG, signResJo)) {
+                val prizeInfo = signResJo.optJSONObject("prizeInfo")
+                    ?: signResJo.optJSONObject("data")?.optJSONObject("prizeInfo")
+                val prizeDesc = prizeInfo?.optString("prizeDesc")
+                    ?: prizeInfo?.optString("prizeName")
+                    ?: signResJo.optString("resultView", "成功")
+                Log.other(TAG, "新任务中心[签到成功]#$prizeDesc")
+                setFlagToday("AntMember_NewTaskCenter_Sign_Done")
+            } else {
+                val errorMsg = newTaskCenterErrorDesc(signResJo)
+                Log.error(TAG, "新任务中心签到失败: $errorMsg")
+                if (errorMsg.contains("已签到") || errorMsg.contains("REPEAT") || errorMsg.contains("ALREADY")) {
+                    setFlagToday("AntMember_NewTaskCenter_Sign_Done")
+                }
+            }
+        } catch (e: Exception) {
+            Log.error(TAG, "解析新任务中心签到响应异常: ${e.message}")
+        }
     }
 
     /**

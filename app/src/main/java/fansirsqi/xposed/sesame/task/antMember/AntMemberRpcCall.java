@@ -1263,6 +1263,31 @@ public class AntMemberRpcCall {
     }
 
     /**
+     * 新任务中心执行签到 (支持 doSign 与 sign 双接口自动兼容)
+     */
+    public static String newTaskCenterDoSign(String activityId, String source, String bizNo, String token) {
+        try {
+            JSONObject args = new JSONObject();
+            args.put("activityId", activityId != null && !activityId.isEmpty() ? activityId : "SIGN_TASK_CENTER");
+            args.put("source", source != null && !source.isEmpty() ? source : "zhimaxinyong");
+            if (bizNo != null && !bizNo.isEmpty()) {
+                args.put("bizNo", bizNo);
+            }
+            if (token != null && !token.isEmpty()) {
+                args.put("token", token);
+            }
+            String params = new JSONArray().put(args).toString();
+            String res = RequestManager.requestString("alipay.membertangram.biz.rpc.newtaskcenter.doSign", params);
+            if (res != null && (res.contains("NOT_FOUND") || res.contains("不存在") || res.contains("ILLEGAL_ACCESS"))) {
+                res = RequestManager.requestString("alipay.membertangram.biz.rpc.newtaskcenter.sign", params);
+            }
+            return res;
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /**
      * 查询新任务中心任务列表
      */
     public static String newTaskCenterQueryTaskList() {
