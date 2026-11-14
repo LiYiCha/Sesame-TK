@@ -79,10 +79,10 @@ public class OtherTask2 extends ModelTask {
             new String[]{
                     "系统默认 (vivo V2238A / Android 16)",
                     "🎲 随机设备指纹 (仅点击下方按钮生成并固定)",
-                    "vivo 系列固定机型 (vivo X100 Pro)",
-                    "Xiaomi 系列固定机型 (Xiaomi 14)",
-                    "OPPO 系列固定机型 (OPPO Find X7)",
-                    "HONOR 系列固定机型 (HONOR Magic6)"
+                    "vivo X200 Pro (Android 15)",
+                    "Xiaomi 15 (Android 15)",
+                    "OPPO Find X8 (Android 15)",
+                    "HONOR Magic7 (Android 15)"
             },
             "切换饿了么请求的机型指纹与 UA，可有效规避单一指纹引发的百川风控"
     );

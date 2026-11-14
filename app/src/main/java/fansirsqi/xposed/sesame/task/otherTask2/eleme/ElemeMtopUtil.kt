@@ -103,46 +103,48 @@ object ElemeMtopUtil {
         val buildId: String
     )
 
-    // 真实主流 Android 设备特征指纹模板库（全面覆盖 vivo、小米/红米、OPPO/一加、荣耀、华为、三星）
+    // 真实主流 Android 设备特征指纹模板库（全面对齐 2026 年最新旗舰与热门机型及 Android 15/16）
     private val DEVICE_TEMPLATES = listOf(
-        // vivo / iQOO
-        DeviceTemplate("vivo", "V2309A", "vivo/vivo,V2309A", "14", "UP1A.231005.007"),
-        DeviceTemplate("vivo", "V2324A", "vivo/vivo,V2324A", "14", "UP1A.231005.007"),
-        DeviceTemplate("vivo", "V2339A", "vivo/vivo,V2339A", "14", "UP1A.231005.007"),
-        DeviceTemplate("vivo", "V2307A", "vivo/vivo,V2307A", "14", "UP1A.231005.007"),
-        DeviceTemplate("vivo", "V2238A", "vivo/vivo,V2238A", "13", "TKQ1.220829.002"),
-        DeviceTemplate("vivo", "V2241A", "vivo/vivo,V2241A", "13", "TKQ1.220829.002"),
-        // Xiaomi / Redmi
-        DeviceTemplate("Xiaomi", "23116PN5BC", "Xiaomi/Xiaomi,23116PN5BC", "14", "UKQ1.230804.001"),
-        DeviceTemplate("Xiaomi", "23127PN0CC", "Xiaomi/Xiaomi,23127PN0CC", "14", "UKQ1.230804.001"),
-        DeviceTemplate("Xiaomi", "24031PN0DC", "Xiaomi/Xiaomi,24031PN0DC", "14", "UKQ1.230804.001"),
-        DeviceTemplate("Redmi", "2311DRK48C", "Redmi/Xiaomi,2311DRK48C", "14", "UKQ1.230804.001"),
-        DeviceTemplate("Redmi", "23117RK66C", "Redmi/Xiaomi,23117RK66C", "14", "UKQ1.230804.001"),
-        DeviceTemplate("Xiaomi", "2210132C", "Xiaomi/Xiaomi,2210132C", "13", "TKQ1.220829.002"),
-        // OPPO / OnePlus
-        DeviceTemplate("OPPO", "PHY110", "OPPO/OPPO,PHY110", "14", "UKQ1.230924.001"),
-        DeviceTemplate("OPPO", "PHT110", "OPPO/OPPO,PHT110", "14", "UKQ1.230924.001"),
-        DeviceTemplate("OnePlus", "PJE110", "OnePlus/OnePlus,PJE110", "14", "UKQ1.230924.001"),
-        DeviceTemplate("OnePlus", "PJF110", "OnePlus/OnePlus,PJF110", "14", "UKQ1.230924.001"),
-        DeviceTemplate("OPPO", "PGEM10", "OPPO/OPPO,PGEM10", "13", "TP1A.220905.001"),
-        // HONOR
-        DeviceTemplate("HONOR", "BVL-AN00", "HONOR/HONOR,BVL-AN00", "14", "HONORBVL-AN00"),
-        DeviceTemplate("HONOR", "BVL-AN16", "HONOR/HONOR,BVL-AN16", "14", "HONORBVL-AN16"),
-        DeviceTemplate("HONOR", "VER-AN00", "HONOR/HONOR,VER-AN00", "13", "HONORVER-AN00"),
-        DeviceTemplate("HONOR", "FRI-AN00", "HONOR/HONOR,FRI-AN00", "13", "HONORFRI-AN00"),
-        // HUAWEI
-        DeviceTemplate("HUAWEI", "ALN-AL00", "HUAWEI/HUAWEI,ALN-AL00", "12", "HUAWEIALN-AL00"),
-        DeviceTemplate("HUAWEI", "ALN-AL10", "HUAWEI/HUAWEI,ALN-AL10", "12", "HUAWEIALN-AL10"),
-        DeviceTemplate("HUAWEI", "HBP-AL00", "HUAWEI/HUAWEI,HBP-AL00", "12", "HUAWEIHBP-AL00"),
-        // Samsung
-        DeviceTemplate("samsung", "SM-S9280", "samsung/samsung,SM-S9280", "14", "UP1A.231005.007"),
-        DeviceTemplate("samsung", "SM-S9210", "samsung/samsung,SM-S9210", "14", "UP1A.231005.007"),
-        DeviceTemplate("samsung", "SM-S9180", "samsung/samsung,SM-S9180", "13", "TP1A.220624.014")
+        // vivo / iQOO (2025-2026 旗舰)
+        DeviceTemplate("vivo", "V2405A", "vivo/vivo,V2405A", "15", "AP3A.241005.015"),   // vivo X200 Pro
+        DeviceTemplate("vivo", "V2415A", "vivo/vivo,V2415A", "15", "AP3A.241005.015"),   // vivo X200
+        DeviceTemplate("vivo", "V2419A", "vivo/vivo,V2419A", "15", "AP3A.241005.015"),   // vivo X200 Pro mini
+        DeviceTemplate("vivo", "V2408A", "vivo/vivo,V2408A", "15", "AP3A.241005.015"),   // iQOO 13
+        DeviceTemplate("vivo", "V2366GA", "vivo/vivo,V2366GA", "15", "AP3A.240905.015"), // vivo X100 Ultra
+        DeviceTemplate("vivo", "V2309A", "vivo/vivo,V2309A", "15", "AP3A.240905.015"),   // vivo X100 Pro
+        // Xiaomi / Redmi (2025-2026 旗舰)
+        DeviceTemplate("Xiaomi", "24129PN74C", "Xiaomi/Xiaomi,24129PN74C", "15", "VKQ1.240723.001"), // Xiaomi 15
+        DeviceTemplate("Xiaomi", "24101PNB7C", "Xiaomi/Xiaomi,24101PNB7C", "15", "VKQ1.240723.001"), // Xiaomi 15 Pro
+        DeviceTemplate("Redmi", "24122RKC7C", "Redmi/Xiaomi,24122RKC7C", "15", "VKQ1.240723.001"),   // Redmi K80 Pro
+        DeviceTemplate("Redmi", "24117RK2CC", "Redmi/Xiaomi,24117RK2CC", "15", "VKQ1.240723.001"),   // Redmi K80
+        DeviceTemplate("Redmi", "2311DRK48C", "Redmi/Xiaomi,2311DRK48C", "15", "AP3A.241005.015"),   // Redmi K70
+        DeviceTemplate("Xiaomi", "24031PN0DC", "Xiaomi/Xiaomi,24031PN0DC", "15", "AP3A.241005.015"), // Xiaomi 14 Ultra
+        // OPPO / OnePlus (2025-2026 旗舰)
+        DeviceTemplate("OPPO", "PKC110", "OPPO/OPPO,PKC110", "15", "AP3A.240905.015"),   // OPPO Find X8 Pro
+        DeviceTemplate("OPPO", "PKB110", "OPPO/OPPO,PKB110", "15", "AP3A.240905.015"),   // OPPO Find X8
+        DeviceTemplate("OnePlus", "PJZ110", "OnePlus/OnePlus,PJZ110", "15", "AP3A.240905.015"), // OnePlus 13
+        DeviceTemplate("OnePlus", "PKG110", "OnePlus/OnePlus,PKG110", "15", "AP3A.240905.015"), // OnePlus Ace 5
+        DeviceTemplate("OPPO", "PHY110", "OPPO/OPPO,PHY110", "15", "AP3A.240905.015"),   // OPPO Find X7 Ultra
+        // HONOR (2025-2026 旗舰)
+        DeviceTemplate("HONOR", "PTP-AN10", "HONOR/HONOR,PTP-AN10", "15", "HONORPTP-AN10"), // HONOR Magic7 Pro
+        DeviceTemplate("HONOR", "PTP-AN60", "HONOR/HONOR,PTP-AN60", "15", "HONORPTP-AN60"), // HONOR Magic7
+        DeviceTemplate("HONOR", "FCP-AN10", "HONOR/HONOR,FCP-AN10", "15", "HONORFCP-AN10"), // HONOR Magic V3
+        DeviceTemplate("HONOR", "ELP-AN00", "HONOR/HONOR,ELP-AN00", "15", "HONORELP-AN00"), // HONOR 200 Pro
+        // HUAWEI (2025-2026 旗舰)
+        DeviceTemplate("HUAWEI", "HBN-AL00", "HUAWEI/HUAWEI,HBN-AL00", "14", "HUAWEIHBN-AL00"), // HUAWEI Mate 70 Pro
+        DeviceTemplate("HUAWEI", "HBP-AL00", "HUAWEI/HUAWEI,HBP-AL00", "14", "HUAWEIHBP-AL00"), // HUAWEI Pura 70 Ultra
+        // Samsung (2025-2026 旗舰)
+        DeviceTemplate("samsung", "SM-S9380", "samsung/samsung,SM-S9380", "15", "UP1A.241005.007"), // Galaxy S25 Ultra
+        DeviceTemplate("samsung", "SM-S9360", "samsung/samsung,SM-S9360", "15", "UP1A.241005.007"), // Galaxy S25+
+        DeviceTemplate("samsung", "SM-S9280", "samsung/samsung,SM-S9280", "15", "UP1A.241005.007")  // Galaxy S24 Ultra
     )
 
-    private val CHROME_VERSIONS = listOf("118.0.0.0", "121.0.0.0", "124.0.0.0", "126.0.0.0", "128.0.0.0", "130.0.0.0")
-    private val UC_VERSIONS = listOf("16.3.8.1402", "16.2.8.1396", "16.5.0.1420", "15.9.6.1360", "16.0.4.1378")
-    private val SCREEN_RESOLUTIONS = listOf("384|0|853", "393|0|873", "412|0|915", "360|0|800", "432|0|960", "390|0|844")
+    // 对齐 2026 年 11 月最新 Chrome 内核（Chrome 于 2026 年 9 月从 153 起加速为双周发布，11 月对应 Chrome 156~158）
+    private val CHROME_VERSIONS = listOf("154.0.0.0", "155.0.0.0", "156.0.0.0", "157.0.0.0", "158.0.0.0")
+    // 对齐 2026 年最新 UC Webview 内核
+    private val UC_VERSIONS = listOf("17.2.8.1550", "17.3.4.1580", "17.4.2.1610", "17.5.0.1630", "17.5.6.1650")
+    // 现代旗舰主流 1.5K / 2K 屏幕分辨率
+    private val SCREEN_RESOLUTIONS = listOf("393|0|873", "412|0|915", "432|0|960", "384|0|853", "440|0|976")
 
     private fun generateRandomDeviceId(): String {
         val chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789+/"
@@ -150,7 +152,7 @@ object ElemeMtopUtil {
     }
 
     private fun buildProfileFromTemplate(tpl: DeviceTemplate): DeviceProfile {
-        val alipayVer = ApplicationHook.getAlipayVersion()?.versionString?.takeIf { it.isNotEmpty() } ?: "12.12.30.8000"
+        val alipayVer = ApplicationHook.getAlipayVersion()?.versionString?.takeIf { it.isNotEmpty() } ?: "12.12.26.8100"
         val chromeVer = CHROME_VERSIONS[RandomUtil.nextInt(0, CHROME_VERSIONS.size)]
         val ucVer = UC_VERSIONS[RandomUtil.nextInt(0, UC_VERSIONS.size)]
         val screenWs = SCREEN_RESOLUTIONS[RandomUtil.nextInt(0, SCREEN_RESOLUTIONS.size)]
@@ -223,10 +225,10 @@ object ElemeMtopUtil {
      * 获取当前生效的设备指纹配置（受 OtherTask2.elemeUaMode 控制）
      * 0: 系统默认 (本机系统/vivo V2238A)
      * 1: 🎲 随机生成设备指纹（日常完全固定使用已保存指纹，仅在用户点击【生成】按钮时重新生成）
-     * 2: vivo 系列固定机型 (vivo X100 Pro)
-     * 3: Xiaomi 系列固定机型 (Xiaomi 14)
-     * 4: OPPO 系列固定机型 (OPPO Find X7)
-     * 5: HONOR 系列固定机型 (HONOR Magic6)
+     * 2: vivo 系列固定机型 (vivo X200 Pro)
+     * 3: Xiaomi 系列固定机型 (Xiaomi 15)
+     * 4: OPPO 系列固定机型 (OPPO Find X8)
+     * 5: HONOR 系列固定机型 (HONOR Magic7)
      */
     fun getActiveProfile(): DeviceProfile {
         sessionProfile?.let { return it }
@@ -235,7 +237,7 @@ object ElemeMtopUtil {
             fansirsqi.xposed.sesame.task.otherTask2.OtherTask2.getElemeUaMode().value ?: 1
         }.getOrDefault(1)
 
-        val alipayVer = ApplicationHook.getAlipayVersion()?.versionString?.takeIf { it.isNotEmpty() } ?: "12.12.30.8000"
+        val alipayVer = ApplicationHook.getAlipayVersion()?.versionString?.takeIf { it.isNotEmpty() } ?: "12.12.26.8100"
 
         val profile = when (mode) {
             0 -> {
@@ -243,19 +245,23 @@ object ElemeMtopUtil {
                 val model = android.os.Build.MODEL.ifEmpty { "V2238A" }
                 val brand = android.os.Build.BRAND.ifEmpty { "vivo" }
                 val brandModel = if (model.startsWith(brand, ignoreCase = true)) "$brand/$model" else "$brand/$brand,$model"
-                DeviceProfile(brand, model, brandModel, releaseVer, "BP1A.250305.019", alipayVer, "118.0.0.0", "16.3.8.1402", "384|0|853", "asdLYB2rw6kDAN+qYdXj9afD")
+                DeviceProfile(brand, model, brandModel, releaseVer, "BP1A.250305.019", alipayVer, "157.0.0.0", "17.4.2.1610", "384|0|853", "asdLYB2rw6kDAN+qYdXj9afD")
             }
             2 -> {
-                DeviceProfile("vivo", "V2309A", "vivo/vivo,V2309A", "14", "UP1A.231005.007", alipayVer, "128.0.0.0", "16.3.8.1402", "384|0|853", "asdLYB2rw6kDAN+qYdXj9afD")
+                // vivo X200 Pro
+                DeviceProfile("vivo", "V2405A", "vivo/vivo,V2405A", "15", "AP3A.241005.015", alipayVer, "157.0.0.0", "17.4.2.1610", "412|0|915", "asdLYB2rw6kDAN+qYdXj9afD")
             }
             3 -> {
-                DeviceProfile("Xiaomi", "23116PN5BC", "Xiaomi/Xiaomi,23116PN5BC", "14", "UKQ1.230804.001", alipayVer, "128.0.0.0", "16.3.8.1402", "393|0|873", "asdLYB2rw6kDAN+qYdXj9afD")
+                // Xiaomi 15
+                DeviceProfile("Xiaomi", "24129PN74C", "Xiaomi/Xiaomi,24129PN74C", "15", "VKQ1.240723.001", alipayVer, "157.0.0.0", "17.4.2.1610", "393|0|873", "asdLYB2rw6kDAN+qYdXj9afD")
             }
             4 -> {
-                DeviceProfile("OPPO", "PHY110", "OPPO/OPPO,PHY110", "14", "UKQ1.230924.001", alipayVer, "128.0.0.0", "16.3.8.1402", "412|0|915", "asdLYB2rw6kDAN+qYdXj9afD")
+                // OPPO Find X8
+                DeviceProfile("OPPO", "PKB110", "OPPO/OPPO,PKB110", "15", "AP3A.240905.015", alipayVer, "157.0.0.0", "17.4.2.1610", "412|0|915", "asdLYB2rw6kDAN+qYdXj9afD")
             }
             5 -> {
-                DeviceProfile("HONOR", "BVL-AN00", "HONOR/HONOR,BVL-AN00", "14", "HONORBVL-AN00", alipayVer, "128.0.0.0", "16.3.8.1402", "384|0|853", "asdLYB2rw6kDAN+qYdXj9afD")
+                // HONOR Magic7
+                DeviceProfile("HONOR", "PTP-AN60", "HONOR/HONOR,PTP-AN60", "15", "HONORPTP-AN60", alipayVer, "157.0.0.0", "17.4.2.1610", "412|0|915", "asdLYB2rw6kDAN+qYdXj9afD")
             }
             else -> {
                 // mode == 1: 🎲 随机生成设备指纹（日常完全固定，仅在用户点击生成按钮时更新）
