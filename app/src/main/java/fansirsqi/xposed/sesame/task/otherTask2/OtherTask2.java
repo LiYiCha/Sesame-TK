@@ -75,31 +75,39 @@ public class OtherTask2 extends ModelTask {
     private static final ChoiceModelField elemeUaMode = new ChoiceModelField(
             "elemeUaMode",
             "饿了么|设备指纹/UA模式",
-            1,
+            2,
             new String[]{
                     "系统默认 (本机实际系统指纹)",
-                    "🎲 全品牌无限动态随机生成 (永不枯竭)",
-                    "vivo / iQOO 系列无限动态生成",
-                    "Xiaomi / Redmi 系列无限动态生成",
-                    "OPPO / OnePlus 系列无限动态生成",
-                    "HONOR 系列无限动态生成",
-                    "Samsung 系列无限动态生成",
-                    "HUAWEI 系列无限动态生成"
+                    "自定义 User-Agent (使用下方自定义UA)",
+                    "🎲 近几年全系真实热门机型随机生成",
+                    "Redmi K70 / K80 系列热门机型生成",
+                    "Xiaomi 14 / 15 旗舰系列机型生成",
+                    "vivo X100 / X200 / iQOO 系列机型生成",
+                    "OPPO Find X7 / X8 / 一加系列机型生成",
+                    "HONOR Magic 6 / 7 系列机型生成",
+                    "HUAWEI Mate 60 / 70 / Pura 70 系列机型生成",
+                    "Samsung Galaxy S24 / S25 系列机型生成"
             },
-            "切换饿了么请求的机型指纹与 UA。点击下方【生成】按钮将按所选模式无限生成全新真实设备并固定生效"
+            "切换饿了么请求的机型指纹与 UA。支持选择真实热门手机家族生成该类型不同手机，或选择自定义UA"
     );
     private static final EmptyModelField elemeGenerateUa = new EmptyModelField(
             "elemeGenerateUa",
-            "饿了么|🎲 点击生成随机设备UA",
-            "生成随机设备UA",
-            "确定要生成并切换到全新的真实设备指纹与UA吗？\n（生成后将自动保存并固定生效，日常执行不会自动变动）",
+            "饿了么|🎲 点击生成设备指纹/UA",
+            "生成设备指纹与UA",
+            "确定要按所选模式生成该类型的真实手机并固定生效吗？\n（生成后将自动保存并固定生效，日常执行不会自动变动）",
             context -> fansirsqi.xposed.sesame.task.otherTask2.eleme.ElemeMtopUtil.INSTANCE.generateAndSaveRandomProfile(context)
+    );
+    private static final StringModelField elemeCustomUa = new StringModelField(
+            "elemeCustomUa",
+            "饿了么|自定义User-Agent",
+            "",
+            "直接粘贴自定义的完整 User-Agent 字符串。在【模式】选择【自定义 User-Agent】时直接使用此 UA"
     );
     private static final StringModelField elemeCustomProfile = new StringModelField(
             "elemeCustomProfile",
-            "饿了么|当前设备UA配置",
+            "饿了么|当前生效设备详情",
             "",
-            "当前生效的设备指纹配置(JSON格式)。点击可查看详情或手动编辑修改，点击上方【生成】按钮可自动重新生成并覆盖。"
+            "当前生效的设备指纹详情(JSON格式)。点击上方【生成】按钮可自动切换生成，也可手动查看与微调。"
     );
     private static final SelectModelField elemeRiskTasks = new SelectModelField(
             "elemeRiskTasks",
@@ -125,6 +133,10 @@ public class OtherTask2 extends ModelTask {
 
     public static EmptyModelField getElemeGenerateUa() {
         return elemeGenerateUa;
+    }
+
+    public static StringModelField getElemeCustomUa() {
+        return elemeCustomUa;
     }
 
     public static StringModelField getElemeCustomProfile() {
@@ -201,6 +213,7 @@ public class OtherTask2 extends ModelTask {
         modelFields.addField(elemeBurstRed);
         modelFields.addField(elemeUaMode);
         modelFields.addField(elemeGenerateUa);
+        modelFields.addField(elemeCustomUa);
         modelFields.addField(elemeCustomProfile);
         modelFields.addField(elemeRiskTasks);
         modelFields.addField(gameCenterGoldCashExchange);
