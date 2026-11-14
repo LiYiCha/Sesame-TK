@@ -33,8 +33,8 @@ object LuckyStarTask {
             val initCookie = ElemeAuth.ensureCookie()
             if (initCookie.isEmpty() || !ElemeAuth.isBound()) {
                 val reason = if (initCookie.isEmpty()) "未获取到有效登录凭证(账号未绑定或换票失败)" else "当前未关联有效饿了么账号"
-                Log.other("饿了么", "[幸运星] $reason，自动关闭【饿了么|幸运星】开关并退出")
-                fansirsqi.xposed.sesame.task.otherTask2.OtherTask2.disableElemeLuckyStar(reason)
+                Log.other("饿了么", "[幸运星] $reason，自动关闭【幸运星任务】开关并退出")
+                ElemeTask.disableElemeLuckyStar(reason)
                 return
             }
 
@@ -45,7 +45,7 @@ object LuckyStarTask {
                 return
             }
             val profile = ElemeMtopUtil.getActiveProfile()
-            Log.other("饿了么", "[幸运星] 当前账号: ${ElemeAuth.getAccountSummary()} | 设备指纹: ${profile.brandModel} (Android ${profile.release})")
+            Log.other("饿了么", "[幸运星] 当前账号: ${ElemeAuth.getAccountSummary()} | 设备: ${profile.brandModel}")
 
             // 2. 拟真环境初始化：页面动效组件加载与订阅提醒
             LuckyStarRpcCall.initPageComponents(cookie)
@@ -56,7 +56,7 @@ object LuckyStarTask {
             // 3. 查询初始资产
             val initProperty = LuckyStarRpcCall.queryProperty(cookie)
             val initialStars = extractStarAmount(initProperty)
-            Log.other("饿了么", "[幸运星] 当前幸运星余额: $initialStars")
+            Log.other("饿了么", "[幸运星] 当前星数: $initialStars")
 
             // 4. 查询全量任务列表
             val taskListResp = LuckyStarRpcCall.queryTaskList(cookie)
@@ -77,9 +77,9 @@ object LuckyStarTask {
 
             var finishedCount = 0
             var rewardedCount = 0
+            var hasRewardable = false
 
             // ==== 第一轮: 遍历执行可自动化的浏览与点击任务 ====
-            Log.other("饿了么", "[幸运星] ==== 第一轮: 开始执行浏览与点击任务 ====")
             for (i in 0 until taskArray.length()) {
                 val task = taskArray.optJSONObject(i) ?: continue
                 val missionDefId = task.optLong("missionDefId").takeIf { it > 0 } ?: task.optLong("id")
@@ -95,8 +95,8 @@ object LuckyStarTask {
                     continue
                 }
 
-                // 黑名单与 UI 风控跳过过滤（静默跳过，不输出无意义刷屏日志）
-                val riskTasks: Set<String> = fansirsqi.xposed.sesame.task.otherTask2.OtherTask2.getElemeRiskTasks().value ?: emptySet()
+                // 黑名单与 UI 风控跳过过滤（静默跳过）
+                val riskTasks: Set<String> = ElemeTask.getElemeRiskTasks().value ?: emptySet()
                 val inRiskTaskSet = riskTasks.contains(missionDefId.toString())
                 val inGlobalBlacklist = TaskBlacklist.isTaskInBlacklist(title) || TaskBlacklist.isTaskInBlacklist(missionDefId.toString())
                 val inKeywordBlacklist = BLACKLIST_KEYWORDS.any { title.contains(it) }
@@ -104,9 +104,9 @@ object LuckyStarTask {
                     continue
                 }
 
-                // 若任务已处于可领奖状态，无需重复做任务，留待第二轮统一领取
+                // 若任务已处于可领奖状态，标记待领奖
                 if (LuckyStarRpcCall.isTaskRewardable(task)) {
-                    Log.other("饿了么", "[幸运星] 任务已达成: [$title] (DefId: $missionDefId)，待第二轮统一领奖")
+                    hasRewardable = true
                     continue
                 }
 
@@ -118,7 +118,6 @@ object LuckyStarTask {
 
                 if (actionType == "PAGEVIEW" && pageSpm.isNotEmpty()) {
                     val pageStageTime = actionValue?.optInt("pageStageTime")?.takeIf { it > 0 } ?: if (title.contains("15秒")) 15 else 10
-                    Log.other("饿了么", "[幸运星] 执行浏览任务: [$title]，模拟浏览 ${pageStageTime} 秒...")
                     Thread.sleep(pageStageTime * 1000L + RandomUtil.nextGaussianLong(500, 1500))
 
                     val viewRes = LuckyStarRpcCall.reportPageView(
@@ -129,17 +128,17 @@ object LuckyStarTask {
                         instanceId = task.optString("instanceId").takeIf { it.isNotEmpty() }
                     )
                     if (viewRes.isSuccess) {
-                        Log.other("饿了么", "[幸运星] 浏览上报成功: [$title]")
                         finishedCount++
+                        hasRewardable = true
                     } else {
                         val rawResp = viewRes.rawJson?.toString() ?: ElemeMtopUtil.lastResponse ?: viewRes.errorMsg
                         val errDetail = "[幸运星] ❌ 浏览上报失败: [$title] -> ${viewRes.errorCode}::${viewRes.errorMsg}\n完整响应:\n$rawResp"
                         Log.error(TAG, errDetail)
                         Log.other("饿了么", errDetail)
                         if (viewRes.errorMsg.contains("405") || viewRes.errorMsg.contains("行为受限") || viewRes.errorMsg.contains("风控")) {
-                            Log.other("饿了么", "[幸运星] 🛡️ 任务[$title](ID:$missionDefId)浏览埋点遭遇风控拦截，已自动加入UI风控跳过名单")
+                            Log.other("饿了么", "[幸运星] 🛡️ 任务[$title](ID:$missionDefId)触发风控，已自动加入UI跳过名单")
                             fansirsqi.xposed.sesame.entity.ElemeRiskTaskEntity.recordRiskTask(missionDefId.toString(), title)
-                            fansirsqi.xposed.sesame.task.otherTask2.OtherTask2.getElemeRiskTasks().value?.add(missionDefId.toString())
+                            ElemeTask.getElemeRiskTasks().value?.add(missionDefId.toString())
                             runCatching {
                                 fansirsqi.xposed.sesame.data.Config.save(fansirsqi.xposed.sesame.util.maps.UserMap.currentUid, true)
                             }
@@ -152,24 +151,21 @@ object LuckyStarTask {
                         ?: if (title.contains("3个") || title.contains("3次")) 3 else 1
                     val done = task.optJSONObject("stage")?.optInt("count") ?: 0
                     val need = (total - done).coerceAtLeast(0).coerceAtMost(3)
-                    Log.other("饿了么", "[幸运星] 执行动作任务: [$title]，总需 $total 次 / 已做 $done 次 / 需推进 $need 次")
                     for (step in 1..need) {
                         val triggerRes = LuckyStarRpcCall.reportTrigger(
                             cookie = cookie,
                             missionDefId = missionDefId,
                             missionXId = missionXId
                         )
-                        if (triggerRes.isSuccess) {
-                            Log.other("饿了么", "[幸运星] 动作推进成功: [$title] ($step/$need)")
-                        } else {
+                        if (!triggerRes.isSuccess) {
                             val rawResp = triggerRes.rawJson?.toString() ?: ElemeMtopUtil.lastResponse ?: triggerRes.errorMsg
                             val errDetail = "[幸运星] ❌ 动作推进失败: [$title] ($step/$need) -> ${triggerRes.errorCode}::${triggerRes.errorMsg}\n完整响应:\n$rawResp"
                             Log.error(TAG, errDetail)
                             Log.other("饿了么", errDetail)
                             if (triggerRes.errorMsg.contains("风控") || triggerRes.errorMsg.contains("405") || triggerRes.errorCode.contains("RISK")) {
-                                Log.other("饿了么", "[幸运星] 🛡️ 任务[$title](ID:$missionDefId)动作推进遭遇风控拦截，已自动加入UI风控跳过名单")
+                                Log.other("饿了么", "[幸运星] 🛡️ 任务[$title](ID:$missionDefId)触发风控，已自动加入UI跳过名单")
                                 fansirsqi.xposed.sesame.entity.ElemeRiskTaskEntity.recordRiskTask(missionDefId.toString(), title)
-                                fansirsqi.xposed.sesame.task.otherTask2.OtherTask2.getElemeRiskTasks().value?.add(missionDefId.toString())
+                                ElemeTask.getElemeRiskTasks().value?.add(missionDefId.toString())
                                 runCatching {
                                     fansirsqi.xposed.sesame.data.Config.save(fansirsqi.xposed.sesame.util.maps.UserMap.currentUid, true)
                                 }
@@ -178,14 +174,20 @@ object LuckyStarTask {
                         }
                         Thread.sleep(RandomUtil.nextGaussianLong(1800, 2600))
                     }
-                    if (need > 0) finishedCount++
-                } else {
-                    Log.other("饿了么", "[幸运星] 跳过非自动化任务: [$title] (actionType: $actionType)")
+                    if (need > 0) {
+                        finishedCount++
+                        hasRewardable = true
+                    }
                 }
             }
 
-            // ==== 第二轮: 重新刷新任务列表并批量领取奖励 ====
-            Log.other("饿了么", "[幸运星] ==== 第二轮: 刷新任务进度并领取奖励 ====")
+            // 若第一轮没有可推进任务且没有任何待领奖任务，直接退出，绝不执行无意义的第二轮与刷新
+            if (finishedCount == 0 && !hasRewardable) {
+                Log.other("饿了么", "[幸运星] 今日无待执行或可领奖任务")
+                return
+            }
+
+            // ==== 第二轮: 刷新任务进度并领取奖励 ====
             Thread.sleep(RandomUtil.nextGaussianLong(1500, 2500))
             val refreshedResp = LuckyStarRpcCall.queryTaskList(cookie)
             val refreshedArray = extractTaskArray(refreshedResp) ?: taskArray
@@ -197,8 +199,8 @@ object LuckyStarTask {
 
                 if (missionDefId <= 0) continue
 
-                // UI 风控跳过名单与通用黑名单过滤（静默跳过，不输出无意义刷屏日志）
-                val riskTasks: Set<String> = fansirsqi.xposed.sesame.task.otherTask2.OtherTask2.getElemeRiskTasks().value ?: emptySet()
+                // UI 风控跳过名单与通用黑名单过滤（静默跳过）
+                val riskTasks: Set<String> = ElemeTask.getElemeRiskTasks().value ?: emptySet()
                 val inRiskTaskSet = riskTasks.contains(missionDefId.toString())
                 val inGlobalBlacklist = TaskBlacklist.isTaskInBlacklist(title) || TaskBlacklist.isTaskInBlacklist(missionDefId.toString())
                 if (inRiskTaskSet || inGlobalBlacklist) {
@@ -213,12 +215,12 @@ object LuckyStarTask {
                         val prizeRes = LuckyStarRpcCall.receivePrize(cookie, task, stage)
                         if (prizeRes.isSuccess) {
                             val rewardDesc = extractPrizeDesc(prizeRes.data ?: prizeRes.rawJson)
-                            val descText = if (rewardDesc.isNotEmpty()) " -> $rewardDesc" else ""
-                            Log.other("饿了么", "[幸运星] 成功领取任务阶段[$stageCount]奖励: [$title]$descText")
+                            val descText = if (rewardDesc.isNotEmpty()) " +$rewardDesc" else ""
+                            Log.other("饿了么", "[幸运星] [$title]$descText")
                             rewardedCount++
                         } else {
                             val rawResp = prizeRes.rawJson?.toString() ?: ElemeMtopUtil.lastResponse ?: prizeRes.errorMsg
-                            val errDetail = "[幸运星] ❌ 领取任务阶段[$stageCount]奖励失败: [$title] -> ${prizeRes.errorCode}::${prizeRes.errorMsg}\n完整响应:\n$rawResp"
+                            val errDetail = "[幸运星] ❌ 领取阶段[$stageCount]奖励失败: [$title] -> ${prizeRes.errorCode}::${prizeRes.errorMsg}\n完整响应:\n$rawResp"
                             Log.error(TAG, errDetail)
                             Log.other("饿了么", errDetail)
 
@@ -230,9 +232,9 @@ object LuckyStarTask {
                                     prizeRes.errorMsg.contains("安全校验")
 
                             if (isRisk) {
-                                Log.other("饿了么", "[幸运星] 🛡️ 任务[$title](ID:$missionDefId)阶段[$stageCount]触发风控拦截，已自动加入UI风控跳过名单")
+                                Log.other("饿了么", "[幸运星] 🛡️ 任务[$title](ID:$missionDefId)触发风控，已自动加入UI跳过名单")
                                 fansirsqi.xposed.sesame.entity.ElemeRiskTaskEntity.recordRiskTask(missionDefId.toString(), title)
-                                fansirsqi.xposed.sesame.task.otherTask2.OtherTask2.getElemeRiskTasks().value?.add(missionDefId.toString())
+                                ElemeTask.getElemeRiskTasks().value?.add(missionDefId.toString())
                                 runCatching {
                                     fansirsqi.xposed.sesame.data.Config.save(fansirsqi.xposed.sesame.util.maps.UserMap.currentUid, true)
                                 }
@@ -251,8 +253,8 @@ object LuckyStarTask {
                     val prizeRes = LuckyStarRpcCall.receivePrize(cookie, task, null)
                     if (prizeRes.isSuccess) {
                         val rewardDesc = extractPrizeDesc(prizeRes.data ?: prizeRes.rawJson)
-                        val descText = if (rewardDesc.isNotEmpty()) " -> $rewardDesc" else ""
-                        Log.other("饿了么", "[幸运星] 成功领取任务奖励: [$title]$descText")
+                        val descText = if (rewardDesc.isNotEmpty()) " +$rewardDesc" else ""
+                        Log.other("饿了么", "[幸运星] [$title]$descText")
                         rewardedCount++
                     } else {
                         val rawResp = prizeRes.rawJson?.toString() ?: ElemeMtopUtil.lastResponse ?: prizeRes.errorMsg
@@ -268,9 +270,9 @@ object LuckyStarTask {
                                 prizeRes.errorMsg.contains("安全校验")
 
                         if (isRisk) {
-                            Log.other("饿了么", "[幸运星] 🛡️ 任务[$title](ID:$missionDefId)触发风控拦截，已自动加入UI风控跳过名单")
+                            Log.other("饿了么", "[幸运星] 🛡️ 任务[$title](ID:$missionDefId)触发风控，已自动加入UI跳过名单")
                             fansirsqi.xposed.sesame.entity.ElemeRiskTaskEntity.recordRiskTask(missionDefId.toString(), title)
-                            fansirsqi.xposed.sesame.task.otherTask2.OtherTask2.getElemeRiskTasks().value?.add(missionDefId.toString())
+                            ElemeTask.getElemeRiskTasks().value?.add(missionDefId.toString())
                             runCatching {
                                 fansirsqi.xposed.sesame.data.Config.save(fansirsqi.xposed.sesame.util.maps.UserMap.currentUid, true)
                             }
@@ -290,7 +292,7 @@ object LuckyStarTask {
             val finalStars = extractStarAmount(finalProperty)
             val delta = finalStars - initialStars
 
-            Log.other("饿了么", "[幸运星] ==== 饿了么幸运星任务执行完毕: 完成 $finishedCount 个任务, 成功领奖 $rewardedCount 次, 当前星数: $finalStars (+$delta) ====")
+            Log.other("饿了么", "[幸运星] 执行完毕: 完成 $finishedCount 个任务, 领奖 $rewardedCount 次, 当前星数: $finalStars (+$delta)")
         } catch (t: Throwable) {
             val errMsg = "[幸运星] ❌ 执行饿了么幸运星任务异常: ${t.message}"
             Log.error(TAG, errMsg)

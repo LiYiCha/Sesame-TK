@@ -29,8 +29,8 @@ object BurstRedTask {
             val initCookie = ElemeAuth.ensureCookie()
             if (initCookie.isEmpty() || !ElemeAuth.isBound()) {
                 val reason = if (initCookie.isEmpty()) "未获取到有效登录凭证(账号未绑定或换票失败)" else "当前未关联有效饿了么账号"
-                Log.other("饿了么", "[爆红包] $reason，自动关闭【饿了么|爆红包】开关并退出")
-                fansirsqi.xposed.sesame.task.otherTask2.OtherTask2.disableElemeBurstRed(reason)
+                Log.other("饿了么", "[爆红包] $reason，自动关闭【外卖爆红包】开关并退出")
+                ElemeTask.disableElemeBurstRed(reason)
                 return
             }
 

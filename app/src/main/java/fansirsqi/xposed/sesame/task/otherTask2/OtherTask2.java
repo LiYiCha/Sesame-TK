@@ -10,8 +10,6 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.locks.ReentrantLock;
 
 import fansirsqi.xposed.sesame.data.Status;
-import fansirsqi.xposed.sesame.entity.ElemeRiskTaskEntity;
-import fansirsqi.xposed.sesame.model.modelFieldExt.ChoiceModelField;
 import fansirsqi.xposed.sesame.model.modelFieldExt.EmptyModelField;
 import fansirsqi.xposed.sesame.model.modelFieldExt.IntegerModelField;
 import fansirsqi.xposed.sesame.model.modelFieldExt.SelectModelField;
@@ -66,56 +64,6 @@ public class OtherTask2 extends ModelTask {
     private BooleanModelField playConsultFacade = new BooleanModelField("playConsultFacade","会员|转盘",false);
     private IntegerModelField playConsultFacadeNum = new IntegerModelField("playConsultFacadeNum","会员|转盘-次数",10);
     private BooleanModelField topUpGoldTask = new BooleanModelField("topUpGoldTask", "充值金任务", false);
-    @Getter
-    private static final BooleanModelField elemeLuckyStar = new BooleanModelField("elemeLuckyStar", "饿了么|幸运星", false);
-    @Getter
-    private static final BooleanModelField elemeFreeOrder = new BooleanModelField("elemeFreeOrder", "饿了么|抽免单", false);
-    @Getter
-    private static final BooleanModelField elemeBurstRed = new BooleanModelField("elemeBurstRed", "饿了么|爆红包", false);
-    private static final ChoiceModelField elemeUaMode = new ChoiceModelField(
-            "elemeUaMode",
-            "饿了么|设备指纹/UA模式",
-            2,
-            new String[]{
-                    "系统默认 (本机实际系统指纹)",
-                    "自定义 User-Agent (使用下方自定义UA)",
-                    "🎲 近几年全系真实热门机型随机生成",
-                    "Redmi K70 / K80 系列热门机型生成",
-                    "Xiaomi 14 / 15 旗舰系列机型生成",
-                    "vivo X100 / X200 / iQOO 系列机型生成",
-                    "OPPO Find X7 / X8 / 一加系列机型生成",
-                    "HONOR Magic 6 / 7 系列机型生成",
-                    "HUAWEI Mate 60 / 70 / Pura 70 系列机型生成",
-                    "Samsung Galaxy S24 / S25 系列机型生成"
-            },
-            "切换饿了么请求的机型指纹与 UA。支持选择真实热门手机家族生成该类型不同手机，或选择自定义UA"
-    );
-    private static final EmptyModelField elemeGenerateUa = new EmptyModelField(
-            "elemeGenerateUa",
-            "饿了么|🎲 点击生成设备指纹/UA",
-            "生成设备指纹与UA",
-            "确定要按所选模式生成该类型的真实手机并固定生效吗？\n（生成后将自动保存并固定生效，日常执行不会自动变动）",
-            context -> fansirsqi.xposed.sesame.task.otherTask2.eleme.ElemeMtopUtil.INSTANCE.generateAndSaveRandomProfile(context)
-    );
-    private static final StringModelField elemeCustomUa = new StringModelField(
-            "elemeCustomUa",
-            "饿了么|自定义User-Agent",
-            "",
-            "【直接修改此项即可生效】可直接粘贴或修改完整 UA 字符串。\n【Redmi K70 真实 UA 示例】: Mozilla/5.0 (Linux; U; Android 14; zh-CN; 2311DRK48C Build/UKQ1.230804.001) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/130.0.6723.107 UCBrowser/17.4.2.1610 Mobile Safari/537.36 AlipayDefined(nt:wifi,ws:412|0|915) AliApp(AP/12.12.30.8000) AlipayClient/12.12.30.8000 Language/zh-Hans useStatusBar/true isConcaveScreen/false Region/CN Channel/xiaomi GCanvas/1.9.38 Nebula SDK/1.8.1000 Nebula Ariver/1.0.0"
-    );
-    private static final StringModelField elemeCustomProfile = new StringModelField(
-            "elemeCustomProfile",
-            "饿了么|当前生效设备详情",
-            "",
-            "当前生效的设备指纹详情(JSON格式)。点击上方【生成】按钮可自动切换生成，也可手动查看与微调。"
-    );
-    private static final SelectModelField elemeRiskTasks = new SelectModelField(
-            "elemeRiskTasks",
-            "饿了么|风控与跳过任务",
-            new java.util.LinkedHashSet<>(java.util.Arrays.asList("47780001", "49020001", "47774001", "48596001")),
-            ElemeRiskTaskEntity::getList,
-            "勾选的任务将在执行与领奖时自动跳过（默认已勾选百川风控任务）。若需重新测试，取消勾选即可重新请求。"
-    );
     public static final BooleanModelField gameCenterGoldCashExchange = new BooleanModelField("gameCenterGoldCashExchange", "游戏金币|兑换现金", false);
 
 
@@ -127,26 +75,6 @@ public class OtherTask2 extends ModelTask {
         return gameCenterGoldCashExchange;
     }
 
-    public static ChoiceModelField getElemeUaMode() {
-        return elemeUaMode;
-    }
-
-    public static EmptyModelField getElemeGenerateUa() {
-        return elemeGenerateUa;
-    }
-
-    public static StringModelField getElemeCustomUa() {
-        return elemeCustomUa;
-    }
-
-    public static StringModelField getElemeCustomProfile() {
-        return elemeCustomProfile;
-    }
-
-    public static SelectModelField getElemeRiskTasks() {
-        return elemeRiskTasks;
-    }
-
     public static void disableGameCenterGoldCashExchange(String reason) {
         Log.runtime(TAG, "游戏金币兑换现金不可用(" + reason + ")，自动关闭【游戏金币|兑换现金】开关");
         try {
@@ -154,36 +82,6 @@ public class OtherTask2 extends ModelTask {
             fansirsqi.xposed.sesame.data.Config.save(fansirsqi.xposed.sesame.util.maps.UserMap.getCurrentUid(), true);
         } catch (Throwable t) {
             Log.error(TAG, "关闭游戏金币兑换现金开关异常: " + t.getMessage());
-        }
-    }
-
-    public static void disableElemeLuckyStar(String reason) {
-        Log.other("饿了么", "[幸运星] 饿了么幸运星不可用(" + reason + ")，自动关闭【饿了么|幸运星】开关");
-        try {
-            elemeLuckyStar.setValue(false);
-            fansirsqi.xposed.sesame.data.Config.save(fansirsqi.xposed.sesame.util.maps.UserMap.getCurrentUid(), true);
-        } catch (Throwable t) {
-            Log.error(TAG, "关闭饿了么幸运星开关异常: " + t.getMessage());
-        }
-    }
-
-    public static void disableElemeFreeOrder(String reason) {
-        Log.other("饿了么", "[抽免单] 饿了么免单不可用(" + reason + ")，自动关闭【饿了么|抽免单】开关");
-        try {
-            elemeFreeOrder.setValue(false);
-            fansirsqi.xposed.sesame.data.Config.save(fansirsqi.xposed.sesame.util.maps.UserMap.getCurrentUid(), true);
-        } catch (Throwable t) {
-            Log.error(TAG, "关闭饿了么抽免单开关异常: " + t.getMessage());
-        }
-    }
-
-    public static void disableElemeBurstRed(String reason) {
-        Log.other("饿了么", "[爆红包] 饿了么爆红包不可用(" + reason + ")，自动关闭【饿了么|爆红包】开关");
-        try {
-            elemeBurstRed.setValue(false);
-            fansirsqi.xposed.sesame.data.Config.save(fansirsqi.xposed.sesame.util.maps.UserMap.getCurrentUid(), true);
-        } catch (Throwable t) {
-            Log.error(TAG, "关闭饿了么爆红包开关异常: " + t.getMessage());
         }
     }
 
@@ -208,14 +106,6 @@ public class OtherTask2 extends ModelTask {
         modelFields.addField(playConsultFacade);
         modelFields.addField(playConsultFacadeNum);
         modelFields.addField(topUpGoldTask);
-        modelFields.addField(elemeLuckyStar);
-        modelFields.addField(elemeFreeOrder);
-        modelFields.addField(elemeBurstRed);
-        modelFields.addField(elemeUaMode);
-        modelFields.addField(elemeGenerateUa);
-        modelFields.addField(elemeCustomUa);
-        modelFields.addField(elemeCustomProfile);
-        modelFields.addField(elemeRiskTasks);
         modelFields.addField(gameCenterGoldCashExchange);
         return modelFields;
     }
@@ -352,24 +242,6 @@ public class OtherTask2 extends ModelTask {
                         new TaskWrapper("充值金任务", () -> {
                             if (topUpGoldTask.getValue()) {
                                 new TopUpGold().handle();
-                            }
-                        }),
-
-                        new TaskWrapper("饿了么抽免单", () -> {
-                            if (elemeFreeOrder.getValue() && !Status.hasFlagToday("Eleme_FreeOrder_Done")) {
-                                fansirsqi.xposed.sesame.task.otherTask2.eleme.FreeOrderTask.INSTANCE.handle();
-                            }
-                        }),
-
-                        new TaskWrapper("饿了么爆红包", () -> {
-                            if (elemeBurstRed.getValue() && !Status.hasFlagToday("Eleme_BurstRed_Done")) {
-                                fansirsqi.xposed.sesame.task.otherTask2.eleme.BurstRedTask.INSTANCE.handle();
-                            }
-                        }),
-
-                        new TaskWrapper("饿了么幸运星", () -> {
-                            if (elemeLuckyStar.getValue() && !Status.hasFlagToday("Eleme_LuckyStar_Done")) {
-                                fansirsqi.xposed.sesame.task.otherTask2.eleme.LuckyStarTask.INSTANCE.handle();
                             }
                         })
                 )));

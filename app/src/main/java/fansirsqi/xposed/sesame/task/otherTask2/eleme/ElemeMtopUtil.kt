@@ -347,6 +347,30 @@ object ElemeMtopUtil {
     }
 
     /**
+     * 获取系统原生默认设备配置
+     */
+    private fun getDefaultNativeProfile(): DeviceProfile {
+        val alipayVer = ApplicationHook.getAlipayVersion()?.versionString?.takeIf { it.isNotEmpty() } ?: "12.12.30.8000"
+        val releaseVer = android.os.Build.VERSION.RELEASE.ifEmpty { "14" }
+        val model = android.os.Build.MODEL.ifEmpty { "V2238A" }
+        val brand = android.os.Build.BRAND.ifEmpty { "vivo" }
+        val brandModel = if (model.startsWith(brand, ignoreCase = true)) "$brand/$model" else "$brand/$brand,$model"
+        return DeviceProfile(
+            brand = brand,
+            model = model,
+            brandModel = brandModel,
+            release = releaseVer,
+            buildId = android.os.Build.ID.ifEmpty { "UP1A.231005.007" },
+            alipayVer = alipayVer,
+            chromeVer = "130.0.6723.107",
+            ucVer = "17.4.2.1610",
+            screenWs = "412|0|915",
+            deviceId = "asdLYB2rw6kDAN+qYdXj9afD",
+            marketingName = "系统原版默认"
+        )
+    }
+
+    /**
      * 重置会话指纹缓存
      */
     fun resetSessionProfile() {
@@ -354,85 +378,43 @@ object ElemeMtopUtil {
     }
 
     /**
-     * 手动触发生成并保存全新真实设备指纹或应用自定义UA（仅在用户在 UI 点击按钮时调用）
+     * 手动触发随机生成近几年真实市售热门机型（如 Redmi K70 系列、小米15、vivo X100 等）的真实完整 UA
+     * 仅在用户在 UI 点击【🎲 随机生成真实设备UA】按钮时触发，日常任务执行绝不会变动
      */
+    @JvmStatic
+    @JvmOverloads
     fun generateAndSaveRandomProfile(context: android.content.Context? = null): DeviceProfile {
-        val mode = runCatching {
-            fansirsqi.xposed.sesame.task.otherTask2.OtherTask2.getElemeUaMode().value ?: 2
-        }.getOrDefault(2)
+        val newProfile = generateDynamicProfile(2)
+        val generatedUa = newProfile.httpUa()
 
-        val alipayVer = ApplicationHook.getAlipayVersion()?.versionString?.takeIf { it.isNotEmpty() } ?: "12.12.26.8100"
-
-        val newProfile: DeviceProfile
-        if (mode == 1) {
-            val customUa = runCatching {
-                fansirsqi.xposed.sesame.task.otherTask2.OtherTask2.getElemeCustomUa().value.orEmpty().trim()
-            }.getOrDefault("")
-            if (customUa.isEmpty()) {
-                if (context != null) {
-                    runCatching {
-                        android.app.AlertDialog.Builder(context)
-                            .setTitle("提示")
-                            .setMessage("您当前选择了【自定义 User-Agent】模式，但下方的【饿了么|自定义User-Agent】输入框为空。\n\n请先在该输入框中粘贴您的完整 UA 字符串，再点击生成应用。")
-                            .setPositiveButton(fansirsqi.xposed.sesame.R.string.ok, null)
-                            .create()
-                            .show()
-                    }
-                }
-                newProfile = generateDynamicProfile(2)
-            } else {
-                newProfile = parseCustomUa(customUa, alipayVer)
-            }
-        } else {
-            newProfile = generateDynamicProfile(mode)
-        }
-
-        val json = newProfile.toJson()
-
-        // 存入 OtherTask2 的配置字段并持久化保存
-        fansirsqi.xposed.sesame.task.otherTask2.OtherTask2.getElemeCustomProfile().value = json
-        // 同步填入完整 HTTP User-Agent 字符串到自定义 UA 输入框，便于用户直接查看与随时修改微调
-        fansirsqi.xposed.sesame.task.otherTask2.OtherTask2.getElemeCustomUa().value = newProfile.httpUa()
+        // 同步填入 ElemeTask 的自定义 UA 配置并持久化保存
+        ElemeTask.getElemeCustomUa().value = generatedUa
         runCatching {
             fansirsqi.xposed.sesame.data.Config.save(fansirsqi.xposed.sesame.util.maps.UserMap.currentUid, true)
         }
 
-        // 更新当前生效指纹
+        // 更新当前会话生效指纹
         sessionProfile = newProfile
 
-        val logText = "[设备指纹] 🎲 已生成并保存新设备指纹: ${newProfile.summary()} | DeviceId: ${newProfile.deviceId}"
-        Log.other("饿了么", logText)
-
-        if (context != null && (mode != 1 || fansirsqi.xposed.sesame.task.otherTask2.OtherTask2.getElemeCustomUa().value.orEmpty().isNotBlank())) {
+        if (context != null) {
             runCatching {
                 val displayName = newProfile.marketingName?.takeIf { it.isNotBlank() } ?: newProfile.model
-                val msg = if (!newProfile.customHttpUa.isNullOrBlank()) {
-                    "已成功解析并应用自定义 User-Agent：\n\n" +
-                    "【识别机型】$displayName (${newProfile.brandModel})\n" +
-                    "【系统版本】Android ${newProfile.release} (Build/${newProfile.buildId})\n" +
-                    "【浏览器内核】Chrome ${newProfile.chromeVer} / UC ${newProfile.ucVer}\n" +
-                    "【屏幕分辨率】${newProfile.screenWs}\n" +
-                    "【设备标识ID】${newProfile.deviceId}\n\n" +
-                    "【生效 User-Agent】\n${newProfile.customHttpUa}\n\n" +
-                    "✅ 已固定保存并生效！"
-                } else {
-                    "已从近几年真实热门机型库中生成该类型设备：\n\n" +
-                    "【机型品名】$displayName\n" +
-                    "【系统版本】Android ${newProfile.release} (Build/${newProfile.buildId})\n" +
-                    "【浏览器内核】Chrome ${newProfile.chromeVer} / UC ${newProfile.ucVer}\n" +
-                    "【屏幕分辨率】${newProfile.screenWs}\n" +
-                    "【设备标识ID】${newProfile.deviceId}\n\n" +
-                    "【生成的完整 User-Agent 字符串】\n${newProfile.httpUa()}\n\n" +
-                    "✅ 已固定保存并同步填入下方的【自定义User-Agent】输入框！若需微调直接修改该输入框即可。"
-                }
+                val msg = "已从近几年真实热门机型库中随机生成：\n\n" +
+                        "【机型品名】$displayName (${newProfile.model})\n" +
+                        "【系统版本】Android ${newProfile.release} (Build/${newProfile.buildId})\n" +
+                        "【浏览器内核】Chrome ${newProfile.chromeVer} / UC ${newProfile.ucVer}\n" +
+                        "【屏幕分辨率】${newProfile.screenWs}\n\n" +
+                        "【生成的完整 User-Agent】:\n$generatedUa\n\n" +
+                        "✅ 已自动填入【自定义User-Agent】中并持久化保存！日常执行将稳定使用该 UA。"
+
                 android.app.AlertDialog.Builder(context)
-                    .setTitle("设备指纹/UA 生成成功")
+                    .setTitle("真实设备 UA 生成成功")
                     .setMessage(msg)
                     .setPositiveButton(fansirsqi.xposed.sesame.R.string.ok, null)
                     .create()
                     .show()
             }.onFailure {
-                android.widget.Toast.makeText(context, "已生成并保存设备指纹: ${newProfile.summary()}", android.widget.Toast.LENGTH_LONG).show()
+                android.widget.Toast.makeText(context, "已生成并保存真实设备UA: ${newProfile.summary()}", android.widget.Toast.LENGTH_LONG).show()
             }
         }
 
@@ -440,49 +422,51 @@ object ElemeMtopUtil {
     }
 
     /**
-     * 获取当前生效的设备指纹配置（受 OtherTask2.elemeUaMode 控制）
-     * 0: 系统默认 (本机系统/vivo V2238A)
-     * 1: 自定义 User-Agent (读取 elemeCustomUa)
-     * 2~9: 读取已持久化保存的该模式设备指纹
+     * 弹窗展示当前实际生效的设备详情与完整 User-Agent
+     */
+    @JvmStatic
+    @JvmOverloads
+    fun showActiveProfileDialog(context: android.content.Context? = null) {
+        if (context == null) return
+        val profile = getActiveProfile()
+        val customUa = ElemeTask.getElemeCustomUa().value.orEmpty().trim()
+        val modeDesc = if (customUa.isNotEmpty()) "自定义 User-Agent 生效中" else "系统原版默认指纹生效中"
+        val displayName = profile.marketingName?.takeIf { it.isNotBlank() } ?: profile.model
+
+        val msg = "【当前运行模式】$modeDesc\n\n" +
+                "【识别机型】$displayName (${profile.brandModel})\n" +
+                "【系统版本】Android ${profile.release} (Build/${profile.buildId})\n" +
+                "【支付宝版本】${profile.alipayVer}\n" +
+                "【浏览器内核】Chrome ${profile.chromeVer} / UC ${profile.ucVer}\n" +
+                "【屏幕分辨率】${profile.screenWs}\n\n" +
+                "【当前生效的完整 User-Agent】:\n${profile.httpUa()}"
+
+        runCatching {
+            android.app.AlertDialog.Builder(context)
+                .setTitle("当前生效设备详情")
+                .setMessage(msg)
+                .setPositiveButton(fansirsqi.xposed.sesame.R.string.ok, null)
+                .create()
+                .show()
+        }
+    }
+
+    /**
+     * 获取当前生效的设备指纹配置
+     * 默认使用系统原版真实指纹；若用户设置了自定义 UA 则使用自定义 UA
      */
     fun getActiveProfile(): DeviceProfile {
         sessionProfile?.let { return it }
 
-        val mode = runCatching {
-            fansirsqi.xposed.sesame.task.otherTask2.OtherTask2.getElemeUaMode().value ?: 2
-        }.getOrDefault(2)
+        val alipayVer = ApplicationHook.getAlipayVersion()?.versionString?.takeIf { it.isNotEmpty() } ?: "12.12.30.8000"
+        val customUa = runCatching {
+            ElemeTask.getElemeCustomUa().value.orEmpty().trim()
+        }.getOrDefault("")
 
-        val alipayVer = ApplicationHook.getAlipayVersion()?.versionString?.takeIf { it.isNotEmpty() } ?: "12.12.26.8100"
-
-        val profile = when {
-            mode == 1 -> {
-                val customUa = runCatching {
-                    fansirsqi.xposed.sesame.task.otherTask2.OtherTask2.getElemeCustomUa().value.orEmpty().trim()
-                }.getOrDefault("")
-                if (customUa.isNotEmpty()) {
-                    parseCustomUa(customUa, alipayVer)
-                } else {
-                    val savedJson = runCatching {
-                        fansirsqi.xposed.sesame.task.otherTask2.OtherTask2.getElemeCustomProfile().value.orEmpty()
-                    }.getOrDefault("")
-                    val saved = if (savedJson.isNotEmpty()) DeviceProfile.fromJson(savedJson) else null
-                    saved ?: generateAndSaveRandomProfile(null)
-                }
-            }
-            mode == 0 -> {
-                val releaseVer = android.os.Build.VERSION.RELEASE.ifEmpty { "16" }
-                val model = android.os.Build.MODEL.ifEmpty { "V2238A" }
-                val brand = android.os.Build.BRAND.ifEmpty { "vivo" }
-                val brandModel = if (model.startsWith(brand, ignoreCase = true)) "$brand/$model" else "$brand/$brand,$model"
-                DeviceProfile(brand, model, brandModel, releaseVer, "BP1A.250305.019", alipayVer, "157.0.7150.128", "17.4.2.1610", "384|0|853", "asdLYB2rw6kDAN+qYdXj9afD", marketingName = "本机默认")
-            }
-            else -> {
-                val savedJson = runCatching {
-                    fansirsqi.xposed.sesame.task.otherTask2.OtherTask2.getElemeCustomProfile().value.orEmpty()
-                }.getOrDefault("")
-                val saved = if (savedJson.isNotEmpty()) DeviceProfile.fromJson(savedJson) else null
-                saved ?: generateAndSaveRandomProfile(null)
-            }
+        val profile = if (customUa.isNotEmpty()) {
+            parseCustomUa(customUa, alipayVer)
+        } else {
+            getDefaultNativeProfile()
         }
 
         sessionProfile = profile

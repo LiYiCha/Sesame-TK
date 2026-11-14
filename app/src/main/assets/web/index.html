@@ -91,10 +91,19 @@
                                         </div>
                                     </div>
                                     <!-- 输入框组件 -->
-                                    <div class="flex-space-between pdTB10" v-if="['MULTIPLY_INTEGER','LIST','MULTIPLY_INTEGER','INTEGER','STRING','TEXT'].includes(item.type)">
+                                    <div class="flex-space-between pdTB10" v-if="['MULTIPLY_INTEGER','LIST','INTEGER'].includes(item.type)">
                                         <div class="title">{{item.name}}</div>
                                         <div class="w120">
-                                            <van-field v-model="item.configValue" placeholder="请输入..." :disabled="item.type==='TEXT'" />
+                                            <van-field v-model="item.configValue" placeholder="请输入..." />
+                                        </div>
+                                    </div>
+                                    <!-- 字符串与长文本组件：支持弹窗查看完整内容与方便修改 -->
+                                    <div class="flex-space-between pdTB10" v-if="['STRING','TEXT'].includes(item.type)">
+                                        <div class="title" @click="openTextDialog(item)">{{item.name}}</div>
+                                        <div class="flex-center" @click="openTextDialog(item)">
+                                            <div class="link" style="max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px;">
+                                                {{ item.configValue || '点击编辑/查看...' }}
+                                            </div>
                                         </div>
                                     </div>
                                     <!-- 文本组件 -->
@@ -175,10 +184,18 @@
                                             <van-switch v-model="item.configValue" size="20px" active-value="true" inactive-value="false" />
                                         </div>
                                     </div>
-                                    <div class="flex-space-between pdTB10" v-if="['MULTIPLY_INTEGER','LIST','MULTIPLY_INTEGER','INTEGER','STRING','TEXT'].includes(item.type)">
+                                    <div class="flex-space-between pdTB10" v-if="['MULTIPLY_INTEGER','LIST','INTEGER'].includes(item.type)">
                                         <div class="title">{{item.name}}</div>
                                         <div class="w120">
-                                            <van-field v-model="item.configValue" placeholder="请输入..." :disabled="item.type==='TEXT'" />
+                                            <van-field v-model="item.configValue" placeholder="请输入..." />
+                                        </div>
+                                    </div>
+                                    <div class="flex-space-between pdTB10" v-if="['STRING','TEXT'].includes(item.type)">
+                                        <div class="title" @click="openTextDialog(item)">{{item.name}}</div>
+                                        <div class="flex-center" @click="openTextDialog(item)">
+                                            <div class="link" style="max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px;">
+                                                {{ item.configValue || '点击编辑/查看...' }}
+                                            </div>
                                         </div>
                                     </div>
                                     <div class="flex-space-between pdTB10" v-if="['TEXT'].includes(item.type)">
@@ -281,6 +298,24 @@
                 </div>
             </van-dialog>
 
+            <!-- 字符串与长文本弹窗 -->
+            <van-dialog v-model:show="text_dialog.visible" :title="text_dialog.title" show-cancel-button cancelButtonText="取消" confirmButtonText="保存" @confirm="handleSaveText">
+                <div style="padding: 12px 16px;">
+                    <div v-if="text_dialog.desc" style="font-size: 12px; color: #888; margin-bottom: 8px; line-height: 1.4; word-break: break-all;">
+                        {{ text_dialog.desc }}
+                    </div>
+                    <van-field
+                        v-model="text_dialog.value"
+                        rows="7"
+                        autosize
+                        type="textarea"
+                        placeholder="请输入或粘贴完整内容..."
+                        :disabled="text_dialog.readonly"
+                        style="border: 1px solid #dcdee0; border-radius: 6px; padding: 8px; font-size: 13px; line-height: 1.5; background: #fafafa;"
+                    />
+                </div>
+            </van-dialog>
+
             </div>
 
         <script>
@@ -318,6 +353,32 @@
                   modelName: "",
                   check_all: false,
                 });
+
+                // 字符串与长文本编辑弹窗
+                const text_dialog = ref({
+                  visible: false,
+                  title: "",
+                  desc: "",
+                  value: "",
+                  readonly: false,
+                  targetItem: null,
+                });
+
+                function openTextDialog(item) {
+                  text_dialog.value.visible = true;
+                  text_dialog.value.title = item.name;
+                  text_dialog.value.desc = item.desc || "";
+                  text_dialog.value.value = item.configValue || "";
+                  text_dialog.value.readonly = item.type === "TEXT";
+                  text_dialog.value.targetItem = item;
+                }
+
+                function handleSaveText() {
+                  if (text_dialog.value.targetItem && !text_dialog.value.readonly) {
+                    text_dialog.value.targetItem.configValue = text_dialog.value.value;
+                  }
+                  text_dialog.value.visible = false;
+                }
       
                 const com_person_list_filter = computed(() => {
                   return person_list.value.list.filter((item) =>
@@ -587,7 +648,10 @@
                   theme,
                   addEvent,
                   getModelIcon,
-                  getDefaultModelIcon
+                  getDefaultModelIcon,
+                  text_dialog,
+                  openTextDialog,
+                  handleSaveText
                 };
               },
             })

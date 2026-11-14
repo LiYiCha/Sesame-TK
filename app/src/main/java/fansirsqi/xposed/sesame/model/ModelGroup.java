@@ -14,6 +14,7 @@ public enum ModelGroup {
     , EXCHANGE("EXCHANGE", "青春特权", "svg/group/member.svg")
     , OTHER("OTHER", "其他", "svg/group/other.svg")
     , OTHER2("OTHER2", "其他2", "svg/group/other.svg")
+    , ELEME("ELEME", "饿了么", "svg/group/other.svg")
     ;
     final String code;
     final String name;

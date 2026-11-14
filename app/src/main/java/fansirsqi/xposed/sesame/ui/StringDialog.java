@@ -55,6 +55,11 @@ public class StringDialog {
      */
     private static AlertDialog getEditDialog(Context c) {
         EditText edt = new EditText(c);
+        edt.setMinLines(5);
+        edt.setMaxLines(15);
+        edt.setGravity(android.view.Gravity.TOP | android.view.Gravity.START);
+        edt.setScrollContainer(true);
+        edt.setPadding(40, 30, 40, 30);
         AlertDialog editDialog = new AlertDialog.Builder(c)
                 .setTitle("title")
                 .setView(edt)
@@ -132,6 +137,11 @@ public class StringDialog {
         EditText edt = new EditText(c);
         edt.setInputType(InputType.TYPE_NULL);
         edt.setTextColor(Color.GRAY);
+        edt.setMinLines(5);
+        edt.setMaxLines(15);
+        edt.setGravity(android.view.Gravity.TOP | android.view.Gravity.START);
+        edt.setScrollContainer(true);
+        edt.setPadding(40, 30, 40, 30);
         edt.setText(String.valueOf(modelField.getConfigValue()));
         return new AlertDialog.Builder(c)
                 .setTitle("读取")
