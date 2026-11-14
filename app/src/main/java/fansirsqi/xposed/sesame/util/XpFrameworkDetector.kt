@@ -3,6 +3,9 @@ package fansirsqi.xposed.sesame.util
 import android.content.Context
 import android.content.pm.PackageManager
 import fansirsqi.xposed.sesame.data.ViewAppInfo
+import java.io.BufferedReader
+import java.io.File
+import java.io.FileReader
 
 /**
  * Xposed 框架及运行管线探测器
@@ -30,6 +33,9 @@ object XpFrameworkDetector {
             val summary = "$name$ver$api"
             detectedFramework = summary
             ViewAppInfo.xpFrameworkVersion = summary
+            val env = getEnvironmentSummary()
+            ViewAppInfo.xpEnvSummary = env
+            Files.saveXpEnv(env)
         }
     }
 
@@ -39,14 +45,19 @@ object XpFrameworkDetector {
     @JvmStatic
     fun detectTraditional(classLoader: ClassLoader?, context: Context? = null): String {
         return runCatching {
-            detectedPipeline = "xposed_init"
             var framework = detectFrameworkName(classLoader, context)
             val bridgeVersion = getBridgeVersion()
             if (bridgeVersion > 0) {
                 framework = "$framework (v$bridgeVersion)"
             }
-            detectedFramework = framework
-            ViewAppInfo.xpFrameworkVersion = framework
+            if (detectedPipeline != "libxposed") {
+                detectedPipeline = "xposed_init"
+                detectedFramework = framework
+                ViewAppInfo.xpFrameworkVersion = framework
+            }
+            val env = getEnvironmentSummary()
+            ViewAppInfo.xpEnvSummary = env
+            Files.saveXpEnv(env)
             framework
         }.getOrDefault("Xposed (传统管线)").also {
             if (detectedFramework.isBlank()) {
@@ -63,29 +74,56 @@ object XpFrameworkDetector {
     fun getFrameworkSummary(): String {
         return runCatching {
             if (detectedFramework.isNotBlank()) {
-                return detectedFramework
+                return@runCatching detectedFramework
             }
             val stored = ViewAppInfo.xpFrameworkVersion
             if (!stored.isNullOrBlank()) {
-                return stored
+                return@runCatching stored
+            }
+            val envFromFile = Files.getXpEnv()
+            if (!envFromFile.isNullOrBlank()) {
+                val parts = envFromFile.split("|").map { it.trim() }
+                if (parts.size >= 2 && parts[1].isNotBlank()) {
+                    return@runCatching parts[1]
+                }
+                return@runCatching envFromFile
             }
             "未激活 / 未检测到"
         }.getOrDefault("未激活 / 未检测到")
     }
 
     /**
-     * 获取环境完整日志描述（用于冷启动日志输出）
+     * 获取环境完整日志描述（用于冷启动日志与UI卡片展示）
      */
     @JvmStatic
     fun getEnvironmentSummary(): String {
         return runCatching {
-            val pipeline = when (detectedPipeline) {
-                "libxposed" -> "现代管线 (libxposed)"
-                "xposed_init" -> "传统管线 (xposed_init)"
-                else -> "自动探测"
+            if (detectedFramework.isNotBlank()) {
+                val pipeline = when (detectedPipeline) {
+                    "libxposed" -> "现代管线 (libxposed)"
+                    "xposed_init" -> "传统管线 (xposed_init)"
+                    else -> "自动探测"
+                }
+                return@runCatching "$pipeline | $detectedFramework"
             }
-            val fw = getFrameworkSummary()
-            "$pipeline | $fw"
+            val inMemory = ViewAppInfo.xpEnvSummary
+            if (inMemory.isNotBlank() && inMemory != "未激活 / 未检测到") {
+                return@runCatching inMemory
+            }
+            val fileSaved = Files.getXpEnv()
+            if (!fileSaved.isNullOrBlank()) {
+                ViewAppInfo.xpEnvSummary = fileSaved
+                return@runCatching fileSaved
+            }
+            // 尝试在当前进程轻量探测一次（避免在模块自身进程内有框架却未初始化的漏检）
+            val runtimeFw = detectFrameworkName(XpFrameworkDetector::class.java.classLoader, null)
+            if (runtimeFw != "Xposed" && runtimeFw != "未知框架") {
+                val summary = "传统管线 (xposed_init) | $runtimeFw"
+                ViewAppInfo.xpEnvSummary = summary
+                Files.saveXpEnv(summary)
+                return@runCatching summary
+            }
+            "未激活 / 未检测到"
         }.getOrDefault("未激活 / 未检测到")
     }
 
@@ -98,7 +136,7 @@ object XpFrameworkDetector {
     }
 
     private fun detectFrameworkName(classLoader: ClassLoader?, context: Context?): String {
-        // 1. 优先检查 NPatch / LSPatch 应用元数据
+        // 1. 优先检查 NPatch / LSPatch 应用元数据 (AndroidManifest meta-data)
         if (context != null) {
             runCatching {
                 val appInfo = context.packageManager.getApplicationInfo(context.packageName, PackageManager.GET_META_DATA)
@@ -110,39 +148,95 @@ object XpFrameworkDetector {
             }
         }
 
-        // 2. 检查 NPatch / LSPatch 注入类
-        if (classLoader != null) {
-            if (hasClass(classLoader, "npatch.loader.HookLoader")) {
+        // 2. 检查当前进程内存 maps 中是否有注入的 SO 文件
+        runCatching {
+            val mapFw = detectFromProcMaps()
+            if (mapFw != null) return mapFw
+        }
+
+        // 3. 检查 ClassLoader 类名特征
+        runCatching {
+            var curCl = classLoader ?: XpFrameworkDetector::class.java.classLoader
+            while (curCl != null) {
+                val clName = curCl.javaClass.name
+                if (clName.contains("NPClassLoader", ignoreCase = true)) return "NPatch (免Root内置)"
+                if (clName.contains("LSPClassLoader", ignoreCase = true)) return "LSPatch (免Root内置)"
+                if (clName.contains("VectorClassLoader", ignoreCase = true)) return "NPatch / Vector"
+                curCl = curCl.parent
+            }
+        }
+
+        // 4. 检查注入类（依次检查传入 ClassLoader、自身 ClassLoader、上下文 ClassLoader）
+        val loaders = listOfNotNull(
+            classLoader,
+            XpFrameworkDetector::class.java.classLoader,
+            Thread.currentThread().contextClassLoader,
+            ClassLoader.getSystemClassLoader()
+        )
+
+        for (loader in loaders) {
+            if (hasClass(loader, "npatch.loader.HookLoader")) {
                 return "NPatch (免Root内置)"
             }
-            if (hasClass(classLoader, "org.lsposed.lspatch.loader.HookLoader") ||
-                hasClass(classLoader, "org.lsposed.lspatch.loader.LSPClassLoader")
+            if (hasClass(loader, "org.lsposed.lspatch.loader.HookLoader") ||
+                hasClass(loader, "org.lsposed.lspatch.loader.LSPClassLoader")
             ) {
                 return "NPatch / LSPatch (免Root内置)"
             }
+            if (hasClass(loader, "org.lsposed.lspd.core.Startup") ||
+                hasClass(loader, "org.lsposed.lspd.service.LSPService")
+            ) {
+                return "LSPosed (Root)"
+            }
+            if (hasClass(loader, "org.meowcat.edxposed.EdXposed") ||
+                hasClass(loader, "com.solohsu.android.edxp.EdXposed")
+            ) {
+                return "EdXposed"
+            }
+            if (hasClass(loader, "com.swift.sandhook.SandHook")) {
+                return "SandHook"
+            }
+            if (hasClass(loader, "me.weishu.exp.Bridge")) {
+                return "TaiChi (太极)"
+            }
         }
 
-        // 3. 检查系统级 LSPosed
+        // 5. 检查全局常见系统类
         if (hasClass("org.lsposed.lspd.core.Startup") || hasClass("org.lsposed.lspd.service.LSPService")) {
             return "LSPosed (Root)"
         }
-
-        // 4. 检查 EdXposed
         if (hasClass("org.meowcat.edxposed.EdXposed") || hasClass("com.solohsu.android.edxp.EdXposed")) {
             return "EdXposed"
         }
-
-        // 5. 检查 SandHook
         if (hasClass("com.swift.sandhook.SandHook")) {
             return "SandHook"
         }
-
-        // 6. 检查 太极
         if (hasClass("me.weishu.exp.Bridge")) {
             return "TaiChi (太极)"
         }
+        if (hasClass("de.robv.android.xposed.XposedBridge")) {
+            return "Xposed"
+        }
 
-        return "Xposed"
+        return "未知框架"
+    }
+
+    private fun detectFromProcMaps(): String? {
+        val mapsFile = File("/proc/self/maps")
+        if (!mapsFile.canRead()) return null
+        BufferedReader(FileReader(mapsFile)).use { reader ->
+            var line: String?
+            while (reader.readLine().also { line = it } != null) {
+                val str = line ?: continue
+                if (str.contains("libnpatch.so")) return "NPatch (免Root内置)"
+                if (str.contains("liblspatch.so")) return "LSPatch (免Root内置)"
+                if (str.contains("libvector.so")) return "NPatch / Vector"
+                if (str.contains("liblspd.so")) return "LSPosed (Root)"
+                if (str.contains("libsandhook.so")) return "SandHook"
+                if (str.contains("libedxp.so")) return "EdXposed"
+            }
+        }
+        return null
     }
 
     private fun hasClass(className: String): Boolean {

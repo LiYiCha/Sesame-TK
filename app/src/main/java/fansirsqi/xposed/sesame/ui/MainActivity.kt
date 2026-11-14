@@ -110,7 +110,13 @@ class MainActivity : BaseActivity() {
         mainActivityThemeObserver.invoke()
         val deviceInfo: ComposeView = findViewById(R.id.device_info)
 
-        deviceInfoState.value = DeviceInfoUtil.showInfo(verifyId, "未登录")
+        val initialUser = runCatching {
+            Files.getActiveUser()?.let { uid ->
+                UserMap.loadSelf(uid)
+                UserMap.get(uid)?.let { "${it.showName} (${it.account})" } ?: uid
+            }
+        }.getOrNull() ?: "未登录"
+        deviceInfoState.value = DeviceInfoUtil.showInfo(verifyId, initialUser)
         deviceInfo.setContent {
             SesameTheme {
                 DeviceInfoCard(
@@ -143,6 +149,7 @@ class MainActivity : BaseActivity() {
                             val env = intent.getStringExtra("xp_env")
                             if (!env.isNullOrBlank()) {
                                 ViewAppInfo.xpEnvSummary = env
+                                Files.saveXpEnv(env)
                             }
                             if (!fw.isNullOrBlank()) {
                                 ViewAppInfo.xpFrameworkVersion = fw
@@ -187,7 +194,10 @@ class MainActivity : BaseActivity() {
             if (!ViewAppInfo.veriftag) {
                 viewHandler.postDelayed(titleRunner, 3000)
                 try {
-                    sendBroadcast(Intent(General.ACTION_STATUS_QUERY))
+                    val queryIntent = Intent(General.ACTION_STATUS_QUERY).apply {
+                        setPackage(General.PACKAGE_NAME)
+                    }
+                    sendBroadcast(queryIntent)
                 } catch (th: Throwable) {
                     Log.runtime("view sendBroadcast status err:")
                     Log.printStackTrace(th)
@@ -256,7 +266,13 @@ class MainActivity : BaseActivity() {
                     withContext(Dispatchers.Main) {
                         userNameArray = arrayOf("默认")
                         userEntityArray = arrayOf(null)
-                        deviceInfoState.value = DeviceInfoUtil.showInfo(verifyId, "未登录")
+                        val initialUser = runCatching {
+                            Files.getActiveUser()?.let { uid ->
+                                UserMap.loadSelf(uid)
+                                UserMap.get(uid)?.let { "${it.showName} (${it.account})" } ?: uid
+                            }
+                        }.getOrNull() ?: "未登录"
+                        deviceInfoState.value = DeviceInfoUtil.showInfo(verifyId, initialUser)
                     }
                 }
             }

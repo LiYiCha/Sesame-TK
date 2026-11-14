@@ -586,4 +586,35 @@ object Files {
             null
         }
     }
+
+    @JvmStatic
+    fun getXpEnvFile(): File {
+        return File(CONFIG_DIR, "xp_env.txt")
+    }
+
+    @JvmStatic
+    fun saveXpEnv(env: String) {
+        val clean = env.trim()
+        if (clean.isEmpty() || clean == "未激活 / 未检测到") return
+        try {
+            write2File(clean, getXpEnvFile())
+        } catch (e: Exception) {
+            Log.printStackTrace(TAG, "saveXpEnv 错误", e)
+        }
+    }
+
+    @JvmStatic
+    fun getXpEnv(): String? {
+        return try {
+            val file = getXpEnvFile()
+            if (file.exists()) {
+                val content = readFromFile(file)?.trim()
+                if (!content.isNullOrEmpty() && content != "未激活 / 未检测到") content else null
+            } else {
+                null
+            }
+        } catch (e: Exception) {
+            null
+        }
+    }
 }

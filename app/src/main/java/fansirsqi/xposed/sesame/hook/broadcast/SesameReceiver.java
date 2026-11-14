@@ -83,8 +83,11 @@ public class SesameReceiver extends BroadcastReceiver {
                     try {
                         Intent reply = new Intent(General.ACTION_STATUS_REPLY);
                         try {
+                            reply.setPackage(General.MODULE_PACKAGE_NAME);
+                            String env = fansirsqi.xposed.sesame.util.XpFrameworkDetector.getEnvironmentSummary();
                             reply.putExtra("framework", fansirsqi.xposed.sesame.util.XpFrameworkDetector.getFrameworkSummary());
-                            reply.putExtra("xp_env", fansirsqi.xposed.sesame.util.XpFrameworkDetector.getEnvironmentSummary());
+                            reply.putExtra("xp_env", env);
+                            fansirsqi.xposed.sesame.util.Files.saveXpEnv(env);
                         } catch (Throwable ignored) {}
                         context.sendBroadcast(reply);
                     } catch (Throwable th) {

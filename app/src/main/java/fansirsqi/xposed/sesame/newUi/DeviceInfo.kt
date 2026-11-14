@@ -1226,7 +1226,7 @@ object DeviceInfoUtil {
 
         val infoMap = LinkedHashMap<String, String>()
         infoMap["当前账号"] = activeUser
-        val xpEnv = ViewAppInfo.xpEnvSummary.takeIf { it.isNotBlank() }
+        val xpEnv = ViewAppInfo.xpEnvSummary.takeIf { it.isNotBlank() && it != "未激活 / 未检测到" }
             ?: runCatching { fansirsqi.xposed.sesame.util.XpFrameworkDetector.getEnvironmentSummary() }.getOrDefault("未激活 / 未检测到")
         infoMap["XP 环境"] = xpEnv
         infoMap["Product"] = "${Build.MANUFACTURER} ${Build.PRODUCT}"
