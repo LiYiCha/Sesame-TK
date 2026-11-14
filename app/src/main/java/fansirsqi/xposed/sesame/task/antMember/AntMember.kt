@@ -842,7 +842,11 @@ class AntMember : ModelTask() {
 
         try {
             val signResJo = JSONObject(doSignRes)
-            if (ResChecker.checkRes(TAG, signResJo)) {
+            val isSuccess = signResJo.optBoolean("success", false) ||
+                signResJo.optString("resultCode").equals("SUCCESS", ignoreCase = true) ||
+                signResJo.optString("resultCode") == "200"
+
+            if (isSuccess) {
                 val prizeInfo = signResJo.optJSONObject("prizeInfo")
                     ?: signResJo.optJSONObject("data")?.optJSONObject("prizeInfo")
                 val prizeDesc = prizeInfo?.optString("prizeDesc")
@@ -851,10 +855,21 @@ class AntMember : ModelTask() {
                 Log.other(TAG, "新任务中心[签到成功]#$prizeDesc")
                 setFlagToday("AntMember_NewTaskCenter_Sign_Done")
             } else {
-                val errorMsg = newTaskCenterErrorDesc(signResJo)
-                Log.error(TAG, "新任务中心签到失败: $errorMsg")
-                if (errorMsg.contains("已签到") || errorMsg.contains("REPEAT") || errorMsg.contains("ALREADY")) {
+                val resultCode = signResJo.optString("resultCode")
+                val resultDesc = newTaskCenterErrorDesc(signResJo)
+                val isCaptchaBlocked = resultCode == "CAPTCHA_BLOCK" ||
+                    resultDesc.contains("安全校验") ||
+                    resultDesc.contains("验证码") ||
+                    !signResJo.optBoolean("retryable", true)
+
+                if (isCaptchaBlocked) {
+                    Log.other(TAG, "新任务中心[跳过签到]#触发安全校验拦截($resultDesc)，今日不再重试")
                     setFlagToday("AntMember_NewTaskCenter_Sign_Done")
+                } else {
+                    Log.error(TAG, "新任务中心签到失败: $resultDesc")
+                    if (resultDesc.contains("已签到") || resultDesc.contains("REPEAT") || resultDesc.contains("ALREADY")) {
+                        setFlagToday("AntMember_NewTaskCenter_Sign_Done")
+                    }
                 }
             }
         } catch (e: Exception) {
