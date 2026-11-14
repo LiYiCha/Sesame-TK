@@ -48,7 +48,14 @@ object ElemeMtopUtil {
             if (!customHttpUa.isNullOrBlank()) {
                 customHttpUa
             } else {
-                "Mozilla/5.0 (Linux; U; Android $release; zh-CN; $brandModel Build/$buildId) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/$chromeVer UCBrowser/$ucVer Mobile Safari/537.36 AlipayDefined(nt:wifi,ws:$screenWs) AliApp(AP/$alipayVer) AlipayClient/$alipayVer Language/zh-Hans useStatusBar/true isConcaveScreen/false Region/CN Channel/${brand.lowercase()} GCanvas/1.9.38 Nebula SDK/1.8.1000 Nebula Ariver/1.0.0"
+                val deviceToken = if (model.startsWith(brand, ignoreCase = true)) {
+                    model
+                } else if (brand.equals("vivo", ignoreCase = true) || brand.equals("iQOO", ignoreCase = true)) {
+                    "$brand $model"
+                } else {
+                    model
+                }
+                "Mozilla/5.0 (Linux; U; Android $release; zh-CN; $deviceToken Build/$buildId) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/$chromeVer UCBrowser/$ucVer Mobile Safari/537.36 AlipayDefined(nt:wifi,ws:$screenWs) AliApp(AP/$alipayVer) AlipayClient/$alipayVer Language/zh-Hans useStatusBar/true isConcaveScreen/false Region/CN Channel/${brand.lowercase()} GCanvas/1.9.38 Nebula SDK/1.8.1000 Nebula Ariver/1.0.0"
             }
 
         fun toJson(): String {
@@ -384,6 +391,8 @@ object ElemeMtopUtil {
 
         // 存入 OtherTask2 的配置字段并持久化保存
         fansirsqi.xposed.sesame.task.otherTask2.OtherTask2.getElemeCustomProfile().value = json
+        // 同步填入完整 HTTP User-Agent 字符串到自定义 UA 输入框，便于用户直接查看与随时修改微调
+        fansirsqi.xposed.sesame.task.otherTask2.OtherTask2.getElemeCustomUa().value = newProfile.httpUa()
         runCatching {
             fansirsqi.xposed.sesame.data.Config.save(fansirsqi.xposed.sesame.util.maps.UserMap.currentUid, true)
         }
@@ -403,18 +412,18 @@ object ElemeMtopUtil {
                     "【系统版本】Android ${newProfile.release} (Build/${newProfile.buildId})\n" +
                     "【浏览器内核】Chrome ${newProfile.chromeVer} / UC ${newProfile.ucVer}\n" +
                     "【屏幕分辨率】${newProfile.screenWs}\n" +
-                    "【设备标识ID】${newProfile.deviceId}\n" +
-                    "【自定义UA】${newProfile.customHttpUa}\n\n" +
-                    "✅ 已固定保存并生效！日常任务将持续使用此 UA，不会变动。"
+                    "【设备标识ID】${newProfile.deviceId}\n\n" +
+                    "【生效 User-Agent】\n${newProfile.customHttpUa}\n\n" +
+                    "✅ 已固定保存并生效！"
                 } else {
                     "已从近几年真实热门机型库中生成该类型设备：\n\n" +
                     "【机型品名】$displayName\n" +
-                    "【品牌代号】${newProfile.brandModel}\n" +
                     "【系统版本】Android ${newProfile.release} (Build/${newProfile.buildId})\n" +
                     "【浏览器内核】Chrome ${newProfile.chromeVer} / UC ${newProfile.ucVer}\n" +
                     "【屏幕分辨率】${newProfile.screenWs}\n" +
                     "【设备标识ID】${newProfile.deviceId}\n\n" +
-                    "✅ 已固定保存至配置！日常任务将持续使用此真实设备指纹，不会变动。"
+                    "【生成的完整 User-Agent 字符串】\n${newProfile.httpUa()}\n\n" +
+                    "✅ 已固定保存并同步填入下方的【自定义User-Agent】输入框！若需微调直接修改该输入框即可。"
                 }
                 android.app.AlertDialog.Builder(context)
                     .setTitle("设备指纹/UA 生成成功")

@@ -101,7 +101,7 @@ public class OtherTask2 extends ModelTask {
             "elemeCustomUa",
             "饿了么|自定义User-Agent",
             "",
-            "直接粘贴自定义的完整 User-Agent 字符串。在【模式】选择【自定义 User-Agent】时直接使用此 UA"
+            "【直接修改此项即可生效】可直接粘贴或修改完整 UA 字符串。\n【Redmi K70 真实 UA 示例】: Mozilla/5.0 (Linux; U; Android 14; zh-CN; 2311DRK48C Build/UKQ1.230804.001) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/130.0.6723.107 UCBrowser/17.4.2.1610 Mobile Safari/537.36 AlipayDefined(nt:wifi,ws:412|0|915) AliApp(AP/12.12.30.8000) AlipayClient/12.12.30.8000 Language/zh-Hans useStatusBar/true isConcaveScreen/false Region/CN Channel/xiaomi GCanvas/1.9.38 Nebula SDK/1.8.1000 Nebula Ariver/1.0.0"
     );
     private static final StringModelField elemeCustomProfile = new StringModelField(
             "elemeCustomProfile",
