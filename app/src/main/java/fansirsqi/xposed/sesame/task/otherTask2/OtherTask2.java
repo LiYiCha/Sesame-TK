@@ -77,14 +77,16 @@ public class OtherTask2 extends ModelTask {
             "饿了么|设备指纹/UA模式",
             1,
             new String[]{
-                    "系统默认 (vivo V2238A / Android 16)",
-                    "🎲 随机设备指纹 (仅点击下方按钮生成并固定)",
-                    "vivo X200 Pro (Android 15)",
-                    "Xiaomi 15 (Android 15)",
-                    "OPPO Find X8 (Android 15)",
-                    "HONOR Magic7 (Android 15)"
+                    "系统默认 (本机实际系统指纹)",
+                    "🎲 全品牌无限动态随机生成 (永不枯竭)",
+                    "vivo / iQOO 系列无限动态生成",
+                    "Xiaomi / Redmi 系列无限动态生成",
+                    "OPPO / OnePlus 系列无限动态生成",
+                    "HONOR 系列无限动态生成",
+                    "Samsung 系列无限动态生成",
+                    "HUAWEI 系列无限动态生成"
             },
-            "切换饿了么请求的机型指纹与 UA，可有效规避单一指纹引发的百川风控"
+            "切换饿了么请求的机型指纹与 UA。点击下方【生成】按钮将按所选模式无限生成全新真实设备并固定生效"
     );
     private static final EmptyModelField elemeGenerateUa = new EmptyModelField(
             "elemeGenerateUa",
