@@ -11,34 +11,39 @@ import java.util.UUID
 /**
  * 饿了么 H5 MTOP 签名与请求协议工具
  * 基于真实抓包逆向算法：sign = md5("&" + t + "&12574478&" + data)
- * 支持多主流机型设备指纹库（vivo、Xiaomi、OPPO、HONOR）切换与随机轮换防风控
+ * 支持多主流机型设备指纹库（vivo、Xiaomi、OPPO、HONOR、HUAWEI、Samsung）真实动态随机生成与轮换
  */
 object ElemeMtopUtil {
     private const val TAG = "ElemeMtopUtil"
     const val APP_KEY = "12574478"
     const val JSV = "2.4.12"
-    const val TTID = "2021005151656223@alipay_android_12.1.53"
 
     @Volatile
     var lastError: String? = null
     @Volatile
     var lastResponse: String? = null
 
+    // 单次会话级指纹缓存：确保单次任务执行生命周期内所有接口使用完全相同的真实设备指纹
+    @Volatile
+    private var sessionProfile: DeviceProfile? = null
+
     data class DeviceProfile(
         val brand: String,
         val model: String,
+        val brandModel: String,
         val release: String,
-        val buildId: String = "BP1A.250305.019",
-        val alipayVer: String = "12.12.30.8000",
-        val deviceId: String = "atIrzF9s9okDAMFZV1uAZf1x"
+        val buildId: String,
+        val alipayVer: String,
+        val chromeVer: String,
+        val ucVer: String,
+        val screenWs: String,
+        val deviceId: String
     ) {
-        fun brandModel(): String = if (model.startsWith(brand, ignoreCase = true)) "$brand/$model" else "$brand/$brand,$model"
-
-        fun eleUa(appId: String): String =
-            "RenderWay/miniProgram MiniAppId/$appId MiniAppVersion/12.1.53 DeviceId/$deviceId AppName/ap ${brandModel()} Android/$release AlipayClient/$alipayVer AliApp(AP/$alipayVer) userMode/student channel/mini_app subChannel/miniapp.alipay subSubChannel/miniapp.alipay.et"
+        fun eleUa(appId: String = ElemeAuth.APP_ID): String =
+            "RenderWay/miniProgram MiniAppId/$appId MiniAppVersion/12.1.53 DeviceId/$deviceId AppName/ap $brandModel Android/$release AlipayClient/$alipayVer AliApp(AP/$alipayVer) userMode/student channel/mini_app subChannel/miniapp.alipay subSubChannel/miniapp.alipay.et"
 
         fun httpUa(): String =
-            "Mozilla/5.0 (Linux; U; Android $release; zh-CN; ${brandModel()} Build/$buildId) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/118.0.0.0 UCBrowser/16.3.8.1402 Mobile Safari/537.36 AlipayDefined(nt:wifi,ws:384|0|853) AliApp(AP/$alipayVer) AlipayClient/$alipayVer Language/zh-Hans useStatusBar/true isConcaveScreen/false Region/CN Channel/${brand.lowercase()} GCanvas/1.9.38 Nebula SDK/1.8.1000 Nebula Ariver/1.0.0"
+            "Mozilla/5.0 (Linux; U; Android $release; zh-CN; $brandModel Build/$buildId) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/$chromeVer UCBrowser/$ucVer Mobile Safari/537.36 AlipayDefined(nt:wifi,ws:$screenWs) AliApp(AP/$alipayVer) AlipayClient/$alipayVer Language/zh-Hans useStatusBar/true isConcaveScreen/false Region/CN Channel/${brand.lowercase()} GCanvas/1.9.38 Nebula SDK/1.8.1000 Nebula Ariver/1.0.0"
     }
 
     data class MtopResult(
@@ -50,41 +55,136 @@ object ElemeMtopUtil {
         val rawJson: JSONObject? = null
     )
 
+    private data class DeviceTemplate(
+        val brand: String,
+        val model: String,
+        val brandModel: String,
+        val defaultRelease: String,
+        val buildId: String
+    )
+
+    // 真实主流 Android 设备特征指纹模板库（全面覆盖 vivo、小米/红米、OPPO/一加、荣耀、华为、三星）
+    private val DEVICE_TEMPLATES = listOf(
+        // vivo / iQOO
+        DeviceTemplate("vivo", "V2309A", "vivo/vivo,V2309A", "14", "UP1A.231005.007"),
+        DeviceTemplate("vivo", "V2324A", "vivo/vivo,V2324A", "14", "UP1A.231005.007"),
+        DeviceTemplate("vivo", "V2339A", "vivo/vivo,V2339A", "14", "UP1A.231005.007"),
+        DeviceTemplate("vivo", "V2307A", "vivo/vivo,V2307A", "14", "UP1A.231005.007"),
+        DeviceTemplate("vivo", "V2238A", "vivo/vivo,V2238A", "13", "TKQ1.220829.002"),
+        DeviceTemplate("vivo", "V2241A", "vivo/vivo,V2241A", "13", "TKQ1.220829.002"),
+        // Xiaomi / Redmi
+        DeviceTemplate("Xiaomi", "23116PN5BC", "Xiaomi/Xiaomi,23116PN5BC", "14", "UKQ1.230804.001"),
+        DeviceTemplate("Xiaomi", "23127PN0CC", "Xiaomi/Xiaomi,23127PN0CC", "14", "UKQ1.230804.001"),
+        DeviceTemplate("Xiaomi", "24031PN0DC", "Xiaomi/Xiaomi,24031PN0DC", "14", "UKQ1.230804.001"),
+        DeviceTemplate("Redmi", "2311DRK48C", "Redmi/Xiaomi,2311DRK48C", "14", "UKQ1.230804.001"),
+        DeviceTemplate("Redmi", "23117RK66C", "Redmi/Xiaomi,23117RK66C", "14", "UKQ1.230804.001"),
+        DeviceTemplate("Xiaomi", "2210132C", "Xiaomi/Xiaomi,2210132C", "13", "TKQ1.220829.002"),
+        // OPPO / OnePlus
+        DeviceTemplate("OPPO", "PHY110", "OPPO/OPPO,PHY110", "14", "UKQ1.230924.001"),
+        DeviceTemplate("OPPO", "PHT110", "OPPO/OPPO,PHT110", "14", "UKQ1.230924.001"),
+        DeviceTemplate("OnePlus", "PJE110", "OnePlus/OnePlus,PJE110", "14", "UKQ1.230924.001"),
+        DeviceTemplate("OnePlus", "PJF110", "OnePlus/OnePlus,PJF110", "14", "UKQ1.230924.001"),
+        DeviceTemplate("OPPO", "PGEM10", "OPPO/OPPO,PGEM10", "13", "TP1A.220905.001"),
+        // HONOR
+        DeviceTemplate("HONOR", "BVL-AN00", "HONOR/HONOR,BVL-AN00", "14", "HONORBVL-AN00"),
+        DeviceTemplate("HONOR", "BVL-AN16", "HONOR/HONOR,BVL-AN16", "14", "HONORBVL-AN16"),
+        DeviceTemplate("HONOR", "VER-AN00", "HONOR/HONOR,VER-AN00", "13", "HONORVER-AN00"),
+        DeviceTemplate("HONOR", "FRI-AN00", "HONOR/HONOR,FRI-AN00", "13", "HONORFRI-AN00"),
+        // HUAWEI
+        DeviceTemplate("HUAWEI", "ALN-AL00", "HUAWEI/HUAWEI,ALN-AL00", "12", "HUAWEIALN-AL00"),
+        DeviceTemplate("HUAWEI", "ALN-AL10", "HUAWEI/HUAWEI,ALN-AL10", "12", "HUAWEIALN-AL10"),
+        DeviceTemplate("HUAWEI", "HBP-AL00", "HUAWEI/HUAWEI,HBP-AL00", "12", "HUAWEIHBP-AL00"),
+        // Samsung
+        DeviceTemplate("samsung", "SM-S9280", "samsung/samsung,SM-S9280", "14", "UP1A.231005.007"),
+        DeviceTemplate("samsung", "SM-S9210", "samsung/samsung,SM-S9210", "14", "UP1A.231005.007"),
+        DeviceTemplate("samsung", "SM-S9180", "samsung/samsung,SM-S9180", "13", "TP1A.220624.014")
+    )
+
+    private val CHROME_VERSIONS = listOf("118.0.0.0", "121.0.0.0", "124.0.0.0", "126.0.0.0", "128.0.0.0", "130.0.0.0")
+    private val UC_VERSIONS = listOf("16.3.8.1402", "16.2.8.1396", "16.5.0.1420", "15.9.6.1360", "16.0.4.1378")
+    private val SCREEN_RESOLUTIONS = listOf("384|0|853", "393|0|873", "412|0|915", "360|0|800", "432|0|960", "390|0|844")
+
+    private fun generateRandomDeviceId(): String {
+        val chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789+/"
+        return (1..24).map { chars[RandomUtil.nextInt(0, chars.length)] }.joinToString("")
+    }
+
+    private fun buildProfileFromTemplate(tpl: DeviceTemplate): DeviceProfile {
+        val alipayVer = ApplicationHook.getAlipayVersion()?.versionString?.takeIf { it.isNotEmpty() } ?: "12.12.30.8000"
+        val chromeVer = CHROME_VERSIONS[RandomUtil.nextInt(0, CHROME_VERSIONS.size)]
+        val ucVer = UC_VERSIONS[RandomUtil.nextInt(0, UC_VERSIONS.size)]
+        val screenWs = SCREEN_RESOLUTIONS[RandomUtil.nextInt(0, SCREEN_RESOLUTIONS.size)]
+        val deviceId = generateRandomDeviceId()
+        return DeviceProfile(
+            brand = tpl.brand,
+            model = tpl.model,
+            brandModel = tpl.brandModel,
+            release = tpl.defaultRelease,
+            buildId = tpl.buildId,
+            alipayVer = alipayVer,
+            chromeVer = chromeVer,
+            ucVer = ucVer,
+            screenWs = screenWs,
+            deviceId = deviceId
+        )
+    }
+
+    /**
+     * 重置会话指纹缓存（在新轮次或新执行启动时调用，使得随机模式产生全新的合法设备指纹）
+     */
+    fun resetSessionProfile() {
+        sessionProfile = null
+    }
+
     /**
      * 获取当前生效的设备指纹配置（受 OtherTask2.elemeUaMode 控制）
      * 0: 系统默认
-     * 1: vivo X100 Pro
-     * 2: Xiaomi 14
-     * 3: OPPO Find X7
-     * 4: HONOR Magic6
-     * 5: 随机轮换 (每次执行随机挑选机型)
+     * 1: vivo 系列随机机型与指纹
+     * 2: Xiaomi/Redmi 系列随机机型与指纹
+     * 3: OPPO/OnePlus 系列随机机型与指纹
+     * 4: HONOR 系列随机机型与指纹
+     * 5: 🎲 全随机真实主流机型指纹（随机品牌/机型/版本/UC/Chrome/分辨率/DeviceId）
      */
     fun getActiveProfile(): DeviceProfile {
-        val alipayVer = ApplicationHook.getAlipayVersion()?.versionString?.takeIf { it.isNotEmpty() } ?: "12.12.30.8000"
+        sessionProfile?.let { return it }
+
         val mode = runCatching {
-            fansirsqi.xposed.sesame.task.otherTask2.OtherTask2.getElemeUaMode().value ?: 0
-        }.getOrDefault(0)
+            fansirsqi.xposed.sesame.task.otherTask2.OtherTask2.getElemeUaMode().value ?: 5
+        }.getOrDefault(5)
 
-        val presetProfiles = listOf(
-            DeviceProfile("vivo", "V2309A", "14", "UP1A.231005.007", alipayVer, "asdLYB2rw6kDAN+qYdXj9afD"),         // vivo X100 Pro
-            DeviceProfile("Xiaomi", "23116PN5BC", "14", "UKQ1.230804.001", alipayVer, "atIrzF9s9okDAMFZV1uAZf1x"),     // Xiaomi 14
-            DeviceProfile("OPPO", "PHY110", "14", "UKQ1.230924.001", alipayVer, "bnJszG9s1okDAMFZY2uAZg2y"),          // OPPO Find X7
-            DeviceProfile("HONOR", "BVL-AN00", "14", "HONORBVL-AN00", alipayVer, "coKtzH9s2okDAMFZz3uAZh3z")          // HONOR Magic6
-        )
-
-        return when (mode) {
-            1 -> presetProfiles[0]
-            2 -> presetProfiles[1]
-            3 -> presetProfiles[2]
-            4 -> presetProfiles[3]
-            5 -> presetProfiles[RandomUtil.nextInt(0, presetProfiles.size)]
-            else -> {
+        val profile = when (mode) {
+            1 -> {
+                val vivoPool = DEVICE_TEMPLATES.filter { it.brand.equals("vivo", ignoreCase = true) }
+                buildProfileFromTemplate(vivoPool[RandomUtil.nextInt(0, vivoPool.size)])
+            }
+            2 -> {
+                val miPool = DEVICE_TEMPLATES.filter { it.brand.equals("Xiaomi", ignoreCase = true) || it.brand.equals("Redmi", ignoreCase = true) }
+                buildProfileFromTemplate(miPool[RandomUtil.nextInt(0, miPool.size)])
+            }
+            3 -> {
+                val oppoPool = DEVICE_TEMPLATES.filter { it.brand.equals("OPPO", ignoreCase = true) || it.brand.equals("OnePlus", ignoreCase = true) }
+                buildProfileFromTemplate(oppoPool[RandomUtil.nextInt(0, oppoPool.size)])
+            }
+            4 -> {
+                val honorPool = DEVICE_TEMPLATES.filter { it.brand.equals("HONOR", ignoreCase = true) }
+                buildProfileFromTemplate(honorPool[RandomUtil.nextInt(0, honorPool.size)])
+            }
+            0 -> {
+                val alipayVer = ApplicationHook.getAlipayVersion()?.versionString?.takeIf { it.isNotEmpty() } ?: "12.12.30.8000"
                 val releaseVer = android.os.Build.VERSION.RELEASE.ifEmpty { "16" }
                 val model = android.os.Build.MODEL.ifEmpty { "V2238A" }
                 val brand = android.os.Build.BRAND.ifEmpty { "vivo" }
-                DeviceProfile(brand, model, releaseVer, "BP1A.250305.019", alipayVer, "asdLYB2rw6kDAN+qYdXj9afD")
+                val brandModel = if (model.startsWith(brand, ignoreCase = true)) "$brand/$model" else "$brand/$brand,$model"
+                DeviceProfile(brand, model, brandModel, releaseVer, "BP1A.250305.019", alipayVer, "118.0.0.0", "16.3.8.1402", "384|0|853", "asdLYB2rw6kDAN+qYdXj9afD")
+            }
+            else -> {
+                // 5 及默认：全随机动态生成真实主流设备指纹
+                buildProfileFromTemplate(DEVICE_TEMPLATES[RandomUtil.nextInt(0, DEVICE_TEMPLATES.size)])
             }
         }
+
+        sessionProfile = profile
+        return profile
     }
 
     fun getCurrentHttpUa(): String = getActiveProfile().httpUa()
@@ -114,9 +214,7 @@ object ElemeMtopUtil {
         lastResponse = null
 
         val profile = getActiveProfile()
-        val brandModel = profile.brandModel()
-        val releaseVer = profile.release
-        val alipayVer = profile.alipayVer
+        val ttid = "2021005151656223@alipay_android_${profile.alipayVer}"
 
         // 严格遵循阿里 Aladdin 引擎规范，保证 instance 参数完整
         val enrichedDataJson = runCatching {
@@ -135,9 +233,8 @@ object ElemeMtopUtil {
         val timestamp = System.currentTimeMillis()
         val sign = calculateSign(timestamp, enrichedDataJson)
         val encodedData = URLEncoder.encode(enrichedDataJson, "UTF-8")
-        val encodedTtid = URLEncoder.encode(TTID, "UTF-8")
+        val encodedTtid = URLEncoder.encode(ttid, "UTF-8")
 
-        // 严格遵循真机抓包 tb.log 第 55/1483 行规范，杜绝拼入不存在的 platform/product/prodVersion 等非标 query
         val isPost = method.equals("POST", ignoreCase = true)
         val commonQuery = "jsv=$JSV&appKey=$APP_KEY&t=$timestamp&sign=$sign&api=$api&dataType=json&method=${if (isPost) "POST" else "GET"}&timeout=10000&v=$version&type=originaljson&ttid=$encodedTtid&accountSite=eleme&enableCookie=true&prefetchTimeout=10000&mpHost=waimai-guide.ele.me&_bx-m=0.0.15"
         val requestUrl = if (isPost) {
@@ -155,6 +252,7 @@ object ElemeMtopUtil {
         val reqId = "${UUID.randomUUID().toString().replace("-", "").uppercase()}|$timestamp"
         headers["x-eleme-requestid"] = reqId
         headers["x-ele-ua"] = profile.eleUa(ElemeAuth.APP_ID)
+        headers["User-Agent"] = profile.httpUa()
         if (extraHeaders != null) headers.putAll(extraHeaders)
 
         val resp = if (isPost) {
@@ -166,9 +264,10 @@ object ElemeMtopUtil {
         }
 
         if (resp == null) {
-            val err = "[$api] 网络请求失败，未收到响应内容"
+            val err = "[$api] 网络请求失败，未收到响应内容 (URL: $requestUrl)"
             lastError = err
-            Log.other("饿了么", err)
+            Log.error("ElemeMtopUtil", err)
+            Log.other("饿了么", "❌ $err")
             return MtopResult(isSuccess = false, isNotLogin = false, errorMsg = err)
         }
         lastResponse = resp
@@ -208,7 +307,8 @@ object ElemeMtopUtil {
                     resp.contains("\"errorCode\":\"000502\"")
 
             if (isNotLogin) {
-                Log.other("饿了么", "[$api] 会话已失效(需要重新登录)，自动清除本地凭据以便刷新")
+                Log.error("ElemeMtopUtil", "[$api] 会话已失效(需要重新登录)! 完整响应:\n$resp")
+                Log.other("饿了么", "[$api] ⚠️ 会话已失效(需要重新登录)，自动清除本地凭据以便刷新\n完整响应:\n$resp")
                 ElemeAuth.invalidate()
                 val err = "会话失效: 需要登录"
                 lastError = err
@@ -223,16 +323,19 @@ object ElemeMtopUtil {
                     errorMessage.isNotEmpty() -> errorMessage
                     else -> ret
                 }
-                val err = "[$api] 响应失败: $readableErr"
+                val err = "[$api] 响应失败: $readableErr\n完整响应:\n$resp"
                 lastError = err
-                // 使用 Log.other 打印，确保主界面日志面板完整展示错误与风控拦截信息
-                Log.other("饿了么", err)
+                // 使用 Log.error 记录异常日志与完整报文
+                Log.error("ElemeMtopUtil", err)
+                // 在主任务日志中输出错误并附带完整原始响应
+                Log.other("饿了么", "❌ [$api] 响应失败: $readableErr\n完整响应:\n$resp")
                 MtopResult(isSuccess = false, isNotLogin = false, errorCode = errorCode, errorMsg = readableErr, data = dataObj, rawJson = root)
             }
         }.onFailure {
-            val err = "[$api] 解析 JSON 异常: ${it.message}"
+            val err = "[$api] 解析 JSON 异常: ${it.message}\n原始响应:\n$resp"
             lastError = err
-            Log.other("饿了么", err)
+            Log.error("ElemeMtopUtil", err)
+            Log.other("饿了么", "❌ $err")
         }.getOrDefault(MtopResult(isSuccess = false, isNotLogin = false, errorMsg = lastError.orEmpty()))
     }
 

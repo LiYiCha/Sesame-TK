@@ -55,10 +55,11 @@ object LuckyStarRpcCall {
     }
 
     /**
-     * 判断任务是否存在可领奖阶段
+     * 获取任务当前处于已达成(FINISH)且待领奖(TODO)的所有阶段
      */
-    fun getRewardStage(task: JSONObject): JSONObject? {
-        val stages = task.optJSONArray("missionStageDTOS") ?: return null
+    fun getRewardStages(task: JSONObject): List<JSONObject> {
+        val stages = task.optJSONArray("missionStageDTOS") ?: return emptyList()
+        val list = mutableListOf<JSONObject>()
         for (i in 0 until stages.length()) {
             val st = stages.optJSONObject(i) ?: continue
             val sa = st.optJSONObject("sourceAction")
@@ -70,19 +71,23 @@ object LuckyStarRpcCall {
                 && rewardStatus != "FAIL" && rewardStatus != "EXPIRED" && rewardStatus != "HAVERECEIVED"
                 && subtype != "NO_REWARD" && subSubType != "REWARD_SEND_AUTO" && subSubType != "NOTIFY_REACH_STAGE"
             ) {
-                return st
+                list.add(st)
             }
         }
-        return null
+        return list
     }
+
+    /**
+     * 判断任务是否存在可领奖阶段
+     */
+    fun getRewardStage(task: JSONObject): JSONObject? = getRewardStages(task).firstOrNull()
 
     /**
      * 判断任务是否已达成领奖条件（排除未完成却标记为 TORECEIVE 的初始态）
      */
     fun isTaskRewardable(task: JSONObject): Boolean {
         // 1. 如果存在阶段配置，必须有阶段处于 FINISH 且未领奖
-        val stage = getRewardStage(task)
-        if (stage != null) return true
+        if (getRewardStages(task).isNotEmpty()) return true
 
         // 2. 如果无阶段配置或者是单节点任务
         val stages = task.optJSONArray("missionStageDTOS")
@@ -103,14 +108,14 @@ object LuckyStarRpcCall {
     /**
      * 智能领取任务奖励（自动适配多阶段 stageCount 与单节点参数）
      */
-    fun receivePrize(cookie: String, task: JSONObject): ElemeMtopUtil.MtopResult {
+    fun receivePrize(cookie: String, task: JSONObject, targetStage: JSONObject? = null): ElemeMtopUtil.MtopResult {
         val missionDefId = task.optLong("missionDefId").takeIf { it > 0 } ?: task.optLong("id")
         val missionXId = task.optString("missionXId")
         val collectionId = task.optString("missionCollectionId").ifEmpty {
             task.optString("missionCollectId", COLLECTION_ID)
         }
         val instanceId = task.optString("instanceId")
-        val stage = getRewardStage(task)
+        val stage = targetStage ?: getRewardStage(task)
 
         val (lat, lng) = getCoordinates()
         val locInfo = "[\"{\\\"lng\\\":\\\"$lng\\\",\\\"lat\\\":\\\"$lat\\\"}\"]"
