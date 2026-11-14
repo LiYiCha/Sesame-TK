@@ -1025,7 +1025,7 @@ class AntMember : ModelTask() {
      * 会员签到 (严格对齐 AG 规范)
      */
     internal suspend fun doMemberSign(): Unit = CoroutineUtils.run {
-        var signDoneToday = hasFlagToday(StatusFlags.FLAG_ANTMEMBER_MEMBER_SIGN_DONE)
+        var signDoneToday = hasFlagToday("antMember::memberSign")
         try {
             val uid = UserMap.currentUid
             if (!signDoneToday) {
@@ -1035,7 +1035,7 @@ class AntMember : ModelTask() {
                     val s = AntMemberRpcCall.queryMemberSigninCalendar()
                     delay(500)
                     val jo = JSONObject(s)
-                    if (ResChecker.checkRes(TAG, "会员签到失败:", jo)) {
+                    if (ResChecker.checkRes(TAG, jo)) {
                         val currentSigned = jo.optBoolean("currentSigninStatus") || jo.optBoolean("autoSignInSuccess")
                         if (currentSigned) {
                             val signPoint = jo.optString("signinPoint", "0")
@@ -1063,7 +1063,7 @@ class AntMember : ModelTask() {
             Log.printStackTrace(TAG, "doMemberSign err:", t)
         } finally {
             if (signDoneToday) {
-                setFlagToday(StatusFlags.FLAG_ANTMEMBER_MEMBER_SIGN_DONE)
+                setFlagToday("antMember::memberSign")
             }
         }
     }

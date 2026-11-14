@@ -67,6 +67,7 @@ object LuckyStarRpcCall {
             val status = st.optString("status")
             val rewardStatus = st.optString("rewardStatus")
             if (status == "FINISH" && rewardStatus != "SUCCESS" && rewardStatus != "RECEIVED"
+                && rewardStatus != "FAIL" && rewardStatus != "EXPIRED" && rewardStatus != "HAVERECEIVED"
                 && subtype != "NO_REWARD" && subSubType != "REWARD_SEND_AUTO" && subSubType != "NOTIFY_REACH_STAGE"
             ) {
                 return st
@@ -137,8 +138,8 @@ object LuckyStarRpcCall {
                 }
             } else {
                 put("count", 1)
-                put("extInfo", "{\"triggerScene\":\"MISSION_LIST\"}")
             }
+            put("extInfo", "{\"triggerScene\":\"MISSION_LIST\"}")
             put("spPageId", SP_PAGE_ID)
             put("instance", "INNER")
         }

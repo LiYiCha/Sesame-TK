@@ -68,7 +68,8 @@ object ElemeHttpUtil {
                 useCaches = false
                 // 关闭长连接，防止复用被阿里 CDN 主动断开的废弃 TCP 连接导致 Connection reset
                 setRequestProperty("Connection", "close")
-                setRequestProperty("User-Agent", ElemeAuth.DEFAULT_UA)
+                val currentUa = extraHeaders?.get("User-Agent") ?: ElemeMtopUtil.getCurrentHttpUa()
+                setRequestProperty("User-Agent", currentUa)
                 setRequestProperty("Accept", "application/json, text/plain, */*")
                 if (cookie.isNotEmpty()) {
                     setRequestProperty("Cookie", cookie)

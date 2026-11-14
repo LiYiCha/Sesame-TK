@@ -44,7 +44,8 @@ object LuckyStarTask {
                 Log.other("饿了么", "[幸运星] ⚠️ 饿了么会话校验未通过且自动刷新失败，请在支付宝手动打开饿了么小程序完成授权")
                 return
             }
-            Log.other("饿了么", "[幸运星] 当前账号: ${ElemeAuth.getAccountSummary()}")
+            val profile = ElemeMtopUtil.getActiveProfile()
+            Log.other("饿了么", "[幸运星] 当前账号: ${ElemeAuth.getAccountSummary()} | 设备指纹: ${profile.brandModel()} (Android ${profile.release})")
 
             // 2. 拟真环境初始化：页面动效组件加载与订阅提醒
             LuckyStarRpcCall.initPageComponents(cookie)
@@ -91,10 +92,14 @@ object LuckyStarTask {
                     continue
                 }
 
-                // 黑名单过滤（接入通用 TaskBlacklist 与非自动化关键词，阻止不支持的任务）
+                // 黑名单与 UI 风控跳过过滤
+                val riskTasks: Set<String> = fansirsqi.xposed.sesame.task.otherTask2.OtherTask2.getElemeRiskTasks().value ?: emptySet()
+                val inRiskTaskSet = riskTasks.contains(missionDefId.toString())
                 val inGlobalBlacklist = TaskBlacklist.isTaskInBlacklist(title) || TaskBlacklist.isTaskInBlacklist(missionDefId.toString())
                 val inKeywordBlacklist = BLACKLIST_KEYWORDS.any { title.contains(it) }
-                if (inGlobalBlacklist || inKeywordBlacklist) {
+                if (inRiskTaskSet || inGlobalBlacklist || inKeywordBlacklist) {
+                    val reason = if (inRiskTaskSet) "UI风控跳过名单(已勾选)" else if (inGlobalBlacklist) "通用黑名单" else "关键词过滤"
+                    Log.other("饿了么", "[幸运星] 任务[$title](ID:$missionDefId)已在跳过名单中($reason)，跳过执行")
                     continue
                 }
 
@@ -127,6 +132,14 @@ object LuckyStarTask {
                         finishedCount++
                     } else {
                         Log.other("饿了么", "[幸运星] 浏览上报失败: [$title] -> ${viewRes.errorCode}::${viewRes.errorMsg}")
+                        if (viewRes.errorMsg.contains("405") || viewRes.errorMsg.contains("行为受限") || viewRes.errorMsg.contains("风控")) {
+                            Log.other("饿了么", "[幸运星] 🛡️ 任务[$title](ID:$missionDefId)浏览埋点遭遇风控拦截，已自动加入UI风控跳过名单")
+                            fansirsqi.xposed.sesame.entity.ElemeRiskTaskEntity.recordRiskTask(missionDefId.toString(), title)
+                            fansirsqi.xposed.sesame.task.otherTask2.OtherTask2.getElemeRiskTasks().value?.add(missionDefId.toString())
+                            runCatching {
+                                fansirsqi.xposed.sesame.data.Config.save(fansirsqi.xposed.sesame.util.maps.UserMap.currentUid, true)
+                            }
+                        }
                     }
                     Thread.sleep(RandomUtil.nextGaussianLong(1200, 2000))
                 } else if (actionType == "THIRD" && (sceneCode == "commercial_click" || sceneCode == "inter_change" || title.contains("点击") || title.contains("店铺"))) {
@@ -146,6 +159,14 @@ object LuckyStarTask {
                             Log.other("饿了么", "[幸运星] 动作推进成功: [$title] ($step/$need)")
                         } else {
                             Log.other("饿了么", "[幸运星] 动作推进失败: [$title] ($step/$need) -> ${triggerRes.errorCode}::${triggerRes.errorMsg}")
+                            if (triggerRes.errorMsg.contains("风控") || triggerRes.errorMsg.contains("405") || triggerRes.errorCode.contains("RISK")) {
+                                Log.other("饿了么", "[幸运星] 🛡️ 任务[$title](ID:$missionDefId)动作推进遭遇风控拦截，已自动加入UI风控跳过名单")
+                                fansirsqi.xposed.sesame.entity.ElemeRiskTaskEntity.recordRiskTask(missionDefId.toString(), title)
+                                fansirsqi.xposed.sesame.task.otherTask2.OtherTask2.getElemeRiskTasks().value?.add(missionDefId.toString())
+                                runCatching {
+                                    fansirsqi.xposed.sesame.data.Config.save(fansirsqi.xposed.sesame.util.maps.UserMap.currentUid, true)
+                                }
+                            }
                             break
                         }
                         Thread.sleep(RandomUtil.nextGaussianLong(1800, 2600))
@@ -169,6 +190,16 @@ object LuckyStarTask {
 
                 if (missionDefId <= 0) continue
 
+                // UI 风控跳过名单与通用黑名单过滤
+                val riskTasks: Set<String> = fansirsqi.xposed.sesame.task.otherTask2.OtherTask2.getElemeRiskTasks().value ?: emptySet()
+                val inRiskTaskSet = riskTasks.contains(missionDefId.toString())
+                val inGlobalBlacklist = TaskBlacklist.isTaskInBlacklist(title) || TaskBlacklist.isTaskInBlacklist(missionDefId.toString())
+                if (inRiskTaskSet || inGlobalBlacklist) {
+                    val reason = if (inRiskTaskSet) "UI风控跳过名单(已勾选)" else "通用黑名单"
+                    Log.other("饿了么", "[幸运星] 领奖跳过: [$title](ID:$missionDefId) 处于$reason，跳过领奖")
+                    continue
+                }
+
                 // 仅对真正达成领奖条件的任务调用领奖（智能匹配阶段参数）
                 if (LuckyStarRpcCall.isTaskRewardable(task)) {
                     val prizeRes = LuckyStarRpcCall.receivePrize(cookie, task)
@@ -177,9 +208,26 @@ object LuckyStarTask {
                         Log.other("饿了么", "[幸运星] 成功领取任务奖励: [$title] -> $rewardDesc")
                         rewardedCount++
                     } else {
-                        Log.other("饿了么", "[幸运星] 领取任务奖励失败: [$title] -> ${prizeRes.errorCode}::${prizeRes.errorMsg}")
-                        if (prizeRes.errorCode.contains("NOT_EXIST") || prizeRes.errorCode.contains("NOT_FINISH") || prizeRes.errorMsg.contains("LIMIT")) {
+                        val isRisk = prizeRes.errorCode.contains("RISK") ||
+                                prizeRes.errorMsg.contains("风控") ||
+                                prizeRes.errorMsg.contains("NO_DECISION_ITEM") ||
+                                prizeRes.errorMsg.contains("RECEIVE_ALL_ERROR") ||
+                                prizeRes.errorMsg.contains("405") ||
+                                prizeRes.errorMsg.contains("安全校验")
+
+                        if (isRisk) {
+                            Log.other("饿了么", "[幸运星] 🛡️ 任务[$title](ID:$missionDefId)触发风控拦截(${prizeRes.errorMsg})，已自动加入UI风控跳过名单")
+                            fansirsqi.xposed.sesame.entity.ElemeRiskTaskEntity.recordRiskTask(missionDefId.toString(), title)
+                            fansirsqi.xposed.sesame.task.otherTask2.OtherTask2.getElemeRiskTasks().value?.add(missionDefId.toString())
+                            runCatching {
+                                fansirsqi.xposed.sesame.data.Config.save(fansirsqi.xposed.sesame.util.maps.UserMap.currentUid, true)
+                            }
                             TaskBlacklist.autoAddToBlacklist(missionDefId.toString(), title, prizeRes.errorCode, prizeRes.errorMsg)
+                        } else {
+                            Log.other("饿了么", "[幸运星] 领取任务奖励失败: [$title] -> ${prizeRes.errorCode}::${prizeRes.errorMsg}")
+                            if (prizeRes.errorCode.contains("NOT_EXIST") || prizeRes.errorCode.contains("NOT_FINISH") || prizeRes.errorMsg.contains("LIMIT")) {
+                                TaskBlacklist.autoAddToBlacklist(missionDefId.toString(), title, prizeRes.errorCode, prizeRes.errorMsg)
+                            }
                         }
                     }
                     Thread.sleep(RandomUtil.nextGaussianLong(1200, 2200))
