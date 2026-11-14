@@ -79,17 +79,14 @@ object FreeOrderTask {
 
     fun handle() {
         if (Status.hasFlagToday(FLAG_TODAY)) {
-            Log.other("饿了么", "[抽免单] 今日饿了么免单任务已完成，跳过执行")
             return
         }
 
         if (!lock.tryLock()) {
-            Log.other("饿了么", "[抽免单] 已有饿了么抽免单任务正在执行中，跳过本次并发调用")
             return
         }
 
         try {
-            Log.other("饿了么", "[抽免单] ==== 开始执行饿了么抽免单任务 ====")
             val initCookie = ElemeAuth.ensureCookie()
             if (initCookie.isEmpty() || !ElemeAuth.isBound()) {
                 val reason = if (initCookie.isEmpty()) "未获取到有效登录凭证(账号未绑定或换票失败)" else "当前未关联有效饿了么账号"
@@ -104,7 +101,6 @@ object FreeOrderTask {
                 Log.other("饿了么", "[抽免单] ⚠️ 饿了么会话校验未通过且自动刷新失败，请在支付宝手动打开饿了么小程序完成授权")
                 return
             }
-            Log.other("饿了么", "[抽免单] 当前账号: ${ElemeAuth.getAccountSummary()}")
 
             // 2. 淘免单签到打卡（每日签到赠送抽免单机会）
             val signInfoResp = FreeOrderRpcCall.querySignInfo(cookie)
@@ -134,16 +130,13 @@ object FreeOrderTask {
                 val popup = extractPopup(homepageResp)
                 mainCardTips = popup?.optString("mainCardTips").orEmpty()
                 currentChance = parseDrawChance(homepageResp)
-                val tipsText = if (mainCardTips.isNotEmpty()) " (开奖提示: $mainCardTips)" else ""
-                Log.other("饿了么", "[抽免单] 可用抽奖机会: $currentChance$tipsText")
             } else {
-                Log.other("饿了么", "[抽免单] 淘免单主页拉取失败，跳过本次执行")
                 return
             }
             Thread.sleep(RandomUtil.nextGaussianLong(800, 1500))
 
-            val homeErrorCode = homepageResp?.optString("errorCode").orEmpty()
-            val homeErrorMsg = homepageResp?.optString("errorMessage").orEmpty()
+            val homeErrorCode = homepageResp.optString("errorCode").orEmpty()
+            val homeErrorMsg = homepageResp.optString("errorMessage").orEmpty()
             val isActivityClosed = homeErrorCode == "ACTIVITY_CLOSED" ||
                     homeErrorCode == "ACTIVITY_NOT_EXIST" ||
                     homeErrorMsg.contains("活动已结束") ||
@@ -158,7 +151,7 @@ object FreeOrderTask {
             }
 
             if (currentChance <= 0) {
-                Log.other("饿了么", "[抽免单] 今日暂无可用抽免单机会")
+                Status.setFlagToday(FLAG_TODAY)
                 return
             }
 
@@ -226,7 +219,7 @@ object FreeOrderTask {
 
                 // (3) 抽奖后次数未减少/未发生变化 -> 结束本次抽奖流程（防死循环）
                 if (nextChance >= prevChance) {
-                    Log.other("饿了么", "[抽免单] 抽免单完成(无可用机会，结束本次抽奖)")
+                    Status.setFlagToday(FLAG_TODAY)
                     return
                 }
 
@@ -245,6 +238,7 @@ object FreeOrderTask {
                     Thread.sleep(RandomUtil.nextGaussianLong(2000, 3500))
                 }
             }
+            Status.setFlagToday(FLAG_TODAY)
             Thread.sleep(RandomUtil.nextGaussianLong(800, 1500))
 
             // 5. 辅助打卡召回（拉取外卖小程序进站打卡）

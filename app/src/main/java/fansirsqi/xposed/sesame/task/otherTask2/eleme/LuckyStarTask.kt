@@ -16,6 +16,7 @@ import java.util.concurrent.locks.ReentrantLock
  */
 object LuckyStarTask {
     private const val TAG = "LuckyStarTask"
+    private const val FLAG_TODAY = "Eleme_LuckyStar_Done"
     private val lock = ReentrantLock()
 
     private val BLACKLIST_KEYWORDS = listOf(
@@ -23,13 +24,15 @@ object LuckyStarTask {
     )
 
     fun handle() {
+        if (Status.hasFlagToday(FLAG_TODAY)) {
+            return
+        }
+
         if (!lock.tryLock()) {
-            Log.other("饿了么", "[幸运星] 已有饿了么幸运星任务正在执行中，跳过本次并发调用")
             return
         }
 
         try {
-            Log.other("饿了么", "[幸运星] ==== 开始执行饿了么幸运星任务 ====")
             val initCookie = ElemeAuth.ensureCookie()
             if (initCookie.isEmpty() || !ElemeAuth.isBound()) {
                 val reason = if (initCookie.isEmpty()) "未获取到有效登录凭证(账号未绑定或换票失败)" else "当前未关联有效饿了么账号"
@@ -45,7 +48,6 @@ object LuckyStarTask {
                 return
             }
             val profile = ElemeMtopUtil.getActiveProfile()
-            Log.other("饿了么", "[幸运星] 当前账号: ${ElemeAuth.getAccountSummary()} | 设备: ${profile.brandModel}")
 
             // 2. 拟真环境初始化：页面动效组件加载与订阅提醒
             LuckyStarRpcCall.initPageComponents(cookie)
@@ -56,7 +58,6 @@ object LuckyStarTask {
             // 3. 查询初始资产
             val initProperty = LuckyStarRpcCall.queryProperty(cookie)
             val initialStars = extractStarAmount(initProperty)
-            Log.other("饿了么", "[幸运星] 当前星数: $initialStars")
 
             // 4. 查询全量任务列表
             val taskListResp = LuckyStarRpcCall.queryTaskList(cookie)
@@ -71,7 +72,7 @@ object LuckyStarTask {
 
             val taskArray = extractTaskArray(taskListResp)
             if (taskArray == null || taskArray.length() == 0) {
-                Log.other("饿了么", "[幸运星] 当前无可执行任务")
+                Status.setFlagToday(FLAG_TODAY)
                 return
             }
 
@@ -181,9 +182,9 @@ object LuckyStarTask {
                 }
             }
 
-            // 若第一轮没有可推进任务且没有任何待领奖任务，直接退出，绝不执行无意义的第二轮与刷新
+            // 若第一轮没有可推进任务且没有任何待领奖任务，直接退出并打上今日完成标记，绝不再重复执行或输出多余日志
             if (finishedCount == 0 && !hasRewardable) {
-                Log.other("饿了么", "[幸运星] 今日无待执行或可领奖任务")
+                Status.setFlagToday(FLAG_TODAY)
                 return
             }
 
@@ -291,8 +292,11 @@ object LuckyStarTask {
             val finalProperty = LuckyStarRpcCall.queryProperty(cookie)
             val finalStars = extractStarAmount(finalProperty)
             val delta = finalStars - initialStars
+            Status.setFlagToday(FLAG_TODAY)
 
-            Log.other("饿了么", "[幸运星] 执行完毕: 完成 $finishedCount 个任务, 领奖 $rewardedCount 次, 当前星数: $finalStars (+$delta)")
+            if (rewardedCount > 0 || delta > 0) {
+                Log.other("饿了么", "[幸运星] 执行完毕: 完成 $finishedCount 个任务, 领奖 $rewardedCount 次, 当前星数: $finalStars (+$delta)")
+            }
         } catch (t: Throwable) {
             val errMsg = "[幸运星] ❌ 执行饿了么幸运星任务异常: ${t.message}"
             Log.error(TAG, errMsg)

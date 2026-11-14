@@ -99,8 +99,8 @@
                                     </div>
                                     <!-- 字符串与长文本组件：支持弹窗查看完整内容与方便修改 -->
                                     <div class="flex-space-between pdTB10" v-if="['STRING','TEXT'].includes(item.type)">
-                                        <div class="title" @click="openTextDialog(item)">{{item.name}}</div>
-                                        <div class="flex-center" @click="openTextDialog(item)">
+                                        <div class="title" @click="openTextDialog(item, tabs_item.modelCode)">{{item.name}}</div>
+                                        <div class="flex-center" @click="openTextDialog(item, tabs_item.modelCode)">
                                             <div class="link" style="max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px;">
                                                 {{ item.configValue || '点击编辑/查看...' }}
                                             </div>
@@ -191,8 +191,8 @@
                                         </div>
                                     </div>
                                     <div class="flex-space-between pdTB10" v-if="['STRING','TEXT'].includes(item.type)">
-                                        <div class="title" @click="openTextDialog(item)">{{item.name}}</div>
-                                        <div class="flex-center" @click="openTextDialog(item)">
+                                        <div class="title" @click="openTextDialog(item, tabs_item.modelCode)">{{item.name}}</div>
+                                        <div class="flex-center" @click="openTextDialog(item, tabs_item.modelCode)">
                                             <div class="link" style="max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px;">
                                                 {{ item.configValue || '点击编辑/查看...' }}
                                             </div>
@@ -299,9 +299,16 @@
             </van-dialog>
 
             <!-- 字符串与长文本弹窗 -->
-            <van-dialog v-model:show="text_dialog.visible" :title="text_dialog.title" show-cancel-button cancelButtonText="取消" confirmButtonText="保存" @confirm="handleSaveText">
+            <van-dialog 
+                v-model:show="text_dialog.visible" 
+                :title="text_dialog.title" 
+                :show-cancel-button="!text_dialog.readonly" 
+                cancelButtonText="取消" 
+                :confirmButtonText="text_dialog.readonly ? '确定' : '保存'" 
+                :close-on-click-overlay="true"
+                @confirm="handleSaveText">
                 <div style="padding: 12px 16px;">
-                    <div v-if="text_dialog.desc" style="font-size: 12px; color: #888; margin-bottom: 8px; line-height: 1.4; word-break: break-all;">
+                    <div v-if="text_dialog.desc" style="font-size: 12px; color: #888; margin-bottom: 8px; line-height: 1.4; word-break: break-all; max-height: 120px; overflow-y: auto;">
                         {{ text_dialog.desc }}
                     </div>
                     <van-field
@@ -310,8 +317,8 @@
                         autosize
                         type="textarea"
                         placeholder="请输入或粘贴完整内容..."
-                        :disabled="text_dialog.readonly"
-                        style="border: 1px solid #dcdee0; border-radius: 6px; padding: 8px; font-size: 13px; line-height: 1.5; background: #fafafa;"
+                        :readonly="text_dialog.readonly"
+                        style="border: 1px solid #dcdee0; border-radius: 6px; padding: 8px; font-size: 13px; line-height: 1.5; background: #fafafa; max-height: 260px; overflow-y: auto;"
                     />
                 </div>
             </van-dialog>
@@ -361,21 +368,30 @@
                   desc: "",
                   value: "",
                   readonly: false,
+                  modelCode: "",
                   targetItem: null,
                 });
 
-                function openTextDialog(item) {
+                function openTextDialog(item, modelCode) {
                   text_dialog.value.visible = true;
                   text_dialog.value.title = item.name;
                   text_dialog.value.desc = item.desc || "";
                   text_dialog.value.value = item.configValue || "";
                   text_dialog.value.readonly = item.type === "TEXT";
+                  text_dialog.value.modelCode = modelCode || "";
                   text_dialog.value.targetItem = item;
                 }
 
                 function handleSaveText() {
                   if (text_dialog.value.targetItem && !text_dialog.value.readonly) {
                     text_dialog.value.targetItem.configValue = text_dialog.value.value;
+                    try {
+                      if (window.HOOK && window.HOOK.setField && text_dialog.value.modelCode) {
+                        window.HOOK.setField(text_dialog.value.modelCode, text_dialog.value.targetItem.code, text_dialog.value.value);
+                      }
+                    } catch (e) {
+                      console.error("同步字段失败:", e);
+                    }
                   }
                   text_dialog.value.visible = false;
                 }
