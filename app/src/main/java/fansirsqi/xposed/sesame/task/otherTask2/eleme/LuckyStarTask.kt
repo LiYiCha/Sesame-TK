@@ -29,8 +29,6 @@ object LuckyStarTask {
         }
 
         try {
-            // 每次启动任务重置会话级指纹缓存，在全随机模式下生成全新的真实主流机型特征指纹
-            ElemeMtopUtil.resetSessionProfile()
             Log.other("饿了么", "[幸运星] ==== 开始执行饿了么幸运星任务 ====")
             val initCookie = ElemeAuth.ensureCookie()
             if (initCookie.isEmpty() || !ElemeAuth.isBound()) {

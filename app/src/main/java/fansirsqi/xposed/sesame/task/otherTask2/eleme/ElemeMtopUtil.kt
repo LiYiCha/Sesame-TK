@@ -44,6 +44,46 @@ object ElemeMtopUtil {
 
         fun httpUa(): String =
             "Mozilla/5.0 (Linux; U; Android $release; zh-CN; $brandModel Build/$buildId) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/$chromeVer UCBrowser/$ucVer Mobile Safari/537.36 AlipayDefined(nt:wifi,ws:$screenWs) AliApp(AP/$alipayVer) AlipayClient/$alipayVer Language/zh-Hans useStatusBar/true isConcaveScreen/false Region/CN Channel/${brand.lowercase()} GCanvas/1.9.38 Nebula SDK/1.8.1000 Nebula Ariver/1.0.0"
+
+        fun toJson(): String {
+            val jo = JSONObject()
+            jo.put("brand", brand)
+            jo.put("model", model)
+            jo.put("brandModel", brandModel)
+            jo.put("release", release)
+            jo.put("buildId", buildId)
+            jo.put("alipayVer", alipayVer)
+            jo.put("chromeVer", chromeVer)
+            jo.put("ucVer", ucVer)
+            jo.put("screenWs", screenWs)
+            jo.put("deviceId", deviceId)
+            return jo.toString()
+        }
+
+        fun summary(): String = "$brandModel (Android $release, Chrome/$chromeVer, UC/$ucVer)"
+
+        companion object {
+            fun fromJson(jsonStr: String): DeviceProfile? {
+                return runCatching {
+                    val jo = JSONObject(jsonStr)
+                    val alipayVer = jo.optString("alipayVer").ifEmpty {
+                        ApplicationHook.getAlipayVersion()?.versionString?.takeIf { it.isNotEmpty() } ?: "12.12.30.8000"
+                    }
+                    DeviceProfile(
+                        brand = jo.getString("brand"),
+                        model = jo.getString("model"),
+                        brandModel = jo.getString("brandModel"),
+                        release = jo.getString("release"),
+                        buildId = jo.getString("buildId"),
+                        alipayVer = alipayVer,
+                        chromeVer = jo.getString("chromeVer"),
+                        ucVer = jo.getString("ucVer"),
+                        screenWs = jo.getString("screenWs"),
+                        deviceId = jo.getString("deviceId")
+                    )
+                }.getOrNull()
+            }
+        }
     }
 
     data class MtopResult(
@@ -130,56 +170,105 @@ object ElemeMtopUtil {
     }
 
     /**
-     * 重置会话指纹缓存（在新轮次或新执行启动时调用，使得随机模式产生全新的合法设备指纹）
+     * 重置会话指纹缓存
      */
     fun resetSessionProfile() {
         sessionProfile = null
     }
 
     /**
+     * 手动触发生成并保存全新随机真实设备指纹（仅在用户在 UI 点击生成按钮时调用）
+     */
+    fun generateAndSaveRandomProfile(context: android.content.Context? = null): DeviceProfile {
+        val newProfile = buildProfileFromTemplate(DEVICE_TEMPLATES[RandomUtil.nextInt(0, DEVICE_TEMPLATES.size)])
+        val json = newProfile.toJson()
+
+        // 存入 OtherTask2 的配置字段并持久化保存
+        fansirsqi.xposed.sesame.task.otherTask2.OtherTask2.getElemeCustomProfile().value = json
+        runCatching {
+            fansirsqi.xposed.sesame.data.Config.save(fansirsqi.xposed.sesame.util.maps.UserMap.currentUid, true)
+        }
+
+        // 更新当前生效指纹
+        sessionProfile = newProfile
+
+        val logText = "[设备指纹] 🎲 用户点击生成新设备指纹: ${newProfile.summary()} | DeviceId: ${newProfile.deviceId}"
+        Log.other("饿了么", logText)
+
+        if (context != null) {
+            runCatching {
+                android.app.AlertDialog.Builder(context)
+                    .setTitle("随机设备指纹生成成功")
+                    .setMessage(
+                        "已生成并保存全新设备指纹：\n\n" +
+                        "【品牌机型】${newProfile.brandModel}\n" +
+                        "【系统版本】Android ${newProfile.release} (Build/${newProfile.buildId})\n" +
+                        "【浏览器内核】Chrome ${newProfile.chromeVer} / UC ${newProfile.ucVer}\n" +
+                        "【屏幕分辨率】${newProfile.screenWs}\n" +
+                        "【设备标识ID】${newProfile.deviceId}\n\n" +
+                        "✅ 已固定保存至配置！日常任务将固定使用此设备指纹，不会随意变动。"
+                    )
+                    .setPositiveButton(fansirsqi.xposed.sesame.R.string.ok, null)
+                    .create()
+                    .show()
+            }.onFailure {
+                android.widget.Toast.makeText(context, "已生成并保存新设备指纹:\n${newProfile.brandModel} (Android ${newProfile.release})", android.widget.Toast.LENGTH_LONG).show()
+            }
+        }
+
+        return newProfile
+    }
+
+    /**
      * 获取当前生效的设备指纹配置（受 OtherTask2.elemeUaMode 控制）
-     * 0: 系统默认
-     * 1: vivo 系列随机机型与指纹
-     * 2: Xiaomi/Redmi 系列随机机型与指纹
-     * 3: OPPO/OnePlus 系列随机机型与指纹
-     * 4: HONOR 系列随机机型与指纹
-     * 5: 🎲 全随机真实主流机型指纹（随机品牌/机型/版本/UC/Chrome/分辨率/DeviceId）
+     * 0: 系统默认 (本机系统/vivo V2238A)
+     * 1: 🎲 随机生成设备指纹（日常完全固定使用已保存指纹，仅在用户点击【生成】按钮时重新生成）
+     * 2: vivo 系列固定机型 (vivo X100 Pro)
+     * 3: Xiaomi 系列固定机型 (Xiaomi 14)
+     * 4: OPPO 系列固定机型 (OPPO Find X7)
+     * 5: HONOR 系列固定机型 (HONOR Magic6)
      */
     fun getActiveProfile(): DeviceProfile {
         sessionProfile?.let { return it }
 
         val mode = runCatching {
-            fansirsqi.xposed.sesame.task.otherTask2.OtherTask2.getElemeUaMode().value ?: 5
-        }.getOrDefault(5)
+            fansirsqi.xposed.sesame.task.otherTask2.OtherTask2.getElemeUaMode().value ?: 1
+        }.getOrDefault(1)
+
+        val alipayVer = ApplicationHook.getAlipayVersion()?.versionString?.takeIf { it.isNotEmpty() } ?: "12.12.30.8000"
 
         val profile = when (mode) {
-            1 -> {
-                val vivoPool = DEVICE_TEMPLATES.filter { it.brand.equals("vivo", ignoreCase = true) }
-                buildProfileFromTemplate(vivoPool[RandomUtil.nextInt(0, vivoPool.size)])
-            }
-            2 -> {
-                val miPool = DEVICE_TEMPLATES.filter { it.brand.equals("Xiaomi", ignoreCase = true) || it.brand.equals("Redmi", ignoreCase = true) }
-                buildProfileFromTemplate(miPool[RandomUtil.nextInt(0, miPool.size)])
-            }
-            3 -> {
-                val oppoPool = DEVICE_TEMPLATES.filter { it.brand.equals("OPPO", ignoreCase = true) || it.brand.equals("OnePlus", ignoreCase = true) }
-                buildProfileFromTemplate(oppoPool[RandomUtil.nextInt(0, oppoPool.size)])
-            }
-            4 -> {
-                val honorPool = DEVICE_TEMPLATES.filter { it.brand.equals("HONOR", ignoreCase = true) }
-                buildProfileFromTemplate(honorPool[RandomUtil.nextInt(0, honorPool.size)])
-            }
             0 -> {
-                val alipayVer = ApplicationHook.getAlipayVersion()?.versionString?.takeIf { it.isNotEmpty() } ?: "12.12.30.8000"
                 val releaseVer = android.os.Build.VERSION.RELEASE.ifEmpty { "16" }
                 val model = android.os.Build.MODEL.ifEmpty { "V2238A" }
                 val brand = android.os.Build.BRAND.ifEmpty { "vivo" }
                 val brandModel = if (model.startsWith(brand, ignoreCase = true)) "$brand/$model" else "$brand/$brand,$model"
                 DeviceProfile(brand, model, brandModel, releaseVer, "BP1A.250305.019", alipayVer, "118.0.0.0", "16.3.8.1402", "384|0|853", "asdLYB2rw6kDAN+qYdXj9afD")
             }
+            2 -> {
+                DeviceProfile("vivo", "V2309A", "vivo/vivo,V2309A", "14", "UP1A.231005.007", alipayVer, "128.0.0.0", "16.3.8.1402", "384|0|853", "asdLYB2rw6kDAN+qYdXj9afD")
+            }
+            3 -> {
+                DeviceProfile("Xiaomi", "23116PN5BC", "Xiaomi/Xiaomi,23116PN5BC", "14", "UKQ1.230804.001", alipayVer, "128.0.0.0", "16.3.8.1402", "393|0|873", "asdLYB2rw6kDAN+qYdXj9afD")
+            }
+            4 -> {
+                DeviceProfile("OPPO", "PHY110", "OPPO/OPPO,PHY110", "14", "UKQ1.230924.001", alipayVer, "128.0.0.0", "16.3.8.1402", "412|0|915", "asdLYB2rw6kDAN+qYdXj9afD")
+            }
+            5 -> {
+                DeviceProfile("HONOR", "BVL-AN00", "HONOR/HONOR,BVL-AN00", "14", "HONORBVL-AN00", alipayVer, "128.0.0.0", "16.3.8.1402", "384|0|853", "asdLYB2rw6kDAN+qYdXj9afD")
+            }
             else -> {
-                // 5 及默认：全随机动态生成真实主流设备指纹
-                buildProfileFromTemplate(DEVICE_TEMPLATES[RandomUtil.nextInt(0, DEVICE_TEMPLATES.size)])
+                // mode == 1: 🎲 随机生成设备指纹（日常完全固定，仅在用户点击生成按钮时更新）
+                val savedJson = runCatching {
+                    fansirsqi.xposed.sesame.task.otherTask2.OtherTask2.getElemeCustomProfile().value.orEmpty()
+                }.getOrDefault("")
+                val saved = if (savedJson.isNotEmpty()) DeviceProfile.fromJson(savedJson) else null
+                if (saved != null) {
+                    saved
+                } else {
+                    // 若初次运行尚未生成过，初始化生成一次并持久化保存
+                    generateAndSaveRandomProfile(null)
+                }
             }
         }
 

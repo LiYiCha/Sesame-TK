@@ -15,6 +15,8 @@ public class EmptyModelField extends ModelField<Object> {
     private final Runnable clickRunner;
     /** 带上下文的点击回调，用于需要 Context 的操作（如弹出对话框），优先于 clickRunner */
     private final ContextConsumer clickConsumer;
+    private String dialogTitle = null;
+    private String dialogMessage = null;
 
     public EmptyModelField(String code, String name) {
         super(code, name, null);
@@ -32,6 +34,14 @@ public class EmptyModelField extends ModelField<Object> {
         super(code, name, null);
         this.clickRunner = null;
         this.clickConsumer = clickConsumer;
+    }
+
+    public EmptyModelField(String code, String name, String dialogTitle, String dialogMessage, ContextConsumer clickConsumer) {
+        super(code, name, null);
+        this.clickRunner = null;
+        this.clickConsumer = clickConsumer;
+        this.dialogTitle = dialogTitle;
+        this.dialogMessage = dialogMessage;
     }
 
     @Override
@@ -56,9 +66,11 @@ public class EmptyModelField extends ModelField<Object> {
         btn.setPaddingRelative(40, 0, 40, 0);
         btn.setAllCaps(false);
         if (clickConsumer != null) {
+            String title = (dialogTitle != null && !dialogTitle.isEmpty()) ? dialogTitle : "警告";
+            String msg = (dialogMessage != null && !dialogMessage.isEmpty()) ? dialogMessage : "确认执行该操作？";
             btn.setOnClickListener(v -> new AlertDialog.Builder(context)
-                    .setTitle("警告")
-                    .setMessage("确认执行该操作？")
+                    .setTitle(title)
+                    .setMessage(msg)
                     .setPositiveButton(R.string.ok, (dialog, id) -> clickConsumer.accept(context))
                     .setNegativeButton(R.string.cancel, (dialog, id) -> dialog.dismiss())
                     .create()
