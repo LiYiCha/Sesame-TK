@@ -22,10 +22,6 @@ object FreeOrderTask {
     private const val FLAG_TODAY = "Eleme_FreeOrder_Done"
     private val lock = ReentrantLock()
 
-    private val BLACKLIST_KEYWORDS = listOf(
-        "下单", "点一份外卖", "实付", "外卖", "购买", "买单", "开卡", "月卡", "SVIP", "超级会员", "付款", "好友", "充值", "邀请", "拉新", "拼团", "消费"
-    )
-
     fun handle() {
         if (Status.hasFlagToday(FLAG_TODAY)) {
             return
@@ -113,13 +109,11 @@ object FreeOrderTask {
                     val actionConfig = task.optJSONObject("actionConfig")
                     val actionType = actionConfig?.optString("actionType").orEmpty()
 
-                    // 对齐幸运星.py黑名单过滤：ORDER/P2P类型以及下单、购买等不可自动化任务直接跳过，绝不做、绝不领奖
-                    val isOrderOrP2P = actionType == "ORDER" || actionType == "P2P"
-                    val isBlacklisted = isOrderOrP2P ||
-                            BLACKLIST_KEYWORDS.any { title.contains(it) } ||
-                            TaskBlacklist.isTaskInBlacklist(title) ||
-                            TaskBlacklist.isTaskInBlacklist(missionDefId.toString())
-                    if (isBlacklisted) {
+                    // 对齐幸运星.py规范：ORDER/P2P类型直接跳过，绝不按名称关键词误杀浏览任务
+                    if (actionType == "ORDER" || actionType == "P2P") {
+                        continue
+                    }
+                    if (TaskBlacklist.isTaskInBlacklist(title) || TaskBlacklist.isTaskInBlacklist(missionDefId.toString())) {
                         continue
                     }
 

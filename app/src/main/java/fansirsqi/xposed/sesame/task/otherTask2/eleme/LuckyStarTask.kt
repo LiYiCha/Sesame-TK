@@ -19,10 +19,6 @@ object LuckyStarTask {
     private const val FLAG_TODAY = "Eleme_LuckyStar_Done"
     private val lock = ReentrantLock()
 
-    private val BLACKLIST_KEYWORDS = listOf(
-        "下单", "点一份外卖", "实付", "外卖", "购买", "买单", "开卡", "月卡", "SVIP", "超级会员", "付款", "好友", "充值", "邀请", "拉新", "拼团", "消费"
-    )
-
     fun handle() {
         if (Status.hasFlagToday(FLAG_TODAY)) {
             return
@@ -96,12 +92,11 @@ object LuckyStarTask {
                     continue
                 }
 
-                // 黑名单与 UI 风控跳过过滤（静默跳过）
+                // UI 风控跳过名单与用户自选黑名单过滤（静默跳过）
                 val riskTasks: Set<String> = ElemeTask.getElemeRiskTasks().value ?: emptySet()
                 val inRiskTaskSet = riskTasks.contains(missionDefId.toString())
                 val inGlobalBlacklist = TaskBlacklist.isTaskInBlacklist(title) || TaskBlacklist.isTaskInBlacklist(missionDefId.toString())
-                val inKeywordBlacklist = BLACKLIST_KEYWORDS.any { title.contains(it) }
-                if (inRiskTaskSet || inGlobalBlacklist || inKeywordBlacklist) {
+                if (inRiskTaskSet || inGlobalBlacklist) {
                     continue
                 }
 
@@ -111,9 +106,9 @@ object LuckyStarTask {
                     continue
                 }
 
+                // 严格遵循幸运星.py规范：按 actionConfig 分发，非 ORDER/P2P，绝不按名称关键词误杀浏览任务
                 val actionConfig = task.optJSONObject("actionConfig")
                 val actionType = actionConfig?.optString("actionType").orEmpty()
-                // 对齐幸运星.py规范：ORDER / P2P 类型任务无法自动化，直接跳过
                 if (actionType == "ORDER" || actionType == "P2P") {
                     continue
                 }
@@ -204,18 +199,18 @@ object LuckyStarTask {
 
                 if (missionDefId <= 0) continue
 
-                // UI 风控跳过名单、通用黑名单及关键词黑名单过滤（下单等不可自动化任务直接跳过）
+                // 对齐幸运星.py：ORDER（下单类）与 P2P（助力拉新类）属于非自动化任务，绝不领奖、不报错，直接跳过
                 val actionConfig = task.optJSONObject("actionConfig")
                 val actionType = actionConfig?.optString("actionType").orEmpty()
                 if (actionType == "ORDER" || actionType == "P2P") {
                     continue
                 }
 
+                // UI 风控跳过名单与用户自选黑名单过滤（静默跳过）
                 val riskTasks: Set<String> = ElemeTask.getElemeRiskTasks().value ?: emptySet()
                 val inRiskTaskSet = riskTasks.contains(missionDefId.toString())
                 val inGlobalBlacklist = TaskBlacklist.isTaskInBlacklist(title) || TaskBlacklist.isTaskInBlacklist(missionDefId.toString())
-                val inKeywordBlacklist = BLACKLIST_KEYWORDS.any { title.contains(it) }
-                if (inRiskTaskSet || inGlobalBlacklist || inKeywordBlacklist) {
+                if (inRiskTaskSet || inGlobalBlacklist) {
                     continue
                 }
 
