@@ -377,6 +377,99 @@ object ElemeMtopUtil {
         sessionProfile = null
     }
 
+    @Volatile
+    private var lastUaChangeTimestamp: Long = 0L
+    private const val UA_CHANGE_COOLDOWN_MS = 10 * 60 * 1000L // 10分钟修改冷却防风控
+
+    /**
+     * 获取近几年真实热门机型的完整真实 UA
+     */
+    @JvmStatic
+    fun getRandomRealDeviceUa(): String {
+        return generateDynamicProfile(2).httpUa()
+    }
+
+    /**
+     * 检查是否处于 UA 修改冷却期
+     */
+    @JvmStatic
+    fun checkUaChangeCooldown(newUa: String): Pair<Boolean, String> {
+        val currentUa = ElemeTask.getElemeCustomUa().value.orEmpty().trim()
+        val trimmedNew = newUa.trim()
+        // 内容未改变直接通过
+        if (currentUa == trimmedNew) {
+            return Pair(true, "")
+        }
+        val now = System.currentTimeMillis()
+        val elapsed = now - lastUaChangeTimestamp
+        if (lastUaChangeTimestamp > 0 && elapsed < UA_CHANGE_COOLDOWN_MS) {
+            val remainMins = Math.max(1L, (UA_CHANGE_COOLDOWN_MS - elapsed + 59999L) / 60000L)
+            return Pair(false, "频繁更换设备指纹易触发阿里风控检测，修改冷却中，请于 ${remainMins} 分钟后再试！")
+        }
+        return Pair(true, "")
+    }
+
+    @JvmStatic
+    fun recordUaChanged() {
+        lastUaChangeTimestamp = System.currentTimeMillis()
+        resetSessionProfile()
+    }
+
+    /**
+     * 获取指定或当前生效 UA 的结构化解析信息（供 Web 或 Native UI 弹窗实时预览展示）
+     */
+    @JvmStatic
+    fun getProfileJson(rawUa: String? = null): String {
+        val profile = if (!rawUa.isNullOrBlank()) {
+            parseCustomUa(rawUa)
+        } else {
+            getActiveProfile()
+        }
+        val obj = JSONObject().apply {
+            put("model", profile.marketingName?.takeIf { it.isNotBlank() } ?: profile.model)
+            put("brandModel", profile.brandModel)
+            put("system", "Android ${profile.release} (Build/${profile.buildId})")
+            put("kernel", "Chrome ${profile.chromeVer} / UC ${profile.ucVer}")
+            put("screen", profile.screenWs)
+            put("alipayVer", profile.alipayVer)
+            put("ua", profile.httpUa())
+            put("isCustom", !rawUa.isNullOrBlank())
+        }
+        return obj.toString()
+    }
+
+    /**
+     * 解析任务领奖或抽奖响应中的奖品描述文案
+     */
+    @JvmStatic
+    fun extractPrizeDesc(root: JSONObject?): String {
+        if (root == null) return ""
+        val data = root.optJSONObject("data") ?: root
+        val rewards = data.optJSONArray("rewards")
+        if (rewards != null && rewards.length() > 0) {
+            val parts = mutableListOf<String>()
+            for (i in 0 until rewards.length()) {
+                val r = rewards.optJSONObject(i) ?: continue
+                val name = r.optString("prizeName").ifEmpty { r.optString("name") }
+                val amount = r.optString("prizeAmount").ifEmpty { r.optString("amount") }.ifEmpty { r.optString("prizeValue") }
+                val unit = r.optString("prizeUnit").ifEmpty { r.optString("unit") }
+                if (amount.isNotEmpty() && name.isNotEmpty()) {
+                    parts.add("$amount$unit$name")
+                } else if (amount.isNotEmpty()) {
+                    parts.add("$amount$unit")
+                } else if (name.isNotEmpty()) {
+                    parts.add(name)
+                }
+            }
+            if (parts.isNotEmpty()) return parts.joinToString(", ")
+        }
+        val prizeName = data.optString("prizeName").ifEmpty { data.optString("name") }
+        if (prizeName.isNotEmpty()) return prizeName
+        val couponName = data.optString("couponName")
+        if (couponName.isNotEmpty()) return couponName
+        return ""
+    }
+
     /**
      * 手动触发随机生成近几年真实市售热门机型（如 Redmi K70 系列、小米15、vivo X100 等）的真实完整 UA
      * 仅在用户在 UI 点击【🎲 随机生成真实设备UA】按钮时触发，日常任务执行绝不会变动
@@ -389,6 +482,7 @@ object ElemeMtopUtil {
 
         // 同步填入 ElemeTask 的自定义 UA 配置并持久化保存
         ElemeTask.getElemeCustomUa().value = generatedUa
+        recordUaChanged()
         runCatching {
             fansirsqi.xposed.sesame.data.Config.save(fansirsqi.xposed.sesame.util.maps.UserMap.currentUid, true)
         }
@@ -405,7 +499,7 @@ object ElemeMtopUtil {
                         "【浏览器内核】Chrome ${newProfile.chromeVer} / UC ${newProfile.ucVer}\n" +
                         "【屏幕分辨率】${newProfile.screenWs}\n\n" +
                         "【生成的完整 User-Agent】:\n$generatedUa\n\n" +
-                        "✅ 已自动填入【自定义User-Agent】中并持久化保存！日常执行将稳定使用该 UA。"
+                        "✅ 已自动填入【User-Agent设备设置】中并持久化保存！日常执行将稳定使用该 UA。"
 
                 android.app.AlertDialog.Builder(context)
                     .setTitle("真实设备 UA 生成成功")
@@ -422,33 +516,89 @@ object ElemeMtopUtil {
     }
 
     /**
-     * 弹窗展示当前实际生效的设备详情与完整 User-Agent
+     * 原生对话框：详情展示、UA查看与编辑、弹窗内点击随机生成、保存前防频改校验合一
      */
     @JvmStatic
     @JvmOverloads
     fun showActiveProfileDialog(context: android.content.Context? = null) {
         if (context == null) return
+        val currentUa = ElemeTask.getElemeCustomUa().value.orEmpty().trim()
         val profile = getActiveProfile()
-        val customUa = ElemeTask.getElemeCustomUa().value.orEmpty().trim()
-        val modeDesc = if (customUa.isNotEmpty()) "自定义 User-Agent 生效中" else "系统原版默认指纹生效中"
         val displayName = profile.marketingName?.takeIf { it.isNotBlank() } ?: profile.model
 
-        val msg = "【当前运行模式】$modeDesc\n\n" +
-                "【识别机型】$displayName (${profile.brandModel})\n" +
-                "【系统版本】Android ${profile.release} (Build/${profile.buildId})\n" +
-                "【支付宝版本】${profile.alipayVer}\n" +
-                "【浏览器内核】Chrome ${profile.chromeVer} / UC ${profile.ucVer}\n" +
-                "【屏幕分辨率】${profile.screenWs}\n\n" +
-                "【当前生效的完整 User-Agent】:\n${profile.httpUa()}"
+        val detailMsg = "【当前生效设备详情】\n" +
+                "• 识别机型: $displayName (${profile.brandModel})\n" +
+                "• 系统版本: Android ${profile.release} (Build/${profile.buildId})\n" +
+                "• 浏览器内核: Chrome ${profile.chromeVer} / UC ${profile.ucVer}\n" +
+                "• 屏幕分辨率: ${profile.screenWs}\n\n" +
+                "【User-Agent 编辑与自定义】:\n" +
+                "(可直接修改/粘贴，或点击下方“🎲 随机生成”，最后点击“保存”生效)"
 
-        runCatching {
-            android.app.AlertDialog.Builder(context)
-                .setTitle("当前生效设备详情")
-                .setMessage(msg)
-                .setPositiveButton(fansirsqi.xposed.sesame.R.string.ok, null)
-                .create()
-                .show()
+        val layout = android.widget.LinearLayout(context).apply {
+            orientation = android.widget.LinearLayout.VERTICAL
+            setPadding(40, 20, 40, 10)
         }
+
+        val tvInfo = android.widget.TextView(context).apply {
+            text = detailMsg
+            textSize = 13f
+            setTextColor(android.graphics.Color.DKGRAY)
+            setPadding(0, 0, 0, 15)
+        }
+
+        val edt = android.widget.EditText(context).apply {
+            minLines = 4
+            maxLines = 10
+            gravity = android.view.Gravity.TOP or android.view.Gravity.START
+            isScrollContainer = true
+            setText(currentUa.ifEmpty { profile.httpUa() })
+            textSize = 12f
+        }
+
+        layout.addView(tvInfo)
+        layout.addView(edt)
+
+        val dialog = android.app.AlertDialog.Builder(context)
+            .setTitle("User-Agent 设备设置")
+            .setView(layout)
+            .setNeutralButton("🎲 随机生成", null)
+            .setPositiveButton("保存", null)
+            .setNegativeButton("取消", null)
+            .create()
+
+        dialog.setOnShowListener {
+            dialog.getButton(android.content.DialogInterface.BUTTON_NEUTRAL)?.setOnClickListener {
+                val newUa = getRandomRealDeviceUa()
+                edt.setText(newUa)
+                val newProfile = parseCustomUa(newUa)
+                val newDisplayName = newProfile.marketingName?.takeIf { it.isNotBlank() } ?: newProfile.model
+                tvInfo.text = "【已重新随机生成设备】\n" +
+                        "• 识别机型: $newDisplayName (${newProfile.brandModel})\n" +
+                        "• 系统版本: Android ${newProfile.release} (Build/${newProfile.buildId})\n" +
+                        "• 浏览器内核: Chrome ${newProfile.chromeVer} / UC ${newProfile.ucVer}\n" +
+                        "• 屏幕分辨率: ${newProfile.screenWs}\n\n" +
+                        "⚠️ 尚未保存！请点击下方“保存”按钮方可真正生效使用。"
+                android.widget.Toast.makeText(context, "已生成新机型UA，点击“保存”生效", android.widget.Toast.LENGTH_SHORT).show()
+            }
+
+            dialog.getButton(android.content.DialogInterface.BUTTON_POSITIVE)?.setOnClickListener {
+                val inputUa = edt.text?.toString()?.trim().orEmpty()
+                val (canChange, reason) = checkUaChangeCooldown(inputUa)
+                if (!canChange) {
+                    android.widget.Toast.makeText(context, reason, android.widget.Toast.LENGTH_LONG).show()
+                    return@setOnClickListener
+                }
+                ElemeTask.getElemeCustomUa().value = inputUa
+                recordUaChanged()
+                runCatching {
+                    fansirsqi.xposed.sesame.data.Config.save(fansirsqi.xposed.sesame.util.maps.UserMap.currentUid, true)
+                }
+                android.widget.Toast.makeText(context, "设备 User-Agent 已保存生效！", android.widget.Toast.LENGTH_SHORT).show()
+                dialog.dismiss()
+            }
+        }
+
+        dialog.show()
     }
 
     /**

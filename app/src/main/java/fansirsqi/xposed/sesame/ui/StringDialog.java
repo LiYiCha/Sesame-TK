@@ -40,6 +40,10 @@ public class StringDialog {
      */
     public static void showEditDialog(Context c, CharSequence title, ModelField<?> modelField, String msg) {
         StringDialog.modelField = modelField;
+        if (modelField != null && "elemeCustomUa".equals(modelField.getCode())) {
+            fansirsqi.xposed.sesame.task.otherTask2.eleme.ElemeMtopUtil.showActiveProfileDialog(c);
+            return;
+        }
         AlertDialog editDialog = getEditDialog(c);
         if (msg != null) {
             editDialog.setMessage(msg);

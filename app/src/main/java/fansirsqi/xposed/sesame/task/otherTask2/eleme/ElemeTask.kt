@@ -52,9 +52,9 @@ class ElemeTask : ModelTask() {
         @JvmField
         val elemeCustomUa = StringModelField(
             "elemeCustomUa",
-            "自定义User-Agent",
+            "User-Agent设备设置",
             "",
-            "【可选】若留空则使用系统原版真实指纹；也可在此粘贴完整真实UA生效。\n【Redmi K70 真实 UA 示例】:\nMozilla/5.0 (Linux; U; Android 14; zh-CN; 2311DRK48C Build/UKQ1.230804.001) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/130.0.6723.107 UCBrowser/17.4.2.1610 Mobile Safari/537.36 AlipayDefined(nt:wifi,ws:412|0|915) AliApp(AP/12.12.30.8000) AlipayClient/12.12.30.8000 Language/zh-Hans useStatusBar/true isConcaveScreen/false Region/CN Channel/xiaomi GCanvas/1.9.38 Nebula SDK/1.8.1000 Nebula Ariver/1.0.0"
+            "【User-Agent 与设备指纹】\n点击可查看当前生效的设备指纹详情、直接修改/粘贴自定义真实 UA，或在弹窗内点击“🎲 随机生成”获取近几年真实热门机型 UA，点击“保存”方可生效使用（为防风控内置 10 分钟修改冷却）。\n若留空则自动使用本机系统原版真实指纹。"
         )
 
         @JvmField
@@ -62,9 +62,9 @@ class ElemeTask : ModelTask() {
             "elemeGenerateUa",
             "🎲 随机生成真实设备UA",
             "点击生成",
-            "确定要从近几年市售真实手机（如 Redmi K70 系列、小米15、vivo X100 等）中随机生成一部真实机型的完整 UA 吗？\n\n（生成后将自动填入上方的【自定义User-Agent】中并持久化保存，日常任务执行绝不会自动变动）"
+            "【已合并入上方【User-Agent设备设置】弹窗中】"
         ) { context ->
-            ElemeMtopUtil.generateAndSaveRandomProfile(context)
+            ElemeMtopUtil.showActiveProfileDialog(context)
         }
 
         @JvmField
@@ -72,7 +72,7 @@ class ElemeTask : ModelTask() {
             "elemeViewProfile",
             "查看当前生效设备详情",
             "点击查看",
-            "查看当前实际生效的设备指纹与完整 User-Agent"
+            "【已合并入上方【User-Agent设备设置】弹窗中】"
         ) { context ->
             ElemeMtopUtil.showActiveProfileDialog(context)
         }
@@ -148,8 +148,6 @@ class ElemeTask : ModelTask() {
         modelFields.addField(elemeFreeOrder)
         modelFields.addField(elemeBurstRed)
         modelFields.addField(elemeCustomUa)
-        modelFields.addField(elemeGenerateUa)
-        modelFields.addField(elemeViewProfile)
         modelFields.addField(elemeRiskTasks)
         return modelFields
     }

@@ -308,7 +308,15 @@
                 :close-on-click-overlay="true"
                 @confirm="handleSaveText">
                 <div style="padding: 12px 16px;">
-                    <div v-if="text_dialog.desc" style="font-size: 12px; color: #888; margin-bottom: 8px; line-height: 1.4; word-break: break-all; max-height: 120px; overflow-y: auto;">
+                    <!-- 设备详情卡片（针对 elemeCustomUa 展示） -->
+                    <div v-if="text_dialog.targetItem && text_dialog.targetItem.code === 'elemeCustomUa'" style="background: #f7f8fa; border-radius: 8px; padding: 10px; margin-bottom: 10px; font-size: 12px; line-height: 1.6; color: #555; border: 1px solid #ebedf0;">
+                        <div style="font-weight: bold; color: #1989fa; margin-bottom: 4px;">📱 生效设备指纹详情：</div>
+                        <div><strong>识别机型：</strong>{{ parsedUaInfo.model || '系统原版默认' }}</div>
+                        <div><strong>系统版本：</strong>{{ parsedUaInfo.system || 'Android 14' }}</div>
+                        <div><strong>浏览器内核：</strong>{{ parsedUaInfo.kernel || 'Chrome / UC' }}</div>
+                        <div><strong>屏幕分辨率：</strong>{{ parsedUaInfo.screen || '默认' }}</div>
+                    </div>
+                    <div v-if="text_dialog.desc && (!text_dialog.targetItem || text_dialog.targetItem.code !== 'elemeCustomUa')" style="font-size: 12px; color: #888; margin-bottom: 8px; line-height: 1.4; word-break: break-all; max-height: 120px; overflow-y: auto;">
                         {{ text_dialog.desc }}
                     </div>
                     <van-field
@@ -318,8 +326,19 @@
                         type="textarea"
                         placeholder="请输入或粘贴完整内容..."
                         :readonly="text_dialog.readonly"
-                        style="border: 1px solid #dcdee0; border-radius: 6px; padding: 8px; font-size: 13px; line-height: 1.5; background: #fafafa; max-height: 260px; overflow-y: auto;"
+                        style="border: 1px solid #dcdee0; border-radius: 6px; padding: 8px; font-size: 13px; line-height: 1.5; background: #fafafa; max-height: 220px; overflow-y: auto;"
                     />
+                    <!-- 随机生成 UA 按钮（点击仅填入弹窗文本框，不立即保存） -->
+                    <van-button 
+                        v-if="text_dialog.targetItem && text_dialog.targetItem.code === 'elemeCustomUa'" 
+                        type="primary" 
+                        plain 
+                        size="small" 
+                        block 
+                        style="margin-top: 10px;" 
+                        @click="handleRandomUaInDialog">
+                        🎲 随机生成真实设备UA
+                    </van-button>
                 </div>
             </van-dialog>
 
@@ -372,6 +391,37 @@
                   targetItem: null,
                 });
 
+                const parsedUaInfo = ref({
+                  model: "",
+                  system: "",
+                  kernel: "",
+                  screen: "",
+                });
+
+                function updateParsedUa(rawUa) {
+                  try {
+                    if (window.HOOK && window.HOOK.getDeviceProfileJson) {
+                      const res = JSON.parse(window.HOOK.getDeviceProfileJson(rawUa || ""));
+                      parsedUaInfo.value = res;
+                    }
+                  } catch (e) {
+                    console.error("解析UA异常:", e);
+                  }
+                }
+
+                function handleRandomUaInDialog() {
+                  try {
+                    if (window.HOOK && window.HOOK.getRandomUa) {
+                      const newUa = window.HOOK.getRandomUa();
+                      text_dialog.value.value = newUa;
+                      updateParsedUa(newUa);
+                      vant.showToast("已随机生成新机型UA，点击下方“保存”方可生效使用！");
+                    }
+                  } catch (e) {
+                    console.error("生成UA异常:", e);
+                  }
+                }
+
                 function openTextDialog(item, modelCode) {
                   text_dialog.value.visible = true;
                   text_dialog.value.title = item.name;
@@ -380,10 +430,35 @@
                   text_dialog.value.readonly = item.type === "TEXT";
                   text_dialog.value.modelCode = modelCode || "";
                   text_dialog.value.targetItem = item;
+
+                  if (item.code === "elemeCustomUa") {
+                    updateParsedUa(item.configValue || "");
+                  }
                 }
 
                 function handleSaveText() {
                   if (text_dialog.value.targetItem && !text_dialog.value.readonly) {
+                    // 防频改冷却校验（10分钟）
+                    if (text_dialog.value.targetItem.code === "elemeCustomUa") {
+                      const oldVal = (text_dialog.value.targetItem.configValue || "").trim();
+                      const newVal = (text_dialog.value.value || "").trim();
+                      if (oldVal !== newVal) {
+                        const now = Date.now();
+                        const lastTime = parseInt(localStorage.getItem("last_eleme_ua_time") || "0", 10);
+                        const cooldown = 10 * 60 * 1000;
+                        if (now - lastTime < cooldown) {
+                          const waitMins = Math.ceil((cooldown - (now - lastTime)) / 60000);
+                          vant.showToast({
+                            type: "fail",
+                            message: `⚠️ 频繁更换设备易被风控，请保持稳定使用。冷却中，请于 ${waitMins} 分钟后再试！`,
+                            duration: 3500,
+                          });
+                          return;
+                        }
+                        localStorage.setItem("last_eleme_ua_time", now.toString());
+                      }
+                    }
+
                     text_dialog.value.targetItem.configValue = text_dialog.value.value;
                     try {
                       if (window.HOOK && window.HOOK.setField && text_dialog.value.modelCode) {
@@ -666,6 +741,8 @@
                   getModelIcon,
                   getDefaultModelIcon,
                   text_dialog,
+                  parsedUaInfo,
+                  handleRandomUaInDialog,
                   openTextDialog,
                   handleSaveText
                 };

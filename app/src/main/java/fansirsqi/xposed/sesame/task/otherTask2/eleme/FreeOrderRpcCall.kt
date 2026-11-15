@@ -4,92 +4,94 @@ import fansirsqi.xposed.sesame.hook.internal.LocationHelper
 import org.json.JSONObject
 
 /**
- * 饿了么免单/外卖秒杀券 RPC 封装
- * 严格对齐真实 H5 MTOP 接口规范（waimai-guide.ele.me 与淘免单 ETMD）
+ * 饿了么免单/互动中心 RPC 封装
+ * 严格对齐真实 H5 MTOP 接口规范（tb.ele.me 互动中心与下单赢免单）
  */
 object FreeOrderRpcCall {
+    const val API_CENTER_HOMEPAGE = "mtop.alsc.interact.et.interact.center.homepage"
+    const val API_RECORD_SIGN_IN = "mtop.alsc.interact.playapp.signin.component.recordsignin"
+    const val API_ORDER_FREE_DRAW = "mtop.alsc.interact.et.orderfree.draw"
+    const val API_LOTTERY_DRAW = "mtop.alsc.interact.playapp.reward.lottery.draw"
+
     const val API_CONSULT_UNIT = "mtop.alsc.upp.market.timelimitdraw.consultunit"
     const val API_TBET_SEND = "mtop.alsc.upp.tbet.send"
     const val API_PAGE_RECALL = "mtop.ele.rights.page.recall"
 
-    // 淘免单（ETMD）专属核心业务接口
-    const val API_QUERY_SIGN_INFO = "mtop.koubei.interactioncenter.sign.component.querysigninfo"
-    const val API_RECORD_SIGN_IN = "mtop.koubei.interactioncenter.sign.component.recordsignin"
-    const val API_ETMD_HOMEPAGE = "mtop.alsc.interact.et.md.homepage"
-    const val API_ICON_DRAW = "mtop.ele.growth.fission.client.etmd.et.icondraw"
-
-    private const val BIZ_SCENE_ETMD = "ETMD"
-    private const val ETMD_VERSION = "1.10.26"
-    private const val UNION_PARAMS = "scene=bc3900efd5aa428f895605cdeabca7e8"
+    // 阿里风控 asac token
+    const val ASAC_SIGNIN = "alsc3Lhy681SA5TT4iHgL3"
+    const val ASAC_ORDER_FREE_DRAW = "alscrX2P4rmvl0NhmQgr9x"
+    const val ASAC_LOTTERY_DRAW = "alscdZLQXT9DEAlXvQQOLO"
 
     private fun getCoordinates(): Pair<Double, Double> {
         val loc = LocationHelper.getLocation()
-        val lat = loc?.optString("latitude")?.toDoubleOrNull() ?: 25.265211
-        val lng = loc?.optString("longitude")?.toDoubleOrNull() ?: 110.335188
+        val lat = loc?.optString("latitude")?.toDoubleOrNull() ?: 31.2304
+        val lng = loc?.optString("longitude")?.toDoubleOrNull() ?: 121.4737
         return Pair(lat, lng)
     }
 
     /**
-     * 查询淘免单签到信息（获取 copyId 及当天打卡状态）
+     * 查询互动中心免单主页数据（包含连续签到状态、免单卡状态、下单免单与夺宝入口）
      */
-    fun querySignInfo(cookie: String): JSONObject? {
+    fun queryCenterHomepage(cookie: String): JSONObject? {
         val (lat, lng) = getCoordinates()
         val data = JSONObject().apply {
-            put("bizScene", BIZ_SCENE_ETMD)
+            put("bizScene", "interact_center")
+            put("version", "1.4.27")
+            put("modules", """["signIn","property","mdCard","orderFreeDraw","orderFreeMarquee","exchangeV2","exchangeBarrage"]""")
             put("latitude", lat)
             put("longitude", lng)
             put("instance", "INNER")
         }
-        return ElemeMtopUtil.send(API_QUERY_SIGN_INFO, data.toString(), cookie, method = "GET")
+        val headers = mapOf("x-tap" to "wx")
+        return ElemeMtopUtil.send(API_CENTER_HOMEPAGE, data.toString(), cookie, method = "GET", version = "1.0", extraHeaders = headers)
     }
 
     /**
-     * 淘免单每日打卡签到（每次打卡赠送 1~5 次免单抽奖机会 MD_CHANCE）
+     * 连续签到攒免单每日打卡
      */
-    fun recordSignIn(cookie: String, copyId: String): JSONObject? {
+    fun recordSignIn(cookie: String, copyId: String): ElemeMtopUtil.MtopResult {
         val (lat, lng) = getCoordinates()
         val data = JSONObject().apply {
+            put("bizScene", "interact_center")
+            put("latitude", lat)
+            put("longitude", lng)
             put("copyId", copyId)
-            put("bizScene", BIZ_SCENE_ETMD)
-            put("latitude", lat)
-            put("longitude", lng)
-            put("instance", "INNER")
         }
-        return ElemeMtopUtil.send(API_RECORD_SIGN_IN, data.toString(), cookie, method = "GET", version = "1.1")
+        val headers = mapOf("asac" to ASAC_SIGNIN, "x-tap" to "wx")
+        return ElemeMtopUtil.execute(API_RECORD_SIGN_IN, data.toString(), cookie, method = "GET", version = "1.0", extraHeaders = headers)
     }
 
     /**
-     * 淘免单主页数据查询（获取当前抽奖机会、主卡片状态与开奖倒计时 tips）
+     * 下单赢免单抽奖（mtop.alsc.interact.et.orderfree.draw）
      */
-    fun queryEtmdHomepage(cookie: String): JSONObject? {
+    fun orderFreeDraw(cookie: String): ElemeMtopUtil.MtopResult {
         val (lat, lng) = getCoordinates()
         val data = JSONObject().apply {
-            put("bizScene", BIZ_SCENE_ETMD)
-            put("version", ETMD_VERSION)
-            put("modules", """["mainPage"]""")
-            put("unionParams", UNION_PARAMS)
-            put("latitude", lat)
-            put("longitude", lng)
-            put("instance", "INNER")
+            put("bizScene", "order_free_draw")
+            put("version", "1.4.2")
+            put("longitude", lng.toString())
+            put("latitude", lat.toString())
         }
-        return ElemeMtopUtil.send(API_ETMD_HOMEPAGE, data.toString(), cookie, method = "GET")
+        val headers = mapOf("asac" to ASAC_ORDER_FREE_DRAW, "x-tap" to "wx")
+        return ElemeMtopUtil.execute(API_ORDER_FREE_DRAW, data.toString(), cookie, method = "GET", version = "1.0", extraHeaders = headers)
     }
 
     /**
-     * 淘免单核心抽奖接口（触发点击“立即抽免单”/“继续抽免单”）
+     * 夺宝 / 免单机会抽奖（mtop.alsc.interact.playapp.reward.lottery.draw）
      */
-    fun iconDraw(cookie: String): JSONObject? {
+    fun lotteryDraw(cookie: String, actId: String, componentId: String): ElemeMtopUtil.MtopResult {
         val (lat, lng) = getCoordinates()
         val data = JSONObject().apply {
-            put("bizScene", BIZ_SCENE_ETMD)
-            put("version", ETMD_VERSION)
-            put("unionParams", UNION_PARAMS)
-            put("latitude", lat)
-            put("longitude", lng)
-            put("instance", "INNER")
+            put("actId", actId)
+            put("componentId", componentId)
+            put("bizScene", "INTERACT_CENTER_LOT")
+            put("bizCode", "INTERACT_CENTER_LOT")
+            put("longitude", lng.toString())
+            put("latitude", lat.toString())
+            put("extParams", "{\"desc\":\"幸运福利\"}")
         }
-        val headers = mapOf("asac" to "alsc6AD8Rni21gsqJ5rceg")
-        return ElemeMtopUtil.send(API_ICON_DRAW, data.toString(), cookie, method = "GET", extraHeaders = headers)
+        val headers = mapOf("asac" to ASAC_LOTTERY_DRAW, "x-tap" to "wx")
+        return ElemeMtopUtil.execute(API_LOTTERY_DRAW, data.toString(), cookie, method = "GET", version = "1.0", extraHeaders = headers)
     }
 
     /**

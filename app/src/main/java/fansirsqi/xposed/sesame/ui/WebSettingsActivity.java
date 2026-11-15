@@ -381,6 +381,9 @@ public class WebSettingsActivity extends BaseActivity {
                     ModelField<?> modelField = modelConfig.getModelField(fieldCode);
                     if (modelField != null) {
                         modelField.setConfigValue(fieldValue);
+                        if ("elemeCustomUa".equals(fieldCode)) {
+                            fansirsqi.xposed.sesame.task.otherTask2.eleme.ElemeMtopUtil.recordUaChanged();
+                        }
                         return "SUCCESS";
                     }
                 } catch (Exception e) {
@@ -388,6 +391,16 @@ public class WebSettingsActivity extends BaseActivity {
                 }
             }
             return "FAILED";
+        }
+
+        @JavascriptInterface
+        public String getRandomUa() {
+            return fansirsqi.xposed.sesame.task.otherTask2.eleme.ElemeMtopUtil.getRandomRealDeviceUa();
+        }
+
+        @JavascriptInterface
+        public String getDeviceProfileJson(String rawUa) {
+            return fansirsqi.xposed.sesame.task.otherTask2.eleme.ElemeMtopUtil.getProfileJson(rawUa);
         }
 
         @JavascriptInterface
