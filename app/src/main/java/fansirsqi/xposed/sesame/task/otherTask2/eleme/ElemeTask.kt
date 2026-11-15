@@ -3,6 +3,7 @@ package fansirsqi.xposed.sesame.task.otherTask2.eleme
 import fansirsqi.xposed.sesame.data.Status
 import fansirsqi.xposed.sesame.entity.ElemeRiskTaskEntity
 import fansirsqi.xposed.sesame.model.BaseModel
+import fansirsqi.xposed.sesame.model.CustomSettings
 import fansirsqi.xposed.sesame.model.ModelFields
 import fansirsqi.xposed.sesame.model.ModelGroup
 import fansirsqi.xposed.sesame.model.modelFieldExt.BooleanModelField
@@ -209,6 +210,10 @@ class ElemeTask : ModelTask() {
     }
 
     override fun check(): Boolean {
+        if (CustomSettings.isOnceDailyBlackListed("eleme")) {
+            Log.runtime(TAG, "⏸ 当日单次运行模式：饿了么任务今日已完成首轮，已跳过！")
+            return false
+        }
         return if (TaskCommon.IS_ENERGY_TIME) {
             Log.runtime("⏸ 当前为只收能量时间【" + BaseModel.energyTime.value + "】，停止执行" + name + "任务！")
             false
