@@ -20,7 +20,7 @@ object LuckyStarTask {
     private val lock = ReentrantLock()
 
     private val BLACKLIST_KEYWORDS = listOf(
-        "下单", "购买", "买单", "开卡", "月卡", "SVIP", "超级会员", "付款", "好友", "充值"
+        "下单", "点一份外卖", "实付", "外卖", "购买", "买单", "开卡", "月卡", "SVIP", "超级会员", "付款", "好友", "充值", "邀请", "拉新", "拼团", "消费"
     )
 
     fun handle() {
@@ -200,11 +200,12 @@ object LuckyStarTask {
 
                 if (missionDefId <= 0) continue
 
-                // UI 风控跳过名单与通用黑名单过滤（静默跳过）
+                // UI 风控跳过名单、通用黑名单及关键词黑名单过滤（下单等不可自动化任务直接跳过）
                 val riskTasks: Set<String> = ElemeTask.getElemeRiskTasks().value ?: emptySet()
                 val inRiskTaskSet = riskTasks.contains(missionDefId.toString())
                 val inGlobalBlacklist = TaskBlacklist.isTaskInBlacklist(title) || TaskBlacklist.isTaskInBlacklist(missionDefId.toString())
-                if (inRiskTaskSet || inGlobalBlacklist) {
+                val inKeywordBlacklist = BLACKLIST_KEYWORDS.any { title.contains(it) }
+                if (inRiskTaskSet || inGlobalBlacklist || inKeywordBlacklist) {
                     continue
                 }
 

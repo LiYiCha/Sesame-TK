@@ -3,6 +3,7 @@ package fansirsqi.xposed.sesame.task.otherTask2.eleme
 import fansirsqi.xposed.sesame.data.Status
 import fansirsqi.xposed.sesame.util.Log
 import fansirsqi.xposed.sesame.util.RandomUtil
+import fansirsqi.xposed.sesame.util.TaskBlacklist
 import org.json.JSONArray
 import org.json.JSONObject
 import java.util.concurrent.locks.ReentrantLock
@@ -10,16 +11,20 @@ import java.util.concurrent.locks.ReentrantLock
 /**
  * 饿了么抽免单自动化任务
  * 包含：
- * 1. 连续签到攒免单每日打卡
- * 2. 免单专属任务（如 47202001【抽惊喜免单】）推进与奖励领取
- * 3. 下单赢免单抽奖（mtop.alsc.interact.et.orderfree.draw）
- * 4. 免单夺宝机会抽奖（mtop.alsc.interact.playapp.reward.lottery.draw）
+ * 1. 连续签到攒免单每日打卡（输出：[抽免单] 签到: +1 抽奖次数）
+ * 2. 免单专属浏览任务（如 47202001【抽惊喜免单】）推进与奖励领取
+ * 3. 彻底黑名单过滤所有下单/购买等不可自动化的消费任务
+ * 4. 免单夺宝机会抽奖（mtop.alsc.interact.playapp.reward.lottery.draw，中奖才报，无机会静默）
  * 5. 今日完成标记（防重复轮询刷屏）
  */
 object FreeOrderTask {
     private const val TAG = "FreeOrderTask"
     private const val FLAG_TODAY = "Eleme_FreeOrder_Done"
     private val lock = ReentrantLock()
+
+    private val BLACKLIST_KEYWORDS = listOf(
+        "下单", "点一份外卖", "实付", "外卖", "购买", "买单", "开卡", "月卡", "SVIP", "超级会员", "付款", "好友", "充值", "邀请", "拉新", "拼团", "消费"
+    )
 
     fun handle() {
         if (Status.hasFlagToday(FLAG_TODAY)) {
@@ -50,7 +55,10 @@ object FreeOrderTask {
             val homepageResp = FreeOrderRpcCall.queryCenterHomepage(cookie)
             if (homepageResp == null) {
                 val err = ElemeMtopUtil.lastError ?: "主页拉取失败"
-                Log.other("饿了么", "[抽免单] ❌ 拉取免单中心数据失败: $err")
+                val raw = ElemeMtopUtil.lastResponse ?: "无原始响应"
+                val msg = "[抽免单] ❌ 拉取免单中心数据失败: $err\n完整响应:\n$raw"
+                Log.error(TAG, msg)
+                Log.other("饿了么", msg)
                 return
             }
 
@@ -60,18 +68,19 @@ object FreeOrderTask {
             val copyId = signInObj?.optJSONObject("extInfo")?.optString("copyId").orEmpty()
             val signedToday = signInObj?.optBoolean("signIn", false) ?: false
 
-            // 3. 连续签到攒免单打卡
+            // 3. 连续签到攒免单打卡（精简命名：[抽免单] 签到: +1 抽奖次数，已签到静默）
             if (!signedToday && copyId.isNotEmpty()) {
                 Thread.sleep(RandomUtil.nextGaussianLong(400, 800))
                 val signRes = FreeOrderRpcCall.recordSignIn(cookie, copyId)
                 if (signRes.isSuccess) {
-                    val rewards = signRes.data?.optJSONArray("rewards")
-                    val starVal = rewards?.optJSONObject(0)?.optString("prizeValue", "238") ?: "238"
-                    Log.other("饿了么", "[抽免单] 🎉 连续签到攒免单打卡成功 (+$starVal 幸运星/免单权益)")
+                    Log.other("饿了么", "[抽免单] 签到: +1 抽奖次数")
                 } else {
                     val errMsg = signRes.errorMsg
                     if (!errMsg.contains("已签到") && !signRes.errorCode.contains("REPEAT")) {
-                        Log.other("饿了么", "[抽免单] 签到打卡: $errMsg")
+                        val rawResp = signRes.rawJson?.toString() ?: ElemeMtopUtil.lastResponse ?: errMsg
+                        val errDetail = "[抽免单] ❌ 签到打卡失败: ${signRes.errorCode}::$errMsg\n完整响应:\n$rawResp"
+                        Log.error(TAG, errDetail)
+                        Log.other("饿了么", errDetail)
                     }
                 }
             }
@@ -87,7 +96,12 @@ object FreeOrderTask {
                     val missionDefId = task.optLong("missionDefId").takeIf { it > 0 } ?: task.optLong("id")
                     if (missionDefId <= 0) continue
 
-                    // 仅聚焦免单相关任务
+                    // 黑名单过滤：下单、购买等不可自动化任务直接跳过，绝不做、绝不领奖
+                    if (BLACKLIST_KEYWORDS.any { title.contains(it) } || TaskBlacklist.isTaskInBlacklist(title) || TaskBlacklist.isTaskInBlacklist(missionDefId.toString())) {
+                        continue
+                    }
+
+                    // 仅聚焦免单相关任务（如 47202001【抽惊喜免单】）
                     val isFreeOrderTask = title.contains("免单") || missionDefId == 47202001L
                     if (!isFreeOrderTask) continue
 
@@ -102,7 +116,12 @@ object FreeOrderTask {
                         if (prizeRes.isSuccess) {
                             val desc = extractPrizeDesc(prizeRes.data ?: prizeRes.rawJson)
                             val descText = if (desc.isNotEmpty()) " +$desc" else ""
-                            Log.other("饿了么", "[抽免单] 成功领取免单任务奖励: [$title]$descText")
+                            Log.other("饿了么", "[抽免单] [$title]$descText")
+                        } else {
+                            val rawResp = prizeRes.rawJson?.toString() ?: ElemeMtopUtil.lastResponse ?: prizeRes.errorMsg
+                            val errDetail = "[抽免单] ❌ 领取免单任务奖励失败: [$title] -> ${prizeRes.errorCode}::${prizeRes.errorMsg}\n完整响应:\n$rawResp"
+                            Log.error(TAG, errDetail)
+                            Log.other("饿了么", errDetail)
                         }
                     } else {
                         val actionConfig = task.optJSONObject("actionConfig")
@@ -121,7 +140,6 @@ object FreeOrderTask {
                                 instanceId = task.optString("instanceId").takeIf { it.isNotEmpty() }
                             )
                             if (viewRes.isSuccess) {
-                                Log.other("饿了么", "[抽免单] 完成浏览任务: [$title]")
                                 Thread.sleep(RandomUtil.nextGaussianLong(1200, 2000))
                                 val refreshResp = LuckyStarRpcCall.queryTaskList(cookie, missionDefId)
                                 val refreshedTask = findTask(refreshResp, missionDefId) ?: task
@@ -129,24 +147,20 @@ object FreeOrderTask {
                                 if (prizeRes.isSuccess) {
                                     val desc = extractPrizeDesc(prizeRes.data ?: prizeRes.rawJson)
                                     val descText = if (desc.isNotEmpty()) " +$desc" else ""
-                                    Log.other("饿了么", "[抽免单] 成功领取免单任务奖励: [$title]$descText")
+                                    Log.other("饿了么", "[抽免单] [$title]$descText")
                                 }
+                            } else {
+                                val rawResp = viewRes.rawJson?.toString() ?: ElemeMtopUtil.lastResponse ?: viewRes.errorMsg
+                                val errDetail = "[抽免单] ❌ 浏览上报失败: [$title] -> ${viewRes.errorCode}::${viewRes.errorMsg}\n完整响应:\n$rawResp"
+                                Log.error(TAG, errDetail)
+                                Log.other("饿了么", errDetail)
                             }
                         }
                     }
                 }
             }
 
-            // 5. 下单赢免单抽奖（mtop.alsc.interact.et.orderfree.draw）
-            Thread.sleep(RandomUtil.nextGaussianLong(600, 1200))
-            val orderFreeRes = FreeOrderRpcCall.orderFreeDraw(cookie)
-            if (orderFreeRes.isSuccess) {
-                val prize = extractPrizeDesc(orderFreeRes.data ?: orderFreeRes.rawJson)
-                val prizeDesc = if (prize.isNotEmpty()) "，获得: $prize" else ""
-                Log.other("饿了么", "[抽免单] 🎟 下单赢免单抽奖成功$prizeDesc")
-            }
-
-            // 6. 夺宝 / 免单机会抽奖（mtop.alsc.interact.playapp.reward.lottery.draw）
+            // 5. 下单类免单任务直接黑名单跳过；此处仅处理免单夺宝/抽奖组件（mtop.alsc.interact.playapp.reward.lottery.draw）
             val lotteries = dataObj.optJSONArray("lotteries")
             if (lotteries != null && lotteries.length() > 0) {
                 for (j in 0 until lotteries.length()) {
@@ -158,13 +172,15 @@ object FreeOrderTask {
                         val lotRes = FreeOrderRpcCall.lotteryDraw(cookie, actId, compId)
                         if (lotRes.isSuccess) {
                             val prize = extractPrizeDesc(lotRes.data ?: lotRes.rawJson)
-                            Log.other("饿了么", "[抽免单] 🎰 免单夺宝中奖: $prize")
+                            if (prize.isNotEmpty()) {
+                                Log.other("饿了么", "[抽免单] 中奖: $prize")
+                            }
                         }
                     }
                 }
             }
 
-            // 7. 外卖小程序打卡召回
+            // 6. 外卖小程序打卡召回
             FreeOrderRpcCall.pageRecall(cookie)
 
             Status.setFlagToday(FLAG_TODAY)
