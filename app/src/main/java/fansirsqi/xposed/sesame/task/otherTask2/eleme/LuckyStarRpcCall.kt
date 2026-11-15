@@ -16,8 +16,31 @@ object LuckyStarRpcCall {
     const val API_PAGEVIEW = "mtop.ele.biz.growth.task.event.pageview"
     const val API_TRIGGER = "mtop.ele.biz.growth.task.event.trigger"
 
+    // 签到与打卡
+    const val API_SIGNIN = "mtop.alsc.interact.playapp.signin.component.signinandreceive"
+    const val API_RECORDSIGNIN = "mtop.alsc.interact.playapp.signin.component.recordsignin"
+
+    // 夺宝/抽奖
+    const val API_LOTTERY_DRAW = "mtop.alsc.interact.playapp.reward.lottery.draw"
+    const val API_ORDERFREE_DRAW = "mtop.alsc.interact.et.orderfree.draw"
+
+    // 兑换商城与资产
+    const val API_MALL_LIST = "mtop.alsc.interact.playapp.reward.right.mallrecall"
+    const val API_PROPERTY_DETAIL = "mtop.koubei.interaction.center.common.querypropertydetail"
+
+    // 前置营销弹窗与权益召回（对齐 tb.log 真实生命周期）
+    const val API_CARD_DATA_RECALL = "mtop.alsc.card.cardDataRecallFacade"
+    const val API_RIGHTS_PAGE_RECALL = "mtop.ele.rights.page.recall"
+    const val API_RIGHTS_COMPONENT_RECALL = "mtop.ele.rights.component.recall"
+    const val API_CONSULT_UNIT = "mtop.alsc.upp.market.timelimitdraw.consultunit"
+
     const val ASAC_PRIZE = "alscadOjfleDPawx9zVoT0"
     const val ASAC_PAGEVIEW = "alscFS8BNTO6jivYS7XOAM"
+    const val ASAC_TRIGGER = "2A21607NIIT1ND5C4YXJ6C"
+    const val ASAC_SIGNIN = "alsc3Lhy681SA5TT4iHgL3"
+    const val ASAC_LOTTERY_DRAW = "alscdZLQXT9DEAlXvQQOLO"
+    const val ASAC_ORDER_FREE_DRAW = "alscrX2P4rmvl0NhmQgr9x"
+    const val ASAC_MALL_EXCHANGE = "alsc5KvbdX5mHl3sdv4guV"
 
     const val COLLECTION_ID = "3112"
     private const val BIZ_SCENE = "interact_center"
@@ -143,10 +166,8 @@ object LuckyStarRpcCall {
                 }
             } else {
                 put("count", 1)
+                put("extInfo", "{\"triggerScene\":\"MISSION_LIST\"}")
             }
-            put("extInfo", "{\"triggerScene\":\"MISSION_LIST\"}")
-            put("spPageId", SP_PAGE_ID)
-            put("instance", "INNER")
         }
         val headers = mapOf("asac" to ASAC_PRIZE)
         return ElemeMtopUtil.execute(API_RECEIVE_PRIZE, data.toString(), cookie, method = "GET", extraHeaders = headers)
@@ -240,7 +261,6 @@ object LuckyStarRpcCall {
             put("collectionId", collectionId)
             put("missionId", missionDefId.toString())
             put("missionXId", missionXId)
-            put("instance", "INNER")
         }
         return ElemeMtopUtil.execute(API_TRIGGER, data.toString(), cookie, method = "GET", version = "1.1")
     }
@@ -327,5 +347,174 @@ object LuckyStarRpcCall {
             put("instance", "INNER")
         }
         return ElemeMtopUtil.send(API_SUBSCRIBE_REMIND, data.toString(), cookie, method = "GET")
+    }
+
+    /**
+     * 前置营销弹窗与权益召回全链路（对齐 tb.log 第 107~140 行真实生命周期）
+     */
+    fun preflightMarketing(cookie: String) {
+        val (lat, lng) = getCoordinates()
+
+        // 1. 卡片营销数据召回（获取首页营销活动、弹窗 cardIds）
+        try {
+            val cardData = JSONObject().apply {
+                put("cardIds", "[\"hPD1755590981175\",\"Dde1763974474769\",\"XHK1755590830057\",\"BFd1760926092920\",\"TzZ1755161222114\",\"pFH1765806298465\",\"yfp1766631235508\"]")
+                put("bizSource", "alsc-activity")
+                put("instance", "INNER")
+            }
+            ElemeMtopUtil.send(API_CARD_DATA_RECALL, cardData.toString(), cookie, method = "GET")
+        } catch (_: Throwable) {}
+
+        // 2. 页面权益召回 (rights.page.recall)
+        try {
+            val pageRecallData = JSONObject().apply {
+                put("screenNum", "1")
+                put("locationDTO", "{\"latitude\":\"$lat\",\"longitude\":\"$lng\"}")
+                put("sceneCode", "ENGAGE_HUB")
+                put("instance", "INNER")
+            }
+            ElemeMtopUtil.send(API_RIGHTS_PAGE_RECALL, pageRecallData.toString(), cookie, method = "POST")
+        } catch (_: Throwable) {}
+
+        // 3. 组件权益召回 (rights.component.recall)
+        try {
+            val compRecallData = JSONObject().apply {
+                put("sceneCode", "ENGAGE_HUB")
+                put("instance", "INNER")
+            }
+            ElemeMtopUtil.send(API_RIGHTS_COMPONENT_RECALL, compRecallData.toString(), cookie, method = "POST")
+        } catch (_: Throwable) {}
+
+        // 4. 限时抽奖/营销弹窗咨询 (timelimitdraw.consultunit)
+        try {
+            val consultData = JSONObject().apply {
+                put("bizScene", "UPP_TIMELIMITDRAW")
+                put("latitude", lat)
+                put("longitude", lng)
+                put("instance", "INNER")
+            }
+            ElemeMtopUtil.send(API_CONSULT_UNIT, consultData.toString(), cookie, method = "POST")
+        } catch (_: Throwable) {}
+    }
+
+    /**
+     * 获取首页聚合完整数据（包括星星余额、签到配置、夺宝组件、下单抽奖等）
+     */
+    fun getHomepageData(cookie: String): JSONObject? {
+        val (lat, lng) = getCoordinates()
+        val cpnCodes = "[\"PLAY_NOTICE_CPN\",\"INTERACT_RESOURCE_CPN\",\"MORE_MENU_CPN\",\"STAR_MSG_CONTENT_CPN\",\"PLAY_RESOURCE_CPN\",\"INTERACT_CENTER_SKIN_COMPONENT\",\"INTERACT_CENTER_BUBBLE\",\"INTERACT_CENTER_DRAW_BUBBLE\",\"INTERACT_CENTER_LOTTERY\",\"INTERACT_CENTER_CDP_CONFIG\",\"INTERACT_CENTER_MODAL_TASK\"]"
+        val data = JSONObject().apply {
+            put("bizScene", BIZ_SCENE)
+            put("version", "1.4.22")
+            put("cpnCodes", cpnCodes)
+            put("latitude", lat)
+            put("longitude", lng)
+            put("cityName", "")
+            put("channel", "ES0021178012")
+            put("spPageId", SP_PAGE_ID)
+            put("instance", "INNER")
+        }
+        return ElemeMtopUtil.send(API_HOMEPAGE, data.toString(), cookie, method = "GET", version = "1.0")
+    }
+
+    /**
+     * 幸运星打卡签到（对齐 幸运星.py signin 规范）
+     */
+    fun signIn(
+        cookie: String,
+        copyId: String,
+        strategy: String,
+        award: JSONObject?
+    ): ElemeMtopUtil.MtopResult {
+        val (lat, lng) = getCoordinates()
+        val data = JSONObject().apply {
+            put("bizScene", BIZ_SCENE)
+            put("latitude", lat)
+            put("longitude", lng)
+            if (copyId.isNotEmpty()) {
+                put("copyId", copyId)
+            }
+            if (award != null) {
+                if (award.has("actCode")) put("actCode", award.optString("actCode"))
+                if (award.has("sceneCode")) put("sceneCode", award.optString("sceneCode"))
+                if (award.has("prizeMark")) put("prizeMark", award.optString("prizeMark"))
+                if (award.has("signInDay")) put("signInDay", award.optInt("signInDay"))
+            }
+        }
+        val headers = mapOf("asac" to ASAC_SIGNIN)
+        val order = if (strategy == "SIGNIN_AND_RECEIVE") {
+            listOf(API_SIGNIN to "1.0", API_RECORDSIGNIN to "1.1")
+        } else {
+            listOf(API_RECORDSIGNIN to "1.1", API_SIGNIN to "1.0")
+        }
+
+        var lastResult = ElemeMtopUtil.MtopResult(isSuccess = false, isNotLogin = false, errorCode = "NOT_RUN", errorMsg = "未执行")
+        for ((api, ver) in order) {
+            val res = ElemeMtopUtil.execute(api, data.toString(), cookie, method = "GET", version = ver, extraHeaders = headers)
+            if (res.isSuccess) return res
+            lastResult = res
+            if (res.errorCode.contains("REPEAT") || res.errorCode.contains("ALREADY") || res.errorMsg.contains("已签到")) {
+                break
+            }
+        }
+        return lastResult
+    }
+
+    /**
+     * 幸运星夺宝抽奖（对齐 幸运星.py draw_lottery 规范）
+     */
+    fun drawLottery(cookie: String, lotteryComponent: JSONObject): ElemeMtopUtil.MtopResult {
+        val (lat, lng) = getCoordinates()
+        val actId = lotteryComponent.optString("actId")
+        val componentId = lotteryComponent.optString("componentId")
+        val data = JSONObject().apply {
+            put("actId", actId)
+            put("componentId", componentId)
+            put("bizScene", "INTERACT_CENTER_LOT")
+            put("bizCode", "INTERACT_CENTER_LOT")
+            put("longitude", lng)
+            put("latitude", lat)
+            put("extParams", "{\"desc\":\"幸运福利\"}")
+        }
+        val headers = mapOf("asac" to ASAC_LOTTERY_DRAW)
+        return ElemeMtopUtil.execute(API_LOTTERY_DRAW, data.toString(), cookie, method = "GET", extraHeaders = headers)
+    }
+
+    /**
+     * 下单免单抽奖（对齐 幸运星.py orderfree_draw 规范）
+     */
+    fun drawOrderFree(cookie: String, orderFreeData: JSONObject?): ElemeMtopUtil.MtopResult {
+        val (lat, lng) = getCoordinates()
+        val dataObj = orderFreeData?.optJSONObject("data")
+        val cityId = dataObj?.optJSONObject("extInfo")?.optString("cityId").orEmpty()
+        val data = JSONObject().apply {
+            put("bizScene", "order_free_draw")
+            put("longitude", lng)
+            put("latitude", lat)
+            if (cityId.isNotEmpty()) {
+                put("cityId", cityId)
+            }
+        }
+        val headers = mapOf("asac" to ASAC_ORDER_FREE_DRAW)
+        return ElemeMtopUtil.execute(API_ORDERFREE_DRAW, data.toString(), cookie, method = "GET", extraHeaders = headers)
+    }
+
+    /**
+     * 查询兑换商城列表（对齐 幸运星.py mall 规范）
+     */
+    fun queryMallList(cookie: String): JSONObject? {
+        val (lat, lng) = getCoordinates()
+        val data = JSONObject().apply {
+            put("bizScene", BIZ_SCENE)
+            put("version", "1.4.22")
+            put("propertyBizType", "STAR")
+            put("pageNo", 1)
+            put("pageSize", 10)
+            put("latitude", lat)
+            put("longitude", lng)
+            put("spPageId", SP_PAGE_ID)
+            put("instance", "INNER")
+        }
+        return ElemeMtopUtil.send(API_MALL_LIST, data.toString(), cookie, method = "GET")
     }
 }

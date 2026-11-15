@@ -47,7 +47,13 @@ object FreeOrderTask {
                 return
             }
 
-            // 2. 获取互动中心免单主页数据
+            // 2. 前置营销弹窗与限时抽奖咨询（模拟真实进入淘免单页面）
+            try {
+                FreeOrderRpcCall.consultUnit(cookie)
+                Thread.sleep(RandomUtil.nextGaussianLong(300, 500))
+            } catch (_: Throwable) {}
+
+            // 3. 获取互动中心免单主页数据
             val homepageResp = FreeOrderRpcCall.queryCenterHomepage(cookie)
             if (homepageResp == null) {
                 val err = ElemeMtopUtil.lastError ?: "主页拉取失败"
