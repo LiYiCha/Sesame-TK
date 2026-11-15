@@ -23,7 +23,7 @@ object FreeOrderTask {
     private val lock = ReentrantLock()
 
     fun handle() {
-        if (Status.hasFlagToday(FLAG_TODAY)) {
+        if (!ElemeTask.elemeFreeOrder.value || Status.hasFlagToday(FLAG_TODAY)) {
             return
         }
 
@@ -158,6 +158,11 @@ object FreeOrderTask {
                                 val prizeRes = LuckyStarRpcCall.receivePrize(cookie, refreshedTask, null)
                                 if (prizeRes.isSuccess) {
                                     Log.other("饿了么", "[抽免单] [$title]: +1 抽奖次数")
+                                } else {
+                                    val rawResp = prizeRes.rawJson?.toString() ?: ElemeMtopUtil.lastResponse ?: prizeRes.errorMsg
+                                    val errDetail = "[抽免单] ❌ 领取免单任务奖励失败: [$title] -> ${prizeRes.errorCode}::${prizeRes.errorMsg}\n完整响应:\n$rawResp"
+                                    Log.error(TAG, errDetail)
+                                    Log.other("饿了么", errDetail)
                                 }
                             } else {
                                 val rawResp = viewRes.rawJson?.toString() ?: ElemeMtopUtil.lastResponse ?: viewRes.errorMsg

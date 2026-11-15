@@ -20,7 +20,7 @@ object LuckyStarTask {
     private val lock = ReentrantLock()
 
     fun handle() {
-        if (Status.hasFlagToday(FLAG_TODAY)) {
+        if (!ElemeTask.elemeLuckyStar.value || Status.hasFlagToday(FLAG_TODAY)) {
             return
         }
 
