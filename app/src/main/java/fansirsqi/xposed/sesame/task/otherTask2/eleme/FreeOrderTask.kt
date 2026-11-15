@@ -65,13 +65,27 @@ object FreeOrderTask {
             val rootData = homepageResp.optJSONObject("data") ?: homepageResp
             val dataObj = rootData.optJSONObject("data") ?: rootData
             val signInObj = dataObj.optJSONObject("signIn")?.optJSONObject("data")
-            val copyId = signInObj?.optJSONObject("extInfo")?.optString("copyId").orEmpty()
-            val signedToday = signInObj?.optBoolean("signIn", false) ?: false
+            val dtos = signInObj?.optJSONArray("signInQueryPrizeDTOS")
+            var todayDto: JSONObject? = null
+            if (dtos != null) {
+                for (k in 0 until dtos.length()) {
+                    val d = dtos.optJSONObject(k) ?: continue
+                    if (d.optBoolean("today", false)) {
+                        todayDto = d
+                        break
+                    }
+                }
+            }
+            val copyId = todayDto?.optJSONObject("extInfo")?.optString("copyId")?.takeIf { it.isNotEmpty() }
+                ?: signInObj?.optJSONObject("extInfo")?.optString("copyId").orEmpty()
+            val signedToday = todayDto?.optBoolean("signIn", false) ?: signInObj?.optBoolean("signIn", false) ?: false
+            val awards = todayDto?.optJSONObject("extInfo")?.optJSONArray("stageAward")
+            val award = awards?.optJSONObject(0)
 
-            // 3. 连续签到攒免单打卡（精简命名：[抽免单] 签到: +1 抽奖次数，已签到静默）
+            // 3. 连续签到攒免单打卡（对齐幸运星.py：[抽免单] 签到: +1 抽奖次数，已签到静默）
             if (!signedToday && copyId.isNotEmpty()) {
                 Thread.sleep(RandomUtil.nextGaussianLong(400, 800))
-                val signRes = FreeOrderRpcCall.recordSignIn(cookie, copyId)
+                val signRes = FreeOrderRpcCall.recordSignIn(cookie, copyId, award)
                 if (signRes.isSuccess) {
                     Log.other("饿了么", "[抽免单] 签到: +1 抽奖次数")
                 } else {
@@ -96,8 +110,16 @@ object FreeOrderTask {
                     val missionDefId = task.optLong("missionDefId").takeIf { it > 0 } ?: task.optLong("id")
                     if (missionDefId <= 0) continue
 
-                    // 黑名单过滤：下单、购买等不可自动化任务直接跳过，绝不做、绝不领奖
-                    if (BLACKLIST_KEYWORDS.any { title.contains(it) } || TaskBlacklist.isTaskInBlacklist(title) || TaskBlacklist.isTaskInBlacklist(missionDefId.toString())) {
+                    val actionConfig = task.optJSONObject("actionConfig")
+                    val actionType = actionConfig?.optString("actionType").orEmpty()
+
+                    // 对齐幸运星.py黑名单过滤：ORDER/P2P类型以及下单、购买等不可自动化任务直接跳过，绝不做、绝不领奖
+                    val isOrderOrP2P = actionType == "ORDER" || actionType == "P2P"
+                    val isBlacklisted = isOrderOrP2P ||
+                            BLACKLIST_KEYWORDS.any { title.contains(it) } ||
+                            TaskBlacklist.isTaskInBlacklist(title) ||
+                            TaskBlacklist.isTaskInBlacklist(missionDefId.toString())
+                    if (isBlacklisted) {
                         continue
                     }
 
@@ -114,9 +136,7 @@ object FreeOrderTask {
                     if (LuckyStarRpcCall.isTaskRewardable(task)) {
                         val prizeRes = LuckyStarRpcCall.receivePrize(cookie, task, null)
                         if (prizeRes.isSuccess) {
-                            val desc = extractPrizeDesc(prizeRes.data ?: prizeRes.rawJson)
-                            val descText = if (desc.isNotEmpty()) " +$desc" else ""
-                            Log.other("饿了么", "[抽免单] [$title]$descText")
+                            Log.other("饿了么", "[抽免单] [$title]: +1 抽奖次数")
                         } else {
                             val rawResp = prizeRes.rawJson?.toString() ?: ElemeMtopUtil.lastResponse ?: prizeRes.errorMsg
                             val errDetail = "[抽免单] ❌ 领取免单任务奖励失败: [$title] -> ${prizeRes.errorCode}::${prizeRes.errorMsg}\n完整响应:\n$rawResp"
@@ -124,8 +144,6 @@ object FreeOrderTask {
                             Log.other("饿了么", errDetail)
                         }
                     } else {
-                        val actionConfig = task.optJSONObject("actionConfig")
-                        val actionType = actionConfig?.optString("actionType").orEmpty()
                         val actionValue = actionConfig?.optJSONObject("actionValue")
                         val pageSpm = actionValue?.optString("pageSpm").orEmpty()
 
@@ -145,9 +163,7 @@ object FreeOrderTask {
                                 val refreshedTask = findTask(refreshResp, missionDefId) ?: task
                                 val prizeRes = LuckyStarRpcCall.receivePrize(cookie, refreshedTask, null)
                                 if (prizeRes.isSuccess) {
-                                    val desc = extractPrizeDesc(prizeRes.data ?: prizeRes.rawJson)
-                                    val descText = if (desc.isNotEmpty()) " +$desc" else ""
-                                    Log.other("饿了么", "[抽免单] [$title]$descText")
+                                    Log.other("饿了么", "[抽免单] [$title]: +1 抽奖次数")
                                 }
                             } else {
                                 val rawResp = viewRes.rawJson?.toString() ?: ElemeMtopUtil.lastResponse ?: viewRes.errorMsg

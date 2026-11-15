@@ -113,6 +113,10 @@ object LuckyStarTask {
 
                 val actionConfig = task.optJSONObject("actionConfig")
                 val actionType = actionConfig?.optString("actionType").orEmpty()
+                // 对齐幸运星.py规范：ORDER / P2P 类型任务无法自动化，直接跳过
+                if (actionType == "ORDER" || actionType == "P2P") {
+                    continue
+                }
                 val actionValue = actionConfig?.optJSONObject("actionValue")
                 val pageSpm = actionValue?.optString("pageSpm").orEmpty()
                 val sceneCode = actionValue?.optString("scenceCode").orEmpty()
@@ -201,6 +205,12 @@ object LuckyStarTask {
                 if (missionDefId <= 0) continue
 
                 // UI 风控跳过名单、通用黑名单及关键词黑名单过滤（下单等不可自动化任务直接跳过）
+                val actionConfig = task.optJSONObject("actionConfig")
+                val actionType = actionConfig?.optString("actionType").orEmpty()
+                if (actionType == "ORDER" || actionType == "P2P") {
+                    continue
+                }
+
                 val riskTasks: Set<String> = ElemeTask.getElemeRiskTasks().value ?: emptySet()
                 val inRiskTaskSet = riskTasks.contains(missionDefId.toString())
                 val inGlobalBlacklist = TaskBlacklist.isTaskInBlacklist(title) || TaskBlacklist.isTaskInBlacklist(missionDefId.toString())

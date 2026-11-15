@@ -47,18 +47,36 @@ object FreeOrderRpcCall {
     }
 
     /**
-     * 连续签到攒免单每日打卡
+     * 连续签到攒免单每日打卡（对齐幸运星.py规范：支持传入今日奖励参数与版本自愈）
      */
-    fun recordSignIn(cookie: String, copyId: String): ElemeMtopUtil.MtopResult {
+    fun recordSignIn(
+        cookie: String,
+        copyId: String,
+        award: JSONObject? = null
+    ): ElemeMtopUtil.MtopResult {
         val (lat, lng) = getCoordinates()
         val data = JSONObject().apply {
             put("bizScene", "interact_center")
             put("latitude", lat)
             put("longitude", lng)
-            put("copyId", copyId)
+            if (copyId.isNotEmpty()) {
+                put("copyId", copyId)
+            }
+            if (award != null) {
+                listOf("actCode", "sceneCode", "prizeMark", "signInDay").forEach { key ->
+                    val v = award.optString(key)
+                    if (v.isNotEmpty()) {
+                        put(key, v)
+                    }
+                }
+            }
         }
         val headers = mapOf("asac" to ASAC_SIGNIN, "x-tap" to "wx")
-        return ElemeMtopUtil.execute(API_RECORD_SIGN_IN, data.toString(), cookie, method = "GET", version = "1.0", extraHeaders = headers)
+        var res = ElemeMtopUtil.execute(API_RECORD_SIGN_IN, data.toString(), cookie, method = "GET", version = "1.0", extraHeaders = headers)
+        if (!res.isSuccess && !res.errorMsg.contains("已签到") && !res.errorCode.contains("REPEAT")) {
+            res = ElemeMtopUtil.execute(API_RECORD_SIGN_IN, data.toString(), cookie, method = "GET", version = "1.1", extraHeaders = headers)
+        }
+        return res
     }
 
     /**
