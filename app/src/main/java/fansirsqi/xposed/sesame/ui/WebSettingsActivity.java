@@ -395,12 +395,52 @@ public class WebSettingsActivity extends BaseActivity {
 
         @JavascriptInterface
         public String getRandomUa() {
-            return fansirsqi.xposed.sesame.task.otherTask2.eleme.ElemeMtopUtil.getRandomRealDeviceUa();
+            try {
+                return fansirsqi.xposed.sesame.task.otherTask2.eleme.ElemeMtopUtil.getRandomRealDeviceUa();
+            } catch (Throwable t) {
+                Log.printStackTrace(TAG, t);
+                return "";
+            }
         }
 
         @JavascriptInterface
         public String getDeviceProfileJson(String rawUa) {
-            return fansirsqi.xposed.sesame.task.otherTask2.eleme.ElemeMtopUtil.getProfileJson(rawUa);
+            try {
+                return fansirsqi.xposed.sesame.task.otherTask2.eleme.ElemeMtopUtil.getProfileJson(rawUa);
+            } catch (Throwable t) {
+                Log.printStackTrace(TAG, t);
+                return "{\"model\":\"系统原版默认\",\"brandModel\":\"vivo/V2238A\",\"system\":\"Android 14\",\"kernel\":\"Chrome / UC\",\"screen\":\"412|0|915\",\"alipayVer\":\"12.12.30.8000\",\"ua\":\"\",\"isCustom\":false}";
+            }
+        }
+
+        @JavascriptInterface
+        public void runField(String modelCode, String fieldCode) {
+            runOnUiThread(() -> {
+                try {
+                    ModelConfig modelConfig = ModelTask.getModelConfigMap().get(modelCode);
+                    if (modelConfig != null) {
+                        ModelField<?> modelField = modelConfig.getModelField(fieldCode);
+                        if (modelField instanceof fansirsqi.xposed.sesame.model.modelFieldExt.EmptyModelField) {
+                            ((fansirsqi.xposed.sesame.model.modelFieldExt.EmptyModelField) modelField).getView(WebSettingsActivity.this).performClick();
+                        }
+                    }
+                } catch (Throwable t) {
+                    Log.printStackTrace(TAG, t);
+                }
+            });
+        }
+
+        @JavascriptInterface
+        public String getMallItemDetail(String itemId) {
+            try {
+                fansirsqi.xposed.sesame.entity.ElemeMallEntity entity = fansirsqi.xposed.sesame.entity.ElemeMallEntity.getItem(itemId);
+                if (entity != null) {
+                    return entity.getFullDetailText();
+                }
+            } catch (Throwable t) {
+                Log.printStackTrace(TAG, t);
+            }
+            return "";
         }
 
         @JavascriptInterface

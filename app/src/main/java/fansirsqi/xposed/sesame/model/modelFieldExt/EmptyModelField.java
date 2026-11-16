@@ -56,7 +56,12 @@ public class EmptyModelField extends ModelField<Object> {
     @JsonIgnore
     public View getView(Context context) {
         Button btn = new Button(context);
-        btn.setText(getName());
+        if ("elemeViewProfile".equals(code)) {
+            String shortName = fansirsqi.xposed.sesame.task.otherTask2.eleme.ElemeMtopUtil.getCurrentDeviceShortName();
+            btn.setText("设备机型: " + shortName + " (查看)");
+        } else {
+            btn.setText(name);
+        }
         btn.setLayoutParams(new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         btn.setTextColor(ContextCompat.getColor(context, R.color.selection_color));
         btn.setBackground(ContextCompat.getDrawable(context, R.drawable.dialog_list_button));
@@ -66,23 +71,33 @@ public class EmptyModelField extends ModelField<Object> {
         btn.setPaddingRelative(40, 0, 40, 0);
         btn.setAllCaps(false);
         if (clickConsumer != null) {
-            String title = (dialogTitle != null && !dialogTitle.isEmpty()) ? dialogTitle : "警告";
-            String msg = (dialogMessage != null && !dialogMessage.isEmpty()) ? dialogMessage : "确认执行该操作？";
-            btn.setOnClickListener(v -> new AlertDialog.Builder(context)
-                    .setTitle(title)
-                    .setMessage(msg)
-                    .setPositiveButton(R.string.ok, (dialog, id) -> clickConsumer.accept(context))
-                    .setNegativeButton(R.string.cancel, (dialog, id) -> dialog.dismiss())
-                    .create()
-                    .show());
+            if ((dialogTitle != null && !dialogTitle.isEmpty()) || (dialogMessage != null && !dialogMessage.isEmpty())) {
+                String title = (dialogTitle != null && !dialogTitle.isEmpty()) ? dialogTitle : "警告";
+                String msg = (dialogMessage != null && !dialogMessage.isEmpty()) ? dialogMessage : "确认执行该操作？";
+                btn.setOnClickListener(v -> new AlertDialog.Builder(context)
+                        .setTitle(title)
+                        .setMessage(msg)
+                        .setPositiveButton(R.string.ok, (dialog, id) -> clickConsumer.accept(context))
+                        .setNegativeButton(R.string.cancel, (dialog, id) -> dialog.dismiss())
+                        .create()
+                        .show());
+            } else {
+                btn.setOnClickListener(v -> clickConsumer.accept(context));
+            }
         } else if (clickRunner != null) {
-            btn.setOnClickListener(v -> new AlertDialog.Builder(context)
-                    .setTitle("警告")
-                    .setMessage("确认执行该操作？")
-                    .setPositiveButton(R.string.ok, (dialog, id) -> clickRunner.run())
-                    .setNegativeButton(R.string.cancel, (dialog, id) -> dialog.dismiss())
-                    .create()
-                    .show());
+            if ((dialogTitle != null && !dialogTitle.isEmpty()) || (dialogMessage != null && !dialogMessage.isEmpty())) {
+                String title = (dialogTitle != null && !dialogTitle.isEmpty()) ? dialogTitle : "警告";
+                String msg = (dialogMessage != null && !dialogMessage.isEmpty()) ? dialogMessage : "确认执行该操作？";
+                btn.setOnClickListener(v -> new AlertDialog.Builder(context)
+                        .setTitle(title)
+                        .setMessage(msg)
+                        .setPositiveButton(R.string.ok, (dialog, id) -> clickRunner.run())
+                        .setNegativeButton(R.string.cancel, (dialog, id) -> dialog.dismiss())
+                        .create()
+                        .show());
+            } else {
+                btn.setOnClickListener(v -> clickRunner.run());
+            }
         } else {
             btn.setOnClickListener(v -> Toast.makeText(context, "无配置项", Toast.LENGTH_SHORT).show());
         }

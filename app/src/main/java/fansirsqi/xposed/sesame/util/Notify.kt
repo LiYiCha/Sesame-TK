@@ -294,4 +294,35 @@ object Notify {
             isSendingErrorNotification = false
         }
     }
+
+    /**
+     * 发送高优先级中奖通知（系统通知栏强提醒：震动 + 横幅弹窗）
+     */
+    @JvmStatic
+    fun sendPrizeNotification(title: String, content: String) {
+        try {
+            val ctx = context ?: fansirsqi.xposed.sesame.data.ViewAppInfo.context ?: return
+            val notifyMgr = ctx.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager ?: return
+            val channelId = "fansirsqi.xposed.sesame.PRIZE_NOTIFY_CHANNEL"
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                val notificationChannel = NotificationChannel(channelId, "🎉 芝麻粒中奖提醒", NotificationManager.IMPORTANCE_HIGH).apply {
+                    enableLights(true)
+                    enableVibration(true)
+                    setShowBadge(true)
+                }
+                notifyMgr.createNotificationChannel(notificationChannel)
+            }
+            val builder = NotificationCompat.Builder(ctx, channelId)
+                .setSmallIcon(android.R.drawable.sym_def_app_icon)
+                .setLargeIcon(BitmapFactory.decodeResource(ctx.resources, android.R.drawable.sym_def_app_icon))
+                .setContentTitle(title)
+                .setContentText(content)
+                .setSubText("饿了么免单")
+                .setPriority(NotificationCompat.PRIORITY_HIGH)
+                .setAutoCancel(true)
+            notifyMgr.notify(777, builder.build())
+        } catch (e: Throwable) {
+            Log.error(TAG, "sendPrizeNotification failed: ${e.message}")
+        }
+    }
 }

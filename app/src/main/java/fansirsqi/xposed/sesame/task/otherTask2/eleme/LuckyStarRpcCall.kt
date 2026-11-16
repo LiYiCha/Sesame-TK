@@ -18,7 +18,7 @@ object LuckyStarRpcCall {
 
     // 签到与打卡
     const val API_SIGNIN = "mtop.alsc.interact.playapp.signin.component.signinandreceive"
-    const val API_RECORDSIGNIN = "mtop.alsc.interact.playapp.signin.component.recordsignin"
+    const val API_RECORD_SIGNIN = "mtop.alsc.interact.playapp.signin.component.recordsignin"
 
     // 夺宝/抽奖
     const val API_LOTTERY_DRAW = "mtop.alsc.interact.playapp.reward.lottery.draw"
@@ -26,13 +26,12 @@ object LuckyStarRpcCall {
 
     // 兑换商城与资产
     const val API_MALL_LIST = "mtop.alsc.interact.playapp.reward.right.mallrecall"
+    const val API_MALL_EXCHANGE = "mtop.alsc.interact.playapp.reward.right.exchange"
     const val API_PROPERTY_DETAIL = "mtop.koubei.interaction.center.common.querypropertydetail"
 
     // 前置营销弹窗与权益召回（对齐 tb.log 真实生命周期）
     const val API_CARD_DATA_RECALL = "mtop.alsc.card.cardDataRecallFacade"
     const val API_RIGHTS_PAGE_RECALL = "mtop.ele.rights.page.recall"
-    const val API_RIGHTS_COMPONENT_RECALL = "mtop.ele.rights.component.recall"
-    const val API_CONSULT_UNIT = "mtop.alsc.upp.market.timelimitdraw.consultunit"
 
     const val ASAC_PRIZE = "alscadOjfleDPawx9zVoT0"
     const val ASAC_PAGEVIEW = "alscFS8BNTO6jivYS7XOAM"
@@ -43,6 +42,7 @@ object LuckyStarRpcCall {
     const val ASAC_MALL_EXCHANGE = "alsc5KvbdX5mHl3sdv4guV"
 
     const val COLLECTION_ID = "3112"
+    const val PAGE_VERSION = "1.4.2"
     private const val BIZ_SCENE = "interact_center"
     private const val SP_PAGE_ID = "26051124184460076"
 
@@ -143,6 +143,7 @@ object LuckyStarRpcCall {
         val (lat, lng) = getCoordinates()
         val locInfo = "[\"{\\\"lng\\\":\\\"$lng\\\",\\\"lat\\\":\\\"$lat\\\"}\"]"
         val data = JSONObject().apply {
+            put("sync", true)
             put("bizScene", BIZ_SCENE)
             put("accountPlan", "HAVANA_COMMON")
             put("longitude", lng)
@@ -216,6 +217,7 @@ object LuckyStarRpcCall {
         val (lat, lng) = getCoordinates()
         val locInfo = "[\"{\\\"lng\\\":\\\"$lng\\\",\\\"lat\\\":\\\"$lat\\\"}\"]"
         val data = JSONObject().apply {
+            put("sync", true)
             put("bizScene", BIZ_SCENE)
             put("accountPlan", "HAVANA_COMMON")
             put("longitude", lng)
@@ -272,7 +274,7 @@ object LuckyStarRpcCall {
         val (lat, lng) = getCoordinates()
         val data = JSONObject().apply {
             put("bizScene", BIZ_SCENE)
-            put("version", "1.4.22")
+            put("version", PAGE_VERSION)
             put("modules", "[\"property\"]")
             put("latitude", lat)
             put("longitude", lng)
@@ -324,7 +326,7 @@ object LuckyStarRpcCall {
         val cpnCodes = "[\"PLAY_NOTICE_CPN\",\"INTERACT_RESOURCE_CPN\",\"MORE_MENU_CPN\",\"STAR_MSG_CONTENT_CPN\",\"PLAY_RESOURCE_CPN\",\"INTERACT_CENTER_SKIN_COMPONENT\",\"INTERACT_CENTER_BUBBLE\",\"INTERACT_CENTER_DRAW_BUBBLE\",\"INTERACT_CENTER_LOTTERY\",\"INTERACT_CENTER_CDP_CONFIG\",\"INTERACT_CENTER_MODAL_TASK\"]"
         val data = JSONObject().apply {
             put("bizScene", BIZ_SCENE)
-            put("version", "1.4.22")
+            put("version", PAGE_VERSION)
             put("cpnCodes", cpnCodes)
             put("latitude", lat)
             put("longitude", lng)
@@ -370,30 +372,11 @@ object LuckyStarRpcCall {
             val pageRecallData = JSONObject().apply {
                 put("screenNum", "1")
                 put("locationDTO", "{\"latitude\":\"$lat\",\"longitude\":\"$lng\"}")
-                put("sceneCode", "ENGAGE_HUB")
+                put("sceneCode", "ET_RIGHTS_CENTER")
                 put("instance", "INNER")
             }
-            ElemeMtopUtil.send(API_RIGHTS_PAGE_RECALL, pageRecallData.toString(), cookie, method = "POST")
-        } catch (_: Throwable) {}
-
-        // 3. 组件权益召回 (rights.component.recall)
-        try {
-            val compRecallData = JSONObject().apply {
-                put("sceneCode", "ENGAGE_HUB")
-                put("instance", "INNER")
-            }
-            ElemeMtopUtil.send(API_RIGHTS_COMPONENT_RECALL, compRecallData.toString(), cookie, method = "POST")
-        } catch (_: Throwable) {}
-
-        // 4. 限时抽奖/营销弹窗咨询 (timelimitdraw.consultunit)
-        try {
-            val consultData = JSONObject().apply {
-                put("bizScene", "UPP_TIMELIMITDRAW")
-                put("latitude", lat)
-                put("longitude", lng)
-                put("instance", "INNER")
-            }
-            ElemeMtopUtil.send(API_CONSULT_UNIT, consultData.toString(), cookie, method = "POST")
+            val headers = mapOf("asac" to "alscYrvd9HqSzc56DHTYMB")
+            ElemeMtopUtil.send(API_RIGHTS_PAGE_RECALL, pageRecallData.toString(), cookie, method = "POST", extraHeaders = headers)
         } catch (_: Throwable) {}
     }
 
@@ -405,7 +388,8 @@ object LuckyStarRpcCall {
         val cpnCodes = "[\"PLAY_NOTICE_CPN\",\"INTERACT_RESOURCE_CPN\",\"MORE_MENU_CPN\",\"STAR_MSG_CONTENT_CPN\",\"PLAY_RESOURCE_CPN\",\"INTERACT_CENTER_SKIN_COMPONENT\",\"INTERACT_CENTER_BUBBLE\",\"INTERACT_CENTER_DRAW_BUBBLE\",\"INTERACT_CENTER_LOTTERY\",\"INTERACT_CENTER_CDP_CONFIG\",\"INTERACT_CENTER_MODAL_TASK\"]"
         val data = JSONObject().apply {
             put("bizScene", BIZ_SCENE)
-            put("version", "1.4.22")
+            put("version", PAGE_VERSION)
+            put("modules", """["signIn","property","mdCard","orderFreeDraw","orderFreeMarquee","exchangeBarrage","exchangeV2"]""")
             put("cpnCodes", cpnCodes)
             put("latitude", lat)
             put("longitude", lng)
@@ -418,7 +402,7 @@ object LuckyStarRpcCall {
     }
 
     /**
-     * 幸运星打卡签到（对齐 幸运星.py signin 规范）
+     * 幸运星打卡签到（严格对齐 幸运星.py signin 规范，支持 signinandreceive 与 recordsignin 智能降级）
      */
     fun signIn(
         cookie: String,
@@ -426,14 +410,15 @@ object LuckyStarRpcCall {
         strategy: String,
         award: JSONObject?
     ): ElemeMtopUtil.MtopResult {
+        if (copyId.isEmpty()) {
+            return ElemeMtopUtil.MtopResult(isSuccess = false, isNotLogin = false, errorCode = "EMPTY_COPY_ID", errorMsg = "copyId为空")
+        }
         val (lat, lng) = getCoordinates()
         val data = JSONObject().apply {
             put("bizScene", BIZ_SCENE)
             put("latitude", lat)
             put("longitude", lng)
-            if (copyId.isNotEmpty()) {
-                put("copyId", copyId)
-            }
+            put("copyId", copyId)
             if (award != null) {
                 if (award.has("actCode")) put("actCode", award.optString("actCode"))
                 if (award.has("sceneCode")) put("sceneCode", award.optString("sceneCode"))
@@ -443,17 +428,19 @@ object LuckyStarRpcCall {
         }
         val headers = mapOf("asac" to ASAC_SIGNIN)
         val order = if (strategy == "SIGNIN_AND_RECEIVE") {
-            listOf(API_SIGNIN to "1.0", API_RECORDSIGNIN to "1.1")
+            listOf(Pair(API_SIGNIN, "1.0"), Pair(API_RECORD_SIGNIN, "1.1"))
         } else {
-            listOf(API_RECORDSIGNIN to "1.1", API_SIGNIN to "1.0")
+            listOf(Pair(API_RECORD_SIGNIN, "1.1"), Pair(API_SIGNIN, "1.0"))
         }
 
-        var lastResult = ElemeMtopUtil.MtopResult(isSuccess = false, isNotLogin = false, errorCode = "NOT_RUN", errorMsg = "未执行")
+        var lastResult = ElemeMtopUtil.MtopResult(isSuccess = false, isNotLogin = false, errorMsg = "未执行")
         for ((api, ver) in order) {
-            val res = ElemeMtopUtil.execute(api, data.toString(), cookie, method = "GET", version = ver, extraHeaders = headers)
-            if (res.isSuccess) return res
-            lastResult = res
-            if (res.errorCode.contains("REPEAT") || res.errorCode.contains("ALREADY") || res.errorMsg.contains("已签到")) {
+            lastResult = ElemeMtopUtil.execute(api, data.toString(), cookie, method = "GET", version = ver, extraHeaders = headers)
+            if (lastResult.isSuccess) {
+                break
+            }
+            val err = "${lastResult.errorCode} ${lastResult.errorMsg}"
+            if (err.contains("已签到") || err.contains("REPEAT") || err.contains("ALREADY")) {
                 break
             }
         }
@@ -500,13 +487,32 @@ object LuckyStarRpcCall {
     }
 
     /**
-     * 查询兑换商城列表（对齐 幸运星.py mall 规范）
+     * 查询幸运星明细列表（严格对齐 幸运星.py property_detail 规范与参数）
+     */
+    fun queryPropertyDetail(cookie: String, pageNo: Int = 1, pageSize: Int = 20): JSONObject? {
+        val (lat, lng) = getCoordinates()
+        val data = JSONObject().apply {
+            put("bizScene", BIZ_SCENE)
+            put("version", PAGE_VERSION)
+            put("latitude", lat)
+            put("longitude", lng)
+            put("convertType", "INTERACT_CENTER")
+            put("pageNo", pageNo)
+            put("pageSize", pageSize)
+            put("spPageId", SP_PAGE_ID)
+            put("instance", "INNER")
+        }
+        return ElemeMtopUtil.send(API_PROPERTY_DETAIL, data.toString(), cookie, method = "GET", version = "1.0")
+    }
+
+    /**
+     * 查询兑换商城列表（严格对齐 幸运星.py mall 规范与参数）
      */
     fun queryMallList(cookie: String): JSONObject? {
         val (lat, lng) = getCoordinates()
         val data = JSONObject().apply {
             put("bizScene", BIZ_SCENE)
-            put("version", "1.4.22")
+            put("version", PAGE_VERSION)
             put("propertyBizType", "STAR")
             put("pageNo", 1)
             put("pageSize", 10)
@@ -516,5 +522,33 @@ object LuckyStarRpcCall {
             put("instance", "INNER")
         }
         return ElemeMtopUtil.send(API_MALL_LIST, data.toString(), cookie, method = "GET")
+    }
+
+    /**
+     * 发起幸运星兑换商城商品兑换（严格对齐 幸运星.py mall_exchange 规范与参数）
+     */
+    fun mallExchange(
+        cookie: String,
+        actId: String,
+        exchangeCollectionId: String,
+        exchangeId: String,
+        actCode: String
+    ): ElemeMtopUtil.MtopResult {
+        val (lat, lng) = getCoordinates()
+        val data = JSONObject().apply {
+            put("bizScene", BIZ_SCENE)
+            put("version", PAGE_VERSION)
+            put("latitude", lat)
+            put("longitude", lng)
+            if (actId.isNotEmpty()) put("actId", actId)
+            if (exchangeCollectionId.isNotEmpty()) put("exchangeCollectionId", exchangeCollectionId)
+            if (exchangeId.isNotEmpty()) put("exchangeId", exchangeId)
+            if (actCode.isNotEmpty()) put("actCode", actCode)
+            put("propertyBizType", "STAR")
+            put("spPageId", SP_PAGE_ID)
+            put("instance", "INNER")
+        }
+        val headers = mapOf("asac" to ASAC_MALL_EXCHANGE)
+        return ElemeMtopUtil.execute(API_MALL_EXCHANGE, data.toString(), cookie, method = "GET", version = "1.0", extraHeaders = headers)
     }
 }

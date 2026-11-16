@@ -93,12 +93,23 @@ public class StringDialog {
                                 }
                             }
                         }.setData(c))
+                .setNegativeButton(c.getString(R.string.cancel), null)
                 .create();
         editDialog.setOnShowListener(dialog -> {
-            // 设置确认按钮颜色
+            boolean isNight = (c.getResources().getConfiguration().uiMode & android.content.res.Configuration.UI_MODE_NIGHT_MASK) == android.content.res.Configuration.UI_MODE_NIGHT_YES;
+            int positiveColor = isNight ? Color.parseColor("#81C784") : Color.parseColor("#2E7D32");
+            int negativeColor = isNight ? Color.parseColor("#B0BEC5") : Color.parseColor("#546E7A");
+            int textColor = isNight ? Color.parseColor("#E0E0E0") : Color.parseColor("#212121");
+
+            edt.setTextColor(textColor);
+
             Button positiveButton = editDialog.getButton(DialogInterface.BUTTON_POSITIVE);
             if (positiveButton != null) {
-                positiveButton.setTextColor(ContextCompat.getColor(c, R.color.button));
+                positiveButton.setTextColor(positiveColor);
+            }
+            Button negativeButton = editDialog.getButton(DialogInterface.BUTTON_NEGATIVE);
+            if (negativeButton != null) {
+                negativeButton.setTextColor(negativeColor);
             }
         });
         edt.setText(String.valueOf(modelField.getConfigValue()));

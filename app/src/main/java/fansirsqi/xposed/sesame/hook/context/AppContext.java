@@ -26,7 +26,6 @@ public class AppContext {
     @SuppressLint("StaticFieldLeak")
     private static Context context = null;
 
-    @Getter
     private static AlipayVersion alipayVersion = new AlipayVersion("");
 
     @SuppressLint("StaticFieldLeak")
@@ -61,6 +60,13 @@ public class AppContext {
      */
     public static void setAlipayVersion(AlipayVersion version) {
         alipayVersion = version;
+    }
+
+    /**
+     * 获取支付宝版本（显式方法，确保 Kotlin 可以访问）
+     */
+    public static AlipayVersion getAlipayVersion() {
+        return alipayVersion;
     }
 
     /**

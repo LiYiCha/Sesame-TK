@@ -1,6 +1,7 @@
 package fansirsqi.xposed.sesame.task.otherTask2.eleme
 
 import fansirsqi.xposed.sesame.data.Status
+import fansirsqi.xposed.sesame.entity.ElemeMallEntity
 import fansirsqi.xposed.sesame.entity.ElemeRiskTaskEntity
 import fansirsqi.xposed.sesame.model.BaseModel
 import fansirsqi.xposed.sesame.model.CustomSettings
@@ -42,7 +43,7 @@ class ElemeTask : ModelTask() {
 
         @JvmField
         val elemeFreeOrder = BooleanModelField(
-            "elemeFreeOrder", "抽免单任务", false, "自动执行饿了么淘免单打卡、做任务赚次数与免单抽奖"
+            "elemeFreeOrder", "抽免单任务", false, "自动执行饿了么下单赢免单抽奖（每日一次订单抽奖，协同签到）"
         )
 
         @JvmField
@@ -51,32 +52,54 @@ class ElemeTask : ModelTask() {
         )
 
         @JvmField
+        val elemeAutoExchange = BooleanModelField(
+            "elemeAutoExchange",
+            "自动兑换商城商品",
+            false,
+            "开启后，当拥有的幸运星满足兑换条件时，自动兑换下方【目标兑换商品】中勾选的商品（为防误扣资产，未勾选的商品绝不兑换，星数不足绝不请求）。"
+        )
+
+        @JvmField
+        val elemeExchangeItems = SelectModelField(
+            "elemeExchangeItems",
+            "目标兑换商品",
+            LinkedHashSet<String>(),
+            ElemeMallEntity::getList,
+            "请勾选允许自动兑换的目标商品（多选或单选）。只有被勾选且当前幸运星充足的商品才会发起兑换。"
+        )
+
+        @JvmField
+        val elemeRefreshMall = EmptyModelField(
+            "elemeRefreshMall",
+            "查看/刷新兑换商城"
+        ) { context ->
+            ElemeMtopUtil.showMallListDialog(context)
+        }
+
+        @JvmField
         val elemeCustomUa = StringModelField(
             "elemeCustomUa",
             "User-Agent设备设置",
             "",
-            "【User-Agent 与设备指纹】\n点击可查看当前生效的设备指纹详情、直接修改/粘贴自定义真实 UA，或在弹窗内点击“🎲 随机生成”获取近几年真实热门机型 UA，点击“保存”方可生效使用（为防风控内置 10 分钟修改冷却）。\n若留空则自动使用本机系统原版真实指纹。"
+            "【User-Agent 与设备指纹】\n点击可查看当前生效的设备指纹详情、直接修改/粘贴自定义真实 UA，或点击下方【🎲 随机生成真实设备UA】快速获取近几年真实热门机型指纹。\n若留空则自动使用本机系统原版真实指纹。"
         )
 
         @JvmField
         val elemeGenerateUa = EmptyModelField(
             "elemeGenerateUa",
-            "🎲 随机生成真实设备UA",
-            "点击生成",
-            "【已合并入上方【User-Agent设备设置】弹窗中】"
+            "🎲 随机生成真实设备UA"
         ) { context ->
-            ElemeMtopUtil.showActiveProfileDialog(context)
+            ElemeMtopUtil.generateAndSaveRandomProfile(context)
         }
 
         @JvmField
         val elemeViewProfile = EmptyModelField(
             "elemeViewProfile",
-            "查看当前生效设备详情",
-            "点击查看",
-            "【已合并入上方【User-Agent设备设置】弹窗中】"
-        ) { context ->
-            ElemeMtopUtil.showActiveProfileDialog(context)
-        }
+            "设备机型 (查看)",
+            EmptyModelField.ContextConsumer { context ->
+                ElemeMtopUtil.showActiveProfileDialog(context)
+            }
+        )
 
         @JvmField
         val elemeRiskTasks = SelectModelField(
@@ -95,6 +118,15 @@ class ElemeTask : ModelTask() {
 
         @JvmStatic
         fun getElemeBurstRed(): BooleanModelField = elemeBurstRed
+
+        @JvmStatic
+        fun getElemeAutoExchange(): BooleanModelField = elemeAutoExchange
+
+        @JvmStatic
+        fun getElemeExchangeItems(): SelectModelField = elemeExchangeItems
+
+        @JvmStatic
+        fun getElemeRefreshMall(): EmptyModelField = elemeRefreshMall
 
         @JvmStatic
         fun getElemeCustomUa(): StringModelField = elemeCustomUa
@@ -148,6 +180,11 @@ class ElemeTask : ModelTask() {
         modelFields.addField(elemeLuckyStar)
         modelFields.addField(elemeFreeOrder)
         modelFields.addField(elemeBurstRed)
+        modelFields.addField(elemeAutoExchange)
+        modelFields.addField(elemeExchangeItems)
+        modelFields.addField(elemeRefreshMall)
+        modelFields.addField(elemeViewProfile)
+        modelFields.addField(elemeGenerateUa)
         modelFields.addField(elemeCustomUa)
         modelFields.addField(elemeRiskTasks)
         return modelFields
@@ -169,7 +206,7 @@ class ElemeTask : ModelTask() {
         currentFuture = taskExecutor!!.submit {
             executionLock.lock()
             try {
-                if (elemeFreeOrder.value && !Status.hasFlagToday("Eleme_FreeOrder_Done")) {
+                if (elemeFreeOrder.value) {
                     FreeOrderTask.handle()
                 }
 
@@ -177,7 +214,7 @@ class ElemeTask : ModelTask() {
                     BurstRedTask.handle()
                 }
 
-                if (elemeLuckyStar.value && !Status.hasFlagToday("Eleme_LuckyStar_Done")) {
+                if (elemeLuckyStar.value) {
                     LuckyStarTask.handle()
                 }
             } catch (t: Throwable) {
@@ -210,10 +247,6 @@ class ElemeTask : ModelTask() {
     }
 
     override fun check(): Boolean {
-        if (CustomSettings.isOnceDailyBlackListed("eleme")) {
-            Log.runtime(TAG, "⏸ 当日单次运行模式：饿了么任务今日已完成首轮，已跳过！")
-            return false
-        }
         return if (TaskCommon.IS_ENERGY_TIME) {
             Log.runtime("⏸ 当前为只收能量时间【" + BaseModel.energyTime.value + "】，停止执行" + name + "任务！")
             false

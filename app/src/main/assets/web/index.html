@@ -102,7 +102,16 @@
                                         <div class="title" @click="openTextDialog(item, tabs_item.modelCode)">{{item.name}}</div>
                                         <div class="flex-center" @click="openTextDialog(item, tabs_item.modelCode)">
                                             <div class="link" style="max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px;">
-                                                {{ item.configValue || '点击编辑/查看...' }}
+                                                {{ getRowDisplayValue(item) }}
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <!-- 操作按钮组件 (EMPTY) -->
+                                    <div class="flex-space-between pdTB10" v-if="item.type==='EMPTY'">
+                                        <div class="title" @click="handleRunField(tabs_item.modelCode, item.code)">{{item.name}}</div>
+                                        <div class="flex-center" @click="handleRunField(tabs_item.modelCode, item.code)">
+                                            <div class="link" style="font-size: 13px;">
+                                                {{ item.code === 'elemeRefreshMall' ? '点击查看/刷新' : (item.code === 'elemeGenerateUa' ? '点击生成' : (item.code === 'elemeViewProfile' ? '点击查看' : '点击执行')) }}
                                             </div>
                                         </div>
                                     </div>
@@ -194,7 +203,16 @@
                                         <div class="title" @click="openTextDialog(item, tabs_item.modelCode)">{{item.name}}</div>
                                         <div class="flex-center" @click="openTextDialog(item, tabs_item.modelCode)">
                                             <div class="link" style="max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px;">
-                                                {{ item.configValue || '点击编辑/查看...' }}
+                                                {{ getRowDisplayValue(item) }}
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <!-- 操作按钮组件 (EMPTY) -->
+                                    <div class="flex-space-between pdTB10" v-if="item.type==='EMPTY'">
+                                        <div class="title" @click="handleRunField(tabs_item.modelCode, item.code)">{{item.name}}</div>
+                                        <div class="flex-center" @click="handleRunField(tabs_item.modelCode, item.code)">
+                                            <div class="link" style="font-size: 13px;">
+                                                {{ item.code === 'elemeRefreshMall' ? '点击查看/刷新' : (item.code === 'elemeGenerateUa' ? '点击生成' : (item.code === 'elemeViewProfile' ? '点击查看' : '点击执行')) }}
                                             </div>
                                         </div>
                                     </div>
@@ -302,44 +320,115 @@
             <van-dialog 
                 v-model:show="text_dialog.visible" 
                 :title="text_dialog.title" 
-                :show-cancel-button="!text_dialog.readonly" 
-                cancelButtonText="取消" 
-                :confirmButtonText="text_dialog.readonly ? '确定' : '保存'" 
-                :close-on-click-overlay="true"
-                @confirm="handleSaveText">
+                :show-confirm-button="false"
+                :show-cancel-button="false"
+                :close-on-click-overlay="true">
                 <div style="padding: 12px 16px;">
-                    <!-- 设备详情卡片（针对 elemeCustomUa 展示） -->
-                    <div v-if="text_dialog.targetItem && text_dialog.targetItem.code === 'elemeCustomUa'" style="background: #f7f8fa; border-radius: 8px; padding: 10px; margin-bottom: 10px; font-size: 12px; line-height: 1.6; color: #555; border: 1px solid #ebedf0;">
-                        <div style="font-weight: bold; color: #1989fa; margin-bottom: 4px;">📱 生效设备指纹详情：</div>
-                        <div><strong>识别机型：</strong>{{ parsedUaInfo.model || '系统原版默认' }}</div>
-                        <div><strong>系统版本：</strong>{{ parsedUaInfo.system || 'Android 14' }}</div>
-                        <div><strong>浏览器内核：</strong>{{ parsedUaInfo.kernel || 'Chrome / UC' }}</div>
-                        <div><strong>屏幕分辨率：</strong>{{ parsedUaInfo.screen || '默认' }}</div>
+                    <!-- 设备机型与UA指纹专属设置弹窗（针对 elemeCustomUa 展示） -->
+                    <div v-if="text_dialog.targetItem && text_dialog.targetItem.code === 'elemeCustomUa'">
+                        <!-- 1. 顶部简略总结栏（机型信息 + 右侧抽屉展开/收起切换按钮） -->
+                        <div class="ua-summary-bar">
+                            <div class="ua-summary-left">
+                                <span class="ua-summary-model">{{ parsedUaInfo.model || '系统默认' }}</span>
+                                <span v-if="parsedUaInfo.brandModel" class="ua-summary-tag">{{ parsedUaInfo.brandModel }}</span>
+                                <span class="ua-summary-status">({{ (!text_dialog.value || !text_dialog.value.trim()) ? '系统默认' : '已自定义' }})</span>
+                            </div>
+                            <div class="ua-summary-right" @click="showUaDrawer = !showUaDrawer">
+                                <span class="ua-drawer-toggle-btn">
+                                    {{ showUaDrawer ? '收起详情' : '指纹详情' }}
+                                </span>
+                            </div>
+                        </div>
+
+                        <!-- 2. 可折叠的详细设备指纹抽屉面板（默认折叠，点击展开） -->
+                        <div v-show="showUaDrawer" class="ua-detail-drawer">
+                            <div class="ua-drawer-grid">
+                                <div class="ua-drawer-row">
+                                    <span class="ua-drawer-label">识别机型</span>
+                                    <span class="ua-drawer-val">{{ parsedUaInfo.model || '系统默认' }}</span>
+                                </div>
+                                <div class="ua-drawer-row">
+                                    <span class="ua-drawer-label">品牌代码</span>
+                                    <span class="ua-drawer-val">{{ parsedUaInfo.brandModel || '默认' }}</span>
+                                </div>
+                                <div class="ua-drawer-row">
+                                    <span class="ua-drawer-label">系统版本</span>
+                                    <span class="ua-drawer-val">{{ parsedUaInfo.system || 'Android 14' }}</span>
+                                </div>
+                                <div class="ua-drawer-row">
+                                    <span class="ua-drawer-label">内核版本</span>
+                                    <span class="ua-drawer-val">{{ parsedUaInfo.kernel || 'Chrome / UC' }}</span>
+                                </div>
+                                <div class="ua-drawer-row">
+                                    <span class="ua-drawer-label">屏幕规格</span>
+                                    <span class="ua-drawer-val">{{ parsedUaInfo.screen || '默认' }}</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 3. 弹窗主体：大面积 User-Agent 编辑框（完整展示，自由编辑复制粘贴） -->
+                        <div class="ua-edit-body">
+                            <div class="ua-field-hint">
+                                自定义 User-Agent（留空使用系统默认）：
+                            </div>
+                            <van-field
+                                v-model="text_dialog.value"
+                                rows="8"
+                                autosize
+                                type="textarea"
+                                placeholder="留空使用系统默认，支持粘贴自定义UA..."
+                                class="custom-textarea-field ua-large-textarea"
+                                @input="onUaInputChanged"
+                            />
+                        </div>
+
+                        <!-- 4. 辅助快捷操作按钮（纯文本无表情） -->
+                        <div class="ua-action-btns">
+                            <button type="button" class="ua-btn-action" @click="handleRandomUaInDialog">
+                                随机生成机型
+                            </button>
+                            <button type="button" class="ua-btn-action" @click="handleResetUaInDialog">
+                                恢复系统默认
+                            </button>
+                        </div>
                     </div>
-                    <div v-if="text_dialog.desc && (!text_dialog.targetItem || text_dialog.targetItem.code !== 'elemeCustomUa')" style="font-size: 12px; color: #888; margin-bottom: 8px; line-height: 1.4; word-break: break-all; max-height: 120px; overflow-y: auto;">
-                        {{ text_dialog.desc }}
+
+                    <!-- 开始执行时间专属单行输入（针对 startTime 展示） -->
+                    <div v-else-if="text_dialog.targetItem && text_dialog.targetItem.code === 'startTime'">
+                        <div style="font-size: 12px; color: var(--text-color); opacity: 0.7; margin-bottom: 8px;">
+                            执行时间格式为 4 位数字（例如 0700 表示 07:00 执行），填 -1 表示关闭：
+                        </div>
+                        <van-field
+                            v-model="text_dialog.value"
+                            placeholder="请输入时间，例如 0700 或 -1"
+                            class="custom-single-field"
+                        />
                     </div>
-                    <van-field
-                        v-model="text_dialog.value"
-                        rows="7"
-                        autosize
-                        type="textarea"
-                        placeholder="请输入或粘贴完整内容..."
-                        :readonly="text_dialog.readonly"
-                        style="border: 1px solid #dcdee0; border-radius: 6px; padding: 8px; font-size: 13px; line-height: 1.5; background: #fafafa; max-height: 220px; overflow-y: auto;"
-                    />
-                    <!-- 随机生成 UA 按钮（点击仅填入弹窗文本框，不立即保存） -->
-                    <van-button 
-                        v-if="text_dialog.targetItem && text_dialog.targetItem.code === 'elemeCustomUa'" 
-                        type="primary" 
-                        plain 
-                        size="small" 
-                        block 
-                        style="margin-top: 10px;" 
-                        @click="handleRandomUaInDialog">
-                        🎲 随机生成真实设备UA
-                    </van-button>
+
+                    <!-- 普通长文本/字符串展示 -->
+                    <div v-else>
+                        <div v-if="text_dialog.desc" style="font-size: 12px; color: var(--text-color); opacity: 0.7; margin-bottom: 8px; line-height: 1.4; word-break: break-all; max-height: 100px; overflow-y: auto;">
+                            {{ text_dialog.desc }}
+                        </div>
+                        <van-field
+                            v-model="text_dialog.value"
+                            rows="6"
+                            autosize
+                            type="textarea"
+                            placeholder="请输入内容..."
+                            :readonly="text_dialog.readonly"
+                            class="custom-textarea-field"
+                        />
+                    </div>
                 </div>
+                <template #footer>
+                    <div class="flex borderTop">
+                        <div v-if="!text_dialog.readonly" @click="text_dialog.visible = false" class="dialog-footer-btn">取消</div>
+                        <div class="main-color dialog-footer-btn" :class="{ borderLeft: !text_dialog.readonly }" @click="handleSaveText">
+                            {{ text_dialog.readonly ? '确定' : '保存' }}
+                        </div>
+                    </div>
+                </template>
             </van-dialog>
 
             </div>
@@ -391,6 +480,7 @@
                   targetItem: null,
                 });
 
+                const showUaDrawer = ref(false);
                 const parsedUaInfo = ref({
                   model: "",
                   system: "",
@@ -409,17 +499,82 @@
                   }
                 }
 
+                // 页面挂载/初始化时立即尝试预解析已保存的 elemeCustomUa
+                try {
+                  for (const tabItems of setData.value) {
+                    if (Array.isArray(tabItems)) {
+                      const uaItem = tabItems.find((i) => i && i.code === "elemeCustomUa");
+                      if (uaItem) {
+                        updateParsedUa(uaItem.configValue || "");
+                        break;
+                      }
+                    }
+                  }
+                } catch (e) {}
+
                 function handleRandomUaInDialog() {
                   try {
                     if (window.HOOK && window.HOOK.getRandomUa) {
                       const newUa = window.HOOK.getRandomUa();
                       text_dialog.value.value = newUa;
                       updateParsedUa(newUa);
-                      vant.showToast("已随机生成新机型UA，点击下方“保存”方可生效使用！");
+                      vant.showToast("已生成新机型UA，点击保存生效");
                     }
                   } catch (e) {
                     console.error("生成UA异常:", e);
                   }
+                }
+
+                function handleResetUaInDialog() {
+                  text_dialog.value.value = "";
+                  updateParsedUa("");
+                  vant.showToast("已重置为系统默认，点击保存生效");
+                }
+
+                function onUaInputChanged() {
+                  updateParsedUa(text_dialog.value.value || "");
+                }
+
+                function handleRunField(modelCode, itemCode) {
+                  try {
+                    if (window.HOOK && window.HOOK.runField) {
+                      window.HOOK.runField(modelCode, itemCode);
+                    }
+                    if (itemCode === "elemeGenerateUa") {
+                      setTimeout(() => {
+                        try {
+                          for (const tabItems of setData.value) {
+                            if (Array.isArray(tabItems)) {
+                              const uaItem = tabItems.find((i) => i && i.code === "elemeCustomUa");
+                              if (uaItem && window.HOOK && window.HOOK.getField) {
+                                const info = JSON.parse(window.HOOK.getField(modelCode, "elemeCustomUa"));
+                                uaItem.configValue = info.configValue || "";
+                                updateParsedUa(uaItem.configValue);
+                                break;
+                              }
+                            }
+                          }
+                        } catch (e) {}
+                      }, 600);
+                    }
+                  } catch (e) {
+                    console.error("执行按钮异常:", e);
+                  }
+                }
+
+                function getRowDisplayValue(item) {
+                  if (item.code === "elemeCustomUa") {
+                    const val = (item.configValue || "").trim();
+                    if (!val) return "系统原版 (查看)";
+                    if (parsedUaInfo.value && parsedUaInfo.value.model && parsedUaInfo.value.model !== "系统原版默认") {
+                      return parsedUaInfo.value.model + " (查看)";
+                    }
+                    return "已自定义 (查看)";
+                  }
+                  if (item.code === "startTime") {
+                    return item.configValue || "0700";
+                  }
+                  return item.configValue || "点击查看";
                 }
 
                 function openTextDialog(item, modelCode) {
@@ -432,6 +587,7 @@
                   text_dialog.value.targetItem = item;
 
                   if (item.code === "elemeCustomUa") {
+                    showUaDrawer.value = false;
                     updateParsedUa(item.configValue || "");
                   }
                 }
@@ -450,7 +606,7 @@
                           const waitMins = Math.ceil((cooldown - (now - lastTime)) / 60000);
                           vant.showToast({
                             type: "fail",
-                            message: `⚠️ 频繁更换设备易被风控，请保持稳定使用。冷却中，请于 ${waitMins} 分钟后再试！`,
+                            message: `频繁更换设备易被风控，请保持稳定使用。冷却中，请于 ${waitMins} 分钟后再试`,
                             duration: 3500,
                           });
                           return;
@@ -741,8 +897,13 @@
                   getModelIcon,
                   getDefaultModelIcon,
                   text_dialog,
+                  showUaDrawer,
                   parsedUaInfo,
                   handleRandomUaInDialog,
+                  handleResetUaInDialog,
+                  onUaInputChanged,
+                  handleRunField,
+                  getRowDisplayValue,
                   openTextDialog,
                   handleSaveText
                 };
