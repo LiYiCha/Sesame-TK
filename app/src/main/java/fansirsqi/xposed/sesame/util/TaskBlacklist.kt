@@ -12,6 +12,7 @@ object TaskBlacklist {
     private const val TAG = "TaskBlacklist"
     private const val PERMANENT_KEY = "task_blacklist_permanent"
     private const val DAILY_KEY = "task_blacklist_daily"
+    private const val REASONS_KEY = "task_blacklist_reasons"
 
     private val cachedPermanent = ConcurrentHashMap.newKeySet<String>()
     private val cachedDaily = ConcurrentHashMap.newKeySet<String>()
@@ -261,11 +262,26 @@ object TaskBlacklist {
         // 6. 频率限制（当日限频，次日可重试）
         val isRateLimit = errorCode == "OP_REPEAT_CHECK" || errorMsg.contains("操作太频繁")
 
-        val isPermanent = isUnsupportedRpc || isPromoProdEvent || isSignupRecordMissing || isTemplateNotExist || isInvalidArgument || isSecurityReject
+        // 7. 阿里百川/饿了么风控行为受限 (405)
+        val isRiskRestricted = errorCode == "405" ||
+                errorCode.contains("405") ||
+                errorMsg.contains("405") ||
+                errorMsg.contains("行为受限")
+
+        // 8. 三方打点防作弊过滤 (417)
+        val isRiskFiltered = errorCode == "417" ||
+                errorCode.contains("417") ||
+                errorMsg.contains("417") ||
+                errorMsg.contains("防止作弊") ||
+                errorMsg.contains("三方打点")
+
+        val isPermanent = isUnsupportedRpc || isPromoProdEvent || isSignupRecordMissing || isTemplateNotExist || isInvalidArgument || isSecurityReject || isRiskRestricted || isRiskFiltered
         val shouldAdd = isPermanent || isRateLimit
 
         if (shouldAdd) {
             val reason = when {
+                isRiskRestricted -> "风控拦截(405::行为受限)"
+                isRiskFiltered -> "防作弊过滤(417::三方打点mtop入口过滤)"
                 isUnsupportedRpc -> "接口不支持RPC调用"
                 isPromoProdEvent -> "不允许RPC完成事件规则任务(需真实交易)"
                 isSignupRecordMissing -> "任务报名记录不存在或已过期"
@@ -291,9 +307,58 @@ object TaskBlacklist {
 
             // 仅在真实产生新增时打印日志，避免每次启动刷屏
             if (updated) {
+                if (cleanId.isNotBlank()) saveReason(cleanId, reason)
+                if (cleanTitle.isNotBlank()) saveReason(cleanTitle, reason)
                 val display = if (cleanTitle.isNotBlank()) "$cleanId - $cleanTitle" else cleanId
                 Log.runtime(TAG, "🛡️ 任务[$display]因【$reason】已自动加入黑名单，后续跳过执行")
             }
+        }
+    }
+
+    private fun saveReason(taskInfo: String, reason: String) {
+        ensureInit()
+        try {
+            val raw = DataStore.getOrCreate(REASONS_KEY, object : TypeReference<Any>() {})
+            val map = if (raw is Map<*, *>) {
+                raw.entries.associate { it.key.toString() to it.value.toString() }.toMutableMap()
+            } else {
+                mutableMapOf()
+            }
+            val time = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.CHINA).format(java.util.Date())
+            map[taskInfo] = "$reason [$time]"
+            DataStore.put(REASONS_KEY, map)
+        } catch (_: Throwable) {}
+    }
+
+    /**
+     * 获取指定任务被加入黑名单的原因及记录时间
+     */
+    @JvmStatic
+    fun getReason(taskInfo: String): String? {
+        ensureInit()
+        return try {
+            val raw = DataStore.getOrCreate(REASONS_KEY, object : TypeReference<Any>() {})
+            if (raw is Map<*, *>) {
+                raw[taskInfo]?.toString()
+            } else null
+        } catch (_: Throwable) {
+            null
+        }
+    }
+
+    /**
+     * 获取所有任务黑名单的原因字典映射
+     */
+    @JvmStatic
+    fun getAllReasons(): Map<String, String> {
+        ensureInit()
+        return try {
+            val raw = DataStore.getOrCreate(REASONS_KEY, object : TypeReference<Any>() {})
+            if (raw is Map<*, *>) {
+                raw.entries.associate { it.key.toString() to it.value.toString() }
+            } else emptyMap()
+        } catch (_: Throwable) {
+            emptyMap()
         }
     }
 }

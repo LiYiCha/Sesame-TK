@@ -1,6 +1,7 @@
 package fansirsqi.xposed.sesame.task.otherTask2.eleme
 
 import fansirsqi.xposed.sesame.data.Status
+import fansirsqi.xposed.sesame.entity.ElemeRiskTaskEntity
 import fansirsqi.xposed.sesame.util.Log
 import fansirsqi.xposed.sesame.util.Notify
 import fansirsqi.xposed.sesame.util.RandomUtil
@@ -228,6 +229,7 @@ object LuckyStarTask {
                     val inRiskTaskSet = riskTasks.contains(missionDefId.toString())
                     val inGlobalBlacklist = TaskBlacklist.isTaskInBlacklist(title) || TaskBlacklist.isTaskInBlacklist(missionDefId.toString())
                     if (inRiskTaskSet || inGlobalBlacklist) {
+                        Log.runtime(TAG, "[幸运星] 🛡️ 跳过风控跳过名单任务: [$missionDefId - $title]")
                         continue
                     }
 
@@ -269,6 +271,10 @@ object LuckyStarTask {
                             Log.other("饿了么", errDetail)
                             val msg = viewRes.errorMsg
                             if (viewRes.errorCode == "405" || msg.contains("405") || msg.contains("行为受限") || msg.contains("受限")) {
+                                val reason = "405::行为受限"
+                                ElemeRiskTaskEntity.recordRiskTask(missionDefId.toString(), title, reason)
+                                TaskBlacklist.autoAddToBlacklist(missionDefId.toString(), title, "405", viewRes.errorMsg)
+                                Log.other("饿了么", "[幸运星] 🛡️ 任务[$missionDefId - $title]因【$reason】已自动加入风控名单，后续执行将自动跳过")
                                 Log.other("饿了么", "[幸运星] ⛔ 检测到接口行为受限 (405::行为受限)，为保护账号安全，停止今日后续浏览埋点")
                                 break
                             }
@@ -292,6 +298,13 @@ object LuckyStarTask {
                                 val errDetail = "[幸运星] ❌ 触发[$title]失败 ($step/$need): ${triggerRes.errorCode}::${triggerRes.errorMsg}\n完整响应:\n$rawResp"
                                 Log.error(TAG, errDetail)
                                 Log.other("饿了么", errDetail)
+                                if (triggerRes.errorCode == "417" || triggerRes.errorMsg.contains("417") || triggerRes.errorMsg.contains("作弊") ||
+                                    triggerRes.errorCode == "405" || triggerRes.errorMsg.contains("行为受限")) {
+                                    val reason = if (triggerRes.errorCode == "417" || triggerRes.errorMsg.contains("417")) "417::防作弊打点拦截" else "405::行为受限"
+                                    ElemeRiskTaskEntity.recordRiskTask(missionDefId.toString(), title, reason)
+                                    TaskBlacklist.autoAddToBlacklist(missionDefId.toString(), title, triggerRes.errorCode, triggerRes.errorMsg)
+                                    Log.other("饿了么", "[幸运星] 🛡️ 任务[$missionDefId - $title]因【$reason】已自动加入风控名单，后续执行将自动跳过")
+                                }
                                 break
                             }
                             Thread.sleep(RandomUtil.nextGaussianLong(1800, 2600))
@@ -331,6 +344,7 @@ object LuckyStarTask {
                     val inRiskTaskSet = riskTasks.contains(missionDefId.toString())
                     val inGlobalBlacklist = TaskBlacklist.isTaskInBlacklist(title) || TaskBlacklist.isTaskInBlacklist(missionDefId.toString())
                     if (inRiskTaskSet || inGlobalBlacklist) {
+                        Log.runtime(TAG, "[幸运星] 🛡️ 跳过风控跳过名单任务: [$missionDefId - $title]")
                         continue
                     }
 
@@ -349,6 +363,12 @@ object LuckyStarTask {
                                 val errDetail = "[幸运星] ❌ 领奖[$title]失败: ${prizeRes.errorCode}::${prizeRes.errorMsg}\n完整响应:\n$rawResp"
                                 Log.error(TAG, errDetail)
                                 Log.other("饿了么", errDetail)
+                                if (prizeRes.errorCode == "405" || prizeRes.errorCode == "417" || prizeRes.errorMsg.contains("受限") || prizeRes.errorMsg.contains("作弊")) {
+                                    val reason = if (prizeRes.errorCode == "417" || prizeRes.errorMsg.contains("417")) "417::防作弊领奖拦截" else "405::行为受限"
+                                    ElemeRiskTaskEntity.recordRiskTask(missionDefId.toString(), title, reason)
+                                    TaskBlacklist.autoAddToBlacklist(missionDefId.toString(), title, prizeRes.errorCode, prizeRes.errorMsg)
+                                    Log.other("饿了么", "[幸运星] 🛡️ 任务[$missionDefId - $title]因【$reason】已自动加入风控名单，后续执行将自动跳过")
+                                }
                             }
                             Thread.sleep(RandomUtil.nextGaussianLong(1200, 2200))
                         }
@@ -364,6 +384,12 @@ object LuckyStarTask {
                             val errDetail = "[幸运星] ❌ 领奖[$title]失败: ${prizeRes.errorCode}::${prizeRes.errorMsg}\n完整响应:\n$rawResp"
                             Log.error(TAG, errDetail)
                             Log.other("饿了么", errDetail)
+                            if (prizeRes.errorCode == "405" || prizeRes.errorCode == "417" || prizeRes.errorMsg.contains("受限") || prizeRes.errorMsg.contains("作弊")) {
+                                val reason = if (prizeRes.errorCode == "417" || prizeRes.errorMsg.contains("417")) "417::防作弊领奖拦截" else "405::行为受限"
+                                ElemeRiskTaskEntity.recordRiskTask(missionDefId.toString(), title, reason)
+                                TaskBlacklist.autoAddToBlacklist(missionDefId.toString(), title, prizeRes.errorCode, prizeRes.errorMsg)
+                                Log.other("饿了么", "[幸运星] 🛡️ 任务[$missionDefId - $title]因【$reason】已自动加入风控名单，后续执行将自动跳过")
+                            }
                         }
                         Thread.sleep(RandomUtil.nextGaussianLong(1200, 2200))
                     }
