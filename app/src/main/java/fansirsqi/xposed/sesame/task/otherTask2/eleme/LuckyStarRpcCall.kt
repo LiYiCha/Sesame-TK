@@ -33,6 +33,11 @@ object LuckyStarRpcCall {
     const val API_CARD_DATA_RECALL = "mtop.alsc.card.cardDataRecallFacade"
     const val API_RIGHTS_PAGE_RECALL = "mtop.ele.rights.page.recall"
 
+    // 趣味话题答题/猜价格（对齐 幸运星.py quiz_query/quiz_submit/quiz_award）
+    const val API_QUIZ_QUERY = "mtop.alsc.interact.playapp.quiz.query"
+    const val API_QUIZ_SUBMIT = "mtop.alsc.interact.playapp.quiz.submit"
+    const val API_QUIZ_AWARD = "mtop.alsc.interact.playapp.quiz.award"
+
     const val ASAC_PRIZE = "alscadOjfleDPawx9zVoT0"
     const val ASAC_PAGEVIEW = "alscFS8BNTO6jivYS7XOAM"
     const val ASAC_TRIGGER = "2A21607NIIT1ND5C4YXJ6C"
@@ -40,6 +45,7 @@ object LuckyStarRpcCall {
     const val ASAC_LOTTERY_DRAW = "alscdZLQXT9DEAlXvQQOLO"
     const val ASAC_ORDER_FREE_DRAW = "alscrX2P4rmvl0NhmQgr9x"
     const val ASAC_MALL_EXCHANGE = "alsc5KvbdX5mHl3sdv4guV"
+    const val ASAC_QUIZ_AWARD = "alsc0Ue9L6Q0YtTZjC3Ovx"
 
     const val COLLECTION_ID = "3112"
     const val PAGE_VERSION = "1.4.2"
@@ -170,8 +176,8 @@ object LuckyStarRpcCall {
                 put("extInfo", "{\"triggerScene\":\"MISSION_LIST\"}")
             }
         }
-        val headers = mapOf("asac" to ASAC_PRIZE)
-        return ElemeMtopUtil.execute(API_RECEIVE_PRIZE, data.toString(), cookie, method = "GET", extraHeaders = headers)
+        // 对齐 幸运星.py：asac 仅随 data 传递，不额外携带 header（避免多带 header 触发风控）
+        return ElemeMtopUtil.execute(API_RECEIVE_PRIZE, data.toString(), cookie, method = "GET")
     }
 
     /**
@@ -427,10 +433,11 @@ object LuckyStarRpcCall {
             }
         }
         val headers = mapOf("asac" to ASAC_SIGNIN)
+        // 接口尝试顺序（对齐幸运星.py；recordsignin 同时尝试 v1.1 与 v1.0，修复 v1.1 API 不存在时无兜底的问题）
         val order = if (strategy == "SIGNIN_AND_RECEIVE") {
-            listOf(Pair(API_SIGNIN, "1.0"), Pair(API_RECORD_SIGNIN, "1.1"))
+            listOf(Pair(API_SIGNIN, "1.0"), Pair(API_RECORD_SIGNIN, "1.1"), Pair(API_RECORD_SIGNIN, "1.0"))
         } else {
-            listOf(Pair(API_RECORD_SIGNIN, "1.1"), Pair(API_SIGNIN, "1.0"))
+            listOf(Pair(API_RECORD_SIGNIN, "1.1"), Pair(API_RECORD_SIGNIN, "1.0"), Pair(API_SIGNIN, "1.0"))
         }
 
         var lastResult = ElemeMtopUtil.MtopResult(isSuccess = false, isNotLogin = false, errorMsg = "未执行")
@@ -475,6 +482,8 @@ object LuckyStarRpcCall {
         val dataObj = orderFreeData?.optJSONObject("data")
         val cityId = dataObj?.optJSONObject("extInfo")?.optString("cityId").orEmpty()
         val data = JSONObject().apply {
+            // 对齐 幸运星.py：payload 携带 _kj() 展开的 version 页面版本号
+            put("version", PAGE_VERSION)
             put("bizScene", "order_free_draw")
             put("longitude", lng)
             put("latitude", lat)
@@ -508,6 +517,7 @@ object LuckyStarRpcCall {
     /**
      * 查询兑换商城列表（严格对齐 幸运星.py mall 规范与参数）
      */
+    @JvmStatic
     fun queryMallList(cookie: String): JSONObject? {
         val (lat, lng) = getCoordinates()
         val data = JSONObject().apply {
@@ -550,5 +560,72 @@ object LuckyStarRpcCall {
         }
         val headers = mapOf("asac" to ASAC_MALL_EXCHANGE)
         return ElemeMtopUtil.execute(API_MALL_EXCHANGE, data.toString(), cookie, method = "GET", version = "1.0", extraHeaders = headers)
+    }
+
+    /**
+     * 趣味话题答题/猜价格取题（对齐 幸运星.py quiz.query 规范）
+     * @param actId 答题活动 ID（从任务 actionValue 或页面 URL 提取）
+     * @param bizSceneSource 业务场景来源，默认 INTERACT_CENTER
+     * @return 响应 data（含 copyId、questionDTO/questionList、answeredCount 等），失败返回 null
+     */
+    fun quizQuery(cookie: String, actId: String, bizSceneSource: String = "INTERACT_CENTER"): JSONObject? {
+        val (lat, lng) = getCoordinates()
+        val data = JSONObject().apply {
+            put("actId", actId)
+            put("bizScene", bizSceneSource)
+            put("source", bizSceneSource)
+            put("latitude", lat)
+            put("longitude", lng)
+        }
+        return ElemeMtopUtil.send(API_QUIZ_QUERY, data.toString(), cookie, method = "GET", version = "1.0")
+    }
+
+    /**
+     * 趣味话题答题/猜价格提交答案（对齐 幸运星.py quiz.submit 规范）
+     * @param questionId 题目 ID（questionDTO.questionId）
+     * @param optionId 选项 ID（optionList 第一个选项，服务端不校验对错只计次）
+     */
+    fun quizSubmit(
+        cookie: String,
+        actId: String,
+        copyId: String,
+        questionId: Any,
+        optionId: Any,
+        bizSceneSource: String = "INTERACT_CENTER"
+    ): ElemeMtopUtil.MtopResult {
+        val (lat, lng) = getCoordinates()
+        val data = JSONObject().apply {
+            put("actId", actId)
+            put("bizScene", bizSceneSource)
+            put("source", bizSceneSource)
+            put("copyId", copyId)
+            put("questionId", questionId)
+            put("optionId", optionId)
+            put("latitude", lat)
+            put("longitude", lng)
+        }
+        return ElemeMtopUtil.execute(API_QUIZ_SUBMIT, data.toString(), cookie, method = "GET", version = "1.0")
+    }
+
+    /**
+     * 趣味话题答题/猜价格领奖（对齐 幸运星.py quiz.award 规范）
+     */
+    fun quizAward(
+        cookie: String,
+        actId: String,
+        copyId: String,
+        bizSceneSource: String = "INTERACT_CENTER"
+    ): ElemeMtopUtil.MtopResult {
+        val (lat, lng) = getCoordinates()
+        val data = JSONObject().apply {
+            put("actId", actId)
+            put("bizScene", bizSceneSource)
+            put("source", bizSceneSource)
+            put("copyId", copyId)
+            put("latitude", lat)
+            put("longitude", lng)
+        }
+        val headers = mapOf("asac" to ASAC_QUIZ_AWARD)
+        return ElemeMtopUtil.execute(API_QUIZ_AWARD, data.toString(), cookie, method = "GET", version = "1.0", extraHeaders = headers)
     }
 }

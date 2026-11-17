@@ -551,161 +551,94 @@ html.dark .van-dialog {
   background-color: var(--card-bg-color);
 }
 
-/* ============ UA指纹与弹窗深浅模式自适应 ============ */
-.ua-summary-bar {
+/* ============ 设备机型与 UA 设置弹窗（重构版） ============ */
+/* 当前行：仅显示机型名 */
+.ua-model-line {
   display: flex;
   justify-content: space-between;
   align-items: center;
   padding: 8px 12px;
-  background: #f4f6f8;
   border: 1px solid #e1e4e8;
   border-radius: 8px;
-  margin-bottom: 8px;
+  background: #f4f6f8;
   font-size: 13px;
   line-height: 1.4;
+  margin-bottom: 10px;
 }
 
-html.dark .ua-summary-bar {
+html.dark .ua-model-line {
   background: #232427;
   border-color: #383a3e;
   color: #e0e0e0;
 }
 
-.ua-summary-left {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex: 1;
+.ua-model-label {
+  color: #888888;
+  flex-shrink: 0;
+}
+
+html.dark .ua-model-label {
+  color: #909090;
+}
+
+.ua-model-value {
+  font-weight: 600;
+  color: var(--text-color);
+  text-align: right;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.ua-summary-icon {
-  font-size: 14px;
-}
-
-.ua-summary-model {
-  font-weight: 600;
-  color: var(--text-color);
-}
-
-.ua-summary-tag {
-  font-size: 11px;
-  padding: 1px 5px;
-  border-radius: 4px;
-  background: rgba(0, 0, 0, 0.06);
-  color: #666;
-}
-
-html.dark .ua-summary-tag {
-  background: rgba(255, 255, 255, 0.1);
-  color: #aaa;
-}
-
-.ua-summary-status {
-  font-size: 11px;
-  color: var(--main-color);
-  font-weight: 500;
-}
-
-.ua-summary-right {
-  margin-left: 8px;
-  cursor: pointer;
-  flex-shrink: 0;
-}
-
-.ua-drawer-toggle-btn {
-  font-size: 11px;
-  padding: 3px 8px;
-  border-radius: 12px;
-  border: 1px solid var(--main-color);
-  color: var(--main-color);
-  background: transparent;
-  user-select: none;
-  transition: all 0.2s ease;
-}
-
-.ua-drawer-toggle-btn:active {
-  opacity: 0.7;
-}
-
-/* 详情抽屉面板 */
-.ua-detail-drawer {
-  background: #fcfcfd;
-  border: 1px solid #ebedf0;
+/* 带边框的 UA 编辑区 */
+.ua-edit-box {
+  border: 1px solid #d0d3d8;
   border-radius: 8px;
-  padding: 10px 12px;
-  margin-bottom: 10px;
-  font-size: 12px;
-  animation: uaFadeSlide 0.2s ease;
+  padding: 8px;
+  background: #ffffff;
 }
 
-html.dark .ua-detail-drawer {
-  background: #1c1d20;
-  border-color: #34363a;
-  color: #c4c4c4;
+html.dark .ua-edit-box {
+  border-color: #3a3b3c;
+  background: #1e1e22;
 }
 
-@keyframes uaFadeSlide {
-  from {
-    opacity: 0;
-    transform: translateY(-4px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-.ua-drawer-grid {
+/* 指定机型生成行 */
+.ua-gen-row {
   display: flex;
-  flex-direction: column;
-  gap: 5px;
-}
-
-.ua-drawer-row {
-  display: flex;
-  justify-content: space-between;
-  line-height: 1.5;
-}
-
-.ua-drawer-label {
-  color: #888888;
-  flex-shrink: 0;
-}
-
-html.dark .ua-drawer-label {
-  color: #909090;
-}
-
-.ua-drawer-val {
-  font-weight: 500;
-  color: var(--text-color);
-  text-align: right;
-  word-break: break-all;
-}
-
-.ua-edit-body {
-  margin-top: 4px;
-}
-
-.ua-field-hint {
-  font-size: 12px;
-  color: var(--text-color);
-  opacity: 0.7;
-  margin-bottom: 6px;
-}
-
-.ua-action-btns {
-  display: flex;
+  align-items: center;
   gap: 8px;
   margin-top: 10px;
 }
 
+.ua-model-select {
+  flex: 1.6;
+  min-width: 0;
+  height: 34px;
+  padding: 0 8px;
+  font-size: 12px;
+  color: var(--text-color, #333);
+  background: #fafafa;
+  border: 1px solid #d0d3d8;
+  border-radius: 6px;
+  outline: none;
+  appearance: auto;
+}
+
+.ua-model-select:focus {
+  border-color: var(--main-color);
+}
+
+html.dark .ua-model-select {
+  background: #1e1e22;
+  border-color: #3a3b3c;
+  color: #e6e6e6;
+}
+
 .ua-btn-action {
   flex: 1;
-  padding: 8px 0;
+  height: 34px;
+  padding: 0;
   border-radius: 6px;
   font-size: 12px;
   text-align: center;
@@ -715,6 +648,7 @@ html.dark .ua-drawer-label {
   outline: none;
   cursor: pointer;
   transition: all 0.15s ease;
+  white-space: nowrap;
 }
 
 .ua-btn-action:active {

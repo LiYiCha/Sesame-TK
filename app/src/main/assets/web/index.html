@@ -111,7 +111,7 @@
                                         <div class="title" @click="handleRunField(tabs_item.modelCode, item.code)">{{item.name}}</div>
                                         <div class="flex-center" @click="handleRunField(tabs_item.modelCode, item.code)">
                                             <div class="link" style="font-size: 13px;">
-                                                {{ item.code === 'elemeRefreshMall' ? '点击查看/刷新' : (item.code === 'elemeGenerateUa' ? '点击生成' : (item.code === 'elemeViewProfile' ? '点击查看' : '点击执行')) }}
+                                                点击执行
                                             </div>
                                         </div>
                                     </div>
@@ -212,7 +212,7 @@
                                         <div class="title" @click="handleRunField(tabs_item.modelCode, item.code)">{{item.name}}</div>
                                         <div class="flex-center" @click="handleRunField(tabs_item.modelCode, item.code)">
                                             <div class="link" style="font-size: 13px;">
-                                                {{ item.code === 'elemeRefreshMall' ? '点击查看/刷新' : (item.code === 'elemeGenerateUa' ? '点击生成' : (item.code === 'elemeViewProfile' ? '点击查看' : '点击执行')) }}
+                                                点击执行
                                             </div>
                                         </div>
                                     </div>
@@ -324,72 +324,35 @@
                 :show-cancel-button="false"
                 :close-on-click-overlay="true">
                 <div style="padding: 12px 16px;">
-                    <!-- 设备机型与UA指纹专属设置弹窗（针对 elemeCustomUa 展示） -->
+                    <!-- 设备机型与 UA 设置（重构版：仅显示机型、带边框编辑区、支持指定机型生成） -->
                     <div v-if="text_dialog.targetItem && text_dialog.targetItem.code === 'elemeCustomUa'">
-                        <!-- 1. 顶部简略总结栏（机型信息 + 右侧抽屉展开/收起切换按钮） -->
-                        <div class="ua-summary-bar">
-                            <div class="ua-summary-left">
-                                <span class="ua-summary-model">{{ parsedUaInfo.model || '系统默认' }}</span>
-                                <span v-if="parsedUaInfo.brandModel" class="ua-summary-tag">{{ parsedUaInfo.brandModel }}</span>
-                                <span class="ua-summary-status">({{ (!text_dialog.value || !text_dialog.value.trim()) ? '系统默认' : '已自定义' }})</span>
-                            </div>
-                            <div class="ua-summary-right" @click="showUaDrawer = !showUaDrawer">
-                                <span class="ua-drawer-toggle-btn">
-                                    {{ showUaDrawer ? '收起详情' : '指纹详情' }}
-                                </span>
-                            </div>
+                        <!-- 1. 当前行：仅显示机型名 -->
+                        <div class="ua-model-line">
+                            <span class="ua-model-label">当前机型</span>
+                            <span class="ua-model-value">{{ uaDisplayModel }}</span>
                         </div>
 
-                        <!-- 2. 可折叠的详细设备指纹抽屉面板（默认折叠，点击展开） -->
-                        <div v-show="showUaDrawer" class="ua-detail-drawer">
-                            <div class="ua-drawer-grid">
-                                <div class="ua-drawer-row">
-                                    <span class="ua-drawer-label">识别机型</span>
-                                    <span class="ua-drawer-val">{{ parsedUaInfo.model || '系统默认' }}</span>
-                                </div>
-                                <div class="ua-drawer-row">
-                                    <span class="ua-drawer-label">品牌代码</span>
-                                    <span class="ua-drawer-val">{{ parsedUaInfo.brandModel || '默认' }}</span>
-                                </div>
-                                <div class="ua-drawer-row">
-                                    <span class="ua-drawer-label">系统版本</span>
-                                    <span class="ua-drawer-val">{{ parsedUaInfo.system || 'Android 14' }}</span>
-                                </div>
-                                <div class="ua-drawer-row">
-                                    <span class="ua-drawer-label">内核版本</span>
-                                    <span class="ua-drawer-val">{{ parsedUaInfo.kernel || 'Chrome / UC' }}</span>
-                                </div>
-                                <div class="ua-drawer-row">
-                                    <span class="ua-drawer-label">屏幕规格</span>
-                                    <span class="ua-drawer-val">{{ parsedUaInfo.screen || '默认' }}</span>
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- 3. 弹窗主体：大面积 User-Agent 编辑框（完整展示，自由编辑复制粘贴） -->
-                        <div class="ua-edit-body">
-                            <div class="ua-field-hint">
-                                自定义 User-Agent（留空使用系统默认）：
-                            </div>
+                        <!-- 2. 带边框的 UA 编辑区（完整展示，自由编辑复制粘贴） -->
+                        <div class="ua-edit-box">
                             <van-field
                                 v-model="text_dialog.value"
-                                rows="8"
+                                rows="7"
                                 autosize
                                 type="textarea"
-                                placeholder="留空使用系统默认，支持粘贴自定义UA..."
+                                placeholder="留空使用系统默认，支持粘贴自定义UA"
                                 class="custom-textarea-field ua-large-textarea"
                                 @input="onUaInputChanged"
                             />
                         </div>
 
-                        <!-- 4. 辅助快捷操作按钮（纯文本无表情） -->
-                        <div class="ua-action-btns">
-                            <button type="button" class="ua-btn-action" @click="handleRandomUaInDialog">
-                                随机生成机型
-                            </button>
-                            <button type="button" class="ua-btn-action" @click="handleResetUaInDialog">
-                                恢复系统默认
-                            </button>
+                        <!-- 3. 指定机型生成（生成仅填充输入框，点击保存后才生效） -->
+                        <div class="ua-gen-row">
+                            <select v-model="uaSelectedModel" class="ua-model-select">
+                                <option value="">随机机型（全部）</option>
+                                <option v-for="m in uaModelOptions" :key="m" :value="m">{{ m }}</option>
+                            </select>
+                            <button type="button" class="ua-btn-action" @click="handleGenerateUaInDialog">生成</button>
+                            <button type="button" class="ua-btn-action" @click="handleResetUaInDialog">恢复默认</button>
                         </div>
                     </div>
 
@@ -480,23 +443,81 @@
                   targetItem: null,
                 });
 
-                const showUaDrawer = ref(false);
+                // 设备机型与 UA 设置状态
+                const uaModelOptions = ref([]);
+                const uaSelectedModel = ref("");
                 const parsedUaInfo = ref({
                   model: "",
+                  brandModel: "",
                   system: "",
                   kernel: "",
                   screen: "",
                 });
 
+                // 解析 UA 并更新机型展示信息；任何异常均回退为空对象，绝不抛出导致页面崩溃
                 function updateParsedUa(rawUa) {
+                  const fallback = { model: "", brandModel: "", system: "", kernel: "", screen: "" };
                   try {
-                    if (window.HOOK && window.HOOK.getDeviceProfileJson) {
-                      const res = JSON.parse(window.HOOK.getDeviceProfileJson(rawUa || ""));
-                      parsedUaInfo.value = res;
+                    if (window.HOOK && typeof window.HOOK.getDeviceProfileJson === "function") {
+                      const raw = window.HOOK.getDeviceProfileJson(rawUa || "");
+                      const res = raw ? JSON.parse(raw) : null;
+                      parsedUaInfo.value = Object.assign({}, fallback, res || {});
+                    } else {
+                      parsedUaInfo.value = fallback;
                     }
                   } catch (e) {
                     console.error("解析UA异常:", e);
+                    parsedUaInfo.value = fallback;
                   }
+                }
+
+                // 机型展示名：优先取解析结果，输入为空时显示系统默认
+                const uaDisplayModel = computed(() => {
+                  if (!text_dialog.value.value || !text_dialog.value.value.trim()) return "系统默认";
+                  const m = parsedUaInfo.value && parsedUaInfo.value.model;
+                  return m || "已自定义";
+                });
+
+                // 懒加载机型库列表（仅首次打开弹窗时拉取一次）
+                function ensureModelOptions() {
+                  if (uaModelOptions.value.length > 0) return;
+                  try {
+                    if (window.HOOK && typeof window.HOOK.getDeviceModelList === "function") {
+                      const raw = window.HOOK.getDeviceModelList();
+                      const arr = raw ? JSON.parse(raw) : [];
+                      uaModelOptions.value = Array.isArray(arr) ? arr : [];
+                    }
+                  } catch (e) {
+                    console.error("获取机型列表异常:", e);
+                    uaModelOptions.value = [];
+                  }
+                }
+
+                // 按选定机型生成 UA（仅填充输入框，保存后才生效；桥接缺失或异常时给出提示，绝不闪退）
+                function handleGenerateUaInDialog() {
+                  try {
+                    if (!window.HOOK || typeof window.HOOK.generateUaByModel !== "function") {
+                      vant.showToast("当前模块版本不支持机型生成，请升级模块");
+                      return;
+                    }
+                    const newUa = window.HOOK.generateUaByModel(uaSelectedModel.value || "");
+                    if (!newUa || !newUa.trim()) {
+                      vant.showToast("生成失败，请重试或改选其他机型");
+                      return;
+                    }
+                    text_dialog.value.value = newUa;
+                    updateParsedUa(newUa);
+                    vant.showToast("已生成，点击保存生效");
+                  } catch (e) {
+                    console.error("生成UA异常:", e);
+                    vant.showToast("生成异常，请重试");
+                  }
+                }
+
+                function handleResetUaInDialog() {
+                  text_dialog.value.value = "";
+                  updateParsedUa("");
+                  vant.showToast("已重置为系统默认，点击保存生效");
                 }
 
                 // 页面挂载/初始化时立即尝试预解析已保存的 elemeCustomUa
@@ -512,25 +533,6 @@
                   }
                 } catch (e) {}
 
-                function handleRandomUaInDialog() {
-                  try {
-                    if (window.HOOK && window.HOOK.getRandomUa) {
-                      const newUa = window.HOOK.getRandomUa();
-                      text_dialog.value.value = newUa;
-                      updateParsedUa(newUa);
-                      vant.showToast("已生成新机型UA，点击保存生效");
-                    }
-                  } catch (e) {
-                    console.error("生成UA异常:", e);
-                  }
-                }
-
-                function handleResetUaInDialog() {
-                  text_dialog.value.value = "";
-                  updateParsedUa("");
-                  vant.showToast("已重置为系统默认，点击保存生效");
-                }
-
                 function onUaInputChanged() {
                   updateParsedUa(text_dialog.value.value || "");
                 }
@@ -540,23 +542,6 @@
                     if (window.HOOK && window.HOOK.runField) {
                       window.HOOK.runField(modelCode, itemCode);
                     }
-                    if (itemCode === "elemeGenerateUa") {
-                      setTimeout(() => {
-                        try {
-                          for (const tabItems of setData.value) {
-                            if (Array.isArray(tabItems)) {
-                              const uaItem = tabItems.find((i) => i && i.code === "elemeCustomUa");
-                              if (uaItem && window.HOOK && window.HOOK.getField) {
-                                const info = JSON.parse(window.HOOK.getField(modelCode, "elemeCustomUa"));
-                                uaItem.configValue = info.configValue || "";
-                                updateParsedUa(uaItem.configValue);
-                                break;
-                              }
-                            }
-                          }
-                        } catch (e) {}
-                      }, 600);
-                    }
                   } catch (e) {
                     console.error("执行按钮异常:", e);
                   }
@@ -565,11 +550,10 @@
                 function getRowDisplayValue(item) {
                   if (item.code === "elemeCustomUa") {
                     const val = (item.configValue || "").trim();
-                    if (!val) return "系统原版 (查看)";
-                    if (parsedUaInfo.value && parsedUaInfo.value.model && parsedUaInfo.value.model !== "系统原版默认") {
-                      return parsedUaInfo.value.model + " (查看)";
-                    }
-                    return "已自定义 (查看)";
+                    if (!val) return "系统默认";
+                    const m = parsedUaInfo.value && parsedUaInfo.value.model;
+                    if (m && m !== "系统原版默认") return m;
+                    return "已自定义";
                   }
                   if (item.code === "startTime") {
                     return item.configValue || "0700";
@@ -587,8 +571,9 @@
                   text_dialog.value.targetItem = item;
 
                   if (item.code === "elemeCustomUa") {
-                    showUaDrawer.value = false;
+                    uaSelectedModel.value = "";
                     updateParsedUa(item.configValue || "");
+                    ensureModelOptions();
                   }
                 }
 
@@ -897,9 +882,10 @@
                   getModelIcon,
                   getDefaultModelIcon,
                   text_dialog,
-                  showUaDrawer,
-                  parsedUaInfo,
-                  handleRandomUaInDialog,
+                  uaModelOptions,
+                  uaSelectedModel,
+                  uaDisplayModel,
+                  handleGenerateUaInDialog,
                   handleResetUaInDialog,
                   onUaInputChanged,
                   handleRunField,

@@ -382,7 +382,13 @@ public class WebSettingsActivity extends BaseActivity {
                     if (modelField != null) {
                         modelField.setConfigValue(fieldValue);
                         if ("elemeCustomUa".equals(fieldCode)) {
+                            // UA 字段立即持久化到配置文件，不依赖退出设置页时的统一保存，避免进程被杀导致丢失
                             fansirsqi.xposed.sesame.task.otherTask2.eleme.ElemeMtopUtil.recordUaChanged();
+                            try {
+                                fansirsqi.xposed.sesame.data.Config.save(userId, true);
+                            } catch (Exception e) {
+                                Log.printStackTrace(e);
+                            }
                         }
                         return "SUCCESS";
                     }
@@ -397,6 +403,33 @@ public class WebSettingsActivity extends BaseActivity {
         public String getRandomUa() {
             try {
                 return fansirsqi.xposed.sesame.task.otherTask2.eleme.ElemeMtopUtil.getRandomRealDeviceUa();
+            } catch (Throwable t) {
+                Log.printStackTrace(TAG, t);
+                return "";
+            }
+        }
+
+        /**
+         * 获取机型库全部可选机型名称（JSON 数组字符串，供 UA 编辑弹窗下拉框使用）
+         */
+        @JavascriptInterface
+        public String getDeviceModelList() {
+            try {
+                return fansirsqi.xposed.sesame.task.otherTask2.eleme.ElemeMtopUtil.getDeviceModelList();
+            } catch (Throwable t) {
+                Log.printStackTrace(TAG, t);
+                return "[]";
+            }
+        }
+
+        /**
+         * 按指定机型生成真实 UA（仅返回字符串，是否保存由用户在弹窗点击保存决定）
+         * @param marketingName 机型名称；传空则从全部机型中随机选取
+         */
+        @JavascriptInterface
+        public String generateUaByModel(String marketingName) {
+            try {
+                return fansirsqi.xposed.sesame.task.otherTask2.eleme.ElemeMtopUtil.generateUaByModel(marketingName);
             } catch (Throwable t) {
                 Log.printStackTrace(TAG, t);
                 return "";

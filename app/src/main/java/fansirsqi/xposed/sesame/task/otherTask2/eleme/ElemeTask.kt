@@ -60,45 +60,28 @@ class ElemeTask : ModelTask() {
         )
 
         @JvmField
-        val elemeExchangeItems = SelectModelField(
-            "elemeExchangeItems",
-            "目标兑换商品",
-            LinkedHashSet<String>(),
-            ElemeMallEntity::getList,
-            "请勾选允许自动兑换的目标商品（多选或单选）。只有被勾选且当前幸运星充足的商品才会发起兑换。"
-        )
-
-        @JvmField
         val elemeRefreshMall = EmptyModelField(
             "elemeRefreshMall",
-            "查看/刷新兑换商城"
+            "兑换商城"
         ) { context ->
             ElemeMtopUtil.showMallListDialog(context)
         }
 
         @JvmField
-        val elemeCustomUa = StringModelField(
-            "elemeCustomUa",
-            "User-Agent设备设置",
-            "",
-            "【User-Agent 与设备指纹】\n点击可查看当前生效的设备指纹详情、直接修改/粘贴自定义真实 UA，或点击下方【🎲 随机生成真实设备UA】快速获取近几年真实热门机型指纹。\n若留空则自动使用本机系统原版真实指纹。"
+        val elemeExchangeItems = SelectModelField(
+            "elemeExchangeItems",
+            "目标兑换商品",
+            LinkedHashSet<String>(),
+            ElemeMallEntity::getList,
+            "请勾选允许自动兑换的目标商品（多选或单选）。可在【兑换商城】弹窗内直接勾选每个商品的「自动兑换」开关（实时保存），或在此列表批量勾选；只有被勾选且当前幸运星充足的商品才会发起兑换。"
         )
 
         @JvmField
-        val elemeGenerateUa = EmptyModelField(
-            "elemeGenerateUa",
-            "🎲 随机生成真实设备UA"
-        ) { context ->
-            ElemeMtopUtil.generateAndSaveRandomProfile(context)
-        }
-
-        @JvmField
-        val elemeViewProfile = EmptyModelField(
-            "elemeViewProfile",
-            "设备机型 (查看)",
-            EmptyModelField.ContextConsumer { context ->
-                ElemeMtopUtil.showActiveProfileDialog(context)
-            }
+        val elemeCustomUa = StringModelField(
+            "elemeCustomUa",
+            "设备机型与User-Agent设置",
+            "",
+            "设备机型与 UA 合并设置入口。点击编辑 UA：弹窗内实时显示当前生效机型，可从真实机型库中指定机型生成，确认后保存生效；留空使用本机系统原版指纹。修改有 10 分钟冷却防风控。"
         )
 
         @JvmField
@@ -130,12 +113,6 @@ class ElemeTask : ModelTask() {
 
         @JvmStatic
         fun getElemeCustomUa(): StringModelField = elemeCustomUa
-
-        @JvmStatic
-        fun getElemeGenerateUa(): EmptyModelField = elemeGenerateUa
-
-        @JvmStatic
-        fun getElemeViewProfile(): EmptyModelField = elemeViewProfile
 
         @JvmStatic
         fun getElemeRiskTasks(): SelectModelField = elemeRiskTasks
@@ -181,10 +158,8 @@ class ElemeTask : ModelTask() {
         modelFields.addField(elemeFreeOrder)
         modelFields.addField(elemeBurstRed)
         modelFields.addField(elemeAutoExchange)
-        modelFields.addField(elemeExchangeItems)
         modelFields.addField(elemeRefreshMall)
-        modelFields.addField(elemeViewProfile)
-        modelFields.addField(elemeGenerateUa)
+        modelFields.addField(elemeExchangeItems)
         modelFields.addField(elemeCustomUa)
         modelFields.addField(elemeRiskTasks)
         return modelFields

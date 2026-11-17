@@ -268,12 +268,13 @@ public class ElemeMallEntity extends MapperEntity {
 
     /**
      * 供 UI 设置页 SelectModelField 调用的选项获取方法
+     * 仅返回本地缓存列表，绝不主动发起网络请求；刷新由用户点击【兑换商城】手动触发
      */
     public static synchronized List<ElemeMallEntity> getList() {
         if (MALL_ITEMS.isEmpty()) {
             // 如果尚未从接口拉取且无本地缓存，给出唯一清晰的动态提示项
             List<ElemeMallEntity> emptyTip = new ArrayList<>();
-            emptyTip.add(new ElemeMallEntity("0", "【暂未拉取商品，请点击【查看/刷新兑换商城】获取最新真实列表】", 0, "", "", "", "", 0, "", "", ""));
+            emptyTip.add(new ElemeMallEntity("0", "【暂未拉取商品，请点击【兑换商城】手动获取最新列表】", 0, "", "", "", "", 0, "", "", ""));
             return emptyTip;
         }
         return new ArrayList<>(MALL_ITEMS.values());

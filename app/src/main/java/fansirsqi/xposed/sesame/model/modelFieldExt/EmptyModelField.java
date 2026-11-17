@@ -56,12 +56,7 @@ public class EmptyModelField extends ModelField<Object> {
     @JsonIgnore
     public View getView(Context context) {
         Button btn = new Button(context);
-        if ("elemeViewProfile".equals(code)) {
-            String shortName = fansirsqi.xposed.sesame.task.otherTask2.eleme.ElemeMtopUtil.getCurrentDeviceShortName();
-            btn.setText("设备机型: " + shortName + " (查看)");
-        } else {
-            btn.setText(name);
-        }
+        btn.setText(name);
         btn.setLayoutParams(new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         btn.setTextColor(ContextCompat.getColor(context, R.color.selection_color));
         btn.setBackground(ContextCompat.getDrawable(context, R.drawable.dialog_list_button));

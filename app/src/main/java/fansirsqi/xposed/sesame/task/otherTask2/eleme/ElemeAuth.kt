@@ -66,6 +66,8 @@ object ElemeAuth {
     /**
      * 获取有效的 Cookie，若过期或不存在则自动刷新（支持多账号数据隔离）
      */
+    @JvmStatic
+    @JvmOverloads
     @Synchronized
     fun ensureCookie(force: Boolean = false): String {
         val currentUid = UserMap.currentUid
@@ -169,6 +171,7 @@ object ElemeAuth {
     /**
      * 判断当前账号是否具备有效饿了么凭据
      */
+    @JvmStatic
     fun isBound(): Boolean {
         val cookie = peekCookie()
         return cookie.contains("USERID=") || cookie.contains("user_id=") || cookie.contains("SID=") || cookie.contains("sid=") || cookie.contains("bindTag=existed")

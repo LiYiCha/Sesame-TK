@@ -142,6 +142,49 @@ public class ElemeRiskTaskEntity extends MapperEntity {
     }
 
     /**
+     * 判断任务是否已关闭或不可用（活动下线、任务不存在、累计阶段永远无法达成等）
+     * 命中此类错误的任务应自动加入风控名单，避免每日重复请求制造无效报错
+     */
+    public static boolean isTaskClosedError(String errorCode, String errorMsg) {
+        String code = errorCode == null ? "" : errorCode;
+        String msg = errorMsg == null ? "" : errorMsg;
+        String[] closedKeywords = {
+                "STAGE_NOT_FINISH", "阶段还未完成",
+                "ACTIVITY_END", "ACTIVITY_NOT", "MISSION_NOT", "NOT_EXIST", "NOT_FOUND",
+                "已结束", "已关闭", "已下线", "已过期", "活动不存在", "任务不存在", "任务已结束"
+        };
+        for (String kw : closedKeywords) {
+            if (code.contains(kw) || msg.contains(kw)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * 判断失败原因并自动加入风控名单（供幸运星/抽免单领奖、执行失败分支统一调用）
+     * @return 本次是否已记录为风控任务
+     */
+    public static boolean recordIfBlockedOrClosed(String id, String title, String errorCode, String errorMsg) {
+        String code = errorCode == null ? "" : errorCode;
+        String msg = errorMsg == null ? "" : errorMsg;
+        boolean isRisk = code.contains("405") || msg.contains("行为受限")
+                || code.contains("417") || msg.contains("作弊");
+        boolean isClosed = isTaskClosedError(code, msg);
+        if (!isRisk && !isClosed) {
+            return false;
+        }
+        String reason;
+        if (isRisk) {
+            reason = code.contains("417") || msg.contains("作弊") ? "417::防作弊拦截" : "405::行为受限";
+        } else {
+            reason = "任务已关闭或不可用::" + (msg.length() > 40 ? msg.substring(0, 40) : msg);
+        }
+        recordRiskTask(id, title, reason);
+        return true;
+    }
+
+    /**
      * 供 UI 设置页 SelectModelField 调用的选项获取方法
      */
     public static synchronized List<ElemeRiskTaskEntity> getList() {
