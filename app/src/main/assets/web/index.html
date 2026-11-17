@@ -354,6 +354,35 @@
                             <button type="button" class="ua-btn-action" @click="handleGenerateUaInDialog">生成</button>
                             <button type="button" class="ua-btn-action" @click="handleResetUaInDialog">恢复默认</button>
                         </div>
+
+                        <!-- 4. UA 历史记录（保存生效过的 UA 自动记录，点击条目回填输入框） -->
+                        <div class="ua-gen-row">
+                            <button type="button" class="ua-btn-action" @click="toggleUaHistory">
+                                {{ uaHistoryVisible ? '收起历史' : '历史记录' }}
+                            </button>
+                            <button
+                                type="button"
+                                class="ua-btn-action ua-btn-danger"
+                                v-if="uaHistoryVisible && uaHistoryList.length > 0"
+                                @click="handleClearUaHistory"
+                            >
+                                清空历史
+                            </button>
+                        </div>
+                        <div class="ua-history-box" v-if="uaHistoryVisible">
+                            <div
+                                class="ua-history-item"
+                                v-for="(h, hi) in uaHistoryList"
+                                :key="hi"
+                                @click="handlePickUaHistory(h)"
+                            >
+                                <div class="ua-history-model">{{ h.model }}</div>
+                                <div class="ua-history-time">{{ formatUaTime(h.time) }}</div>
+                            </div>
+                            <div class="ua-history-empty" v-if="uaHistoryList.length === 0">
+                                暂无历史记录（保存 UA 后自动记录）
+                            </div>
+                        </div>
                     </div>
 
                     <!-- 开始执行时间专属单行输入（针对 startTime 展示） -->
@@ -520,6 +549,76 @@
                   vant.showToast("已重置为系统默认，点击保存生效");
                 }
 
+                // UA 历史记录状态：可见性、条目列表
+                const uaHistoryVisible = ref(false);
+                const uaHistoryList = ref([]);
+
+                // 从桥接读取 UA 历史（桥接缺失或异常时安全降级为空列表）
+                function loadUaHistory() {
+                  try {
+                    if (window.HOOK && typeof window.HOOK.getUaHistory === "function") {
+                      const raw = window.HOOK.getUaHistory();
+                      const arr = raw ? JSON.parse(raw) : [];
+                      uaHistoryList.value = Array.isArray(arr) ? arr : [];
+                    } else {
+                      uaHistoryList.value = [];
+                    }
+                  } catch (e) {
+                    console.error("获取UA历史异常:", e);
+                    uaHistoryList.value = [];
+                  }
+                }
+
+                // 展开/收起历史记录（展开时懒加载一次）
+                function toggleUaHistory() {
+                  uaHistoryVisible.value = !uaHistoryVisible.value;
+                  if (uaHistoryVisible.value) {
+                    loadUaHistory();
+                  }
+                }
+
+                // 时间格式化：yyyy-MM-dd HH:mm
+                function formatUaTime(ts) {
+                  try {
+                    const d = new Date(Number(ts) || 0);
+                    if (!d.getTime()) return "";
+                    const p = (n) => (n < 10 ? "0" + n : "" + n);
+                    return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
+                  } catch (e) {
+                    return "";
+                  }
+                }
+
+                // 点击历史条目：回填输入框（不自动保存，仍需点击「保存」生效）
+                function handlePickUaHistory(h) {
+                  if (!h || typeof h.ua !== "string") return;
+                  text_dialog.value.value = h.ua;
+                  updateParsedUa(h.ua);
+                  vant.showToast("已回填，点击保存生效");
+                }
+
+                // 清空 UA 历史（需二次确认，防止误触丢失全部回滚记录）
+                function handleClearUaHistory() {
+                  try {
+                    if (!window.HOOK || typeof window.HOOK.clearUaHistory !== "function") {
+                      vant.showToast("当前模块版本不支持清空历史，请升级模块");
+                      return;
+                    }
+                    vant.Dialog.confirm({
+                      title: "清空历史",
+                      message: "确定清空全部 UA 历史记录？清空后无法通过历史回填之前的 UA。",
+                    })
+                      .then(() => {
+                        window.HOOK.clearUaHistory();
+                        uaHistoryList.value = [];
+                        vant.showToast("已清空 UA 历史记录");
+                      })
+                      .catch(() => {});
+                  } catch (e) {
+                    console.error("清空UA历史异常:", e);
+                  }
+                }
+
                 // 页面挂载/初始化时立即尝试预解析已保存的 elemeCustomUa
                 try {
                   for (const tabItems of setData.value) {
@@ -572,6 +671,7 @@
 
                   if (item.code === "elemeCustomUa") {
                     uaSelectedModel.value = "";
+                    uaHistoryVisible.value = false;
                     updateParsedUa(item.configValue || "");
                     ensureModelOptions();
                   }
@@ -628,10 +728,23 @@
                   person_list.value.visible = true;
                   person_list.value.list = [];
                   let obj = JSON.parse(window.HOOK.getField(modelName, code));
-                  let configValue = JSON.parse(
-                    setData.value[currentTab.value].find((i) => i.code === code)
-                      .configValue
-                  );
+                  // 勾选状态优先实时读取磁盘配置（hook 进程可能已在任务执行期间动态写入，
+                  // 例如运行期自动加入风控名单的任务），读取失败再回退页面打开时的快照
+                  let configValue;
+                  try {
+                    let freshValue = window.HOOK.getFieldValue(modelName, code);
+                    configValue = freshValue
+                      ? JSON.parse(freshValue)
+                      : JSON.parse(
+                          setData.value[currentTab.value].find((i) => i.code === code)
+                            .configValue
+                        );
+                  } catch (e) {
+                    configValue = JSON.parse(
+                      setData.value[currentTab.value].find((i) => i.code === code)
+                        .configValue
+                    );
+                  }
                   let array = obj.expandValue
                     .map((item) => {
                       return {
@@ -887,6 +1000,12 @@
                   uaDisplayModel,
                   handleGenerateUaInDialog,
                   handleResetUaInDialog,
+                  uaHistoryVisible,
+                  uaHistoryList,
+                  toggleUaHistory,
+                  formatUaTime,
+                  handlePickUaHistory,
+                  handleClearUaHistory,
                   onUaInputChanged,
                   handleRunField,
                   getRowDisplayValue,

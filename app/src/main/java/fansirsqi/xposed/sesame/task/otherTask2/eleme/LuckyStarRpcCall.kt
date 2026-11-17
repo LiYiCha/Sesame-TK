@@ -266,6 +266,8 @@ object LuckyStarRpcCall {
             put("eventIdemPotent", now)
             put("eventTime", now)
             put("triggerType", "SYNC")
+            // 对齐幸运星.py：collectionId 必须使用任务自身的 missionCollectionId，
+            // 抽免单等非幸运星集合的任务固定传幸运星集合 ID 会因场景不匹配被服务端过滤
             put("collectionId", collectionId)
             put("missionId", missionDefId.toString())
             put("missionXId", missionXId)

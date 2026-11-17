@@ -1,6 +1,8 @@
 package fansirsqi.xposed.sesame.task.otherTask2.eleme
 
 import fansirsqi.xposed.sesame.hook.ApplicationHook
+import fansirsqi.xposed.sesame.util.DataStore
+import fansirsqi.xposed.sesame.util.Files
 import fansirsqi.xposed.sesame.util.Log
 import fansirsqi.xposed.sesame.util.RandomUtil
 import org.json.JSONObject
@@ -22,6 +24,10 @@ object ElemeMtopUtil {
     var lastError: String? = null
     @Volatile
     var lastResponse: String? = null
+
+    // 会话级缓存：最近一次网络拉取到的幸运星数量（打开商城弹窗不请求网络，仅展示该值；null 表示尚未拉取过）
+    @Volatile
+    private var lastKnownStarAmount: Int? = null
 
     // 单次会话级指纹缓存：确保单次任务执行生命周期内所有接口使用完全相同的真实设备指纹
     @Volatile
@@ -436,6 +442,82 @@ object ElemeMtopUtil {
         resetSessionProfile()
     }
 
+    // UA 变更历史去重缓存：记录上次已持久化的键与 UA 原文，避免每次读取配置都重复写盘
+    @Volatile
+    private var lastRecordedUaKey: String? = null
+    @Volatile
+    private var lastRecordedUaValue: String? = null
+    private const val UA_HISTORY_MAX = 20 // 历史记录最大保留条数
+
+    /**
+     * 记录 UA 变更历史（按账号持久化到 DataStore，JSON 数组，最新在前，去重且上限 20 条）
+     * 记录内容包括 UA 原文、记录时间与机型展示名（「营销名-型号代码」格式），供 Web 设置页查看与一键回填
+     */
+    @JvmStatic
+    fun recordUaHistory(rawUa: String?) {
+        runCatching {
+            val ua = rawUa?.trim().orEmpty()
+            val key = ElemeAuth.getUidKey("Eleme_UA_History")
+            // 会话级去重：同一账号同一 UA 不重复记录
+            if (lastRecordedUaKey == key && lastRecordedUaValue == ua) {
+                return
+            }
+            val existing = DataStore.get(key, String::class.java).orEmpty().ifEmpty { "[]" }
+            val arr = org.json.JSONArray(existing)
+            // 磁盘级去重：最新一条与本次相同则跳过（覆盖跨进程重复保存的场景）
+            if (arr.length() > 0 && arr.optJSONObject(0)?.optString("ua") == ua) {
+                lastRecordedUaKey = key
+                lastRecordedUaValue = ua
+                return
+            }
+            // 机型展示名：空 UA 视为回到系统默认，非空 UA 用「营销名-型号代码」格式
+            val modelDisplay = if (ua.isEmpty()) {
+                "系统原版默认"
+            } else {
+                val p = parseCustomUa(ua)
+                val name = p.marketingName?.takeIf { it.isNotBlank() }
+                if (name != null && !name.contains(p.model)) "$name-${p.model}" else p.model
+            }
+            val entry = JSONObject()
+            entry.put("ua", ua)
+            entry.put("time", System.currentTimeMillis())
+            entry.put("model", modelDisplay)
+            val newArr = org.json.JSONArray()
+            newArr.put(entry)
+            for (i in 0 until arr.length()) {
+                val old = arr.optJSONObject(i) ?: continue
+                if (old.optString("ua") == ua) continue
+                newArr.put(old)
+                if (newArr.length() >= UA_HISTORY_MAX) break
+            }
+            DataStore.put(key, newArr.toString())
+            lastRecordedUaKey = key
+            lastRecordedUaValue = ua
+        }
+    }
+
+    /**
+     * 获取 UA 变更历史（JSON 数组字符串，最新在前；元素含 ua/time/model 字段，供 Web 设置页展示与回填）
+     */
+    @JvmStatic
+    fun getUaHistory(): String {
+        return runCatching {
+            DataStore.get(ElemeAuth.getUidKey("Eleme_UA_History"), String::class.java).orEmpty().ifEmpty { "[]" }
+        }.getOrDefault("[]")
+    }
+
+    /**
+     * 清空 UA 变更历史
+     */
+    @JvmStatic
+    fun clearUaHistory() {
+        runCatching {
+            DataStore.put(ElemeAuth.getUidKey("Eleme_UA_History"), "[]")
+            lastRecordedUaKey = null
+            lastRecordedUaValue = null
+        }
+    }
+
     /**
      * 获取指定或当前生效 UA 的结构化解析信息（供 Web 或 Native UI 弹窗实时预览展示）
      */
@@ -598,10 +680,118 @@ object ElemeMtopUtil {
     }
 
     /**
-     * 弹窗展示当前饿了么兑换商城的商品列表、所需星数与补货状态
-     * 全面防御 Activity 生命周期销毁、BadTokenException、窗口泄露与跨线程闪退
+     * 从磁盘直读当前账号 status.json 的 flagList（设置进程与钩子进程内存隔离，
+     * 直接读文件才能拿到钩子进程写入的当日任务完成标记）
      */
-    fun showMallListDialog(context: android.content.Context? = null) {
+    private fun readTodayFlags(): Set<String> {
+        return runCatching {
+            val f = Files.getStatusFile(fansirsqi.xposed.sesame.util.maps.UserMap.currentUid) ?: return emptySet()
+            val json = Files.readFromFile(f)
+            if (json.isBlank()) return emptySet()
+            val arr = JSONObject(json).optJSONArray("flagList") ?: return emptySet()
+            val set = mutableSetOf<String>()
+            for (i in 0 until arr.length()) {
+                val v = arr.optString(i)
+                if (v.isNotEmpty()) set.add(v)
+            }
+            set
+        }.getOrDefault(emptySet())
+    }
+
+    /**
+     * 原生账号状态弹窗：展示支付宝/饿了么账号信息、CK 凭据有效期与来源、当前设备指纹、
+     * 风控名单数量与今日任务完成状态；底部提供「校验并刷新CK」手动触发会话校验与 72h 换票自愈
+     */
+    @JvmStatic
+    @JvmOverloads
+    fun showAccountStatusDialog(context: android.content.Context? = null) {
+        if (context == null) return
+        if (context is android.app.Activity && (context.isFinishing || context.isDestroyed)) return
+
+        val isNight = isDarkThemeMode(context)
+        val primaryTextColor = if (isNight) android.graphics.Color.parseColor("#E0E0E0") else android.graphics.Color.parseColor("#212121")
+        val positiveButtonColor = if (isNight) android.graphics.Color.parseColor("#81C784") else android.graphics.Color.parseColor("#2E7D32")
+        val neutralButtonColor = if (isNight) android.graphics.Color.parseColor("#64B5F6") else android.graphics.Color.parseColor("#1976D2")
+
+        // CK 凭据状态描述
+        val cookieStatus = ElemeAuth.getCookieStatus()
+        val fmt = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.getDefault())
+        val ckText = when {
+            !cookieStatus.exists -> "不存在（尚未绑定或从未刷新过）"
+            cookieStatus.valid -> {
+                val remainHours = Math.max(1L, (cookieStatus.expiresAt - System.currentTimeMillis()) / 3600000L)
+                "有效（至 ${fmt.format(java.util.Date(cookieStatus.expiresAt))}，剩余约 ${remainHours} 小时）"
+            }
+            else -> "已过期或临期（将在下次任务执行时自动刷新）"
+        }
+
+        // 当前设备指纹（「营销名-型号代码」格式）
+        val profile = getActiveProfile()
+        val displayName = run {
+            val name = profile.marketingName?.takeIf { it.isNotBlank() }
+            if (name != null && !name.contains(profile.model)) "$name-${profile.model}" else profile.model
+        }
+        val uaSource = if (ElemeTask.getElemeCustomUa().value.orEmpty().trim().isEmpty()) "系统默认" else "自定义 UA"
+
+        // 风控名单数量
+        val riskCount = runCatching { ElemeTask.getElemeRiskTasks().value.size }.getOrDefault(0)
+
+        // 今日任务完成标记（直读磁盘，保证跨进程准确）
+        val flags = readTodayFlags()
+        fun flagDone(flag: String) = if (flags.contains(flag)) "已完成" else "未完成"
+        val todayText = "• 幸运星全流程: ${flagDone(FreeOrderTask.FLAG_FLOW_DONE)}\n" +
+                "• 下单免单抽奖: ${if (flags.contains(FreeOrderTask.FLAG_ORDER_FREE)) "已抽" else "未抽"}\n" +
+                "• 抽免单签到: ${flagDone(FreeOrderTask.FLAG_SIGNIN)}\n" +
+                "• 外卖爆红包: ${if (flags.contains("Eleme_BurstRed_Done")) "已领取" else "未领取"}"
+
+        val detailMsg = "【账号信息】\n" +
+                "• ${ElemeAuth.getAccountSummary()}\n" +
+                "• 饿了么绑定: ${if (ElemeAuth.isBound()) "已绑定" else "未绑定"}\n\n" +
+                "【CK 凭据状态】\n" +
+                "• 状态: $ckText\n" +
+                "• 来源: ${cookieStatus.source}\n\n" +
+                "【设备指纹】\n" +
+                "• 当前机型: $displayName\n" +
+                "• UA 来源: $uaSource\n\n" +
+                "【风控与今日状态】\n" +
+                "• 风控名单: $riskCount 个任务\n" +
+                todayText
+
+        val dialog = androidx.appcompat.app.AlertDialog.Builder(context)
+            .setTitle("账号状态")
+            .setMessage(detailMsg)
+            .setPositiveButton("关闭", null)
+            .setNeutralButton("校验并刷新CK") { _, _ ->
+                Thread {
+                    val result = runCatching {
+                        val ck = ElemeAuth.peekCookie()
+                        ElemeAuth.validateOrRefreshCookie(ck) != null
+                    }.getOrDefault(false)
+                    android.os.Handler(android.os.Looper.getMainLooper()).post {
+                        fansirsqi.xposed.sesame.hook.Toast.show(
+                            if (result) "CK 校验通过或已自动刷新自愈" else "CK 校验失败，请在支付宝打开饿了么小程序重新授权"
+                        )
+                    }
+                }.start()
+            }
+            .create()
+
+        dialog.setOnShowListener {
+            dialog.getButton(android.content.DialogInterface.BUTTON_POSITIVE)?.setTextColor(positiveButtonColor)
+            dialog.getButton(android.content.DialogInterface.BUTTON_NEUTRAL)?.setTextColor(neutralButtonColor)
+        }
+        dialog.findViewById<android.widget.TextView>(android.R.id.message)?.setTextColor(primaryTextColor)
+
+        runCatching { dialog.show() }
+    }
+
+    /**
+     * 弹窗展示饿了么幸运星兑换商城商品列表、所需星数与补货状态
+     * 打开弹窗仅渲染本地缓存数据，绝不主动发起网络请求；仅当用户点击「拉取最新」按钮时才请求网络
+     * 全面防御 Activity 生命周期销毁、BadTokenException、窗口泄露与跨线程闪退
+     * @param fetchFirst true 表示由用户手动触发网络拉取（展示加载框并在成功后刷新弹窗）
+     */
+    fun showMallListDialog(context: android.content.Context? = null, fetchFirst: Boolean = false) {
         if (context == null) return
         if (context is android.app.Activity && (context.isFinishing || context.isDestroyed)) {
             return
@@ -614,6 +804,14 @@ object ElemeMtopUtil {
         val primaryTextColor = if (isNight) android.graphics.Color.parseColor("#E0E0E0") else android.graphics.Color.parseColor("#212121")
         val positiveButtonColor = if (isNight) android.graphics.Color.parseColor("#81C784") else android.graphics.Color.parseColor("#2E7D32")
         val neutralButtonColor = if (isNight) android.graphics.Color.parseColor("#64B5F6") else android.graphics.Color.parseColor("#1976D2")
+
+        // 本地缓存优先：直接渲染本地缓存商品列表，绝不主动请求网络
+        if (!fetchFirst) {
+            val cachedItems = fansirsqi.xposed.sesame.entity.ElemeMallEntity.getList().filter { it.id != "0" }
+            val starDisplay = lastKnownStarAmount?.toString() ?: "未获取（点击「拉取最新」后显示）"
+            showMallContentDialog(context, isNight, starDisplay, cachedItems)
+            return
+        }
 
         var progressDialog: android.app.Dialog? = null
         runCatching {
@@ -668,14 +866,14 @@ object ElemeMtopUtil {
                 val mallResp = LuckyStarRpcCall.queryMallList(cookie)
                 val propResp = LuckyStarRpcCall.queryProperty(cookie)
 
-                // 提取星星数
+                // 提取星星数并记入会话级缓存（供不请求网络的缓存弹窗展示）
                 val data = propResp?.optJSONObject("data") ?: propResp
                 val prop = data?.optJSONObject("property") ?: data?.optJSONObject("data")?.optJSONObject("property")
                 val starAmount = prop?.optJSONObject("data")?.optJSONObject("STAR")?.optInt("amount", 0)
                     ?: prop?.optInt("amount", 0) ?: 0
+                lastKnownStarAmount = starAmount
 
-                // 提取商城商品
-                val mallData = mallResp?.optJSONObject("data") ?: mallResp
+                // 提取商城商品并更新本地持久化缓存
                 if (mallResp != null) {
                     fansirsqi.xposed.sesame.entity.ElemeMallEntity.updateFromMallResponse(mallResp)
                 }
@@ -685,185 +883,7 @@ object ElemeMtopUtil {
                     runCatching { progressDialog?.dismiss() }
                     if (context is android.app.Activity && (context.isFinishing || context.isDestroyed)) return@post
                     runCatching {
-                        val scrollView = android.widget.ScrollView(context).apply {
-                            isFillViewport = true
-                        }
-                        val container = android.widget.LinearLayout(context).apply {
-                            orientation = android.widget.LinearLayout.VERTICAL
-                            setPadding(40, 20, 40, 20)
-                        }
-                        scrollView.addView(container)
-
-                        // 深浅色适配色板
-                        val secondaryColor = if (isNight) android.graphics.Color.parseColor("#B0BEC5") else android.graphics.Color.parseColor("#666666")
-                        val accentColor = if (isNight) android.graphics.Color.parseColor("#64B5F6") else android.graphics.Color.parseColor("#1976D2")
-                        val okColor = if (isNight) android.graphics.Color.parseColor("#81C784") else android.graphics.Color.parseColor("#34A853")
-                        val lackColor = if (isNight) android.graphics.Color.parseColor("#FFB74D") else android.graphics.Color.parseColor("#FF976A")
-                        val barBgColor = if (isNight) android.graphics.Color.parseColor("#232427") else android.graphics.Color.parseColor("#F4F6F8")
-                        val cardBorderColor = if (isNight) android.graphics.Color.parseColor("#383A3E") else android.graphics.Color.parseColor("#EBEDF0")
-
-                        // 顶部资产汇总条（圆角底色：当前幸运星 + 商品数）
-                        val summaryBar = android.widget.LinearLayout(context).apply {
-                            orientation = android.widget.LinearLayout.HORIZONTAL
-                            setPadding(28, 18, 28, 18)
-                            background = android.graphics.drawable.GradientDrawable().apply {
-                                setColor(barBgColor)
-                                cornerRadius = 16f
-                            }
-                        }
-                        fun barText(text: String, bold: Boolean, color: Int): android.widget.TextView =
-                            android.widget.TextView(context).apply {
-                                this.text = text
-                                textSize = 13f
-                                typeface = if (bold) android.graphics.Typeface.DEFAULT_BOLD else android.graphics.Typeface.DEFAULT
-                                setTextColor(color)
-                                setPadding(0, 0, 12, 0)
-                            }
-                        summaryBar.addView(barText("当前幸运星: ", false, secondaryColor))
-                        summaryBar.addView(barText("$starAmount", true, accentColor))
-                        summaryBar.addView(barText("    商品数: ", false, secondaryColor))
-                        summaryBar.addView(barText("${mallItems.size}", true, accentColor))
-                        summaryBar.addView(barText("    已选自动兑换: ", false, secondaryColor))
-                        summaryBar.addView(
-                            barText(
-                                "${mallItems.count { item -> (runCatching { ElemeTask.getElemeExchangeItems().value }.getOrNull() ?: emptySet<String>()).contains(item.id) }}",
-                                true, okColor
-                            )
-                        )
-                        container.addView(summaryBar)
-
-                        if (mallItems.isEmpty()) {
-                            val emptyTv = android.widget.TextView(context).apply {
-                                text = "\n暂未查询到商城商品，请点击下方「重新拉取」重试。"
-                                textSize = 13.5f
-                                setTextColor(secondaryColor)
-                                setPadding(0, 24, 0, 24)
-                            }
-                            container.addView(emptyTv)
-                        } else {
-                            for (item in mallItems) {
-                                val title = if (item.pureTitle.isNotEmpty()) item.pureTitle else item.name
-                                val statusPair = when {
-                                    item.gapAmount > 0 -> "差 ${item.gapAmount} 星" to lackColor
-                                    item.exchangeStatus == "PROPERTY_NOT_ENOUGH" -> "星数不足" to lackColor
-                                    item.exchangeStatus == "SOLD_OUT" -> "已抢光" to secondaryColor
-                                    item.exchangeStatus in listOf("", "INIT", "EXCHANGE_ABLE", "CAN_EXCHANGE", "ONLINE") -> "可兑换" to okColor
-                                    else -> item.exchangeStatus to secondaryColor
-                                }
-
-                                // 商品卡片：圆角边框容器 + 三段着色富文本标题（名称/星数/状态）
-                                val card = android.widget.LinearLayout(context).apply {
-                                    orientation = android.widget.LinearLayout.VERTICAL
-                                    setPadding(24, 20, 24, 20)
-                                    background = android.graphics.drawable.GradientDrawable().apply {
-                                        setColor(android.graphics.Color.TRANSPARENT)
-                                        setStroke(2, cardBorderColor)
-                                        cornerRadius = 18f
-                                    }
-                                    isClickable = true
-                                    isFocusable = true
-                                }
-
-                                val tvTitle = android.widget.TextView(context).apply {
-                                    val span = android.text.SpannableStringBuilder()
-                                    var s0 = span.length; span.append(title)
-                                    span.setSpan(android.text.style.StyleSpan(android.graphics.Typeface.BOLD), s0, span.length, android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
-                                    s0 = span.length; span.append("  [${item.consumeAmount}星]")
-                                    span.setSpan(android.text.style.ForegroundColorSpan(accentColor), s0, span.length, android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
-                                    s0 = span.length; span.append("  (${statusPair.first})")
-                                    span.setSpan(android.text.style.ForegroundColorSpan(statusPair.second), s0, span.length, android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
-                                    text = span
-                                    textSize = 14f
-                                    setTextColor(primaryTextColor)
-                                    setLineSpacing(2f, 1f)
-                                }
-
-                                val tvTime = android.widget.TextView(context).apply {
-                                    text = "秒杀/补货: ${item.timeDesc.ifEmpty { "每日按时补货 / 随时可兑" }}"
-                                    textSize = 12f
-                                    setTextColor(secondaryColor)
-                                    setPadding(0, 6, 0, 0)
-                                }
-
-                                card.addView(tvTitle)
-                                card.addView(tvTime)
-                                if (item.stockDesc.isNotEmpty()) {
-                                    val tvStock = android.widget.TextView(context).apply {
-                                        text = "库存: ${item.stockDesc}"
-                                        textSize = 11.5f
-                                        setTextColor(secondaryColor)
-                                        setPadding(0, 3, 0, 0)
-                                    }
-                                    card.addView(tvStock)
-                                }
-
-                                // 自动兑换勾选框：直接读写【目标兑换商品】勾选集合并实时落盘
-                                val cbExchange = android.widget.CheckBox(context).apply {
-                                    text = "自动兑换"
-                                    textSize = 12.5f
-                                    val selected = runCatching { ElemeTask.getElemeExchangeItems().value }.getOrNull() ?: emptySet<String>()
-                                    isChecked = selected.contains(item.id)
-                                    setTextColor(if (isChecked) okColor else secondaryColor)
-                                    setPadding(0, 6, 0, 0)
-                                    setOnCheckedChangeListener { _, checked ->
-                                        val set = LinkedHashSet(
-                                            runCatching { ElemeTask.getElemeExchangeItems().value }.getOrNull() ?: emptySet<String>()
-                                        )
-                                        if (checked) set.add(item.id) else set.remove(item.id)
-                                        ElemeTask.getElemeExchangeItems().value = set
-                                        setTextColor(if (checked) okColor else secondaryColor)
-                                        runCatching {
-                                            fansirsqi.xposed.sesame.data.Config.save(fansirsqi.xposed.sesame.util.maps.UserMap.currentUid, true)
-                                        }
-                                        fansirsqi.xposed.sesame.hook.Toast.show(if (checked) "已勾选自动兑换: $title" else "已取消自动兑换: $title")
-                                    }
-                                }
-                                card.addView(cbExchange)
-
-                                val tvHint = android.widget.TextView(context).apply {
-                                    text = "点击卡片查看完整详情与门槛规则"
-                                    textSize = 11.5f
-                                    setTextColor(accentColor)
-                                    setPadding(0, 5, 0, 0)
-                                }
-                                card.addView(tvHint)
-
-                                card.setOnClickListener {
-                                    showMallItemDetailDialog(context, item, isNight)
-                                }
-
-                                container.addView(
-                                    card,
-                                    android.widget.LinearLayout.LayoutParams(
-                                        android.widget.LinearLayout.LayoutParams.MATCH_PARENT,
-                                        android.widget.LinearLayout.LayoutParams.WRAP_CONTENT
-                                    ).apply { setMargins(0, 12, 0, 0) }
-                                )
-                            }
-
-                            val tipTv = android.widget.TextView(context).apply {
-                                text = "\n提示: 在商品卡片内勾选「自动兑换」（实时保存），并开启【自动兑换商城商品】开关后，星数达标将自动为您兑换！"
-                                textSize = 12f
-                                setTextColor(secondaryColor)
-                                setPadding(0, 10, 0, 10)
-                            }
-                            container.addView(tipTv)
-                        }
-
-                        val d = androidx.appcompat.app.AlertDialog.Builder(context)
-                            .setTitle("幸运星兑换商城")
-                            .setView(scrollView)
-                            .setPositiveButton("关闭", null)
-                            .setNeutralButton("重新拉取") { _, _ ->
-                                runCatching { showMallListDialog(context) }
-                            }
-                            .create()
-
-                        d.setOnShowListener {
-                            d.getButton(android.content.DialogInterface.BUTTON_POSITIVE)?.setTextColor(positiveButtonColor)
-                            d.getButton(android.content.DialogInterface.BUTTON_NEUTRAL)?.setTextColor(neutralButtonColor)
-                        }
-                        d.show()
+                        showMallContentDialog(context, isNight, "$starAmount", mallItems)
                     }
                 }
             } catch (e: Throwable) {
@@ -880,6 +900,215 @@ object ElemeMtopUtil {
                 }
             }
         }.start()
+    }
+
+    /**
+     * 构建商城商品列表滚动视图（顶部资产汇总条 + 商品卡片 + 底部提示）
+     * @param starDisplay 顶部汇总条展示的幸运星文本（缓存模式下可能为「未获取」占位提示）
+     */
+    private fun buildMallScrollView(
+        context: android.content.Context,
+        isNight: Boolean,
+        starDisplay: String,
+        mallItems: List<fansirsqi.xposed.sesame.entity.ElemeMallEntity>
+    ): android.widget.ScrollView {
+        val primaryTextColor = if (isNight) android.graphics.Color.parseColor("#E0E0E0") else android.graphics.Color.parseColor("#212121")
+        val secondaryColor = if (isNight) android.graphics.Color.parseColor("#B0BEC5") else android.graphics.Color.parseColor("#666666")
+        val accentColor = if (isNight) android.graphics.Color.parseColor("#64B5F6") else android.graphics.Color.parseColor("#1976D2")
+        val okColor = if (isNight) android.graphics.Color.parseColor("#81C784") else android.graphics.Color.parseColor("#34A853")
+        val lackColor = if (isNight) android.graphics.Color.parseColor("#FFB74D") else android.graphics.Color.parseColor("#FF976A")
+        val barBgColor = if (isNight) android.graphics.Color.parseColor("#232427") else android.graphics.Color.parseColor("#F4F6F8")
+        val cardBorderColor = if (isNight) android.graphics.Color.parseColor("#383A3E") else android.graphics.Color.parseColor("#EBEDF0")
+
+        val scrollView = android.widget.ScrollView(context).apply {
+            isFillViewport = true
+        }
+        val container = android.widget.LinearLayout(context).apply {
+            orientation = android.widget.LinearLayout.VERTICAL
+            setPadding(40, 20, 40, 20)
+        }
+        scrollView.addView(container)
+
+        // 顶部资产汇总条（圆角底色：当前幸运星 + 商品数 + 已选自动兑换数）
+        val summaryBar = android.widget.LinearLayout(context).apply {
+            orientation = android.widget.LinearLayout.HORIZONTAL
+            setPadding(28, 18, 28, 18)
+            background = android.graphics.drawable.GradientDrawable().apply {
+                setColor(barBgColor)
+                cornerRadius = 16f
+            }
+        }
+        fun barText(text: String, bold: Boolean, color: Int): android.widget.TextView =
+            android.widget.TextView(context).apply {
+                this.text = text
+                textSize = 13f
+                typeface = if (bold) android.graphics.Typeface.DEFAULT_BOLD else android.graphics.Typeface.DEFAULT
+                setTextColor(color)
+                setPadding(0, 0, 12, 0)
+            }
+        summaryBar.addView(barText("当前幸运星: ", false, secondaryColor))
+        summaryBar.addView(barText(starDisplay, true, accentColor))
+        summaryBar.addView(barText("    商品数: ", false, secondaryColor))
+        summaryBar.addView(barText("${mallItems.size}", true, accentColor))
+        summaryBar.addView(barText("    已选自动兑换: ", false, secondaryColor))
+        summaryBar.addView(
+            barText(
+                "${mallItems.count { item -> (runCatching { ElemeTask.getElemeExchangeItems().value }.getOrNull() ?: emptySet<String>()).contains(item.id) }}",
+                true, okColor
+            )
+        )
+        container.addView(summaryBar)
+
+        if (mallItems.isEmpty()) {
+            val emptyTv = android.widget.TextView(context).apply {
+                text = "\n本地暂无商城商品缓存，请点击下方「拉取最新」手动获取实时数据（弹窗打开绝不自动请求网络）。"
+                textSize = 13.5f
+                setTextColor(secondaryColor)
+                setPadding(0, 24, 0, 24)
+            }
+            container.addView(emptyTv)
+        } else {
+            for (item in mallItems) {
+                val title = if (item.pureTitle.isNotEmpty()) item.pureTitle else item.name
+                val statusPair = when {
+                    item.gapAmount > 0 -> "差 ${item.gapAmount} 星" to lackColor
+                    item.exchangeStatus == "PROPERTY_NOT_ENOUGH" -> "星数不足" to lackColor
+                    item.exchangeStatus == "SOLD_OUT" -> "已抢光" to secondaryColor
+                    item.exchangeStatus in listOf("", "INIT", "EXCHANGE_ABLE", "CAN_EXCHANGE", "ONLINE") -> "可兑换" to okColor
+                    else -> item.exchangeStatus to secondaryColor
+                }
+
+                // 商品卡片：圆角边框容器 + 三段着色富文本标题（名称/星数/状态）
+                val card = android.widget.LinearLayout(context).apply {
+                    orientation = android.widget.LinearLayout.VERTICAL
+                    setPadding(24, 20, 24, 20)
+                    background = android.graphics.drawable.GradientDrawable().apply {
+                        setColor(android.graphics.Color.TRANSPARENT)
+                        setStroke(2, cardBorderColor)
+                        cornerRadius = 18f
+                    }
+                    isClickable = true
+                    isFocusable = true
+                }
+
+                val tvTitle = android.widget.TextView(context).apply {
+                    val span = android.text.SpannableStringBuilder()
+                    var s0 = span.length; span.append(title)
+                    span.setSpan(android.text.style.StyleSpan(android.graphics.Typeface.BOLD), s0, span.length, android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                    s0 = span.length; span.append("  [${item.consumeAmount}星]")
+                    span.setSpan(android.text.style.ForegroundColorSpan(accentColor), s0, span.length, android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                    s0 = span.length; span.append("  (${statusPair.first})")
+                    span.setSpan(android.text.style.ForegroundColorSpan(statusPair.second), s0, span.length, android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                    text = span
+                    textSize = 14f
+                    setTextColor(primaryTextColor)
+                    setLineSpacing(2f, 1f)
+                }
+
+                val tvTime = android.widget.TextView(context).apply {
+                    text = "秒杀/补货: ${item.timeDesc.ifEmpty { "每日按时补货 / 随时可兑" }}"
+                    textSize = 12f
+                    setTextColor(secondaryColor)
+                    setPadding(0, 6, 0, 0)
+                }
+
+                card.addView(tvTitle)
+                card.addView(tvTime)
+                if (item.stockDesc.isNotEmpty()) {
+                    val tvStock = android.widget.TextView(context).apply {
+                        text = "库存: ${item.stockDesc}"
+                        textSize = 11.5f
+                        setTextColor(secondaryColor)
+                        setPadding(0, 3, 0, 0)
+                    }
+                    card.addView(tvStock)
+                }
+
+                // 自动兑换勾选框：直接读写【目标兑换商品】勾选集合并实时落盘
+                val cbExchange = android.widget.CheckBox(context).apply {
+                    text = "自动兑换"
+                    textSize = 12.5f
+                    val selected = runCatching { ElemeTask.getElemeExchangeItems().value }.getOrNull() ?: emptySet<String>()
+                    isChecked = selected.contains(item.id)
+                    setTextColor(if (isChecked) okColor else secondaryColor)
+                    setPadding(0, 6, 0, 0)
+                    setOnCheckedChangeListener { _, checked ->
+                        val set = LinkedHashSet(
+                            runCatching { ElemeTask.getElemeExchangeItems().value }.getOrNull() ?: emptySet<String>()
+                        )
+                        if (checked) set.add(item.id) else set.remove(item.id)
+                        ElemeTask.getElemeExchangeItems().value = set
+                        setTextColor(if (checked) okColor else secondaryColor)
+                        runCatching {
+                            fansirsqi.xposed.sesame.data.Config.save(fansirsqi.xposed.sesame.util.maps.UserMap.currentUid, true)
+                        }
+                        fansirsqi.xposed.sesame.hook.Toast.show(if (checked) "已勾选自动兑换: $title" else "已取消自动兑换: $title")
+                    }
+                }
+                card.addView(cbExchange)
+
+                val tvHint = android.widget.TextView(context).apply {
+                    text = "点击卡片查看完整详情与门槛规则"
+                    textSize = 11.5f
+                    setTextColor(accentColor)
+                    setPadding(0, 5, 0, 0)
+                }
+                card.addView(tvHint)
+
+                card.setOnClickListener {
+                    showMallItemDetailDialog(context, item, isNight)
+                }
+
+                container.addView(
+                    card,
+                    android.widget.LinearLayout.LayoutParams(
+                        android.widget.LinearLayout.LayoutParams.MATCH_PARENT,
+                        android.widget.LinearLayout.LayoutParams.WRAP_CONTENT
+                    ).apply { setMargins(0, 12, 0, 0) }
+                )
+            }
+
+            val tipTv = android.widget.TextView(context).apply {
+                text = "\n提示: 在商品卡片内勾选「自动兑换」（实时保存），并开启【兑换商品】开关后，星数达标将自动为您兑换！"
+                textSize = 12f
+                setTextColor(secondaryColor)
+                setPadding(0, 10, 0, 10)
+            }
+            container.addView(tipTv)
+        }
+        return scrollView
+    }
+
+    /**
+     * 展示商城列表弹窗（底部按钮：关闭 / 拉取最新；「拉取最新」才发起网络请求）
+     */
+    private fun showMallContentDialog(
+        context: android.content.Context,
+        isNight: Boolean,
+        starDisplay: String,
+        mallItems: List<fansirsqi.xposed.sesame.entity.ElemeMallEntity>
+    ) {
+        if (context is android.app.Activity && (context.isFinishing || context.isDestroyed)) return
+        val positiveButtonColor = if (isNight) android.graphics.Color.parseColor("#81C784") else android.graphics.Color.parseColor("#2E7D32")
+        val neutralButtonColor = if (isNight) android.graphics.Color.parseColor("#64B5F6") else android.graphics.Color.parseColor("#1976D2")
+
+        runCatching {
+            val scrollView = buildMallScrollView(context, isNight, starDisplay, mallItems)
+            val d = androidx.appcompat.app.AlertDialog.Builder(context)
+                .setTitle("幸运星兑换商城")
+                .setView(scrollView)
+                .setPositiveButton("关闭", null)
+                .setNeutralButton("拉取最新") { _, _ ->
+                    runCatching { showMallListDialog(context, true) }
+                }
+                .create()
+
+            d.setOnShowListener {
+                d.getButton(android.content.DialogInterface.BUTTON_POSITIVE)?.setTextColor(positiveButtonColor)
+                d.getButton(android.content.DialogInterface.BUTTON_NEUTRAL)?.setTextColor(neutralButtonColor)
+            }
+            d.show()
+        }
     }
 
     /**
@@ -942,6 +1171,9 @@ object ElemeMtopUtil {
         val customUa = runCatching {
             ElemeTask.getElemeCustomUa().value.orEmpty().trim()
         }.getOrDefault("")
+
+        // 记录实际生效 UA 的变更历史（内部含去重：仅在 UA 相对上次记录发生变化时写盘）
+        recordUaHistory(customUa)
 
         sessionProfile?.let { if (sessionProfileUa == customUa) return it }
 

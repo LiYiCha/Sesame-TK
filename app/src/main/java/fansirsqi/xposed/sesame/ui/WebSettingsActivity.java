@@ -28,6 +28,7 @@ import androidx.activity.result.contract.ActivityResultContracts;
 import com.fasterxml.jackson.core.type.TypeReference;
 
 import org.json.JSONException;
+import org.json.JSONObject;
 
 import java.io.File;
 import java.nio.charset.StandardCharsets;
@@ -278,6 +279,10 @@ public class WebSettingsActivity extends BaseActivity {
             for (ModelConfig modelConfig : modelConfigCollection) {
                 List<ModelFieldShowDto> modelFields = new ArrayList<>();
                 for (ModelField<?> modelField : modelConfig.getFields().values()) {
+                    // 隐藏字段不下发给 Web 设置页，但仍参与配置持久化
+                    if (modelField.isHidden()) {
+                        continue;
+                    }
                     modelFields.add(ModelFieldShowDto.toShowDto(modelField));
                 }
                 modelDtoList.add(new ModelDto(modelConfig.getCode(), modelConfig.getName(), modelConfig.getIcon(), groupCode, modelFields));
@@ -317,6 +322,10 @@ public class WebSettingsActivity extends BaseActivity {
                 ModelFields modelFields = modelConfig.getFields();
                 List<ModelFieldShowDto> list = new ArrayList<>();
                 for (ModelField<?> modelField : modelFields.values()) {
+                    // 隐藏字段不下发给 Web 设置页，但仍参与配置持久化
+                    if (modelField.isHidden()) {
+                        continue;
+                    }
                     list.add(ModelFieldShowDto.toShowDto(modelField));
                 }
                 String result = JsonUtil.formatJson(list, false);
@@ -373,6 +382,37 @@ public class WebSettingsActivity extends BaseActivity {
             return null;
         }
 
+        /**
+         * 从磁盘配置文件实时读取指定字段的当前值（与 getField 返回的内存快照不同）。
+         * 用途：风控名单等字段会被支付宝进程（hook 进程）在任务执行期间动态写入配置文件，
+         * 设置页内存中的值是打开页面时的快照；选择弹窗打开时应读取磁盘最新值，
+         * 否则运行期自动加入风控名单的任务在弹窗中将显示为未勾选。
+         * @return 字段值的 JSON 字符串（如 ["47780001","48596001"]），读取失败返回 null
+         */
+        @JavascriptInterface
+        public String getFieldValue(String modelCode, String fieldCode) {
+            try {
+                File configFile = StringUtil.isEmpty(userId)
+                        ? Files.getDefaultConfigV2File()
+                        : Files.getConfigV2File(userId);
+                if (configFile == null || !configFile.exists() || configFile.length() == 0) {
+                    return null;
+                }
+                JSONObject root = new JSONObject(Files.readFromFile(configFile));
+                JSONObject modelFieldsMap = root.optJSONObject("modelFieldsMap");
+                JSONObject modelFields = modelFieldsMap == null ? null : modelFieldsMap.optJSONObject(modelCode);
+                JSONObject fieldObj = modelFields == null ? null : modelFields.optJSONObject(fieldCode);
+                if (fieldObj == null) {
+                    return null;
+                }
+                Object value = fieldObj.opt("value");
+                return value == null ? null : String.valueOf(value);
+            } catch (Throwable t) {
+                Log.printStackTrace(TAG, t);
+                return null;
+            }
+        }
+
         @JavascriptInterface
         public String setField(String modelCode, String fieldCode, String fieldValue) {
             ModelConfig modelConfig = ModelTask.getModelConfigMap().get(modelCode);
@@ -383,6 +423,7 @@ public class WebSettingsActivity extends BaseActivity {
                         modelField.setConfigValue(fieldValue);
                         if ("elemeCustomUa".equals(fieldCode)) {
                             // UA 字段立即持久化到配置文件，不依赖退出设置页时的统一保存，避免进程被杀导致丢失
+                            fansirsqi.xposed.sesame.task.otherTask2.eleme.ElemeMtopUtil.recordUaHistory(fieldValue);
                             fansirsqi.xposed.sesame.task.otherTask2.eleme.ElemeMtopUtil.recordUaChanged();
                             try {
                                 fansirsqi.xposed.sesame.data.Config.save(userId, true);
@@ -433,6 +474,31 @@ public class WebSettingsActivity extends BaseActivity {
             } catch (Throwable t) {
                 Log.printStackTrace(TAG, t);
                 return "";
+            }
+        }
+
+        /**
+         * 获取 UA 变更历史（JSON 数组字符串，最新在前；元素含 ua/time/model 字段，供 UA 编辑弹窗展示与回填）
+         */
+        @JavascriptInterface
+        public String getUaHistory() {
+            try {
+                return fansirsqi.xposed.sesame.task.otherTask2.eleme.ElemeMtopUtil.getUaHistory();
+            } catch (Throwable t) {
+                Log.printStackTrace(TAG, t);
+                return "[]";
+            }
+        }
+
+        /**
+         * 清空 UA 变更历史
+         */
+        @JavascriptInterface
+        public void clearUaHistory() {
+            try {
+                fansirsqi.xposed.sesame.task.otherTask2.eleme.ElemeMtopUtil.clearUaHistory();
+            } catch (Throwable t) {
+                Log.printStackTrace(TAG, t);
             }
         }
 

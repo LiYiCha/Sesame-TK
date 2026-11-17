@@ -142,14 +142,14 @@ public class ElemeRiskTaskEntity extends MapperEntity {
     }
 
     /**
-     * 判断任务是否已关闭或不可用（活动下线、任务不存在、累计阶段永远无法达成等）
-     * 命中此类错误的任务应自动加入风控名单，避免每日重复请求制造无效报错
+     * 判断任务是否已关闭或不可用（活动下线、任务不存在等永久性失效）
+     * 注意：STAGE_NOT_FINISH（阶段进度未完成）属于可重试的临时状态，不在此列，
+     * 绝不能据此把任务加入风控名单，否则会误杀正常推进中的累计类任务
      */
     public static boolean isTaskClosedError(String errorCode, String errorMsg) {
         String code = errorCode == null ? "" : errorCode;
         String msg = errorMsg == null ? "" : errorMsg;
         String[] closedKeywords = {
-                "STAGE_NOT_FINISH", "阶段还未完成",
                 "ACTIVITY_END", "ACTIVITY_NOT", "MISSION_NOT", "NOT_EXIST", "NOT_FOUND",
                 "已结束", "已关闭", "已下线", "已过期", "活动不存在", "任务不存在", "任务已结束"
         };

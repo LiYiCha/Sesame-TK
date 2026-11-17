@@ -140,6 +140,10 @@ object LuckyStarTask {
                                         if (prize.contains("免单")) {
                                             Notify.sendPrizeNotification("🎉 饿了么免单中奖通知", "恭喜在夺宝抽奖中成功命中【$prize】！请及时使用。")
                                         }
+                                    } else {
+                                        // 服务端未返回奖励描述时直接打印完整响应，便于核实实际抽奖结果
+                                        val rawResp = drawRes.rawJson?.toString() ?: drawRes.data?.toString() ?: "无响应内容"
+                                        Log.other("饿了么", "[幸运星] 🎁 夺宝抽奖: 奖励描述缺失，完整响应:\n$rawResp")
                                     }
                                     Thread.sleep(RandomUtil.nextGaussianLong(1200, 2000))
                                 } else {
@@ -174,10 +178,16 @@ object LuckyStarTask {
                         val ofRes = LuckyStarRpcCall.drawOrderFree(cookie, orderFreeData)
                         if (ofRes.isSuccess) {
                             Status.setFlagToday(FreeOrderTask.FLAG_ORDER_FREE)
-                            val prize = extractLotteryPrize(ofRes.data).ifEmpty { "奖励" }
-                            Log.other("饿了么", "[幸运星] 🎲 下单免单抽奖: $prize")
-                            if (prize.contains("免单")) {
-                                Notify.sendPrizeNotification("🎉 饿了么免单中奖通知", "恭喜在下单免单抽奖中成功命中【$prize】！请及时使用。")
+                            val prize = extractLotteryPrize(ofRes.data)
+                            if (prize.isNotEmpty()) {
+                                Log.other("饿了么", "[幸运星] 🎲 下单免单抽奖: $prize")
+                                if (prize.contains("免单")) {
+                                    Notify.sendPrizeNotification("🎉 饿了么免单中奖通知", "恭喜在下单免单抽奖中成功命中【$prize】！请及时使用。")
+                                }
+                            } else {
+                                // 服务端未返回奖励描述时直接打印完整响应，便于核实实际抽奖结果
+                                val rawResp = ofRes.rawJson?.toString() ?: ofRes.data?.toString() ?: "无响应内容"
+                                Log.other("饿了么", "[幸运星] 🎲 下单免单抽奖: 奖励描述缺失，完整响应:\n$rawResp")
                             }
                         }
                         Thread.sleep(RandomUtil.nextGaussianLong(500, 1000))
@@ -239,12 +249,11 @@ object LuckyStarTask {
                         continue
                     }
 
-                    // UI 风控跳过名单与用户自选黑名单过滤（静默跳过）
+                    // UI 风控名单与用户自选黑名单过滤（静默跳过，不打印日志）
                     val riskTasks: Set<String> = ElemeTask.getElemeRiskTasks().value ?: emptySet()
                     val inRiskTaskSet = riskTasks.contains(missionDefId.toString())
                     val inGlobalBlacklist = TaskBlacklist.isTaskInBlacklist(title) || TaskBlacklist.isTaskInBlacklist(missionDefId.toString())
                     if (inRiskTaskSet || inGlobalBlacklist) {
-                        Log.runtime(TAG, "[幸运星] 🛡️ 跳过风控跳过名单任务: [$missionDefId - $title]")
                         continue
                     }
 
@@ -296,18 +305,24 @@ object LuckyStarTask {
                             }
                         }
                         Thread.sleep(RandomUtil.nextGaussianLong(1200, 2000))
-                    } else if (actionType == "THIRD" && (sceneCode == "commercial_click" || sceneCode == "inter_change" || title.contains("点击") || title.contains("店铺"))) {
+                    } else if (actionType == "THIRD" && (sceneCode == "commercial_click" || sceneCode == "inter_change")) {
+                        // 对齐幸运星.py _is_trigger：仅站内点击类任务可协议触发；
+                        // 闲鱼看视频等外部结算任务（scenceCode=third）不调 trigger，只领已完成阶段
                         val total = actionValue?.optInt("finalStageCount")?.takeIf { it > 0 }
                             ?: task.optJSONObject("stage")?.optInt("targetCount")?.takeIf { it > 0 }
                             ?: if (title.contains("3个") || title.contains("3次")) 3 else 1
                         val done = task.optJSONObject("stage")?.optInt("count") ?: 0
                         val need = (total - done).coerceAtLeast(0).coerceAtMost(3)
                         Log.other("饿了么", "[幸运星] 点击[$title] 需${total}次/已${done}次/补${need}次")
+                        // 触发是否全部成功：失败（含被风控拉黑）不得计入任务完成
+                        var triggerAllSuccess = need == 0
                         for (step in 1..need) {
                             val triggerRes = LuckyStarRpcCall.reportTrigger(
                                 cookie = cookie,
                                 missionDefId = missionDefId,
-                                missionXId = missionXId
+                                missionXId = missionXId,
+                                // 对齐幸运星.py：使用任务自身的 missionCollectionId，避免场景不匹配被过滤
+                                collectionId = task.optString("missionCollectionId").ifEmpty { LuckyStarRpcCall.COLLECTION_ID }
                             )
                             if (!triggerRes.isSuccess) {
                                 val rawResp = triggerRes.rawJson?.toString() ?: ElemeMtopUtil.lastResponse ?: triggerRes.errorMsg
@@ -323,9 +338,10 @@ object LuckyStarTask {
                                 }
                                 break
                             }
+                            triggerAllSuccess = true
                             Thread.sleep(RandomUtil.nextGaussianLong(1800, 2600))
                         }
-                        if (need > 0) {
+                        if (need > 0 && triggerAllSuccess) {
                             Log.other("饿了么", "[幸运星] 完成[$title]")
                             finishedCount++
                             hasRewardable = true
@@ -408,12 +424,11 @@ object LuckyStarTask {
                         continue
                     }
 
-                    // UI 风控跳过名单与用户自选黑名单过滤（静默跳过）
+                    // UI 风控名单与用户自选黑名单过滤（静默跳过，不打印日志）
                     val riskTasks: Set<String> = ElemeTask.getElemeRiskTasks().value ?: emptySet()
                     val inRiskTaskSet = riskTasks.contains(missionDefId.toString())
                     val inGlobalBlacklist = TaskBlacklist.isTaskInBlacklist(title) || TaskBlacklist.isTaskInBlacklist(missionDefId.toString())
                     if (inRiskTaskSet || inGlobalBlacklist) {
-                        Log.runtime(TAG, "[幸运星] 🛡️ 跳过风控跳过名单任务: [$missionDefId - $title]")
                         continue
                     }
 
@@ -569,7 +584,7 @@ object LuckyStarTask {
     }
 
     private fun extractLotteryPrize(data: JSONObject?): String {
-        if (data == null) return "奖励"
+        if (data == null) return ""
         val items = mutableListOf<JSONObject>()
         val arr = data.optJSONArray("rlist") ?: data.optJSONArray("prizeList") ?: data.optJSONArray("rewards")
         if (arr != null && arr.length() > 0) {
@@ -598,7 +613,7 @@ object LuckyStarTask {
                     "VIRTUAL_INTEGRAL", "STAR" -> "幸运星"
                     "COUPON" -> "优惠券"
                     "RED_PACKET" -> "红包"
-                    else -> if (btype.isNotEmpty()) btype else "奖励"
+                    else -> btype
                 }
             }
             if (btype == "VIRTUAL_INTEGRAL") {
@@ -611,7 +626,7 @@ object LuckyStarTask {
                 out.add(name)
             }
         }
-        return if (out.isNotEmpty()) out.joinToString("、") else "奖励"
+        return if (out.isNotEmpty()) out.joinToString("、") else ""
     }
 
     private fun extractSignInReward(data: JSONObject?): String {

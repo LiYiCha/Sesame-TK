@@ -54,10 +54,18 @@ class ElemeTask : ModelTask() {
         @JvmField
         val elemeAutoExchange = BooleanModelField(
             "elemeAutoExchange",
-            "自动兑换商城商品",
+            "兑换商品",
             false,
-            "开启后，当拥有的幸运星满足兑换条件时，自动兑换下方【目标兑换商品】中勾选的商品（为防误扣资产，未勾选的商品绝不兑换，星数不足绝不请求）。"
+            "开启后，当拥有的幸运星满足兑换条件时，自动兑换【兑换商城】弹窗内勾选「自动兑换」的商品（为防误扣资产，未勾选的商品绝不兑换，星数不足绝不请求）。"
         )
+
+        @JvmField
+        val elemeAccountStatus = EmptyModelField(
+            "elemeAccountStatus",
+            "账号状态"
+        ) { context ->
+            ElemeMtopUtil.showAccountStatusDialog(context)
+        }
 
         @JvmField
         val elemeRefreshMall = EmptyModelField(
@@ -73,24 +81,24 @@ class ElemeTask : ModelTask() {
             "目标兑换商品",
             LinkedHashSet<String>(),
             ElemeMallEntity::getList,
-            "请勾选允许自动兑换的目标商品（多选或单选）。可在【兑换商城】弹窗内直接勾选每个商品的「自动兑换」开关（实时保存），或在此列表批量勾选；只有被勾选且当前幸运星充足的商品才会发起兑换。"
+            "允许自动兑换的目标商品 ID 集合。本字段已在设置页隐藏，请通过【兑换商城】弹窗内每个商品的「自动兑换」勾选框维护（实时保存）。"
         )
 
         @JvmField
         val elemeCustomUa = StringModelField(
             "elemeCustomUa",
-            "设备机型与User-Agent设置",
+            "设备UA",
             "",
-            "设备机型与 UA 合并设置入口。点击编辑 UA：弹窗内实时显示当前生效机型，可从真实机型库中指定机型生成，确认后保存生效；留空使用本机系统原版指纹。修改有 10 分钟冷却防风控。"
+            "点击编辑设备 UA：弹窗内实时显示当前生效机型，可从真实机型库中指定机型生成，或从「历史记录」一键回填之前生效过的 UA，确认后保存生效；留空使用本机系统原版指纹。每次保存自动记录历史（最多 20 条）。修改有 10 分钟冷却防风控。"
         )
 
         @JvmField
         val elemeRiskTasks = SelectModelField(
             "elemeRiskTasks",
-            "风控跳过名单",
+            "风控名单",
             LinkedHashSet(listOf("47780001", "49020001", "47774001", "48596001")),
             ElemeRiskTaskEntity::getList,
-            "勾选的任务将在执行与领奖时自动跳过（默认已勾选百川风控任务）。若需重新测试，取消勾选即可重新请求。"
+            "勾选的任务在执行与领奖时自动跳过；执行中命中 405/417 风控或任务已下线时会自动加入此名单。取消勾选即可重新测试，再次失败仍会自动加回。"
         )
 
         @JvmStatic
@@ -110,6 +118,9 @@ class ElemeTask : ModelTask() {
 
         @JvmStatic
         fun getElemeRefreshMall(): EmptyModelField = elemeRefreshMall
+
+        @JvmStatic
+        fun getElemeAccountStatus(): EmptyModelField = elemeAccountStatus
 
         @JvmStatic
         fun getElemeCustomUa(): StringModelField = elemeCustomUa
@@ -153,15 +164,16 @@ class ElemeTask : ModelTask() {
 
     override fun getFields(): ModelFields {
         val modelFields = ModelFields()
+        // 「目标兑换商品」已由【兑换商城】弹窗内的勾选框承载，设置页隐藏该字段（仍保留配置持久化）
+        elemeExchangeItems.isHidden = true
+        // 账号状态/兑换商城/设备UA/风控名单已拆分至「饿了么管理」页面（ElemeManageTask），
+        // 字段实例仍在本 companion 中，运行时读写引用不变
         modelFields.addField(startTime)
         modelFields.addField(elemeLuckyStar)
         modelFields.addField(elemeFreeOrder)
         modelFields.addField(elemeBurstRed)
         modelFields.addField(elemeAutoExchange)
-        modelFields.addField(elemeRefreshMall)
         modelFields.addField(elemeExchangeItems)
-        modelFields.addField(elemeCustomUa)
-        modelFields.addField(elemeRiskTasks)
         return modelFields
     }
 

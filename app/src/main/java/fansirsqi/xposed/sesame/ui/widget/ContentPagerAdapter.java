@@ -84,7 +84,14 @@ public class ContentPagerAdapter extends FragmentStateAdapter {
             if (fields == null) {
                 throw new IllegalStateException("Fields cannot be null for config at position: " + position);
             }
-            return new ContentFragment(new ArrayList<>(fields.values()));
+            // 过滤掉标记为 hidden 的字段：原生设置页不渲染，但字段仍参与配置持久化
+            ArrayList<ModelField<?>> visibleFields = new ArrayList<>();
+            for (ModelField<?> field : fields.values()) {
+                if (!field.isHidden()) {
+                    visibleFields.add(field);
+                }
+            }
+            return new ContentFragment(visibleFields);
         } catch (Exception e) {
             Log.e(TAG, "Error creating fragment at position: " + position, e);
             throw e;

@@ -36,6 +36,26 @@ public class ModelField<T> implements Serializable {
     public T defaultValue; // 默认值
     @JsonIgnore
     public String desc;
+    /**
+     * 是否在设置界面隐藏该字段：隐藏后 Web 与原生设置页均不再渲染该字段，
+     * 但仍参与配置持久化与运行时读写（适用于已由弹窗等其他交互承载、无需单独展示入口的字段）
+     */
+    @JsonIgnore
+    public volatile boolean hidden = false;
+
+    /**
+     * 判断字段是否在设置界面隐藏（显式定义以供 Kotlin 调用，Lombok 生成的方法对 Kotlin 编译不可见）
+     */
+    public boolean isHidden() {
+        return hidden;
+    }
+
+    /**
+     * 设置字段是否在设置界面隐藏（显式定义以供 Kotlin 调用）
+     */
+    public void setHidden(boolean hidden) {
+        this.hidden = hidden;
+    }
     @Setter
     @Getter
     public volatile T value; // 当前值

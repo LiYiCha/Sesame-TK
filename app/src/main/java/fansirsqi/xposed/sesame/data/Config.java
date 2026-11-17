@@ -47,6 +47,25 @@ public class Config {
         if (newModels == null) {
             newModels = new HashMap<>();
         }
+        // 一次性迁移：管理类字段（账号状态/兑换商城/设备UA/风控名单）已从 ElemeTask
+        // 拆分至 ElemeManageTask，旧版配置中它们的值保存在 "ElemeTask" 键下；
+        // 此处将其转移到新键名，避免拆分后丢失已保存的 UA 字符串与风控勾选集合
+        if (newModels.containsKey("ElemeTask") && !newModels.containsKey("ElemeManageTask")) {
+            ModelFields legacyFields = newModels.get("ElemeTask");
+            ModelFields migratedFields = new ModelFields();
+            boolean hasLegacyField = false;
+            for (String manageFieldCode : new String[]{
+                    "elemeAccountStatus", "elemeRefreshMall", "elemeCustomUa", "elemeRiskTasks"}) {
+                ModelField<?> legacyField = legacyFields.get(manageFieldCode);
+                if (legacyField != null) {
+                    migratedFields.addField(legacyField);
+                    hasLegacyField = true;
+                }
+            }
+            if (hasLegacyField) {
+                newModels.put("ElemeManageTask", migratedFields);
+            }
+        }
         // 遍历所有模型配置，合并字段配置
         for (ModelConfig modelConfig : modelConfigMap.values()) {
             String modelCode = modelConfig.getCode();

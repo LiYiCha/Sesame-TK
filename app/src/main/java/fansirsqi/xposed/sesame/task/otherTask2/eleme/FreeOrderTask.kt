@@ -140,12 +140,11 @@ object FreeOrderTask {
                             continue
                         }
 
-                        // 风控跳过名单与用户自选黑名单过滤（静默跳过）
+                        // 风控名单与用户自选黑名单过滤（静默跳过，不打印日志）
                         val riskTasks: Set<String> = ElemeTask.getElemeRiskTasks().value ?: emptySet()
                         val inRiskTaskSet = riskTasks.contains(missionDefId.toString())
                         val inGlobalBlacklist = TaskBlacklist.isTaskInBlacklist(title) || TaskBlacklist.isTaskInBlacklist(missionDefId.toString())
                         if (inRiskTaskSet || inGlobalBlacklist) {
-                            Log.runtime(TAG, "[抽免单] 🛡️ 跳过风控名单任务: [$missionDefId - $title]")
                             continue
                         }
 
@@ -194,6 +193,9 @@ object FreeOrderTask {
                                 val refreshResp = LuckyStarRpcCall.queryTaskList(cookie, missionDefId)
                                 val refreshedTask = findTask(refreshResp, missionDefId) ?: task
                                 val stages = LuckyStarRpcCall.getRewardStages(refreshedTask)
+                                // 兜底领奖仅限无阶段配置的单节点任务；带阶段配置但尚无已完成阶段时（如 0/3），
+                                // 贸然领奖只会收到 STAGE_NOT_FINISH，属正常推进状态，静默等待下一轮即可
+                                val staged = refreshedTask.optJSONArray("missionStageDTOS")?.length() ?: 0
                                 if (stages.isNotEmpty()) {
                                     for (st in stages) {
                                         val prizeRes = LuckyStarRpcCall.receivePrize(cookie, refreshedTask, st)
@@ -204,7 +206,7 @@ object FreeOrderTask {
                                             handlePrizeFailure(missionDefId, title, prizeRes)
                                         }
                                     }
-                                } else {
+                                } else if (staged == 0) {
                                     val prizeRes = LuckyStarRpcCall.receivePrize(cookie, refreshedTask, null)
                                     if (prizeRes.isSuccess) {
                                         Log.other("饿了么", "[抽免单] [$title]: +1 抽奖机会")
@@ -215,6 +217,8 @@ object FreeOrderTask {
                                 }
                             } else {
                                 val msg = viewRes.errorMsg
+                                // 失败必须带任务名，否则通用错误日志无法对应到具体任务
+                                Log.other("饿了么", "[抽免单] ❌ 浏览[$title]失败: ${viewRes.errorCode}::${msg}")
                                 if (viewRes.errorCode == "405" || msg.contains("405") || msg.contains("行为受限") || msg.contains("受限")) {
                                     val reason = "405::行为受限"
                                     ElemeRiskTaskEntity.recordRiskTask(missionDefId.toString(), title, reason)
@@ -224,14 +228,25 @@ object FreeOrderTask {
                                 }
                             }
                             Thread.sleep(RandomUtil.nextGaussianLong(1000, 1800))
-                        } else if (actionType == "THIRD" && (sceneCode == "commercial_click" || sceneCode == "inter_change" || title.contains("点击") || title.contains("店铺"))) {
+                        } else if (actionType == "THIRD" && (sceneCode == "commercial_click" || sceneCode == "inter_change")) {
+                            // 对齐幸运星.py _is_trigger：仅站内点击类任务可协议触发上报；
+                            // 闲鱼看视频等外部结算任务（scenceCode=third）由服务端结算进度，页面端从不调 trigger，
+                            // 贸然上报必然 417 防作弊拦截，且会误拉黑本来可正常领奖的任务
                             val total = actionValue?.optInt("finalStageCount")?.takeIf { it > 0 }
                                 ?: task.optJSONObject("stage")?.optInt("targetCount")?.takeIf { it > 0 }
                                 ?: if (title.contains("3个") || title.contains("3次")) 3 else 1
                             val done = task.optJSONObject("stage")?.optInt("count") ?: 0
                             val need = (total - done).coerceAtLeast(0).coerceAtMost(3)
+                            // 标记本任务是否已被风控拉黑：拉黑后立即终止该任务的一切后续请求（包括领奖）
+                            var riskBlockedThisTask = false
                             for (step in 1..need) {
-                                val triggerRes = LuckyStarRpcCall.reportTrigger(cookie, missionDefId, missionXId)
+                                // 对齐幸运星.py：使用任务自身的 missionCollectionId，避免场景不匹配被服务端过滤
+                                val triggerRes = LuckyStarRpcCall.reportTrigger(
+                                    cookie,
+                                    missionDefId,
+                                    missionXId,
+                                    task.optString("missionCollectionId").ifEmpty { LuckyStarRpcCall.COLLECTION_ID }
+                                )
                                 if (!triggerRes.isSuccess) {
                                     if (triggerRes.errorCode == "417" || triggerRes.errorMsg.contains("417") || triggerRes.errorMsg.contains("作弊") ||
                                         triggerRes.errorCode == "405" || triggerRes.errorMsg.contains("行为受限")) {
@@ -239,16 +254,23 @@ object FreeOrderTask {
                                         ElemeRiskTaskEntity.recordRiskTask(missionDefId.toString(), title, reason)
                                         TaskBlacklist.autoAddToBlacklist(missionDefId.toString(), title, triggerRes.errorCode, triggerRes.errorMsg)
                                         Log.other("饿了么", "[抽免单] 🛡️ 任务[$missionDefId - $title]因【$reason】已加入风控名单")
+                                        riskBlockedThisTask = true
+                                    } else {
+                                        // 非风控类失败也必须带任务名，保证日志可追溯
+                                        Log.other("饿了么", "[抽免单] ❌ 点击[$title]触发失败: ${triggerRes.errorCode}::${triggerRes.errorMsg}")
                                     }
                                     break
                                 }
                                 Thread.sleep(RandomUtil.nextGaussianLong(1500, 2200))
                             }
-                            if (need > 0) {
+                            // 已被风控拉黑的任务不再刷新进度、不再领奖，避免对已受限任务重复请求
+                            if (need > 0 && !riskBlockedThisTask) {
                                 Thread.sleep(RandomUtil.nextGaussianLong(1000, 1800))
                                 val refreshResp = LuckyStarRpcCall.queryTaskList(cookie, missionDefId)
                                 val refreshedTask = findTask(refreshResp, missionDefId) ?: task
                                 val stages = LuckyStarRpcCall.getRewardStages(refreshedTask)
+                                // 同上：带阶段配置但无已完成阶段时不领奖，避免 STAGE_NOT_FINISH 误报
+                                val staged = refreshedTask.optJSONArray("missionStageDTOS")?.length() ?: 0
                                 if (stages.isNotEmpty()) {
                                     for (st in stages) {
                                         val prizeRes = LuckyStarRpcCall.receivePrize(cookie, refreshedTask, st)
@@ -259,7 +281,7 @@ object FreeOrderTask {
                                             handlePrizeFailure(missionDefId, title, prizeRes)
                                         }
                                     }
-                                } else {
+                                } else if (staged == 0) {
                                     val prizeRes = LuckyStarRpcCall.receivePrize(cookie, refreshedTask, null)
                                     if (prizeRes.isSuccess) {
                                         Log.other("饿了么", "[抽免单] [$title]: +1 抽奖机会")
@@ -381,11 +403,17 @@ object FreeOrderTask {
             Status.setFlagToday(FLAG_ORDER_FREE)
 
             if (ofRes.isSuccess) {
-                val prize = ElemeMtopUtil.extractPrizeDesc(ofRes.data ?: ofRes.rawJson).ifEmpty { "奖励" }
-                Log.other("饿了么", "[抽免单] 🎲 下单免单抽奖: $prize")
-                if (prize.contains("免单")) {
-                    Log.other("饿了么", "[抽免单] 🎉 恭喜成功抽中免单大奖: $prize")
-                    Notify.sendPrizeNotification("🎉 饿了么免单中奖通知", "恭喜在下单免单抽奖中成功命中【$prize】！请及时使用。")
+                val prize = ElemeMtopUtil.extractPrizeDesc(ofRes.data ?: ofRes.rawJson)
+                if (prize.isNotEmpty()) {
+                    Log.other("饿了么", "[抽免单] 🎲 下单免单抽奖: $prize")
+                    if (prize.contains("免单")) {
+                        Log.other("饿了么", "[抽免单] 🎉 恭喜成功抽中免单大奖: $prize")
+                        Notify.sendPrizeNotification("🎉 饿了么免单中奖通知", "恭喜在下单免单抽奖中成功命中【$prize】！请及时使用。")
+                    }
+                } else {
+                    // 服务端未返回奖励描述时直接打印完整响应，便于核实实际抽奖结果
+                    val rawResp = ofRes.rawJson?.toString() ?: ofRes.data?.toString() ?: "无响应内容"
+                    Log.other("饿了么", "[抽免单] 🎲 下单免单抽奖: 奖励描述缺失，完整响应:\n$rawResp")
                 }
             } else {
                 val msg = ofRes.errorMsg

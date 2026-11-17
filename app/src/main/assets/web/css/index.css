@@ -437,7 +437,9 @@ video {
 
 .dialog-list .dialog-list-content {
   width: 100%;
-  max-height: 68vh;
+  /* 限制列表高度：为标题、描述、全选/搜索行与底部取消/保存按钮预留空间，
+     避免长描述+长列表把弹窗撑出屏幕导致列表内容与按钮重叠 */
+  max-height: 45vh;
   overflow-y: scroll;
   scrollbar-width: none;
   /* Firefox */
@@ -474,6 +476,10 @@ video {
   color: #666666;
   margin-left: 20px;
   margin-top: 8px;
+  margin-right: 20px;
+  /* 长描述限高三行滚动，防止把列表区挤出屏幕 */
+  max-height: 60px;
+  overflow-y: auto;
 }
 
 .w100 {
@@ -659,6 +665,90 @@ html.dark .ua-btn-action {
   background: #1e1e22;
   border-color: var(--main-color);
   color: var(--main-color);
+}
+
+/* 危险操作按钮（清空历史等） */
+.ua-btn-danger {
+  border-color: #e64340;
+  color: #e64340;
+}
+
+html.dark .ua-btn-danger {
+  border-color: #e64340;
+  color: #ef7a78;
+}
+
+/* UA 历史记录列表容器 */
+.ua-history-box {
+  margin-top: 8px;
+  border: 1px solid #d0d3d8;
+  border-radius: 8px;
+  background: #fafafa;
+  max-height: 160px;
+  overflow-y: auto;
+}
+
+html.dark .ua-history-box {
+  background: #1e1e22;
+  border-color: #3a3b3c;
+}
+
+/* 历史条目：机型名 + 记录时间，点击回填 */
+.ua-history-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  border-bottom: 1px solid #ececec;
+  cursor: pointer;
+}
+
+.ua-history-item:last-child {
+  border-bottom: none;
+}
+
+.ua-history-item:active {
+  background: rgba(0, 0, 0, 0.05);
+}
+
+html.dark .ua-history-item {
+  border-bottom-color: #2c2d30;
+}
+
+html.dark .ua-history-item:active {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.ua-history-model {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-color, #333);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ua-history-time {
+  flex-shrink: 0;
+  margin-left: 10px;
+  font-size: 11px;
+  color: #999999;
+}
+
+html.dark .ua-history-time {
+  color: #808080;
+}
+
+/* 历史为空时的占位提示 */
+.ua-history-empty {
+  padding: 14px 12px;
+  font-size: 12px;
+  color: #999999;
+  text-align: center;
+}
+
+html.dark .ua-history-empty {
+  color: #808080;
 }
 
 .custom-textarea-field,

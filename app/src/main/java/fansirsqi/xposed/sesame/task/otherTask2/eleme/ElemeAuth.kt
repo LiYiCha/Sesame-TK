@@ -178,6 +178,36 @@ object ElemeAuth {
     }
 
     /**
+     * CK 凭据状态结构化信息（供账号状态弹窗展示）
+     */
+    data class CookieStatus(
+        val exists: Boolean,   // 是否存在凭据
+        val valid: Boolean,    // 是否处于有效期内（已含 30 分钟提前刷新余量）
+        val expiresAt: Long,   // 有效期截止时间戳（0 表示未知）
+        val source: String     // 凭据来源：内存缓存 / 磁盘缓存 / 未获取
+    )
+
+    /**
+     * 获取当前账号 CK 凭据的结构化状态（只读，不触发网络刷新）
+     */
+    @JvmStatic
+    fun getCookieStatus(): CookieStatus {
+        val currentUid = UserMap.currentUid
+        val now = System.currentTimeMillis()
+        // 内存缓存优先
+        if (currentUid == memoryUid && memoryCookie.isNotEmpty()) {
+            return CookieStatus(true, memoryExpiresAt - now > EXPIRE_MARGIN_MS, memoryExpiresAt, "内存缓存")
+        }
+        // 磁盘缓存（跨进程共享的持久化凭据）
+        val diskCookie = DataStore.get(getUidKey(KEY_COOKIE), String::class.java).orEmpty()
+        val diskExpires = DataStore.get(getUidKey(KEY_EXPIRES), Long::class.java) ?: 0L
+        if (diskCookie.isNotEmpty()) {
+            return CookieStatus(true, diskExpires - now > EXPIRE_MARGIN_MS, diskExpires, "磁盘缓存")
+        }
+        return CookieStatus(false, false, 0L, "未获取")
+    }
+
+    /**
      * 通过 auth_code 调用 eaLogin.do 换取饿了么 72 小时登录凭据
      */
     private fun refresh(): String {
