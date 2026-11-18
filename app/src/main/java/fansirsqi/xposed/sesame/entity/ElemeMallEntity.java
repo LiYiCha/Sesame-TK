@@ -18,6 +18,27 @@ import org.json.JSONObject;
 public class ElemeMallEntity extends MapperEntity {
     private static final String TAG = "ElemeMallEntity";
     private static final Map<String, ElemeMallEntity> MALL_ITEMS = new LinkedHashMap<>();
+    /** 商城缓存最近一次联网拉取时间（毫秒），随商品列表一起持久化，供 UI 展示刷新时间 */
+    private static volatile long lastRefreshTime = 0L;
+    /** 最近一次拉取时的幸运星余额；-1 表示未知，避免显示过期差额 */
+    private static volatile int lastStarAmount = -1;
+
+    /** 获取商城缓存刷新时间（毫秒），0 表示从未拉取 */
+    public static synchronized long getLastRefreshTime() {
+        return lastRefreshTime;
+    }
+
+    /** 获取最近一次拉取时的幸运星余额，-1 表示未知 */
+    public static synchronized int getLastStarAmount() {
+        return lastStarAmount;
+    }
+
+    /** 记录一次商城拉取的时间与星数（由 LuckyStarTask 每日流程/手动刷新调用） */
+    public static synchronized void recordFetchSnapshot(long refreshTime, int starAmount) {
+        lastRefreshTime = refreshTime;
+        lastStarAmount = starAmount;
+        saveToLocalCache();
+    }
 
     public String pureTitle;
     public int consumeAmount;
@@ -227,7 +248,12 @@ public class ElemeMallEntity extends MapperEntity {
                 jo.put("stockDesc", item.stockDesc);
                 arr.put(jo);
             }
-            Files.write2File(arr.toString(), f);
+            // 结构与商品列表一起持久化：meta 存刷新时间与星数，list 存商品
+            JSONObject root = new JSONObject();
+            root.put("refreshTime", lastRefreshTime);
+            root.put("starAmount", lastStarAmount);
+            root.put("list", arr);
+            Files.write2File(root.toString(), f);
         } catch (Throwable t) {
             Log.error(TAG, "saveToLocalCache error: " + t.getMessage());
         }
@@ -239,7 +265,19 @@ public class ElemeMallEntity extends MapperEntity {
             if (f == null || !f.exists()) return;
             String content = Files.readFromFile(f);
             if (content == null || content.trim().isEmpty()) return;
-            JSONArray arr = new JSONArray(content.trim());
+            String trimmed = content.trim();
+            JSONArray arr;
+            if (trimmed.startsWith("{")) {
+                // 新格式：{refreshTime, starAmount, list:[...]}
+                JSONObject root = new JSONObject(trimmed);
+                lastRefreshTime = root.optLong("refreshTime", 0L);
+                lastStarAmount = root.optInt("starAmount", -1);
+                arr = root.optJSONArray("list");
+            } else {
+                // 旧格式：纯商品数组，无刷新时间/星数
+                arr = new JSONArray(trimmed);
+            }
+            if (arr == null) return;
             for (int i = 0; i < arr.length(); i++) {
                 JSONObject jo = arr.optJSONObject(i);
                 if (jo == null) continue;

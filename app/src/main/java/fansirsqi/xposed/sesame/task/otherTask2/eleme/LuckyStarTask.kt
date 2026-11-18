@@ -500,6 +500,11 @@ object LuckyStarTask {
                 val items = mallData?.optJSONArray("list")
                 if (items != null && items.length() > 0) {
                     fansirsqi.xposed.sesame.entity.ElemeMallEntity.updateFromMallResponse(mallResp)
+                    // 每日首次运行拉取成功后记录快照（刷新时间+实时星数），供商城弹窗显示「刷新时间」与星数，
+                    // 避免打开弹窗总是显示「未获取」
+                    fansirsqi.xposed.sesame.entity.ElemeMallEntity.recordFetchSnapshot(
+                        System.currentTimeMillis(), finalStars
+                    )
 
                     // 4. 自动兑换逻辑（严格仅兑换用户勾选商品，星数不足绝不请求，单次最多兑 1 件保护资产）
                     if (ElemeTask.getElemeAutoExchange().value) {

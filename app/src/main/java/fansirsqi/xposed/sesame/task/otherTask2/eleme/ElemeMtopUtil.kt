@@ -817,11 +817,19 @@ object ElemeMtopUtil {
         val positiveButtonColor = if (isNight) android.graphics.Color.parseColor("#81C784") else android.graphics.Color.parseColor("#2E7D32")
         val neutralButtonColor = if (isNight) android.graphics.Color.parseColor("#64B5F6") else android.graphics.Color.parseColor("#1976D2")
 
-        // 本地缓存优先：直接渲染本地缓存商品列表，绝不主动请求网络
+        // 本地缓存优先：直接渲染本地缓存商品列表，绝不主动请求网络。
+        // 星数取最近一次拉取的持久化快照（每日任务/手动刷新写入），刷新时间一并展示。
         if (!fetchFirst) {
             val cachedItems = fansirsqi.xposed.sesame.entity.ElemeMallEntity.getList().filter { it.id != "0" }
-            val starDisplay = lastKnownStarAmount?.toString() ?: "未获取（点击「拉取最新」后显示）"
-            showMallContentDialog(context, isNight, starDisplay, cachedItems)
+            val cachedStars = fansirsqi.xposed.sesame.entity.ElemeMallEntity.getLastStarAmount()
+            val starDisplay = if (cachedStars >= 0) "$cachedStars" else "未获取（点「拉取最新」获取）"
+            val refreshMs = fansirsqi.xposed.sesame.entity.ElemeMallEntity.getLastRefreshTime()
+            val refreshDisplay = if (refreshMs > 0) {
+                java.text.SimpleDateFormat("MM-dd HH:mm", java.util.Locale.getDefault()).format(java.util.Date(refreshMs))
+            } else {
+                "从未刷新"
+            }
+            showMallContentDialog(context, isNight, starDisplay, cachedItems, refreshDisplay)
             return
         }
 
@@ -888,6 +896,10 @@ object ElemeMtopUtil {
                 // 提取商城商品并更新本地持久化缓存
                 if (mallResp != null) {
                     fansirsqi.xposed.sesame.entity.ElemeMallEntity.updateFromMallResponse(mallResp)
+                    // 手动刷新也记录快照，刷新时间与星数同步落盘
+                    fansirsqi.xposed.sesame.entity.ElemeMallEntity.recordFetchSnapshot(
+                        System.currentTimeMillis(), starAmount
+                    )
                 }
                 val mallItems = fansirsqi.xposed.sesame.entity.ElemeMallEntity.getList().filter { it.id != "0" }
 
@@ -895,7 +907,8 @@ object ElemeMtopUtil {
                     runCatching { progressDialog?.dismiss() }
                     if (context is android.app.Activity && (context.isFinishing || context.isDestroyed)) return@post
                     runCatching {
-                        showMallContentDialog(context, isNight, "$starAmount", mallItems)
+                        val nowDisplay = java.text.SimpleDateFormat("MM-dd HH:mm", java.util.Locale.getDefault()).format(java.util.Date())
+                        showMallContentDialog(context, isNight, "$starAmount", mallItems, nowDisplay)
                     }
                 }
             } catch (e: Throwable) {
@@ -922,7 +935,8 @@ object ElemeMtopUtil {
         context: android.content.Context,
         isNight: Boolean,
         starDisplay: String,
-        mallItems: List<fansirsqi.xposed.sesame.entity.ElemeMallEntity>
+        mallItems: List<fansirsqi.xposed.sesame.entity.ElemeMallEntity>,
+        refreshDisplay: String = ""
     ): android.widget.ScrollView {
         val primaryTextColor = if (isNight) android.graphics.Color.parseColor("#E0E0E0") else android.graphics.Color.parseColor("#212121")
         val secondaryColor = if (isNight) android.graphics.Color.parseColor("#B0BEC5") else android.graphics.Color.parseColor("#666666")
@@ -966,6 +980,9 @@ object ElemeMtopUtil {
             appendSeg("幸运星 ", starDisplay, accentColor)
             appendSeg("  ·  商品 ", "${mallItems.size}", accentColor)
             appendSeg("  ·  已选 ", "$selectedCount", okColor)
+            if (refreshDisplay.isNotEmpty()) {
+                appendSeg("  ·  刷新 ", refreshDisplay, secondaryColor)
+            }
         }
         summaryBar.addView(android.widget.TextView(context).apply {
             text = summaryText
@@ -1117,14 +1134,15 @@ object ElemeMtopUtil {
         context: android.content.Context,
         isNight: Boolean,
         starDisplay: String,
-        mallItems: List<fansirsqi.xposed.sesame.entity.ElemeMallEntity>
+        mallItems: List<fansirsqi.xposed.sesame.entity.ElemeMallEntity>,
+        refreshDisplay: String = ""
     ) {
         if (context is android.app.Activity && (context.isFinishing || context.isDestroyed)) return
         val positiveButtonColor = if (isNight) android.graphics.Color.parseColor("#81C784") else android.graphics.Color.parseColor("#2E7D32")
         val neutralButtonColor = if (isNight) android.graphics.Color.parseColor("#64B5F6") else android.graphics.Color.parseColor("#1976D2")
 
         runCatching {
-            val scrollView = buildMallScrollView(context, isNight, starDisplay, mallItems)
+            val scrollView = buildMallScrollView(context, isNight, starDisplay, mallItems, refreshDisplay)
             val d = androidx.appcompat.app.AlertDialog.Builder(context)
                 .setTitle("幸运星兑换商城")
                 .setView(scrollView)

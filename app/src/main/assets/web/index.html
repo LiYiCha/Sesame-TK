@@ -648,11 +648,10 @@
 
                 function getRowDisplayValue(item) {
                   if (item.code === "elemeCustomUa") {
-                    const val = (item.configValue || "").trim();
-                    if (!val) return "未设置（点此从历史恢复）";
+                    // 始终展示当前生效机型（含系统默认指纹的真实机型），不再显示「系统默认/未设置」等空泛文案
                     const m = parsedUaInfo.value && parsedUaInfo.value.model;
                     if (m && m !== "系统原版默认") return m;
-                    return "已自定义";
+                    return "当前机型";
                   }
                   if (item.code === "startTime") {
                     return item.configValue || "0700";
