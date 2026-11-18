@@ -62,7 +62,17 @@ object ElemeMtopUtil {
                 } else {
                     model
                 }
-                "Mozilla/5.0 (Linux; Android $release; $deviceToken Build/$buildId; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/$chromeVer UCBrowser/$ucVer Mobile Safari/537.36 AlipayDefined(nt:wifi,ws:$screenWs) AliApp(AP/$alipayVer) AlipayClient/$alipayVer Language/zh-Hans useStatusBar/true isConcaveScreen/false Region/CN Channel/${brand.lowercase()} GCanvas/1.9.38 Nebula SDK/1.8.1000 Nebula Ariver/1.0.0"
+                // 对齐 tb.log 真实抓包的 HTTP User-Agent（支付宝小程序 webview）：
+                // ... Chrome/x MYWeb/1.11.x UWS/3.22.2.9999 UCBS/3.22.2..._220000000000
+                // Mobile Safari/537.36 NebulaSDK/1.8.100112 Nebula AlipayDefined(nt:WIFI,ws:...)
+                // AliApp(AP/..) AlipayClient/.. Language/zh-Hans isConcaveScreen/false Region/CNAriver/..
+                // 不再使用旧模板的 UCBrowser/Nebula SDK/GCanvas/Ariver 等字段
+                "Mozilla/5.0 (Linux; Android $release; $deviceToken Build/$buildId; wv) " +
+                    "AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/$chromeVer " +
+                    "MYWeb/1.11.$chromeVer UWS/3.22.2.9999 UCBS/3.22.2.9999_220000000000 " +
+                    "Mobile Safari/537.36 NebulaSDK/1.8.100112 Nebula " +
+                    "AlipayDefined(nt:WIFI,ws:$screenWs) AliApp(AP/$alipayVer) AlipayClient/$alipayVer " +
+                    "Language/zh-Hans isConcaveScreen/false Region/CNAriver/$alipayVer"
             }
 
         fun toJson(): String {

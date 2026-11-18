@@ -64,7 +64,11 @@ object LuckyStarTask {
 
             // 3. 首页聚合：获取星数、签到、夺宝/抽奖及任务集合 ID
             // 任务开始仅输出账号信息与设备 UA；幸运星数量统一在执行结束后输出
-            Log.other("饿了么", "[幸运星] 账号: ${ElemeAuth.getAccountSummary()}")
+            // 任务开始仅输出账号信息与设备 UA；幸运星数量统一在执行结束后输出。
+            // 账号信息不打印昵称/姓名（脱敏 UID 即可），避免日志泄露个人信息
+            val alipayUidRaw = fansirsqi.xposed.sesame.util.maps.UserMap.currentUid.orEmpty()
+            val alipayUidLog = if (alipayUidRaw.length > 8) alipayUidRaw.take(4) + "***" + alipayUidRaw.takeLast(4) else alipayUidRaw.ifEmpty { "未知" }
+            Log.other("饿了么", "[幸运星] 账号: 支付宝 $alipayUidLog | ${ElemeAuth.getElemeAccountLine()}")
             Log.other("饿了么", "[幸运星] 设备UA: ${ElemeMtopUtil.getActiveProfile().httpUa()}")
             val homepageResp = LuckyStarRpcCall.getHomepageData(cookie)
             val hpData = homepageResp?.optJSONObject("data") ?: homepageResp
