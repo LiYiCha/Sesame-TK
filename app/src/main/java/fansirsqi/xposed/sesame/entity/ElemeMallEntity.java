@@ -114,9 +114,7 @@ public class ElemeMallEntity extends MapperEntity {
                 timeDesc = biz.optString("seckillTimeDesc");
                 if (timeDesc.isEmpty()) timeDesc = biz.optString("countdownDesc");
             }
-            if (timeDesc.isEmpty()) {
-                timeDesc = "每日按时补货 / 随时可兑";
-            }
+            // 无真实补货时间时保持为空，UI 层据此隐藏该行，不展示无意义的兜底文案
 
             // 提取使用门槛与说明
             String ruleDesc = "";

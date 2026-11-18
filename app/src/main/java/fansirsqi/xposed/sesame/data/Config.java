@@ -51,15 +51,16 @@ public class Config {
         // 管理类字段曾短暂拆分到独立的 ElemeManageTask 页面，用户保存的 UA/风控勾选被写在
         // "ElemeManageTask" 键下；拆分撤销后字段回到 ElemeTask 页，其存储键也应为 "ElemeTask"。
         // 若不搬回，用户之前保存的 UA 字符串与风控勾选将因键名不匹配而读不到（表现为"系统默认"）。
-        // 仅当 ElemeTask 键下尚无该字段时才迁入，绝不覆盖用户更新的值。
+        // 只要旧键中的值非空就迁入；ElemeTask 键下可能残留一个空值字段，不能因它存在就跳过，
+        // 否则之前保存的 UA 仍读不到。仅用非空旧值覆盖，不会用空值抹掉用户数据。
         if (newModels.containsKey("ElemeManageTask")) {
             ModelFields legacyManage = newModels.remove("ElemeManageTask");
             ModelFields elemeFields = newModels.computeIfAbsent("ElemeTask", k -> new ModelFields());
             for (String code : new String[]{
                     "elemeAccountStatus", "elemeRefreshMall", "elemeCustomUa", "elemeRiskTasks"}) {
                 ModelField<?> f = legacyManage.get(code);
-                if (f != null && f.getValue() != null && elemeFields.get(code) == null) {
-                    elemeFields.addField(f);
+                if (f != null && f.getValue() != null) {
+                    elemeFields.addField(f); // LinkedHashMap.put：同 code 以旧键的非空值覆盖
                 }
             }
         }

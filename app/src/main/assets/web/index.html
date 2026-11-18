@@ -649,7 +649,7 @@
                 function getRowDisplayValue(item) {
                   if (item.code === "elemeCustomUa") {
                     const val = (item.configValue || "").trim();
-                    if (!val) return "系统默认";
+                    if (!val) return "未设置（点此从历史恢复）";
                     const m = parsedUaInfo.value && parsedUaInfo.value.model;
                     if (m && m !== "系统原版默认") return m;
                     return "已自定义";

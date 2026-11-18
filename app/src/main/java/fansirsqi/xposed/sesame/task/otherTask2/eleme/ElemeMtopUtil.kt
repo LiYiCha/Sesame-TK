@@ -448,6 +448,8 @@ object ElemeMtopUtil {
     @Volatile
     private var lastRecordedUaValue: String? = null
     private const val UA_HISTORY_MAX = 20 // 历史记录最大保留条数
+    // UA 属设备级设置，历史记录全局共享（不按支付宝账号隔离），避免切换账号后找不到之前保存的 UA
+    private const val UA_HISTORY_KEY = "Eleme_UA_History_Global"
 
     /**
      * 记录 UA 变更历史（按账号持久化到 DataStore，JSON 数组，最新在前，去重且上限 20 条）
@@ -457,7 +459,7 @@ object ElemeMtopUtil {
     fun recordUaHistory(rawUa: String?) {
         runCatching {
             val ua = rawUa?.trim().orEmpty()
-            val key = ElemeAuth.getUidKey("Eleme_UA_History")
+            val key = UA_HISTORY_KEY
             // 会话级去重：同一账号同一 UA 不重复记录
             if (lastRecordedUaKey == key && lastRecordedUaValue == ua) {
                 return
@@ -502,7 +504,10 @@ object ElemeMtopUtil {
     @JvmStatic
     fun getUaHistory(): String {
         return runCatching {
-            DataStore.get(ElemeAuth.getUidKey("Eleme_UA_History"), String::class.java).orEmpty().ifEmpty { "[]" }
+            val global = DataStore.get(UA_HISTORY_KEY, String::class.java).orEmpty()
+            val legacy = DataStore.get(ElemeAuth.getUidKey("Eleme_UA_History"), String::class.java).orEmpty()
+            // 兼容读取旧版本按账号存储的历史：新键为空时才回退旧键，保证切换账号后仍能找回之前保存的 UA
+            global.ifEmpty { legacy }.ifEmpty { "[]" }
         }.getOrDefault("[]")
     }
 
@@ -512,7 +517,7 @@ object ElemeMtopUtil {
     @JvmStatic
     fun clearUaHistory() {
         runCatching {
-            DataStore.put(ElemeAuth.getUidKey("Eleme_UA_History"), "[]")
+            DataStore.put(UA_HISTORY_KEY, "[]")
             lastRecordedUaKey = null
             lastRecordedUaValue = null
         }
@@ -745,14 +750,13 @@ object ElemeMtopUtil {
                 "• 抽免单签到: ${flagDone(FreeOrderTask.FLAG_SIGNIN)}\n" +
                 "• 外卖爆红包: ${if (flags.contains("Eleme_BurstRed_Done")) "已领取" else "未领取"}"
 
-        // 账号信息：饿了么账号置顶并直接展示脱敏账号；支付宝账号次之
-        val alipayMask = fansirsqi.xposed.sesame.util.maps.UserMap.getCurrentMaskName().ifEmpty { "当前用户" }
+        // 支付宝账号仅显示脱敏 UID，不展示昵称/姓名
         val alipayUidRaw = fansirsqi.xposed.sesame.util.maps.UserMap.currentUid.orEmpty()
-        val alipayUid = if (alipayUidRaw.length > 8) alipayUidRaw.take(4) + "***" + alipayUidRaw.takeLast(4) else alipayUidRaw
+        val alipayUid = if (alipayUidRaw.length > 8) alipayUidRaw.take(4) + "***" + alipayUidRaw.takeLast(4) else alipayUidRaw.ifEmpty { "未知" }
         val elemeInfoLine = ElemeAuth.getElemeAccountLine()
         val detailMsg = "【账号信息】\n" +
                 "• $elemeInfoLine\n" +
-                "• 支付宝账号: $alipayMask (UID: $alipayUid)\n\n" +
+                "• 支付宝: $alipayUid\n\n" +
                 "【CK 凭据状态】\n" +
                 "• 状态: $ckText\n" +
                 "• 来源: ${cookieStatus.source}\n\n" +
@@ -785,6 +789,8 @@ object ElemeMtopUtil {
         dialog.setOnShowListener {
             dialog.getButton(android.content.DialogInterface.BUTTON_POSITIVE)?.setTextColor(positiveButtonColor)
             dialog.getButton(android.content.DialogInterface.BUTTON_NEUTRAL)?.setTextColor(neutralButtonColor)
+            // 账号状态文本（含 CK 信息）允许长按选中复制
+            dialog.findViewById<android.widget.TextView>(android.R.id.message)?.setTextIsSelectable(true)
         }
         dialog.findViewById<android.widget.TextView>(android.R.id.message)?.setTextColor(primaryTextColor)
 
@@ -946,25 +952,27 @@ object ElemeMtopUtil {
                 cornerRadius = 16f
             }
         }
-        fun barText(text: String, bold: Boolean, color: Int): android.widget.TextView =
-            android.widget.TextView(context).apply {
-                this.text = text
-                textSize = 13f
-                typeface = if (bold) android.graphics.Typeface.DEFAULT_BOLD else android.graphics.Typeface.DEFAULT
-                setTextColor(color)
-                setPadding(0, 0, 12, 0)
+        // 汇总条用单个 TextView + Spannable 一行显示，避免多个子 View 在窄屏被挤成竖排
+        val selectedCount = mallItems.count { item ->
+            (runCatching { ElemeTask.getElemeExchangeItems().value }.getOrNull() ?: emptySet<String>()).contains(item.id)
+        }
+        val summaryText = android.text.SpannableStringBuilder().apply {
+            fun appendSeg(label: String, value: String, valueColor: Int) {
+                append(label)
+                val s = length
+                append(value)
+                setSpan(android.text.style.ForegroundColorSpan(valueColor), s, length, android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
             }
-        summaryBar.addView(barText("当前幸运星: ", false, secondaryColor))
-        summaryBar.addView(barText(starDisplay, true, accentColor))
-        summaryBar.addView(barText("    在售商品: ", false, secondaryColor))
-        summaryBar.addView(barText("${mallItems.size} 件", true, accentColor))
-        summaryBar.addView(barText("    已勾选兑换: ", false, secondaryColor))
-        summaryBar.addView(
-            barText(
-                "${mallItems.count { item -> (runCatching { ElemeTask.getElemeExchangeItems().value }.getOrNull() ?: emptySet<String>()).contains(item.id) }}",
-                true, okColor
-            )
-        )
+            appendSeg("幸运星 ", starDisplay, accentColor)
+            appendSeg("  ·  商品 ", "${mallItems.size}", accentColor)
+            appendSeg("  ·  已选 ", "$selectedCount", okColor)
+        }
+        summaryBar.addView(android.widget.TextView(context).apply {
+            text = summaryText
+            textSize = 13f
+            setTextColor(secondaryColor)
+            setSingleLine(true)
+        })
         container.addView(summaryBar)
 
         if (mallItems.isEmpty()) {
@@ -1014,15 +1022,17 @@ object ElemeMtopUtil {
                     setLineSpacing(2f, 1f)
                 }
 
-                val tvTime = android.widget.TextView(context).apply {
-                    text = "秒杀/补货: ${item.timeDesc.ifEmpty { "每日按时补货 / 随时可兑" }}"
-                    textSize = 12f
-                    setTextColor(secondaryColor)
-                    setPadding(0, 6, 0, 0)
-                }
-
+                // 仅当服务端返回真实补货/秒杀时间才显示「补货: 时间」；无数据时不显示该行，避免无意义兜底文案
                 card.addView(tvTitle)
-                card.addView(tvTime)
+                if (item.timeDesc.isNotEmpty()) {
+                    val tvTime = android.widget.TextView(context).apply {
+                        text = "补货: ${item.timeDesc}"
+                        textSize = 12f
+                        setTextColor(secondaryColor)
+                        setPadding(0, 6, 0, 0)
+                    }
+                    card.addView(tvTime)
+                }
                 if (item.stockDesc.isNotEmpty()) {
                     val tvStock = android.widget.TextView(context).apply {
                         text = "库存: ${item.stockDesc}"
@@ -1119,18 +1129,14 @@ object ElemeMtopUtil {
                 .setTitle("幸运星兑换商城")
                 .setView(scrollView)
                 .setPositiveButton("关闭", null)
+                // 必须声明 Neutral 按钮，否则 Dialog 不会创建它，OnShowListener 里取到的为 null，刷新入口消失
+                .setNeutralButton("拉取最新") { _, _ ->
+                    runCatching { showMallListDialog(context, true) }
+                }
                 .create()
-            // 用 setOnShowListener 内绑定按钮，避免 Builder 链 lambda 引用尚未初始化的 d
             d.setOnShowListener {
                 d.getButton(android.content.DialogInterface.BUTTON_POSITIVE)?.setTextColor(positiveButtonColor)
-                d.getButton(android.content.DialogInterface.BUTTON_NEUTRAL)?.apply {
-                    setTextColor(neutralButtonColor)
-                    setOnClickListener {
-                        // 先关闭当前弹窗再重新拉取，避免快速连点叠加多个 Dialog 持有 Activity 引用
-                        runCatching { d.dismiss() }
-                        runCatching { showMallListDialog(context, true) }
-                    }
-                }
+                d.getButton(android.content.DialogInterface.BUTTON_NEUTRAL)?.setTextColor(neutralButtonColor)
             }
             d.show()
         }
