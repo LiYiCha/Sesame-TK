@@ -440,16 +440,6 @@ public class WebSettingsActivity extends BaseActivity {
             return "FAILED";
         }
 
-        @JavascriptInterface
-        public String getRandomUa() {
-            try {
-                return fansirsqi.xposed.sesame.task.otherTask2.eleme.ElemeMtopUtil.getRandomRealDeviceUa();
-            } catch (Throwable t) {
-                Log.printStackTrace(TAG, t);
-                return "";
-            }
-        }
-
         /**
          * 获取机型库全部可选机型名称（JSON 数组字符串，供 UA 编辑弹窗下拉框使用）
          */
@@ -527,19 +517,6 @@ public class WebSettingsActivity extends BaseActivity {
                     Log.printStackTrace(TAG, t);
                 }
             });
-        }
-
-        @JavascriptInterface
-        public String getMallItemDetail(String itemId) {
-            try {
-                fansirsqi.xposed.sesame.entity.ElemeMallEntity entity = fansirsqi.xposed.sesame.entity.ElemeMallEntity.getItem(itemId);
-                if (entity != null) {
-                    return entity.getFullDetailText();
-                }
-            } catch (Throwable t) {
-                Log.printStackTrace(TAG, t);
-            }
-            return "";
         }
 
         @JavascriptInterface

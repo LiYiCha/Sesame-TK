@@ -17,8 +17,8 @@ public class EmptyModelField extends ModelField<Object> {
     private final ContextConsumer clickConsumer;
     private String dialogTitle = null;
     private String dialogMessage = null;
-    /** 按钮右侧动作文案：默认「点击执行」，可设为「查看」等只读语义 */
-    private String actionLabel = "点击执行";
+    /** 按钮右侧动作文案：默认「查看」（此类字段均为打开弹窗/拉取列表的只读入口） */
+    private String actionLabel = "查看";
 
     /** 设置按钮右侧动作文案（如「查看」），仅影响展示，不改变点击行为 */
     public EmptyModelField setActionLabel(String actionLabel) {

@@ -30,7 +30,6 @@ class ElemeTask : ModelTask() {
 
     override fun getName(): String = "饿了么"
 
-    protected var executeIntervalInt: Int = 6000
     private val startTime = StringModelField("startTime", "开始执行时间(关闭:-1)", "0700")
 
     companion object {
@@ -52,20 +51,12 @@ class ElemeTask : ModelTask() {
         )
 
         @JvmField
-        val elemeAutoExchange = BooleanModelField(
-            "elemeAutoExchange",
-            "兑换商品",
-            false,
-            "开启后，当拥有的幸运星满足兑换条件时，自动兑换【兑换商城】弹窗内勾选「自动兑换」的商品（为防误扣资产，未勾选的商品绝不兑换，星数不足绝不请求）。"
-        )
-
-        @JvmField
         val elemeAccountStatus = EmptyModelField(
             "elemeAccountStatus",
             "账号状态"
         ) { context ->
             ElemeMtopUtil.showAccountStatusDialog(context)
-        }.setActionLabel("查看")
+        }
 
         @JvmField
         val elemeRefreshMall = EmptyModelField(
@@ -89,7 +80,15 @@ class ElemeTask : ModelTask() {
             "elemeCustomUa",
             "设备UA",
             "",
-            "点击编辑设备 UA：弹窗内实时显示当前生效机型，可从真实机型库中指定机型生成，或从「历史记录」一键回填之前生效过的 UA，确认后保存生效；留空使用本机系统原版指纹。每次保存自动记录历史（最多 20 条）。修改有 10 分钟冷却防风控。"
+            "点击编辑设备 UA：弹窗内实时显示当前生效机型，可从真实机型库中指定机型生成，或从「历史记录」一键回填之前生效过的 UA，确认后保存生效；留空使用本机系统原版指纹。每次保存自动记录历史（最多 20 条）。保存后立即生效。"
+        )
+
+        @JvmField
+        val elemeQuizActId = StringModelField(
+            "elemeQuizActId",
+            "答题活动actId",
+            "",
+            "趣味话题答题（猜价格/猜一猜）的活动 ID。该 ID 不在幸运星任务列表的返回中，只能从答题页 URL 上读取，因此需手动填写；留空则跳过答题，不发起任何答题请求。"
         )
 
         @JvmField
@@ -102,31 +101,16 @@ class ElemeTask : ModelTask() {
         )
 
         @JvmStatic
-        fun getElemeLuckyStar(): BooleanModelField = elemeLuckyStar
-
-        @JvmStatic
-        fun getElemeFreeOrder(): BooleanModelField = elemeFreeOrder
-
-        @JvmStatic
-        fun getElemeBurstRed(): BooleanModelField = elemeBurstRed
-
-        @JvmStatic
-        fun getElemeAutoExchange(): BooleanModelField = elemeAutoExchange
-
-        @JvmStatic
         fun getElemeExchangeItems(): SelectModelField = elemeExchangeItems
-
-        @JvmStatic
-        fun getElemeRefreshMall(): EmptyModelField = elemeRefreshMall
-
-        @JvmStatic
-        fun getElemeAccountStatus(): EmptyModelField = elemeAccountStatus
 
         @JvmStatic
         fun getElemeCustomUa(): StringModelField = elemeCustomUa
 
         @JvmStatic
         fun getElemeRiskTasks(): SelectModelField = elemeRiskTasks
+
+        @JvmStatic
+        fun getElemeQuizActId(): StringModelField = elemeQuizActId
 
         @JvmStatic
         fun disableElemeLuckyStar(reason: String) {
@@ -171,11 +155,11 @@ class ElemeTask : ModelTask() {
         modelFields.addField(elemeLuckyStar)
         modelFields.addField(elemeFreeOrder)
         modelFields.addField(elemeBurstRed)
-        modelFields.addField(elemeAutoExchange)
         modelFields.addField(elemeAccountStatus)
         modelFields.addField(elemeRefreshMall)
         modelFields.addField(elemeExchangeItems)
         modelFields.addField(elemeCustomUa)
+        modelFields.addField(elemeQuizActId)
         modelFields.addField(elemeRiskTasks)
         return modelFields
     }
@@ -202,6 +186,10 @@ class ElemeTask : ModelTask() {
         currentFuture = executor.submit {
             executionLock.lock()
             try {
+                // 每轮任务开始复位账号级风控标记：
+                // 同一轮内任一子任务命中 USER_RISK 后，后续子任务的一切请求都会被拦截
+                ElemeMtopUtil.resetAccountRiskFlag()
+
                 if (elemeFreeOrder.value) {
                     FreeOrderTask.handle()
                 }
@@ -243,14 +231,29 @@ class ElemeTask : ModelTask() {
     }
 
     override fun check(): Boolean {
-        return if (TaskCommon.IS_ENERGY_TIME) {
+        if (TaskCommon.IS_ENERGY_TIME) {
             Log.runtime("⏸ 当前为只收能量时间【" + BaseModel.energyTime.value + "】，停止执行" + name + "任务！")
-            false
-        } else if (TaskCommon.IS_MODULE_SLEEP_TIME) {
-            Log.runtime("💤 模块休眠时间【" + BaseModel.modelSleepTime.value + "】停止执行" + name + "任务！")
-            false
-        } else {
-            true
+            return false
         }
+        if (TaskCommon.IS_MODULE_SLEEP_TIME) {
+            Log.runtime("💤 模块休眠时间【" + BaseModel.modelSleepTime.value + "】停止执行" + name + "任务！")
+            return false
+        }
+        // 「开始执行时间」此前只作为展示字段，框架从不读取，导致把它当作生效开关会误判。
+        // 此处接入判定：格式 HHmm（如 0700），早于该时刻不执行；留空或填 -1 表示不限制。
+        return !isBeforeStartTime()
+    }
+
+    /** 当前是否早于配置的开始执行时间（-1/空 视为不限制） */
+    private fun isBeforeStartTime(): Boolean {
+        val raw = startTime.value?.trim().orEmpty()
+        if (raw.isEmpty() || raw == "-1") return false
+        val hm = raw.padStart(4, '0')
+        val hour = hm.take(2).toIntOrNull() ?: return false
+        val minute = hm.takeLast(2).toIntOrNull() ?: return false
+        if (hour !in 0..23 || minute !in 0..59) return false
+        val cal = java.util.Calendar.getInstance()
+        val nowMinutes = cal.get(java.util.Calendar.HOUR_OF_DAY) * 60 + cal.get(java.util.Calendar.MINUTE)
+        return nowMinutes < hour * 60 + minute
     }
 }

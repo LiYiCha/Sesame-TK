@@ -4,14 +4,13 @@ import fansirsqi.xposed.sesame.hook.internal.LocationHelper
 import org.json.JSONObject
 
 /**
- * 饿了么免单/订单抽奖 RPC 封装
- * 严格对齐真实 H5 MTOP 接口规范（tb.ele.me 互动中心与下单赢免单抽奖）
+ * 饿了么外卖爆红包 RPC 封装（mtop.alsc.upp.tbet.send）
+ *
+ * 说明：下单免单抽奖与互动中心首页已统一收敛到 LuckyStarRpcCall
+ * （drawOrderFree / getHomepageData），本类只保留爆红包领取这一独立接口。
  */
 object FreeOrderRpcCall {
-    const val API_CENTER_HOMEPAGE = "mtop.alsc.interact.et.interact.center.homepage"
-    const val API_ORDER_FREE_DRAW = "mtop.alsc.interact.et.orderfree.draw"
     const val API_TBET_SEND = "mtop.alsc.upp.tbet.send"
-    const val ASAC_ORDER_FREE_DRAW = "alscrX2P4rmvl0NhmQgr9x"
     const val ASAC_TBET_SEND = "alscIEHa9RGen8cRSFu1rN"
 
     private fun getCoordinates(): Pair<Double, Double> {
@@ -19,33 +18,6 @@ object FreeOrderRpcCall {
         val lat = loc?.optString("latitude")?.toDoubleOrNull() ?: 31.2304
         val lng = loc?.optString("longitude")?.toDoubleOrNull() ?: 121.4737
         return Pair(lat, lng)
-    }
-
-    /**
-     * 下单赢免单抽奖（mtop.alsc.interact.et.orderfree.draw）
-     * 严格对齐 幸运星.py orderfree_draw 规范（每日仅抽一次，支持透传 cityId）
-     */
-    fun orderFreeDraw(cookie: String, orderFreeData: JSONObject? = null): ElemeMtopUtil.MtopResult {
-        val (lat, lng) = getCoordinates()
-        val cityId = orderFreeData?.optJSONObject("data")?.optJSONObject("extInfo")?.optString("cityId").orEmpty()
-        val data = JSONObject().apply {
-            put("bizScene", "order_free_draw")
-            put("version", "1.4.2")
-            put("longitude", lng.toString())
-            put("latitude", lat.toString())
-            if (cityId.isNotEmpty()) {
-                put("cityId", cityId)
-            }
-        }
-        val headers = mapOf("asac" to ASAC_ORDER_FREE_DRAW)
-        return ElemeMtopUtil.execute(API_ORDER_FREE_DRAW, data.toString(), cookie, method = "GET", version = "1.0", extraHeaders = headers)
-    }
-
-    /**
-     * 查询互动中心主页（包含 orderFreeDraw 与连续签到配置）
-     */
-    fun queryCenterHomepage(cookie: String): JSONObject? {
-        return LuckyStarRpcCall.getHomepageData(cookie)
     }
 
     /**

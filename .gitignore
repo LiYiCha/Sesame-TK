@@ -75,3 +75,6 @@ build_release.bat
 temp/
 .agents/
 .trae
+
+# 本地自动化工具数据（非项目产物）
+.workbuddy/

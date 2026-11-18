@@ -21,29 +21,20 @@ import java.util.concurrent.locks.ReentrantLock
  */
 object FreeOrderTask {
     private const val TAG = "FreeOrderTask"
-    const val FLAG_ORDER_FREE = "Eleme_OrderFree_Done"
+    /** 签到：每日单次 */
     const val FLAG_SIGNIN = "Eleme_SignIn_Done"
+    /** 夺宝/抽奖：每日次数用完后置位，当日不再请求 */
     const val FLAG_LOTTERY_DONE = "Eleme_LuckyStar_Lottery_Done"
-    // 幸运星任务全流程正常完成标记：置位后抽免单任务无需再兜底执行
-    const val FLAG_FLOW_DONE = "Eleme_TaskFlow_Done"
-    // 抽免单任务自身完成标记（与幸运星流程标记独立，避免两者共用导致互相屏蔽、只剩一个运行）
-    const val FLAG_FREEORDER_DONE = "Eleme_FreeOrder_Done"
+    /** 下单免单抽奖：当日抽中/抽成功一次后置位 */
+    const val FLAG_ORDER_FREE = "Eleme_OrderFree_Done"
     private val lock = ReentrantLock()
 
     fun handle() {
         if (!ElemeTask.elemeFreeOrder.value) {
             return
         }
-
-        // 幸运星任务全流程已正常完成时才整体跳过；若幸运星中途被风控中止，抽免单任务照常兜底补跑。
-        // 注意：此处只判断幸运星标记，不判断本任务自己的标记由下方独立字段处理，
-        // 避免历史上两任务共用 FLAG_FLOW_DONE 导致抽免单先跑后把幸运星永久屏蔽。
-        if (Status.hasFlagToday(FLAG_FLOW_DONE)) {
-            return
-        }
-        if (Status.hasFlagToday(FLAG_FREEORDER_DONE)) {
-            return
-        }
+        // 不再使用「全流程完成/抽免单完成」等入口标记屏蔽任务：
+        // 每次触发都重新拉取任务列表并处理，是否重复由服务端状态与各接口自身幂等决定。
 
         if (!lock.tryLock()) {
             return
@@ -65,7 +56,7 @@ object FreeOrderTask {
             }
 
             // 1. 获取互动中心首页聚合数据
-            val homepageResp = FreeOrderRpcCall.queryCenterHomepage(cookie)
+            val homepageResp = LuckyStarRpcCall.getHomepageData(cookie)
             // 对齐 幸运星.py：d = r["data"]，业务字段（resource/signIn/orderFreeDraw）均在 d 下。
             // 注意不可再下钻一层，否则 lotteries/orderFreeDraw 全部取不到，导致「获得次数却不抽奖」。
             val dataObj = homepageResp?.optJSONObject("data") ?: homepageResp
@@ -87,29 +78,27 @@ object FreeOrderTask {
                     }
                     val signedToday = todayDto?.optBoolean("signIn", false) ?: signInObj?.optBoolean("signIn", false) ?: false
                     if (signedToday) {
+                        // 首页已明确返回今日已签到，直接标记，无需再请求
                         Status.setFlagToday(FLAG_SIGNIN)
-                    } else {
-                        val copyId = todayDto?.optJSONObject("extInfo")?.optString("copyId")?.takeIf { it.isNotEmpty() }
-                            ?: signInObj?.optJSONObject("extInfo")?.optString("copyId").orEmpty()
-                        if (copyId.isNotEmpty()) {
-                            val strategy = signInObj?.optString("signInRewardStrategy").orEmpty()
-                            val awards = todayDto?.optJSONObject("extInfo")?.optJSONArray("stageAward")
-                            val award = awards?.optJSONObject(0)
-                            Thread.sleep(RandomUtil.nextGaussianLong(400, 800))
-                            val signRes = LuckyStarRpcCall.signIn(cookie, copyId, strategy, award)
-                            if (signRes.isSuccess || signRes.errorCode.contains("REPEAT") || signRes.errorCode.contains("ALREADY") || signRes.errorMsg.contains("已签到")) {
-                                Status.setFlagToday(FLAG_SIGNIN)
-                                Log.other("饿了么", "[抽免单] 连续签到打卡: +1 抽奖机会")
-                            } else if (signRes.errorMsg.contains("REWARD_MODE_NOT_SIGNIN_AND_RECEIVE") ||
-                                signRes.errorMsg.contains("API_NOT_FOUNDED") || signRes.errorCode.contains("API_NOT_FOUNDED")
-                            ) {
-                                // 签到模式不匹配或接口已下线为确定性失败，当日标记完成，避免每轮重复请求
-                                Status.setFlagToday(FLAG_SIGNIN)
-                                Log.other("饿了么", "[抽免单] 签到接口暂不可用（签到模式不匹配或接口已下线），今日跳过签到")
-                            }
-                        } else {
+                    } else if (signInObj != null) {
+                        // copyId 缺失时不阻断签到（对齐 幸运星.py），也绝不据此置位标记，
+                        // 否则首页数据抖动一次就会把当天签到永久标记完成
+                        val copyId = todayDto?.optJSONObject("extInfo")?.optString("copyId").orEmpty()
+                            .ifEmpty { signInObj.optJSONObject("extInfo")?.optString("copyId").orEmpty() }
+                        val strategy = signInObj.optString("signInRewardStrategy")
+                        val awards = todayDto?.optJSONObject("extInfo")?.optJSONArray("stageAward")
+                        val award = awards?.optJSONObject(0)
+                        Thread.sleep(RandomUtil.nextGaussianLong(400, 800))
+                        val signRes = LuckyStarRpcCall.signIn(cookie, copyId, strategy, award)
+                        if (signRes.isSuccess) {
+                            Status.setFlagToday(FLAG_SIGNIN)
+                            Log.other("饿了么", "[抽免单] 连续签到打卡: +1 抽奖机会")
+                        } else if (signRes.errorCode.contains("REPEAT") || signRes.errorCode.contains("ALREADY") ||
+                            signRes.errorMsg.contains("已签到")
+                        ) {
                             Status.setFlagToday(FLAG_SIGNIN)
                         }
+                        // 其余失败不置位：属可重试状态，下一轮触发会继续尝试
                     }
                 } catch (e: Throwable) {
                     Log.error(TAG, "签到打卡异常: ${e.message}")
@@ -119,18 +108,18 @@ object FreeOrderTask {
             // 3. 推进全量互动浏览与打点任务（做任务获得抽奖次数）
             try {
                 val taskListResp = LuckyStarRpcCall.queryTaskList(cookie)
-                val taskArray = extractTaskArray(taskListResp)
+                val taskArray = LuckyStarRpcCall.extractTaskArray(taskListResp)
                 if (taskArray != null && taskArray.length() > 0) {
                     var finishedCount = 0
                     var blocked = false
-                    // 会话级防重：本日同一答题任务只尝试一次（猜价格/趣味话题）
-                    val attemptedQuizTasks = mutableSetOf<Long>()
 
                     for (i in 0 until taskArray.length()) {
+                        // 账号已被平台标记风控时立即中止，避免继续发请求加重标记
+                        if (ElemeMtopUtil.accountRiskFlagged) break
                         val task = taskArray.optJSONObject(i) ?: continue
                         val missionDefId = task.optLong("missionDefId").takeIf { it > 0 } ?: task.optLong("id")
                         val missionXId = task.optString("missionXId")
-                        val title = taskTitle(task)
+                        val title = LuckyStarRpcCall.taskTitle(task)
                         val receiveStatus = task.optString("receiveStatus")
                         val rewardStatus = task.optString("rewardStatus")
                         val actionConfig = task.optJSONObject("actionConfig")
@@ -186,7 +175,9 @@ object FreeOrderTask {
 
                         if (actionType == "PAGEVIEW" && pageSpm.isNotEmpty()) {
                             if (blocked) continue
-                            val pageStageTime = actionValue?.optInt("pageStageTime")?.takeIf { it > 0 } ?: if (title.contains("15秒")) 15 else 10
+                            // 停留时长对齐 幸运星.py：有 pageStageTime 取 max(3, 值)，缺失时随机 8~16 秒
+                            val pageStageTime = actionValue?.optInt("pageStageTime")?.let { maxOf(3, it) }
+                                ?: RandomUtil.nextInt(8, 16)
                             Thread.sleep(pageStageTime * 1000L + RandomUtil.nextGaussianLong(500, 1500))
 
                             val viewRes = LuckyStarRpcCall.reportPageView(
@@ -194,7 +185,10 @@ object FreeOrderTask {
                                 missionDefId = missionDefId,
                                 pageSpm = pageSpm,
                                 viewTime = pageStageTime + RandomUtil.nextInt(0, 3),
-                                instanceId = task.optString("instanceId").takeIf { it.isNotEmpty() }
+                                instanceId = task.optString("instanceId").takeIf { it.isNotEmpty() },
+                                collectionId = task.optString("missionCollectionId")
+                                    .ifEmpty { task.optString("missionCollectId") }
+                                    .ifEmpty { LuckyStarRpcCall.COLLECTION_ID }
                             )
                             if (viewRes.isSuccess) {
                                 Thread.sleep(RandomUtil.nextGaussianLong(1200, 2000))
@@ -243,7 +237,7 @@ object FreeOrderTask {
                             // 贸然上报必然 417 防作弊拦截，且会误拉黑本来可正常领奖的任务
                             val total = actionValue?.optInt("finalStageCount")?.takeIf { it > 0 }
                                 ?: task.optJSONObject("stage")?.optInt("targetCount")?.takeIf { it > 0 }
-                                ?: if (title.contains("3个") || title.contains("3次")) 3 else 1
+                                ?: 1 // 对齐 幸运星.py：仅取 finalStageCount，缺失默认 1，不按标题猜次数
                             val done = task.optJSONObject("stage")?.optInt("count") ?: 0
                             val need = (total - done).coerceAtLeast(0).coerceAtMost(3)
                             // 标记本任务是否已被风控拉黑：拉黑后立即终止该任务的一切后续请求（包括领奖）
@@ -301,103 +295,65 @@ object FreeOrderTask {
                                     }
                                 }
                             }
-                        } else if (actionType == "QUIZ" || title.contains("猜价格") || title.contains("猜一猜")) {
-                            // 猜价格/趣味话题答题（对齐 幸运星.py quiz 流程）：actId 从任务 actionValue 提取
-                            if (attemptedQuizTasks.contains(missionDefId)) {
-                                continue
-                            }
-                            attemptedQuizTasks.add(missionDefId)
-                            val actionValue = actionConfig?.optJSONObject("actionValue")
-                            val actId = actionValue?.optString("actId")?.takeIf { it.isNotEmpty() }
-                                ?: actionValue?.optString("quizActId")?.takeIf { it.isNotEmpty() }
-                            if (actId.isNullOrEmpty()) {
-                                Log.runtime(TAG, "[抽免单] 答题任务[$title]未提取到 actId，跳过本次尝试")
-                            } else {
-                                val qResp = LuckyStarRpcCall.quizQuery(cookie, actId)
-                                if (qResp == null) {
-                                    Log.runtime(TAG, "[抽免单] 答题[$title]取题失败: ${ElemeMtopUtil.lastError ?: "无响应"}")
-                                } else {
-                                    val d = qResp.optJSONObject("data") ?: qResp
-                                    val copyId = d.optString("copyId")
-                                    val q = d.optJSONObject("questionDTO")
-                                        ?: d.optJSONArray("questionList")?.optJSONObject(0)
-                                    val qid = q?.opt("questionId")
-                                    val opts = q?.optJSONArray("optionList") ?: q?.optJSONArray("options")
-                                    val firstOpt = opts?.optJSONObject(0)
-                                    val oid = firstOpt?.opt("optionId") ?: firstOpt?.opt("id")
-                                    if (qid == null || oid == null) {
-                                        Log.other("饿了么", "[抽免单] 答题[$title]: 今日无题或题目结构异常，跳过")
-                                    } else {
-                                        // 取第一个选项提交（猜价格类不校验对错，仅计次；对齐 py opts[0] 策略）
-                                        val subRes = LuckyStarRpcCall.quizSubmit(cookie, actId, copyId, qid, oid)
-                                        if (subRes.isSuccess) {
-                                            Log.other("饿了么", "[抽免单] 答题[$title]: 已提交答案")
-                                            Thread.sleep(RandomUtil.nextGaussianLong(1000, 1800))
-                                            val awRes = LuckyStarRpcCall.quizAward(cookie, actId, copyId)
-                                            if (awRes.isSuccess) {
-                                                Log.other("饿了么", "[抽免单] 答题[$title]: +1 抽奖机会")
-                                                finishedCount++
-                                            }
-                                        } else {
-                                            val rawResp = subRes.rawJson?.toString() ?: ElemeMtopUtil.lastResponse ?: subRes.errorMsg
-                                            Log.error(TAG, "[抽免单] ❌ 答题[$title]提交失败: ${subRes.errorCode}::${subRes.errorMsg}\n完整响应:\n$rawResp")
-                                            val msg = subRes.errorMsg
-                                            if (subRes.errorCode == "405" || msg.contains("405") || msg.contains("受限") ||
-                                                subRes.errorCode == "417" || msg.contains("作弊")) {
-                                                val reason = if (subRes.errorCode == "417" || msg.contains("417")) "417::防作弊打点拦截" else "405::行为受限"
-                                                ElemeRiskTaskEntity.recordRiskTask(missionDefId.toString(), title, reason)
-                                                TaskBlacklist.autoAddToBlacklist(missionDefId.toString(), title, subRes.errorCode, subRes.errorMsg)
-                                                Log.other("饿了么", "[抽免单] 🛡️ 任务[$missionDefId - $title]因【$reason】已加入风控名单")
-                                            }
-                                        }
-                                    }
-                                }
-                                Thread.sleep(RandomUtil.nextGaussianLong(1200, 2200))
-                            }
                         }
                     }
+                }
+
+                // 趣味话题答题：actId 不在任务列表返回中（只在答题页 URL 上），
+                // 仅在设置页【答题活动actId】填写后执行一次，未填写不发任何请求
+                if (!ElemeMtopUtil.accountRiskFlagged) {
+                    ElemeQuiz.run(cookie, "[抽免单]")
                 }
             } catch (e: Throwable) {
                 Log.error(TAG, "免单任务推进异常: ${e.message}")
             }
 
-            // 4. 夺宝抽免单（消耗获得的抽奖机会进行抽奖）
+            // 4. 夺宝抽免单（每日单次任务，当日次数用完后置位标记，整天不再请求）
             try {
                 if (!Status.hasFlagToday(FLAG_LOTTERY_DONE)) {
                     val resourceData = dataObj?.optJSONObject("resource")?.optJSONObject("data")
                     val lotteries = resourceData?.optJSONArray("INTERACT_CENTER_LOTTERY")
                         ?: dataObj?.optJSONArray("lotteries")
                     if (lotteries != null && lotteries.length() > 0) {
+                        var drawInterrupted = false
                         for (j in 0 until lotteries.length()) {
+                            if (drawInterrupted) break
                             val lot = lotteries.optJSONObject(j) ?: continue
+                            // 对齐 幸运星.py：actId 或 componentId 缺失的组件直接跳过，不发无效请求
+                            if (lot.optString("actId").isEmpty() || lot.optString("componentId").isEmpty()) continue
                             var drawCount = 0
-                            val maxDraws = 3
+                            val maxDraws = 1 // 对齐 幸运星.py：ELM_DRAW_TIMES 默认 1，每个组件抽一次，失败即停
                             while (drawCount < maxDraws) {
                                 drawCount++
                                 val drawRes = LuckyStarRpcCall.drawLottery(cookie, lot)
                                 if (drawRes.isSuccess) {
-                                    val prize = ElemeMtopUtil.extractPrizeDesc(drawRes.data ?: drawRes.rawJson).ifEmpty { "奖品" }
-                                    Log.other("饿了么", "[抽免单] 🎁 夺宝抽免单: $prize")
-                                    if (prize.contains("免单")) {
-                                        Notify.sendPrizeNotification("🎉 饿了么免单中奖通知", "恭喜在夺宝抽奖中成功命中【$prize】！请及时使用。")
+                                    val prize = ElemeMtopUtil.extractPrizeDesc(drawRes.data ?: drawRes.rawJson)
+                                    if (prize.isNotEmpty()) {
+                                        Log.other("饿了么", "[抽免单] 🎁 夺宝抽免单: $prize")
+                                        if (prize.contains("免单")) {
+                                            Notify.sendPrizeNotification("🎉 饿了么免单中奖通知", "恭喜在夺宝抽奖中成功命中【$prize】！请及时使用。")
+                                        }
+                                    } else {
+                                        val rawResp = drawRes.rawJson?.toString() ?: drawRes.data?.toString() ?: "无响应内容"
+                                        Log.other("饿了么", "[抽免单] 🎁 夺宝抽免单: 奖励描述缺失，完整响应:\n$rawResp")
                                     }
                                     Thread.sleep(RandomUtil.nextGaussianLong(1200, 2000))
                                 } else {
-                                    val msg = drawRes.errorMsg
-                                    if (msg.contains("已用完") || msg.contains("不足") || msg.contains("日剩") ||
-                                        drawRes.errorCode.contains("NO_ENOUGH") || drawRes.errorCode.contains("LIMIT") ||
-                                        drawRes.errorCode.contains("CHANCE")) {
-                                        val subMsg = msg.substringAfterLast("::").take(20).ifEmpty { "日剩余机会不足" }
-                                        Log.other("饿了么", "[抽免单] ⏸️ 夺宝次数已用完 ($subMsg)")
+                                    // 判定语义对齐 幸运星.py draw_lottery：
+                                    // 次数类 NO_ENOUGH_REMAIN|CHANCE|已抽完|次数|日剩；未中奖类 未中奖|NO_DECISION_STRATEGY|NOT_WINNING
+                                    val msg = "${drawRes.errorCode} ${drawRes.errorMsg}"
+                                    val detail = msg.substringAfterLast("::").take(20)
+                                    if (Regex("NO_ENOUGH_REMAIN|CHANCE|已抽完|次数|日剩", RegexOption.IGNORE_CASE).containsMatchIn(msg)) {
+                                        Log.other("饿了么", "[抽免单] ⏸️ 夺宝次数已用完(${detail.ifEmpty { "日剩余机会不足" }})")
                                         Status.setFlagToday(FLAG_LOTTERY_DONE)
-                                        break
+                                        drawInterrupted = true
+                                    } else if (Regex("未中奖|NO_DECISION_STRATEGY|NOT_WINNING", RegexOption.IGNORE_CASE).containsMatchIn(msg)) {
+                                        Log.other("饿了么", "[抽免单] 🎰 夺宝未中奖")
                                     } else {
-                                        break
+                                        Log.other("饿了么", "[抽免单] 🎰 夺宝未成功: ${detail.ifEmpty { msg.take(30) }}")
                                     }
+                                    break
                                 }
-                            }
-                            if (Status.hasFlagToday(FLAG_LOTTERY_DONE)) {
-                                break
                             }
                         }
                     }
@@ -406,38 +362,31 @@ object FreeOrderTask {
                 Log.error(TAG, "夺宝抽免单异常: ${e.message}")
             }
 
-            // 5. 下单赢免单抽奖（每日仅抽一次订单抽奖）
-            Thread.sleep(RandomUtil.nextGaussianLong(500, 1000))
-            val orderFreeData = dataObj?.optJSONObject("orderFreeDraw")
-            val ofRes = FreeOrderRpcCall.orderFreeDraw(cookie, orderFreeData)
-            // 仅抽奖成功才置位：失败/临时无资格时留空，交给后续幸运星任务兜底重试，
-            // 避免无条件置位把幸运星的下单免单抽奖永久屏蔽
-            if (ofRes.isSuccess) {
-                Status.setFlagToday(FLAG_ORDER_FREE)
-                val prize = ElemeMtopUtil.extractPrizeDesc(ofRes.data ?: ofRes.rawJson)
-                if (prize.isNotEmpty()) {
-                    Log.other("饿了么", "[抽免单] 🎲 下单免单抽奖: $prize")
-                    if (prize.contains("免单")) {
-                        Log.other("饿了么", "[抽免单] 🎉 恭喜成功抽中免单大奖: $prize")
-                        Notify.sendPrizeNotification("🎉 饿了么免单中奖通知", "恭喜在下单免单抽奖中成功命中【$prize】！请及时使用。")
+            // 5. 下单赢免单抽奖（每日单次任务，当日抽成功一次即置位，整天不再重复请求）
+            if (!Status.hasFlagToday(FLAG_ORDER_FREE)) {
+                Thread.sleep(RandomUtil.nextGaussianLong(500, 1000))
+                val orderFreeData = dataObj?.optJSONObject("orderFreeDraw")
+                val ofRes = LuckyStarRpcCall.drawOrderFree(cookie, orderFreeData)
+                if (ofRes.isSuccess) {
+                    Status.setFlagToday(FLAG_ORDER_FREE)
+                    val prize = ElemeMtopUtil.extractPrizeDesc(ofRes.data ?: ofRes.rawJson)
+                    if (prize.isNotEmpty()) {
+                        Log.other("饿了么", "[抽免单] 🎲 下单免单抽奖: $prize")
+                        if (prize.contains("免单")) {
+                            Log.other("饿了么", "[抽免单] 🎉 恭喜成功抽中免单大奖: $prize")
+                            Notify.sendPrizeNotification("🎉 饿了么免单中奖通知", "恭喜在下单免单抽奖中成功命中【$prize】！请及时使用。")
+                        }
+                    } else {
+                        // 服务端未返回奖励描述时直接打印完整响应，便于核实实际抽奖结果
+                        val rawResp = ofRes.rawJson?.toString() ?: ofRes.data?.toString() ?: "无响应内容"
+                        Log.other("饿了么", "[抽免单] 🎲 下单免单抽奖: 奖励描述缺失，完整响应:\n$rawResp")
                     }
-                } else {
-                    // 服务端未返回奖励描述时直接打印完整响应，便于核实实际抽奖结果
-                    val rawResp = ofRes.rawJson?.toString() ?: ofRes.data?.toString() ?: "无响应内容"
-                    Log.other("饿了么", "[抽免单] 🎲 下单免单抽奖: 奖励描述缺失，完整响应:\n$rawResp")
                 }
-            } else {
-                val msg = ofRes.errorMsg
-                if (msg.contains("已抽") || msg.contains("不足") || msg.contains("无资格") || msg.contains("未下单") || ofRes.errorCode.contains("LIMIT")) {
-                    Log.other("饿了么", "[抽免单] 🎲 下单免单抽奖: 暂无待抽订单或今日已抽")
-                } else {
-                    Log.other("饿了么", "[抽免单] 🎲 下单免单抽奖: 未中奖或暂无待抽订单")
-                }
+                // 失败不置位、也不再臆测失败原因（对齐 py：orderfree_draw 失败仅静默处理），
+                // 下次触发仍会重试，实际错误可由 ElemeMtopUtil 的统一错误日志查看
             }
 
-            // 免单兜底全流程执行完毕，置位本任务独立标记（不再置位 FLAG_FLOW_DONE，
-            // 以免影响幸运星任务的独立执行；FLAG_FLOW_DONE 仅由幸运星任务全流程完成时置位）
-            Status.setFlagToday(FLAG_FREEORDER_DONE)
+            // 任务执行完毕，不再置位任何入口标记，下次触发仍会重新拉取并处理
         } catch (t: Throwable) {
             val msg = "[抽免单] ❌ 执行异常: ${t.message}"
             Log.error(TAG, msg)
@@ -447,13 +396,6 @@ object FreeOrderTask {
         }
     }
 
-    private fun extractTaskArray(root: JSONObject?): JSONArray? {
-        if (root == null) return null
-        val data = root.optJSONObject("data") ?: root
-        return data.optJSONArray("mlist")
-            ?: data.optJSONArray("missionStageDTOList")
-            ?: data.optJSONArray("missionList")
-    }
 
     /**
      * 领奖失败统一处理：识别任务已关闭或不可用（累计阶段永远无法达成、活动下线等），自动加入风控名单停止重试
@@ -467,7 +409,7 @@ object FreeOrderTask {
 
     private fun findTask(root: JSONObject?, missionDefId: Long): JSONObject? {
         if (root == null) return null
-        val array = extractTaskArray(root) ?: return null
+        val array = LuckyStarRpcCall.extractTaskArray(root) ?: return null
         for (i in 0 until array.length()) {
             val item = array.optJSONObject(i) ?: continue
             val defId = item.optLong("missionDefId").takeIf { it > 0 } ?: item.optLong("id")
@@ -478,23 +420,4 @@ object FreeOrderTask {
         return null
     }
 
-    private fun taskTitle(task: JSONObject): String {
-        val pinned = task.optJSONObject("ext")?.optJSONObject("extValue")?.optJSONObject("pinnedTaskTitle")?.optString("value")
-        var name = if (!pinned.isNullOrEmpty()) pinned else task.optString("missionName").ifEmpty {
-            task.optString("showTitle").ifEmpty {
-                task.optString("taskName")
-            }
-        }
-        if (name.isEmpty()) name = task.optLong("missionDefId").toString()
-        // 累计类任务标题中的模板占位符用真实进度替换（如 浏览页面得奖励(2/3)）
-        if (name.contains("{current}") || name.contains("{total}")) {
-            val stageObj = task.optJSONObject("stage")
-            val cur = stageObj?.optInt("count") ?: 0
-            val total = stageObj?.optInt("targetCount")?.takeIf { it > 0 }
-                ?: task.optJSONObject("actionConfig")?.optJSONObject("actionValue")?.optInt("finalStageCount")?.takeIf { it > 0 }
-                ?: 0
-            name = name.replace("{current}", cur.toString()).replace("{total}", total.toString())
-        }
-        return name
-    }
 }

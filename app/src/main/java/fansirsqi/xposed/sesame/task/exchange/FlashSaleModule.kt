@@ -60,11 +60,26 @@ class FlashSaleModule : BaseFlashSaleTask() {
         0, 0, 23
     )
 
+    // 饿了么幸运星商城秒杀
+    private val enableElemeMall = BooleanModelField("enableElemeMall", "饿了么商城秒杀", false)
+    private val elemeMallList = SelectModelField(
+        "elemeMallList",
+        "饿了么商城 | 兑换商品",
+        linkedSetOf(),
+        ElemeMallEX::getExchangeItemListForUI
+    )
+    private val elemeMallTargetHour = IntegerModelField(
+        "elemeMallTargetHour",
+        "饿了么商城 | 秒杀开抢整点(0-23点)",
+        10, 0, 23
+    )
+
     // 子任务实例
     private val neverLandEX = NeverLandEX()
     protected val packageExchangeEX = PackageExchangeEX()
     protected val gameCenterGoldEX = GameCenterGoldEX()
     protected val goldenBeanMallEX = GoldenBeanMallEX()
+    protected val elemeMallEX = ElemeMallEX()
 
     // 每个子任务的执行状态控制（key 为任务名，synchronized 保护）
     private val subTaskFutures = HashMap<String, Future<*>>()
@@ -114,6 +129,10 @@ class FlashSaleModule : BaseFlashSaleTask() {
         goldenBeanMallEX.enableGoldenBeanMall = enableGoldenBeanMall
         goldenBeanMallEX.goldenBeanMallList = goldenBeanMallList
         goldenBeanMallEX.targetHourField = goldenBeanMallTargetHour
+
+        // 饿了么商城秒杀
+        elemeMallEX.elemeMallList = elemeMallList
+        elemeMallEX.targetHourField = elemeMallTargetHour
     }
 
     /**
@@ -189,6 +208,9 @@ class FlashSaleModule : BaseFlashSaleTask() {
         fields.addField(enableGoldenBeanMall)
         fields.addField(goldenBeanMallList)
         fields.addField(goldenBeanMallTargetHour)
+        fields.addField(enableElemeMall)
+        fields.addField(elemeMallList)
+        fields.addField(elemeMallTargetHour)
         return fields
     }
 
@@ -202,12 +224,15 @@ class FlashSaleModule : BaseFlashSaleTask() {
         gameCenterGoldEX.targetHourField = gameCenterGoldTargetHour
         goldenBeanMallEX.goldenBeanMallList = goldenBeanMallList
         goldenBeanMallEX.targetHourField = goldenBeanMallTargetHour
+        elemeMallEX.elemeMallList = elemeMallList
+        elemeMallEX.targetHourField = elemeMallTargetHour
         schedulePreloadIfNeeded()
 
         if (enableNeverLand.value) submitSubTask("健康岛", neverLandEX)
         if (enablePackageExchange.value) submitSubTask("包裹兑换", packageExchangeEX)
         if (enableGameCenterGold.value) submitSubTask("游戏金币秒杀", gameCenterGoldEX)
         if (enableGoldenBeanMall.value) submitSubTask("金豆商城秒杀", goldenBeanMallEX)
+        if (enableElemeMall.value) submitSubTask("饿了么商城秒杀", elemeMallEX)
     }
 
     /**

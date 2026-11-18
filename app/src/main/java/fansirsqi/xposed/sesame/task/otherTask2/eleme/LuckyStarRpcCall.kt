@@ -25,9 +25,10 @@ object LuckyStarRpcCall {
     const val API_ORDERFREE_DRAW = "mtop.alsc.interact.et.orderfree.draw"
 
     // 兑换商城与资产
+    /** 幸运星资产明细（今日收益统计），参数与 幸运星.py wallet() 一致 */
+    const val API_PROPERTY_DETAIL = "mtop.koubei.interaction.center.common.querypropertydetail"
     const val API_MALL_LIST = "mtop.alsc.interact.playapp.reward.right.mallrecall"
     const val API_MALL_EXCHANGE = "mtop.alsc.interact.playapp.reward.right.exchange"
-    const val API_PROPERTY_DETAIL = "mtop.koubei.interaction.center.common.querypropertydetail"
 
     // 前置营销弹窗与权益召回（对齐 tb.log 真实生命周期）
     const val API_CARD_DATA_RECALL = "mtop.alsc.card.cardDataRecallFacade"
@@ -40,7 +41,6 @@ object LuckyStarRpcCall {
 
     const val ASAC_PRIZE = "alscadOjfleDPawx9zVoT0"
     const val ASAC_PAGEVIEW = "alscFS8BNTO6jivYS7XOAM"
-    const val ASAC_TRIGGER = "2A21607NIIT1ND5C4YXJ6C"
     const val ASAC_SIGNIN = "alsc3Lhy681SA5TT4iHgL3"
     const val ASAC_LOTTERY_DRAW = "alscdZLQXT9DEAlXvQQOLO"
     const val ASAC_ORDER_FREE_DRAW = "alscrX2P4rmvl0NhmQgr9x"
@@ -181,36 +181,7 @@ object LuckyStarRpcCall {
     }
 
     /**
-     * 领取任务奖励（参数严格对齐真实抓包规范）
-     */
-    fun receivePrize(
-        cookie: String,
-        missionId: Long,
-        missionXId: String,
-        collectionId: String = COLLECTION_ID
-    ): ElemeMtopUtil.MtopResult {
-        val (lat, lng) = getCoordinates()
-        val locInfo = "[\"{\\\"lng\\\":\\\"$lng\\\",\\\"lat\\\":\\\"$lat\\\"}\"]"
-        val data = JSONObject().apply {
-            put("missionCollectionId", collectionId.toIntOrNull() ?: 3112)
-            put("missionId", missionId)
-            put("missionXId", missionXId)
-            put("extInfo", "{\"triggerScene\":\"MISSION_LIST\"}")
-            put("count", 1)
-            put("bizScene", BIZ_SCENE)
-            put("accountPlan", "HAVANA_COMMON")
-            put("longitude", lng)
-            put("latitude", lat)
-            put("locationInfos", locInfo)
-            put("spPageId", SP_PAGE_ID)
-            put("instance", "INNER")
-        }
-        val headers = mapOf("asac" to ASAC_PRIZE)
-        return ElemeMtopUtil.execute(API_RECEIVE_PRIZE, data.toString(), cookie, method = "GET", extraHeaders = headers)
-    }
-
-    /**
-     * 浏览任务埋点上报（模拟停留 15 秒并提交事件）
+     * 浏览任务埋点上报（模拟停留并提交事件）
      */
     fun reportPageView(
         cookie: String,
@@ -240,7 +211,7 @@ object LuckyStarRpcCall {
             put("spPageId", SP_PAGE_ID)
             put("instance", "INNER")
         }
-        val headers = mapOf("asac" to "alscFS8BNTO6jivYS7XOAM")
+        val headers = mapOf("asac" to ASAC_PAGEVIEW)
         return ElemeMtopUtil.execute(API_PAGEVIEW, data.toString(), cookie, method = "GET", version = "1.1", extraHeaders = headers)
     }
 
@@ -313,20 +284,6 @@ object LuckyStarRpcCall {
     }
 
     /**
-     * 校验 checkLogin 响应是否为有效登录态
-     */
-    fun isLoginSuccess(resp: JSONObject?): Boolean {
-        if (resp == null) return false
-        val ret = resp.optJSONArray("ret")?.optString(0).orEmpty()
-        val data = resp.optJSONObject("data") ?: resp
-        val errorCode = data.optString("errorCode", "")
-        val errorMsg = data.optString("errorMessage", "")
-        if (errorCode == "000502" || errorMsg.contains("需要登录") || errorMsg.contains("未登录")) return false
-        if (ret.contains("SESSION_EXPIRED") || ret.contains("NOT_LOGIN")) return false
-        return ret.startsWith("SUCCESS") || data.optBoolean("isLogin", false) || data.optBoolean("login", false) || data.has("userId")
-    }
-
-    /**
      * 页面动效、气泡、弹窗任务组件加载（模拟页面渲染环境，对应 tb.log 第 1030 行）
      */
     fun initPageComponents(cookie: String): JSONObject? {
@@ -343,6 +300,57 @@ object LuckyStarRpcCall {
             put("instance", "INNER")
         }
         return ElemeMtopUtil.send(API_HOMEPAGE, data.toString(), cookie, method = "GET", version = "1.0")
+    }
+
+    /**
+     * 从 querytask 响应中取出任务数组（各接口返回的键名不一致，按真实抓包顺序回退）。
+     * 原本在 LuckyStarTask 与 FreeOrderTask 中各有一份逐字相同的副本，统一到此处。
+     */
+    @JvmStatic
+    fun extractTaskArray(root: JSONObject?): org.json.JSONArray? {
+        if (root == null) return null
+        val data = root.optJSONObject("data") ?: root
+        return data.optJSONArray("mlist")
+            ?: data.optJSONArray("missionStageDTOList")
+            ?: data.optJSONArray("missionList")
+    }
+
+    /**
+     * 按 missionDefId 在任务数组中定位任务对象。
+     */
+    @JvmStatic
+    fun findTask(root: JSONObject?, missionDefId: Long): JSONObject? {
+        val array = extractTaskArray(root) ?: return null
+        for (i in 0 until array.length()) {
+            val item = array.optJSONObject(i) ?: continue
+            val defId = item.optLong("missionDefId").takeIf { it > 0 } ?: item.optLong("id")
+            if (defId == missionDefId) return item
+        }
+        return null
+    }
+
+    /**
+     * 任务展示标题：优先 pinnedTaskTitle，其次多个候选字段，最后退化为 missionDefId；
+     * 标题中的 {current}/{total} 模板占位符用真实进度替换。
+     */
+    @JvmStatic
+    fun taskTitle(task: JSONObject): String {
+        val pinned = task.optJSONObject("ext")?.optJSONObject("extValue")
+            ?.optJSONObject("pinnedTaskTitle")?.optString("value")
+        var name = if (!pinned.isNullOrEmpty()) pinned else task.optString("missionName").ifEmpty {
+            task.optString("showTitle").ifEmpty { task.optString("taskName") }
+        }
+        if (name.isEmpty()) name = task.optLong("missionDefId").toString()
+        if (name.contains("{current}") || name.contains("{total}")) {
+            val stageObj = task.optJSONObject("stage")
+            val cur = stageObj?.optInt("count") ?: 0
+            val total = stageObj?.optInt("targetCount")?.takeIf { it > 0 }
+                ?: task.optJSONObject("actionConfig")?.optJSONObject("actionValue")
+                    ?.optInt("finalStageCount")?.takeIf { it > 0 }
+                ?: 0
+            name = name.replace("{current}", cur.toString()).replace("{total}", total.toString())
+        }
+        return name
     }
 
     /**
@@ -418,32 +426,32 @@ object LuckyStarRpcCall {
         strategy: String,
         award: JSONObject?
     ): ElemeMtopUtil.MtopResult {
-        if (copyId.isEmpty()) {
-            return ElemeMtopUtil.MtopResult(isSuccess = false, isNotLogin = false, errorCode = "EMPTY_COPY_ID", errorMsg = "copyId为空")
-        }
         val (lat, lng) = getCoordinates()
         val data = JSONObject().apply {
             put("bizScene", BIZ_SCENE)
             put("latitude", lat)
             put("longitude", lng)
-            put("copyId", copyId)
+            // 对齐 幸运星.py signin：copyId 仅在有值时附加，缺失不阻断签到
+            if (copyId.isNotEmpty()) put("copyId", copyId)
+            // 对齐 py 注释「实测必传」：今日奖励的 actCode / sceneCode / prizeMark / signInDay，
+            // 缺任意一个都会返回 FAIL_BIZ_REWARD_MODE_NOT_SIGNIN_AND_RECEIVE
             if (award != null) {
-                if (award.has("actCode")) put("actCode", award.optString("actCode"))
-                if (award.has("sceneCode")) put("sceneCode", award.optString("sceneCode"))
-                if (award.has("prizeMark")) put("prizeMark", award.optString("prizeMark"))
-                if (award.has("signInDay")) put("signInDay", award.optInt("signInDay"))
+                award.optString("actCode").takeIf { it.isNotEmpty() }?.let { put("actCode", it) }
+                award.optString("sceneCode").takeIf { it.isNotEmpty() }?.let { put("sceneCode", it) }
+                award.optString("prizeMark").takeIf { it.isNotEmpty() }?.let { put("prizeMark", it) }
+                award.optString("signInDay").takeIf { it.isNotEmpty() }?.let { put("signInDay", it) }
             }
         }
         val headers = mapOf("asac" to ASAC_SIGNIN)
-        // 接口尝试顺序：signinandreceive 为两个抓包与 py 均确认存在的接口，优先且必试；
-        // recordsignin 在当前小程序版本实测返回 FAIL_SYS_API_NOT_FOUNDED（API 不存在），
-        // 仅作为最后兜底各试一次（v1.1/v1.0），失败属预期，不视为签到失败。
-        // 无论 strategy 取值如何都先走确定可用的 signinandreceive，避免每次无谓的下线 API 探测。
-        val order = listOf(
-            Pair(API_SIGNIN, "1.0"),
-            Pair(API_RECORD_SIGNIN, "1.1"),
-            Pair(API_RECORD_SIGNIN, "1.0")
-        )
+        // 接口尝试顺序严格对齐 幸运星.py signin：
+        //   strategy == "SIGNIN_AND_RECEIVE" -> signinandreceive(1.0) 在前，recordsignin(1.1) 兜底
+        //   其余                              -> recordsignin(1.1) 在前，signinandreceive(1.0) 兜底
+        // py 只对 recordsignin 使用 v1.1，不存在 v1.0 的额外探测。
+        val order = if (strategy == "SIGNIN_AND_RECEIVE") {
+            listOf(Pair(API_SIGNIN, "1.0"), Pair(API_RECORD_SIGNIN, "1.1"))
+        } else {
+            listOf(Pair(API_RECORD_SIGNIN, "1.1"), Pair(API_SIGNIN, "1.0"))
+        }
 
         var lastResult = ElemeMtopUtil.MtopResult(isSuccess = false, isNotLogin = false, errorMsg = "未执行")
         for ((api, ver) in order) {
@@ -466,6 +474,14 @@ object LuckyStarRpcCall {
         val (lat, lng) = getCoordinates()
         val actId = lotteryComponent.optString("actId")
         val componentId = lotteryComponent.optString("componentId")
+        // 对齐 幸运星.py draw_lottery：缺 actId 或 componentId 的组件不发起请求
+        if (actId.isEmpty() || componentId.isEmpty()) {
+            return ElemeMtopUtil.MtopResult(
+                isSuccess = false, isNotLogin = false,
+                errorCode = "INVALID_LOTTERY_COMPONENT",
+                errorMsg = "抽奖组件缺少 actId/componentId，已跳过"
+            )
+        }
         val data = JSONObject().apply {
             put("actId", actId)
             put("componentId", componentId)
@@ -501,8 +517,12 @@ object LuckyStarRpcCall {
     }
 
     /**
-     * 查询幸运星明细列表（严格对齐 幸运星.py property_detail 规范与参数）
+     * 查询幸运星资产明细（严格对齐 幸运星.py wallet() 的 property_detail 调用）。
+     *
+     * 该接口虽未出现在 tb.log 抓包中（抓包期间未打开明细页），但 py 实跑日志
+     * 明确返回「资产:今日 +728」，证明接口真实可用，用于统计当日 GRANT 类收益。
      */
+    @JvmStatic
     fun queryPropertyDetail(cookie: String, pageNo: Int = 1, pageSize: Int = 20): JSONObject? {
         val (lat, lng) = getCoordinates()
         val data = JSONObject().apply {
@@ -513,14 +533,13 @@ object LuckyStarRpcCall {
             put("convertType", "INTERACT_CENTER")
             put("pageNo", pageNo)
             put("pageSize", pageSize)
-            put("spPageId", SP_PAGE_ID)
-            put("instance", "INNER")
         }
         return ElemeMtopUtil.send(API_PROPERTY_DETAIL, data.toString(), cookie, method = "GET", version = "1.0")
     }
 
     /**
-     * 查询兑换商城列表（严格对齐 幸运星.py mall 规范与参数）
+     * 查询兑换商城列表（参数对齐 tb.log 抓包的 mallrecall 真实请求：
+     * bizScene、version、propertyBizType=STAR、tabType=RECOMMEND、pageNo、pageSize、经纬度、spPageId、instance=INNER）
      */
     @JvmStatic
     fun queryMallList(cookie: String): JSONObject? {
@@ -529,6 +548,7 @@ object LuckyStarRpcCall {
             put("bizScene", BIZ_SCENE)
             put("version", PAGE_VERSION)
             put("propertyBizType", "STAR")
+            put("tabType", "RECOMMEND")
             put("pageNo", 1)
             put("pageSize", 10)
             put("latitude", lat)
@@ -540,7 +560,10 @@ object LuckyStarRpcCall {
     }
 
     /**
-     * 发起幸运星兑换商城商品兑换（严格对齐 幸运星.py mall_exchange 规范与参数）
+     * 发起幸运星兑换商城商品兑换（严格对齐 幸运星.py mall_exchange 的入参集合）。
+     *
+     * 说明：该接口在 tb.log 抓包中未出现（抓包期间未发生兑换），实跑脚本也因星数不足未真正提交过，
+     * 因此入参以 幸运星.py 为准，不额外附加 spPageId/instance，避免引入未经验证的字段。
      */
     fun mallExchange(
         cookie: String,
@@ -560,8 +583,6 @@ object LuckyStarRpcCall {
             if (exchangeId.isNotEmpty()) put("exchangeId", exchangeId)
             if (actCode.isNotEmpty()) put("actCode", actCode)
             put("propertyBizType", "STAR")
-            put("spPageId", SP_PAGE_ID)
-            put("instance", "INNER")
         }
         val headers = mapOf("asac" to ASAC_MALL_EXCHANGE)
         return ElemeMtopUtil.execute(API_MALL_EXCHANGE, data.toString(), cookie, method = "GET", version = "1.0", extraHeaders = headers)

@@ -20,14 +20,30 @@ object ElemeMtopUtil {
     const val APP_KEY = "12574478"
     const val JSV = "2.4.12"
 
+    /** tb.log 抓包实测：支付宝小程序 WebView 内核版本 */
+    private const val CAPTURED_CHROME_VERSION = "126.0.6478.122"
+    /** tb.log 抓包实测：支付宝小程序 MYWeb 容器版本 */
+    private const val CAPTURED_MYWEB_VERSION = "1.11.126.260911211123"
+
+    /**
+     * 账号级风控标记（对齐 幸运星.py 的 risk_flagged）：
+     * 服务端返回 FAIL_BIZ_USER_RISK / 用户存在风险 / USER_RISK 说明账号已被平台标记，
+     * 此时继续发任何请求只会加重标记，因此本轮立即停止一切请求。
+     */
+    @Volatile
+    var accountRiskFlagged: Boolean = false
+        private set
+
+    /** 每轮任务开始时复位账号级风控标记 */
+    @JvmStatic
+    fun resetAccountRiskFlag() {
+        accountRiskFlagged = false
+    }
+
     @Volatile
     var lastError: String? = null
     @Volatile
     var lastResponse: String? = null
-
-    // 会话级缓存：最近一次网络拉取到的幸运星数量（打开商城弹窗不请求网络，仅展示该值；null 表示尚未拉取过）
-    @Volatile
-    private var lastKnownStarAmount: Int? = null
 
     // 单次会话级指纹缓存：确保单次任务执行生命周期内所有接口使用完全相同的真实设备指纹
     @Volatile
@@ -55,76 +71,16 @@ object ElemeMtopUtil {
             if (!customHttpUa.isNullOrBlank()) {
                 customHttpUa
             } else {
-                val deviceToken = if (model.startsWith(brand, ignoreCase = true)) {
-                    model
-                } else if (brand.equals("vivo", ignoreCase = true) || brand.equals("iQOO", ignoreCase = true)) {
-                    "$brand $model"
-                } else {
-                    model
-                }
-                // 对齐 tb.log 真实抓包的 HTTP User-Agent（支付宝小程序 webview）：
-                // ... Chrome/x MYWeb/1.11.x UWS/3.22.2.9999 UCBS/3.22.2..._220000000000
-                // Mobile Safari/537.36 NebulaSDK/1.8.100112 Nebula AlipayDefined(nt:WIFI,ws:...)
-                // AliApp(AP/..) AlipayClient/.. Language/zh-Hans isConcaveScreen/false Region/CNAriver/..
-                // 不再使用旧模板的 UCBrowser/Nebula SDK/GCanvas/Ariver 等字段
-                "Mozilla/5.0 (Linux; Android $release; $deviceToken Build/$buildId; wv) " +
-                    "AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/$chromeVer " +
-                    "MYWeb/1.11.$chromeVer UWS/3.22.2.9999 UCBS/3.22.2.9999_220000000000 " +
-                    "Mobile Safari/537.36 NebulaSDK/1.8.100112 Nebula " +
-                    "AlipayDefined(nt:WIFI,ws:$screenWs) AliApp(AP/$alipayVer) AlipayClient/$alipayVer " +
-                    "Language/zh-Hans isConcaveScreen/false Region/CNAriver/$alipayVer"
+                // 设备段取型号代码本身：tb.log 实测形态为「V2238A」，
+                // 旧实现对 vivo/iQOO 额外拼成「vivo V2238A」，与抓包不符，已移除
+                val deviceToken = model
+                // 严格对齐 tb.log 抓包中支付宝小程序 WebView 的真实 User-Agent 结构：
+                // Chrome/<内核> MYWeb/<版本> UWS/<版本> UCBS/<版本> Mobile Safari/537.36
+                // NebulaSDK/1.8.100112 Nebula AlipayDefined(...) AliApp(AP/...) AlipayClient/...
+                // 注意 Region/CN 与 Ariver/<版本> 在抓包中是连写的，中间无空格
+                "Mozilla/5.0 (Linux; Android $release; $deviceToken Build/$buildId; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/$chromeVer MYWeb/$ucVer UWS/3.22.2.9999 UCBS/3.22.2.9999_220000000000 Mobile Safari/537.36 NebulaSDK/1.8.100112 Nebula AlipayDefined(nt:WIFI,ws:$screenWs) AliApp(AP/$alipayVer) AlipayClient/$alipayVer Language/zh-Hans isConcaveScreen/false Region/CNAriver/$alipayVer"
             }
 
-        fun toJson(): String {
-            val jo = JSONObject()
-            jo.put("brand", brand)
-            jo.put("model", model)
-            jo.put("brandModel", brandModel)
-            jo.put("release", release)
-            jo.put("buildId", buildId)
-            jo.put("alipayVer", alipayVer)
-            jo.put("chromeVer", chromeVer)
-            jo.put("ucVer", ucVer)
-            jo.put("screenWs", screenWs)
-            jo.put("deviceId", deviceId)
-            if (!customHttpUa.isNullOrBlank()) jo.put("customHttpUa", customHttpUa)
-            if (!marketingName.isNullOrBlank()) jo.put("marketingName", marketingName)
-            return jo.toString()
-        }
-
-        fun summary(): String {
-            val name = marketingName?.takeIf { it.isNotBlank() } ?: brandModel
-            return if (!customHttpUa.isNullOrBlank()) {
-                "自定义UA ($name, Android $release)"
-            } else {
-                "$name ($brandModel, Android $release, Chrome/$chromeVer, UC/$ucVer)"
-            }
-        }
-
-        companion object {
-            fun fromJson(jsonStr: String): DeviceProfile? {
-                return runCatching {
-                    val jo = JSONObject(jsonStr)
-                    val alipayVer = jo.optString("alipayVer").ifEmpty {
-                        getSafeAlipayVersion("12.12.30.8000")
-                    }
-                    DeviceProfile(
-                        brand = jo.getString("brand"),
-                        model = jo.getString("model"),
-                        brandModel = jo.getString("brandModel"),
-                        release = jo.getString("release"),
-                        buildId = jo.getString("buildId"),
-                        alipayVer = alipayVer,
-                        chromeVer = jo.getString("chromeVer"),
-                        ucVer = jo.getString("ucVer"),
-                        screenWs = jo.getString("screenWs"),
-                        deviceId = jo.getString("deviceId"),
-                        customHttpUa = jo.optString("customHttpUa").takeIf { it.isNotEmpty() },
-                        marketingName = jo.optString("marketingName").takeIf { it.isNotEmpty() }
-                    )
-                }.getOrNull()
-            }
-        }
     }
 
     data class MtopResult(
@@ -229,19 +185,18 @@ object ElemeMtopUtil {
     private val ALL_REAL_MODELS: List<DeviceTemplate> =
         FAMILY_REDMI_K + FAMILY_XIAOMI_NUM + FAMILY_VIVO_IQOO + FAMILY_OPPO_ONEPLUS + FAMILY_HONOR + FAMILY_HUAWEI + FAMILY_SAMSUNG
 
-    private fun generateDynamicChromeVer(): String {
-        val major = RandomUtil.nextInt(156, 159) // 156 ~ 158 (2026年最新)
-        val build = RandomUtil.nextInt(7100, 7350)
-        val patch = RandomUtil.nextInt(30, 180)
-        return "$major.0.$build.$patch"
-    }
+    /**
+     * WebView 内核版本：支付宝内置 UCCore 决定，同一支付宝版本下与设备无关，
+     * 因此固定为 tb.log 抓包实测值 126.0.6478.122，而不是随机生成——
+     * 随机版本号会随每次会话变化，本身就是明显的机器特征。
+     */
+    private fun generateDynamicChromeVer(): String = CAPTURED_CHROME_VERSION
 
-    private fun generateDynamicUcVer(): String {
-        val sub1 = RandomUtil.nextInt(2, 6)
-        val sub2 = RandomUtil.nextInt(0, 9)
-        val build = RandomUtil.nextInt(1520, 1690)
-        return "17.$sub1.$sub2.$build"
-    }
+    /**
+     * MYWeb 容器版本：同样由支付宝小程序运行时决定，固定为 tb.log 实测值。
+     * 注意这不是 UC 浏览器版本（旧实现误填 17.x），UA 中该段形态为 MYWeb/1.11.126.260911211123。
+     */
+    private fun generateDynamicUcVer(): String = CAPTURED_MYWEB_VERSION
 
     private fun generateRandomDeviceId(): String {
         val chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789+/"
@@ -323,11 +278,11 @@ object ElemeMtopUtil {
 
         // 5. 提取 Chrome 版本
         val chromeVerMatch = Regex("""Chrome/([0-9\.]+)""", RegexOption.IGNORE_CASE).find(ua)
-        val chromeVer = chromeVerMatch?.groupValues?.get(1) ?: "157.0.7150.128"
+        val chromeVer = chromeVerMatch?.groupValues?.get(1) ?: CAPTURED_CHROME_VERSION
 
         // 6. 提取 UCBrowser 版本
         val ucVerMatch = Regex("""UCBrowser/([0-9\.]+)""", RegexOption.IGNORE_CASE).find(ua)
-        val ucVer = ucVerMatch?.groupValues?.get(1) ?: "17.4.2.1610"
+        val ucVer = ucVerMatch?.groupValues?.get(1) ?: CAPTURED_MYWEB_VERSION
 
         // 7. 提取屏幕分辨率 ws:412|0|915
         val wsMatch = Regex("""ws:([0-9\|]+)""", RegexOption.IGNORE_CASE).find(ua)
@@ -396,11 +351,15 @@ object ElemeMtopUtil {
             release = releaseVer,
             buildId = android.os.Build.ID.ifEmpty { "UP1A.231005.007" },
             alipayVer = alipayVer,
-            chromeVer = "130.0.6723.107",
-            ucVer = "17.4.2.1610",
+            // 内核与容器版本固定为抓包实测值：这两个值由支付宝运行时决定，不随机型变化。
+            // 旧实现写死 Chrome/130 + UC/17.4.2 属于虚构版本，与生成路径的模板不一致。
+            chromeVer = CAPTURED_CHROME_VERSION,
+            ucVer = CAPTURED_MYWEB_VERSION,
             screenWs = "412|0|915",
-            deviceId = "asdLYB2rw6kDAN+qYdXj9afD",
-            marketingName = "系统原版默认"
+            // 勿硬编码固定 DeviceId：每次实例化随机生成即可（会话内由 sessionProfile 缓存保证一致）
+            deviceId = generateRandomDeviceId(),
+            // 营销名未知时留空，避免拼出「系统原版默认-V2238A」这类无意义展示名
+            marketingName = null
         )
     }
 
@@ -412,43 +371,13 @@ object ElemeMtopUtil {
         sessionProfileUa = null
     }
 
-    @Volatile
-    private var lastUaChangeTimestamp: Long = 0L
-    private const val UA_CHANGE_COOLDOWN_MS = 10 * 60 * 1000L // 10分钟修改冷却防风控
-
     /**
-     * 获取近几年真实热门机型的完整真实 UA
+     * UA 变更后立即生效：清空会话级指纹缓存，下次请求按新 UA 重建。
+     * （原实现同时记录冷却时间戳并承诺 10 分钟冷却，但框架从未调用校验函数，
+     *   属无效承诺，已移除；UA 是否会被风控取决于服务端，不在此处阻断用户操作）
      */
-    @JvmStatic
-    fun getRandomRealDeviceUa(): String {
-        return runCatching {
-            generateDynamicProfile(2).httpUa()
-        }.getOrDefault("Mozilla/5.0 (Linux; U; Android 14; zh-CN; V2238A; Build/UP1A.231005.007) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/130.0.6723.107 UCBrowser/17.4.2.1610 Mobile Safari/537.36 AliApp(AP/12.12.30.8000) AlipayClient/12.12.30.8000 Language/zh-Hans Region/CN bLanguage/zh-Hans")
-    }
-
-    /**
-     * 检查是否处于 UA 修改冷却期
-     */
-    @JvmStatic
-    fun checkUaChangeCooldown(newUa: String): Pair<Boolean, String> {
-        val currentUa = ElemeTask.getElemeCustomUa().value.orEmpty().trim()
-        val trimmedNew = newUa.trim()
-        // 内容未改变直接通过
-        if (currentUa == trimmedNew) {
-            return Pair(true, "")
-        }
-        val now = System.currentTimeMillis()
-        val elapsed = now - lastUaChangeTimestamp
-        if (lastUaChangeTimestamp > 0 && elapsed < UA_CHANGE_COOLDOWN_MS) {
-            val remainMins = Math.max(1L, (UA_CHANGE_COOLDOWN_MS - elapsed + 59999L) / 60000L)
-            return Pair(false, "频繁更换设备指纹易触发阿里风控检测，修改冷却中，请于 ${remainMins} 分钟后再试！")
-        }
-        return Pair(true, "")
-    }
-
     @JvmStatic
     fun recordUaChanged() {
-        lastUaChangeTimestamp = System.currentTimeMillis()
         resetSessionProfile()
     }
 
@@ -482,9 +411,12 @@ object ElemeMtopUtil {
                 lastRecordedUaValue = ua
                 return
             }
-            // 机型展示名：空 UA 视为回到系统默认，非空 UA 用「营销名-型号代码」格式
+            // 机型展示名：空 UA 走内置模板（按本机指纹生成），非空 UA 用「营销名-型号代码」格式
             val modelDisplay = if (ua.isEmpty()) {
-                "系统原版默认"
+                // 无自定义 UA 时展示本机真实机型，而不是「系统原版默认」这类无信息量文案
+                val p = getDefaultNativeProfile()
+                val name = p.marketingName?.takeIf { it.isNotBlank() }
+                if (name != null && !name.contains(p.model)) "$name-${p.model}" else p.model
             } else {
                 val p = parseCustomUa(ua)
                 val name = p.marketingName?.takeIf { it.isNotBlank() }
@@ -553,7 +485,7 @@ object ElemeMtopUtil {
                 put("model", displayModel)
                 put("brandModel", profile.brandModel)
                 put("system", "Android ${profile.release} (Build/${profile.buildId})")
-                put("kernel", "Chrome ${profile.chromeVer} / UC ${profile.ucVer}")
+                put("kernel", "Chrome ${profile.chromeVer} / MYWeb ${profile.ucVer}")
                 put("screen", profile.screenWs)
                 put("alipayVer", profile.alipayVer)
                 put("ua", profile.httpUa())
@@ -561,40 +493,92 @@ object ElemeMtopUtil {
             }
             obj.toString()
         }.getOrElse {
-            "{\"model\":\"系统原版默认\",\"brandModel\":\"vivo/V2238A\",\"system\":\"Android 14\",\"kernel\":\"Chrome / UC\",\"screen\":\"412|0|915\",\"alipayVer\":\"12.12.30.8000\",\"ua\":\"\",\"isCustom\":false}"
+            // 兜底返回本机真实信息，不编造「系统原版默认」这类无信息量字段
+            val b = android.os.Build::class.java
+            val m = android.os.Build.MODEL.orEmpty()
+            val brd = android.os.Build.BRAND.orEmpty()
+            "{\"model\":\"$m\",\"brandModel\":\"$brd/$m\",\"system\":\"Android ${android.os.Build.VERSION.RELEASE}\",\"kernel\":\"Chrome $CAPTURED_CHROME_VERSION / MYWeb $CAPTURED_MYWEB_VERSION\",\"screen\":\"\",\"alipayVer\":\"12.12.30.8000\",\"ua\":\"\",\"isCustom\":false}"
         }
     }
 
     /**
-     * 解析任务领奖或抽奖响应中的奖品描述文案
+     * 解析任务领奖 / 抽奖响应中的奖品描述（模块内唯一实现，供幸运星、抽免单、秒杀共用）。
+     *
+     * 结构与取值路径对齐 幸运星.py lottery_prize：
+     * - 列表键依次尝试 rlist / rewards / rewardList / prizeList，均无则把根节点当单项；
+     * - 名称取 materialInfo / rightMaterialInfoDTO / prizeMaterialInfo / uppPrizeResult.materialInfo 的 title，
+     *   回退 prizeName / name / title；
+     * - 数量取 discountInfo.reductionYuan / reduction / amount，回退 prizeValue / equityValue / value；
+     * - benefitType(或 prizeType) 为 VIRTUAL_INTEGRAL / STAR 时输出「+N 幸运星」，其余按 名称 +N 组合。
+     *
+     * 解析不出描述时返回空串，由调用方打印完整响应，绝不返回“奖励”这类虚构兜底文案。
      */
     @JvmStatic
     fun extractPrizeDesc(root: JSONObject?): String {
         if (root == null) return ""
+        // 对齐 幸运星.py lottery_prize：items = data if isinstance(data, list) else [data]
+        // 抽奖响应的 data 有时直接是奖品数组，此时不能再按对象字段取
+        val directArr = root.optJSONArray("data")
         val data = root.optJSONObject("data") ?: root
-        val rewards = data.optJSONArray("rewards")
-        if (rewards != null && rewards.length() > 0) {
-            val parts = mutableListOf<String>()
-            for (i in 0 until rewards.length()) {
-                val r = rewards.optJSONObject(i) ?: continue
-                val name = r.optString("prizeName").ifEmpty { r.optString("name") }
-                val amount = r.optString("prizeAmount").ifEmpty { r.optString("amount") }.ifEmpty { r.optString("prizeValue") }
-                val unit = r.optString("prizeUnit").ifEmpty { r.optString("unit") }
-                if (amount.isNotEmpty() && name.isNotEmpty()) {
-                    parts.add("$amount$unit$name")
-                } else if (amount.isNotEmpty()) {
-                    parts.add("$amount$unit")
-                } else if (name.isNotEmpty()) {
-                    parts.add(name)
+        val arr = directArr
+            ?: data.optJSONArray("rlist")
+            ?: data.optJSONArray("rewards")
+            ?: data.optJSONArray("rewardList")
+            ?: data.optJSONArray("prizeList")
+        val items = mutableListOf<JSONObject>()
+        if (arr != null && arr.length() > 0) {
+            for (i in 0 until arr.length()) {
+                arr.optJSONObject(i)?.let { items.add(it) }
+            }
+        } else {
+            items.add(data)
+        }
+        val out = mutableListOf<String>()
+        for (it in items) {
+            val dis = it.optJSONObject("discountInfo")
+            val info = it.optJSONObject("materialInfo")
+                ?: it.optJSONObject("rightMaterialInfoDTO")
+                ?: it.optJSONObject("prizeMaterialInfo")
+                ?: it.optJSONObject("uppPrizeResult")?.optJSONObject("materialInfo")
+            val uppDis = it.optJSONObject("uppPrizeResult")?.optJSONObject("discountInfo")
+            val btype = dis?.optString("benefitType").orEmpty()
+                .ifEmpty { uppDis?.optString("benefitType").orEmpty() }
+                .ifEmpty { it.optString("prizeType") }
+            val amount = dis?.optString("reductionYuan").orEmpty().ifEmpty { null }
+                ?: dis?.optString("reduction").orEmpty().ifEmpty { null }
+                ?: dis?.optString("amount").orEmpty().ifEmpty { null }
+                ?: it.optString("prizeAmount").orEmpty().ifEmpty { null }
+                ?: it.optString("prizeValue").orEmpty().ifEmpty { null }
+                ?: it.optString("equityValue").orEmpty().ifEmpty { null }
+            val unit = it.optString("prizeUnit").ifEmpty { it.optString("unit") }
+            var name = info?.optString("title").orEmpty()
+                .ifEmpty { it.optString("prizeName") }
+                .ifEmpty { it.optString("name") }
+                .ifEmpty { it.optString("title") }
+                .ifEmpty { it.optString("couponName") }
+            if (name.isEmpty()) {
+                name = when (btype) {
+                    "VIRTUAL_INTEGRAL", "STAR" -> "幸运星"
+                    "COUPON" -> "优惠券"
+                    "RED_PACKET" -> "红包"
+                    "INTEGRAL_PROPERTY" -> "积分"
+                    else -> btype
                 }
             }
-            if (parts.isNotEmpty()) return parts.joinToString(", ")
+            if (amount.isNullOrEmpty() && name.isEmpty()) continue
+            when {
+                btype == "VIRTUAL_INTEGRAL" || btype == "STAR" -> {
+                    val yuan = dis?.optString("reductionYuan").orEmpty()
+                    val yuanText = if (yuan.isNotEmpty()) "（${yuan}元）" else ""
+                    out.add("+${amount.orEmpty()} 幸运星$yuanText")
+                }
+                !amount.isNullOrEmpty() && name.isNotEmpty() && !name.contains(amount) ->
+                    out.add("$amount$unit$name")
+                name.isNotEmpty() -> out.add(name)
+                else -> out.add("$amount$unit")
+            }
         }
-        val prizeName = data.optString("prizeName").ifEmpty { data.optString("name") }
-        if (prizeName.isNotEmpty()) return prizeName
-        val couponName = data.optString("couponName")
-        if (couponName.isNotEmpty()) return couponName
-        return ""
+        return out.joinToString("、")
     }
 
     /**
@@ -630,25 +614,6 @@ object ElemeMtopUtil {
         }.getOrDefault("")
     }
 
-    /**
-     * 原生对话框：详情展示、UA查看与编辑、弹窗内点击随机生成、保存前防频改校验合一
-     */
-    /**
-     * 获取当前生效设备的简短型号名称（如 "vivo X100", "Xiaomi 15", "系统默认"）
-     */
-    @JvmStatic
-    fun getCurrentDeviceShortName(): String {
-        return runCatching {
-            val customUa = ElemeTask.getElemeCustomUa().value.orEmpty().trim()
-            if (customUa.isEmpty()) {
-                "系统默认"
-            } else {
-                val p = parseCustomUa(customUa)
-                p.marketingName?.takeIf { it.isNotBlank() } ?: p.model
-            }
-        }.getOrDefault("系统默认")
-    }
-
     fun isDarkThemeMode(context: android.content.Context?): Boolean {
         if (context == null) return false
         return runCatching {
@@ -673,7 +638,7 @@ object ElemeMtopUtil {
             val name = profile.marketingName?.takeIf { it.isNotBlank() }
             if (name != null && !name.contains(profile.model)) "$name-${profile.model}" else profile.model
         }
-        val source = if (ElemeTask.getElemeCustomUa().value.orEmpty().trim().isEmpty()) "系统默认" else "自定义 UA"
+        val source = if (ElemeTask.getElemeCustomUa().value.orEmpty().trim().isEmpty()) "内置模板（按当前机型生成）" else "自定义 UA"
         val detailMsg = "当前机型：$displayName\nUA 来源：$source"
 
         val isNight = isDarkThemeMode(context)
@@ -746,18 +711,17 @@ object ElemeMtopUtil {
             val name = profile.marketingName?.takeIf { it.isNotBlank() }
             if (name != null && !name.contains(profile.model)) "$name-${profile.model}" else profile.model
         }
-        val uaSource = if (ElemeTask.getElemeCustomUa().value.orEmpty().trim().isEmpty()) "系统默认" else "自定义 UA"
+        val uaSource = if (ElemeTask.getElemeCustomUa().value.orEmpty().trim().isEmpty()) "内置模板（按当前机型生成）" else "自定义 UA"
 
         // 风控名单数量
         val riskCount = runCatching { ElemeTask.getElemeRiskTasks().value.size }.getOrDefault(0)
 
-        // 今日任务完成标记（直读磁盘，保证跨进程准确）
+        // 今日状态：任务未完成环节每次触发都会重新拉取并处理；签到/夺宝/下单抽奖/爆红包为每日单次，
+        // 完成后置位标记当日不再请求
         val flags = readTodayFlags()
-        fun flagDone(flag: String) = if (flags.contains(flag)) "已完成" else "未完成"
-        val todayText = "• 幸运星全流程: ${flagDone(FreeOrderTask.FLAG_FLOW_DONE)}\n" +
-                "• 抽免单任务: ${flagDone(FreeOrderTask.FLAG_FREEORDER_DONE)}\n" +
+        val todayText = "• 签到: ${if (flags.contains(FreeOrderTask.FLAG_SIGNIN)) "已完成" else "未完成"}\n" +
+                "• 夺宝抽奖: ${if (flags.contains(FreeOrderTask.FLAG_LOTTERY_DONE)) "次数已用完" else "未完成"}\n" +
                 "• 下单免单抽奖: ${if (flags.contains(FreeOrderTask.FLAG_ORDER_FREE)) "已抽" else "未抽"}\n" +
-                "• 抽免单签到: ${flagDone(FreeOrderTask.FLAG_SIGNIN)}\n" +
                 "• 外卖爆红包: ${if (flags.contains("Eleme_BurstRed_Done")) "已领取" else "未领取"}"
 
         // 支付宝账号仅显示脱敏 UID，不展示昵称/姓名
@@ -896,12 +860,11 @@ object ElemeMtopUtil {
                 val mallResp = LuckyStarRpcCall.queryMallList(cookie)
                 val propResp = LuckyStarRpcCall.queryProperty(cookie)
 
-                // 提取星星数并记入会话级缓存（供不请求网络的缓存弹窗展示）
+                // 提取星星数（持久化由 ElemeMallEntity.recordFetchSnapshot 统一负责）
                 val data = propResp?.optJSONObject("data") ?: propResp
                 val prop = data?.optJSONObject("property") ?: data?.optJSONObject("data")?.optJSONObject("property")
                 val starAmount = prop?.optJSONObject("data")?.optJSONObject("STAR")?.optInt("amount", 0)
                     ?: prop?.optInt("amount", 0) ?: 0
-                lastKnownStarAmount = starAmount
 
                 // 提取商城商品并更新本地持久化缓存
                 if (mallResp != null) {
@@ -1271,6 +1234,14 @@ object ElemeMtopUtil {
         version: String = "1.0",
         extraHeaders: Map<String, String>? = null
     ): MtopResult {
+        // 账号已命中风控标记时不再发起任何请求（继续请求只会加重标记）
+        if (accountRiskFlagged) {
+            return MtopResult(
+                isSuccess = false, isNotLogin = false,
+                errorCode = "ACCOUNT_RISK_ABORTED",
+                errorMsg = "账号已被风控标记，本轮停止请求"
+            )
+        }
         lastError = null
         lastResponse = null
 
@@ -1360,6 +1331,22 @@ object ElemeMtopUtil {
                         errorCode = "RISK_USER"
                     }
                 }
+            }
+
+            // 账号级风控识别（对齐 幸运星.py RISK_RE = FAIL_BIZ_USER_RISK|用户存在风险|USER_RISK）
+            if (!accountRiskFlagged && Regex(
+                    "FAIL_BIZ_USER_RISK|用户存在风险|USER_RISK",
+                    RegexOption.IGNORE_CASE
+                ).containsMatchIn("$ret $errorCode $errorMessage")
+            ) {
+                accountRiskFlagged = true
+                Log.other(
+                    "饿了么",
+                    "[$api] 🚫 账号已被风控标记：$ret\n" +
+                        "  本轮立即停止所有后续请求（继续请求只会加重标记）\n" +
+                        "  处理建议：当日暂停任务，必要时更换设备指纹或等待标记衰减（24h~7d）"
+                )
+                Log.error("ElemeMtopUtil", "[$api] 账号级风控命中，本轮停止请求。完整响应:\n$resp")
             }
 
             val isNotLogin = ret.contains("SESSION_EXPIRED") || ret.contains("NOT_LOGIN") ||

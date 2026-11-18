@@ -111,7 +111,7 @@
                                         <div class="title" @click="handleRunField(tabs_item.modelCode, item.code)">{{item.name}}</div>
                                         <div class="flex-center" @click="handleRunField(tabs_item.modelCode, item.code)">
                                             <div class="link" style="font-size: 13px;">
-                                                {{item.expandKey || '点击执行'}}
+                                                {{item.expandKey || '查看'}}
                                             </div>
                                         </div>
                                     </div>
@@ -212,7 +212,7 @@
                                         <div class="title" @click="handleRunField(tabs_item.modelCode, item.code)">{{item.name}}</div>
                                         <div class="flex-center" @click="handleRunField(tabs_item.modelCode, item.code)">
                                             <div class="link" style="font-size: 13px;">
-                                                {{item.expandKey || '点击执行'}}
+                                                {{item.expandKey || '查看'}}
                                             </div>
                                         </div>
                                     </div>
@@ -339,7 +339,7 @@
                                 rows="7"
                                 autosize
                                 type="textarea"
-                                placeholder="留空使用系统默认，支持粘贴自定义UA"
+                                placeholder="留空使用内置模板，支持粘贴自定义 UA"
                                 class="custom-textarea-field ua-large-textarea"
                                 @input="onUaInputChanged"
                             />
@@ -500,11 +500,11 @@
                   }
                 }
 
-                // 机型展示名：优先取解析结果，输入为空时显示系统默认
+                // 机型展示名：始终展示当前生效的真实机型
+                // （UA 留空时后端仍会按本机指纹解析出品牌型号，不存在“系统默认”这种无信息量文案）
                 const uaDisplayModel = computed(() => {
-                  if (!text_dialog.value.value || !text_dialog.value.value.trim()) return "系统默认";
                   const m = parsedUaInfo.value && parsedUaInfo.value.model;
-                  return m || "已自定义";
+                  return m || "解析中…";
                 });
 
                 // 懒加载机型库列表（仅首次打开弹窗时拉取一次）
@@ -546,7 +546,7 @@
                 function handleResetUaInDialog() {
                   text_dialog.value.value = "";
                   updateParsedUa("");
-                  vant.showToast("已重置为系统默认，点击保存生效");
+                  vant.showToast("已重置为内置模板，点击保存生效");
                 }
 
                 // UA 历史记录状态：可见性、条目列表

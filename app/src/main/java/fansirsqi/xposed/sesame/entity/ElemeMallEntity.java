@@ -107,8 +107,9 @@ public class ElemeMallEntity extends MapperEntity {
             if (exchangeId.isEmpty()) {
                 exchangeId = String.valueOf(it.optLong("exchangeId"));
             }
-            if (exchangeId.isEmpty() || exchangeId.equals("0")) {
-                exchangeId = String.valueOf(i + 1);
+            // exchangeId 是兑换接口的必填入参，缺失即无法兑换，直接丢弃，绝不按序号伪造
+            if (exchangeId.isEmpty() || exchangeId.equals("0") || exchangeId.equals("null")) {
+                continue;
             }
             int cost = ex != null ? ex.optInt("consumeAmount", 0) : 0;
             int gap = ex != null ? ex.optInt("gapAmount", 0) : 0;
@@ -209,7 +210,10 @@ public class ElemeMallEntity extends MapperEntity {
         if (!this.stockDesc.isEmpty()) {
             sb.append("• 库存与限量: ").append(this.stockDesc).append("\n");
         }
-        sb.append("\n【秒杀兑换时间表】:\n• ").append(this.timeDesc.isEmpty() ? "每日按时补货 / 随时可兑" : this.timeDesc).append("\n\n");
+        // 仅在接口返回真实补货/兑换时间时展示，缺失则整段隐藏，不用猜测文案填充
+        if (!this.timeDesc.isEmpty()) {
+            sb.append("\n【秒杀兑换时间表】:\n• ").append(this.timeDesc).append("\n");
+        }
         if (!this.ruleDesc.isEmpty()) {
             sb.append("【使用门槛与规则】:\n• ").append(this.ruleDesc).append("\n\n");
         }

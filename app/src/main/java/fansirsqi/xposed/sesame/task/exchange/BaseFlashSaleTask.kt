@@ -29,6 +29,9 @@ abstract class BaseFlashSaleTask : ModelTask() {
         /** 等待分片时长，保证可及时响应中断 */
         private const val SLEEP_SLICE_MS = 60_000L
 
+        /** 整点发车前刷新数据源的提前量：在发车时刻之前完成刷新，不占用发车瞬间的窗口 */
+        private const val PRE_FIRE_REFRESH_LEAD_MS = 8_000L
+
         /** 发车提前量：在整点前该毫秒数发出请求，利用网络往返让服务端在整点收到 */
         @JvmField
         val waitTimeField = IntegerModelField("waitTime", "开抢提前量(毫秒)", 200, 0, 3000)
@@ -86,8 +89,21 @@ abstract class BaseFlashSaleTask : ModelTask() {
             }
 
             try {
-                sleepUntilTarget(targetTime, fireTime)
-                executeAll(items)
+                waitToFire(targetTime, fireTime)
+                // 发车前用最新数据重建兑换参数：等待期间商品可能已下架、售罄或更换 actId，旧参数会白跑一趟
+                val ready = items.filter {
+                    if (tryExchange(it)) {
+                        true
+                    } else {
+                        Log.error(name, "⚠️ 发车前校验失败，跳过商品: ${it.code}")
+                        false
+                    }
+                }
+                if (ready.isEmpty()) {
+                    Log.other("${name}发车前没有校验通过的商品，本次不兑换")
+                    return
+                }
+                executeAll(ready)
                 if (!Status.hasFlagToday(completedKey)) {
                     Status.setFlagToday(completedKey)
                 }
@@ -128,26 +144,40 @@ abstract class BaseFlashSaleTask : ModelTask() {
         return validItems
     }
 
-    // 等待到发车时间（目标整点 - 提前量，分片 sleep，可响应中断）
-    private fun sleepUntilTarget(targetTime: Long, fireTime: Long) {
+    // 等待到发车时间：整点前 PRE_FIRE_REFRESH_LEAD_MS 先刷新数据源，再精确等到发车时刻
+    private fun waitToFire(targetTime: Long, fireTime: Long) {
         if (System.currentTimeMillis() >= fireTime) {
             Log.other("${name}⏰ 当前已过开抢整点，直接兑换")
+            onBeforeFire()
             return
         }
         val advanceText = if (targetTime > fireTime) "，提前${targetTime - fireTime}ms发车" else ""
         Log.other("${name}⏰ 等待开抢整点 [${TimeUtil.getCommonDate(targetTime)}]$advanceText")
+        val refreshAt = fireTime - PRE_FIRE_REFRESH_LEAD_MS
+        if (refreshAt > System.currentTimeMillis()) {
+            if (!sleepUntil(refreshAt)) return
+        }
+        onBeforeFire()
+        sleepUntil(fireTime)
+    }
+
+    /** 等待至指定时间点，分片 sleep 以便及时响应中断；返回 false 表示等待被中断 */
+    private fun sleepUntil(timeMs: Long): Boolean {
         while (true) {
-            val remaining = fireTime - System.currentTimeMillis()
-            if (remaining <= 0) break
+            val remaining = timeMs - System.currentTimeMillis()
+            if (remaining <= 0) return true
             try {
                 Thread.sleep(minOf(remaining, SLEEP_SLICE_MS))
             } catch (e: InterruptedException) {
                 Thread.currentThread().interrupt()
                 Log.other("${name}💤 等待被中断")
-                return
+                return false
             }
         }
     }
+
+    /** 整点发车前回调：子类可在此刷新商品目录等外部数据（默认不做任何事） */
+    protected open fun onBeforeFire() {}
 
     // 顺序兑换：每个商品失败重试 MAX_RETRY 次；SINGLE 模式任一成功即停止
     private fun executeAll(items: List<ExchangeItem>) {

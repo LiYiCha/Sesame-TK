@@ -24,7 +24,20 @@ object ElemeAuth {
     private const val KEY_USER_ID = "Eleme_UserId"
 
     /** 默认小程序 User-Agent */
-    const val DEFAULT_UA = "Mozilla/5.0 (Linux; U; Android 16; zh-CN; vivo V2238A Build/BP1A.250305.019) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/118.0.0.0 UCBrowser/16.3.8.1402 Mobile Safari/537.36 AlipayDefined(nt:wifi,ws:384|0|853) AliApp(AP/12.12.30.8000) AlipayClient/12.12.30.8000 Language/zh-Hans useStatusBar/true isConcaveScreen/false Region/CN Channel/vivo GCanvas/1.9.38 Nebula SDK/1.8.1000 Nebula Ariver/1.0.0"
+    /**
+     * 换票兜底 UA：结构严格对齐 tb.log 抓包中支付宝小程序 WebView 的真实 User-Agent。
+     * 旧值（UCBrowser/16.3.8 + GCanvas + Nebula SDK）与业务请求用的 [ElemeMtopUtil.httpUa] 是两套指纹，
+     * 同一会话出现两种 UA 属明显异常特征，故统一为同一结构。
+     */
+    const val DEFAULT_UA = "Mozilla/5.0 (Linux; Android 16; V2238A Build/BP2A.250605.031.A3; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/126.0.6478.122 MYWeb/1.11.126.260911211123 UWS/3.22.2.9999 UCBS/3.22.2.9999_220000000000 Mobile Safari/537.36 NebulaSDK/1.8.100112 Nebula AlipayDefined(nt:WIFI,ws:384|0|2.8125) AliApp(AP/12.12.30.8000) AlipayClient/12.12.30.8000 Language/zh-Hans isConcaveScreen/false Region/CNAriver/12.12.30.8000"
+
+    /** 换票请求实际使用的 UA：优先用户自定义 UA，未设置时用与抓包一致的兜底模板 */
+    private fun currentUa(): String {
+        val custom = runCatching {
+            fansirsqi.xposed.sesame.task.otherTask2.eleme.ElemeTask.getElemeCustomUa().value.orEmpty().trim()
+        }.getOrNull().orEmpty()
+        return custom.ifEmpty { DEFAULT_UA }
+    }
 
     /** 提前 30 分钟刷新避免边界失效 */
     private const val EXPIRE_MARGIN_MS = 30 * 60 * 1000L
@@ -233,7 +246,7 @@ object ElemeAuth {
                 doInput = true
                 setRequestProperty("Connection", "close")
                 setRequestProperty("Content-Type", "application/x-www-form-urlencoded;charset=UTF-8")
-                setRequestProperty("User-Agent", DEFAULT_UA)
+                setRequestProperty("User-Agent", currentUa())
                 setRequestProperty("Referer", "https://$APP_ID.hybrid.alipay-eco.com/")
                 setRequestProperty("Origin", "https://$APP_ID.hybrid.alipay-eco.com")
             }
@@ -352,7 +365,7 @@ object ElemeAuth {
                 readTimeout = 10000
                 instanceFollowRedirects = false
                 setRequestProperty("Connection", "close")
-                setRequestProperty("User-Agent", DEFAULT_UA)
+                setRequestProperty("User-Agent", currentUa())
                 if (cookieMap.isNotEmpty()) {
                     setRequestProperty("Cookie", cookieMap.entries.joinToString("; ") { "${it.key}=${it.value}" })
                 }
@@ -378,39 +391,6 @@ object ElemeAuth {
             CookieManager.getInstance().getCookie("https://waimai-guide.ele.me")
                 ?: CookieManager.getInstance().getCookie(".ele.me")
         }.getOrNull()
-    }
-
-    /**
-     * 构造通用的请求头
-     */
-    fun getCommonHeaders(cookie: String): Map<String, String> {
-        return mapOf(
-            "Cookie" to cookie,
-            "x-tap" to "ap",
-            "Referer" to "https://$APP_ID.hybrid.alipay-eco.com/",
-            "x-ele-ua" to "RenderWay/miniProgram MiniAppId/$APP_ID MiniAppVersion/12.1.53 Channel/mini_app",
-            "User-Agent" to DEFAULT_UA
-        )
-    }
-
-    /**
-     * 获取当前账号运行摘要信息
-     */
-    fun getAccountSummary(): String {
-        val alipayMask = UserMap.getCurrentMaskName().ifEmpty { "当前用户" }
-        val currentUid = UserMap.currentUid
-        val alipayUid = if (!currentUid.isNullOrEmpty()) mask(currentUid, 4, 4) else "未知UID"
-        val elemeUser = DataStore.get(getUidKey("Eleme_Username"), String::class.java).orEmpty()
-        val elemeUid = DataStore.get(getUidKey(KEY_USER_ID), String::class.java).orEmpty()
-
-        val elemeInfo = if (elemeUser.isNotEmpty() || elemeUid.isNotEmpty()) {
-            val userStr = if (elemeUser.isNotEmpty()) mask(elemeUser, 3, 3) else "已绑定"
-            val uidStr = if (elemeUid.isNotEmpty()) mask(elemeUid, 3, 3) else "已同步"
-            "饿了么账号: $userStr (UID: $uidStr)"
-        } else {
-            "饿了么: 登录中"
-        }
-        return "支付宝: $alipayMask ($alipayUid) | $elemeInfo"
     }
 
     /**
