@@ -111,7 +111,7 @@
                                         <div class="title" @click="handleRunField(tabs_item.modelCode, item.code)">{{item.name}}</div>
                                         <div class="flex-center" @click="handleRunField(tabs_item.modelCode, item.code)">
                                             <div class="link" style="font-size: 13px;">
-                                                点击执行
+                                                {{item.expandKey || '点击执行'}}
                                             </div>
                                         </div>
                                     </div>
@@ -212,7 +212,7 @@
                                         <div class="title" @click="handleRunField(tabs_item.modelCode, item.code)">{{item.name}}</div>
                                         <div class="flex-center" @click="handleRunField(tabs_item.modelCode, item.code)">
                                             <div class="link" style="font-size: 13px;">
-                                                点击执行
+                                                {{item.expandKey || '点击执行'}}
                                             </div>
                                         </div>
                                     </div>

@@ -17,6 +17,23 @@ public class EmptyModelField extends ModelField<Object> {
     private final ContextConsumer clickConsumer;
     private String dialogTitle = null;
     private String dialogMessage = null;
+    /** 按钮右侧动作文案：默认「点击执行」，可设为「查看」等只读语义 */
+    private String actionLabel = "点击执行";
+
+    /** 设置按钮右侧动作文案（如「查看」），仅影响展示，不改变点击行为 */
+    public EmptyModelField setActionLabel(String actionLabel) {
+        this.actionLabel = actionLabel;
+        return this;
+    }
+
+    /**
+     * 暴露给 Web 设置页 DTO：决定 EMPTY 字段右侧显示的动作文案。
+     * 复用 expandKey 通道传递，无需新增序列化字段。
+     */
+    @Override
+    public Object getExpandKey() {
+        return actionLabel;
+    }
 
     public EmptyModelField(String code, String name) {
         super(code, name, null);

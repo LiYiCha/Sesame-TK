@@ -62,10 +62,10 @@ class ElemeTask : ModelTask() {
         @JvmField
         val elemeAccountStatus = EmptyModelField(
             "elemeAccountStatus",
-            "查看"
+            "账号状态"
         ) { context ->
             ElemeMtopUtil.showAccountStatusDialog(context)
-        }
+        }.setActionLabel("查看")
 
         @JvmField
         val elemeRefreshMall = EmptyModelField(
