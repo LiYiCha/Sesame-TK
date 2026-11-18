@@ -220,8 +220,11 @@ object FreeOrderTask {
                                 }
                             } else {
                                 val msg = viewRes.errorMsg
-                                // 失败必须带任务名，否则通用错误日志无法对应到具体任务
-                                Log.other("饿了么", "[抽免单] ❌ 浏览[$title]失败: ${viewRes.errorCode}::${msg}")
+                                // 失败必须带任务名与完整响应，否则通用错误日志无法对应到具体任务、也无法定位失败原因
+                                val rawResp = viewRes.rawJson?.toString() ?: ElemeMtopUtil.lastResponse ?: msg
+                                val errDetail = "[抽免单] ❌ 浏览[$title]失败: ${viewRes.errorCode}::$msg\n完整响应:\n$rawResp"
+                                Log.error(TAG, errDetail)
+                                Log.other("饿了么", errDetail)
                                 if (viewRes.errorCode == "405" || msg.contains("405") || msg.contains("行为受限") || msg.contains("受限")) {
                                     val reason = "405::行为受限"
                                     ElemeRiskTaskEntity.recordRiskTask(missionDefId.toString(), title, reason)
@@ -259,8 +262,11 @@ object FreeOrderTask {
                                         Log.other("饿了么", "[抽免单] 🛡️ 任务[$missionDefId - $title]因【$reason】已加入风控名单")
                                         riskBlockedThisTask = true
                                     } else {
-                                        // 非风控类失败也必须带任务名，保证日志可追溯
-                                        Log.other("饿了么", "[抽免单] ❌ 点击[$title]触发失败: ${triggerRes.errorCode}::${triggerRes.errorMsg}")
+                                        // 非风控类失败也必须带任务名与完整响应，保证日志可追溯
+                                        val rawResp = triggerRes.rawJson?.toString() ?: ElemeMtopUtil.lastResponse ?: triggerRes.errorMsg
+                                        val detail = "[抽免单] ❌ 点击[$title]触发失败: ${triggerRes.errorCode}::${triggerRes.errorMsg}\n完整响应:\n$rawResp"
+                                        Log.error(TAG, detail)
+                                        Log.other("饿了么", detail)
                                     }
                                     break
                                 }
@@ -350,7 +356,11 @@ object FreeOrderTask {
                                     } else if (Regex("未中奖|NO_DECISION_STRATEGY|NOT_WINNING", RegexOption.IGNORE_CASE).containsMatchIn(msg)) {
                                         Log.other("饿了么", "[抽免单] 🎰 夺宝未中奖")
                                     } else {
-                                        Log.other("饿了么", "[抽免单] 🎰 夺宝未成功: ${detail.ifEmpty { msg.take(30) }}")
+                                        // 既非次数耗尽也非明确未中奖：属异常失败，输出完整响应便于定位
+                                        val rawResp = drawRes.rawJson?.toString() ?: ElemeMtopUtil.lastResponse ?: "无响应内容"
+                                        val errDetail = "[抽免单] 🎰 夺宝未成功: ${drawRes.errorCode}::${drawRes.errorMsg}\n完整响应:\n$rawResp"
+                                        Log.error(TAG, errDetail)
+                                        Log.other("饿了么", errDetail)
                                     }
                                     break
                                 }
@@ -404,7 +414,13 @@ object FreeOrderTask {
         if (ElemeRiskTaskEntity.isTaskClosedError(res.errorCode, res.errorMsg)) {
             ElemeRiskTaskEntity.recordRiskTask(missionDefId.toString(), title, "任务已关闭或阶段无法达成")
             Log.other("饿了么", "[抽免单] 任务[$missionDefId - $title]已关闭或不可用，已自动加入风控名单，后续执行将自动跳过")
+            return
         }
+        // 其余失败不静默：带上错误码与完整响应，否则无法判断是前置未达成、重复领取还是服务端异常
+        val rawResp = res.rawJson?.toString() ?: ElemeMtopUtil.lastResponse ?: res.errorMsg
+        val detail = "[抽免单] ❌ 领奖[$title]失败: ${res.errorCode}::${res.errorMsg}\n完整响应:\n$rawResp"
+        Log.error(TAG, detail)
+        Log.other("饿了么", detail)
     }
 
     private fun findTask(root: JSONObject?, missionDefId: Long): JSONObject? {

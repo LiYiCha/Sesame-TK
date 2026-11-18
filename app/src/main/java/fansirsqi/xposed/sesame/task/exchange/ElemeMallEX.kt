@@ -117,7 +117,9 @@ class ElemeMallEX : BaseFlashSaleTask() {
             val cookie = ElemeAuth.validateOrRefreshCookie(init) ?: init
             val resp = LuckyStarRpcCall.queryMallList(cookie)
             if (resp == null) {
-                Log.other("饿了么", "[商城秒杀] 发车前刷新商品目录失败，沿用本地缓存: ${ElemeMtopUtil.lastError ?: "无响应"}")
+                val err = ElemeMtopUtil.lastError ?: "无响应"
+                val raw = ElemeMtopUtil.lastResponse ?: "无原始响应"
+                Log.other("饿了么", "[商城秒杀] 发车前刷新商品目录失败，沿用本地缓存: $err\n完整响应:\n$raw")
                 return@runCatching
             }
             ElemeMallEntity.updateFromMallResponse(resp)
@@ -163,7 +165,11 @@ class ElemeMallEX : BaseFlashSaleTask() {
             Log.other("饿了么", "[商城秒杀] 成功兑换 [${item.name}] (-${item.cost} 星)")
             true
         } else {
-            Log.other("饿了么", "[商城秒杀] 兑换 [${item.name}] 失败: ${res.errorCode}::${res.errorMsg}")
+            // 兑换接口从未有成功抓包，失败时必须给出完整响应，否则无法判断是参数缺失、库存还是账号受限
+            val rawResp = res.rawJson?.toString() ?: ElemeMtopUtil.lastResponse ?: res.errorMsg
+            val detail = "[商城秒杀] ❌ 兑换[${item.name}]失败: ${res.errorCode}::${res.errorMsg}\n完整响应:\n$rawResp"
+            Log.error(TAG, detail)
+            Log.other("饿了么", detail)
             false
         }
     }

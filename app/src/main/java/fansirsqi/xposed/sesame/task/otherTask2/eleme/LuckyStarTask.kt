@@ -106,8 +106,13 @@ object LuckyStarTask {
                             }
                             signRes.errorCode.contains("REPEAT") || signRes.errorCode.contains("ALREADY") ||
                                 signRes.errorMsg.contains("已签到") -> Status.setFlagToday(FLAG_SIGNIN)
-                            // 失败不置位：签到失败属可重试状态，下一轮触发会继续尝试
-                            else -> Unit
+                            // 失败不置位：签到失败属可重试状态，下一轮触发会继续尝试；但必须留下完整响应便于定位
+                            else -> {
+                                val rawResp = signRes.rawJson?.toString() ?: ElemeMtopUtil.lastResponse ?: signRes.errorMsg
+                                val detail = "[幸运星] ❌ 签到失败: ${signRes.errorCode}::${signRes.errorMsg}\n完整响应:\n$rawResp"
+                                Log.error(TAG, detail)
+                                Log.other("饿了么", detail)
+                            }
                         }
                         Thread.sleep(RandomUtil.nextGaussianLong(500, 1000))
                     }
@@ -159,7 +164,11 @@ object LuckyStarTask {
                                     } else if (Regex("未中奖|NO_DECISION_STRATEGY|NOT_WINNING", RegexOption.IGNORE_CASE).containsMatchIn(msg)) {
                                         Log.other("饿了么", "[幸运星] 🎰 夺宝未中奖")
                                     } else {
-                                        Log.other("饿了么", "[幸运星] 🎰 夺宝未成功: ${detail.ifEmpty { msg.take(30) }}")
+                                        // 既非次数耗尽也非明确未中奖：属异常失败，输出完整响应便于定位
+                                        val rawResp = drawRes.rawJson?.toString() ?: ElemeMtopUtil.lastResponse ?: "无响应内容"
+                                        val detail = "[幸运星] 🎰 夺宝未成功: ${drawRes.errorCode}::${drawRes.errorMsg}\n完整响应:\n$rawResp"
+                                        Log.error(TAG, detail)
+                                        Log.other("饿了么", detail)
                                     }
                                     break
                                 }
@@ -190,12 +199,18 @@ object LuckyStarTask {
                                 val rawResp = ofRes.rawJson?.toString() ?: ofRes.data?.toString() ?: "无响应内容"
                                 Log.other("饿了么", "[幸运星] 🎲 下单免单抽奖: 奖励描述缺失，完整响应:\n$rawResp")
                             }
+                        } else {
+                            // 失败不置位：无资格/时机未到属临时状态，下次触发仍会重试。
+                            // 该接口失败频率高，完整响应写入 runtime 日志留痕，不刷屏 UI 日志
+                            val rawResp = ofRes.rawJson?.toString() ?: ElemeMtopUtil.lastResponse ?: ofRes.errorMsg
+                            Log.runtime(TAG, "[幸运星] 下单免单抽奖未成功: ${ofRes.errorCode}::${ofRes.errorMsg}\n完整响应:\n$rawResp")
                         }
-                        // 失败不置位：无资格/时机未到属临时状态，下次触发仍会重试
                         Thread.sleep(RandomUtil.nextGaussianLong(500, 1000))
                     }
                 }
-            } catch (_: Throwable) {}
+            } catch (e: Throwable) {
+                Log.error(TAG, "幸运星下单免单抽奖异常: ${e.message}")
+            }
 
             // 提取任务集合 ID
             val resourceCpns = hpData?.optJSONObject("resource")?.optJSONObject("data")
@@ -485,8 +500,17 @@ object LuckyStarTask {
 
                     // 自动兑换已迁移到统一秒杀框架 ElemeMallEX（整点前200ms唤醒、可配置开抢整点），
                     // 此处只负责每日拉取并缓存商品目录，不再直接兑换，避免两处重复扣星
+                } else {
+                    // 拉取失败不能静默：否则商城弹窗一直显示旧缓存，用户无从判断是接口异常还是无商品
+                    val err = ElemeMtopUtil.lastError ?: "接口未返回商品列表"
+                    val raw = ElemeMtopUtil.lastResponse ?: "无原始响应"
+                    val detail = "[幸运星] ❌ 拉取兑换商城失败: $err\n完整响应:\n$raw"
+                    Log.error(TAG, detail)
+                    Log.other("饿了么", detail)
                 }
-            } catch (_: Throwable) {}
+            } catch (t: Throwable) {
+                Log.error(TAG, "拉取兑换商城异常: ${t.message}")
+            }
 
             // 运行结束后统一输出最终幸运星数量（无论有无收益）
             runCatching {

@@ -873,6 +873,13 @@ object ElemeMtopUtil {
                     fansirsqi.xposed.sesame.entity.ElemeMallEntity.recordFetchSnapshot(
                         System.currentTimeMillis(), starAmount
                     )
+                } else {
+                    // 手动刷新失败必须留痕：否则弹窗仍显示旧缓存，用户会误以为拉取成功
+                    val err = lastError ?: "接口未返回有效数据"
+                    val raw = lastResponse ?: "无原始响应"
+                    val detail = "[兑换商城] ❌ 拉取商品失败: $err\n完整响应:\n$raw"
+                    Log.error("ElemeMtopUtil", detail)
+                    Log.other("饿了么", detail)
                 }
                 val mallItems = fansirsqi.xposed.sesame.entity.ElemeMallEntity.getList().filter { it.id != "0" }
 
