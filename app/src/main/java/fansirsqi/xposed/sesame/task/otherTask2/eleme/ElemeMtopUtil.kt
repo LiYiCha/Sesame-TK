@@ -740,13 +740,19 @@ object ElemeMtopUtil {
         val flags = readTodayFlags()
         fun flagDone(flag: String) = if (flags.contains(flag)) "已完成" else "未完成"
         val todayText = "• 幸运星全流程: ${flagDone(FreeOrderTask.FLAG_FLOW_DONE)}\n" +
+                "• 抽免单任务: ${flagDone(FreeOrderTask.FLAG_FREEORDER_DONE)}\n" +
                 "• 下单免单抽奖: ${if (flags.contains(FreeOrderTask.FLAG_ORDER_FREE)) "已抽" else "未抽"}\n" +
                 "• 抽免单签到: ${flagDone(FreeOrderTask.FLAG_SIGNIN)}\n" +
                 "• 外卖爆红包: ${if (flags.contains("Eleme_BurstRed_Done")) "已领取" else "未领取"}"
 
+        // 账号信息：饿了么账号置顶并直接展示脱敏账号；支付宝账号次之
+        val alipayMask = fansirsqi.xposed.sesame.util.maps.UserMap.getCurrentMaskName().ifEmpty { "当前用户" }
+        val alipayUidRaw = fansirsqi.xposed.sesame.util.maps.UserMap.currentUid.orEmpty()
+        val alipayUid = if (alipayUidRaw.length > 8) alipayUidRaw.take(4) + "***" + alipayUidRaw.takeLast(4) else alipayUidRaw
+        val elemeInfoLine = ElemeAuth.getElemeAccountLine()
         val detailMsg = "【账号信息】\n" +
-                "• ${ElemeAuth.getAccountSummary()}\n" +
-                "• 饿了么绑定: ${if (ElemeAuth.isBound()) "已绑定" else "未绑定"}\n\n" +
+                "• $elemeInfoLine\n" +
+                "• 支付宝账号: $alipayMask (UID: $alipayUid)\n\n" +
                 "【CK 凭据状态】\n" +
                 "• 状态: $ckText\n" +
                 "• 来源: ${cookieStatus.source}\n\n" +
@@ -914,6 +920,8 @@ object ElemeMtopUtil {
     ): android.widget.ScrollView {
         val primaryTextColor = if (isNight) android.graphics.Color.parseColor("#E0E0E0") else android.graphics.Color.parseColor("#212121")
         val secondaryColor = if (isNight) android.graphics.Color.parseColor("#B0BEC5") else android.graphics.Color.parseColor("#666666")
+        // 星数是否已知：差额「差 N 星」由服务端按当时星数算出，星数未获取时该差额已过期，不得展示以免自相矛盾
+        val starKnown = starDisplay.toIntOrNull() != null
         val accentColor = if (isNight) android.graphics.Color.parseColor("#64B5F6") else android.graphics.Color.parseColor("#1976D2")
         val okColor = if (isNight) android.graphics.Color.parseColor("#81C784") else android.graphics.Color.parseColor("#34A853")
         val lackColor = if (isNight) android.graphics.Color.parseColor("#FFB74D") else android.graphics.Color.parseColor("#FF976A")
@@ -948,9 +956,9 @@ object ElemeMtopUtil {
             }
         summaryBar.addView(barText("当前幸运星: ", false, secondaryColor))
         summaryBar.addView(barText(starDisplay, true, accentColor))
-        summaryBar.addView(barText("    商品数: ", false, secondaryColor))
-        summaryBar.addView(barText("${mallItems.size}", true, accentColor))
-        summaryBar.addView(barText("    已选自动兑换: ", false, secondaryColor))
+        summaryBar.addView(barText("    在售商品: ", false, secondaryColor))
+        summaryBar.addView(barText("${mallItems.size} 件", true, accentColor))
+        summaryBar.addView(barText("    已勾选兑换: ", false, secondaryColor))
         summaryBar.addView(
             barText(
                 "${mallItems.count { item -> (runCatching { ElemeTask.getElemeExchangeItems().value }.getOrNull() ?: emptySet<String>()).contains(item.id) }}",
@@ -971,8 +979,9 @@ object ElemeMtopUtil {
             for (item in mallItems) {
                 val title = if (item.pureTitle.isNotEmpty()) item.pureTitle else item.name
                 val statusPair = when {
-                    item.gapAmount > 0 -> "差 ${item.gapAmount} 星" to lackColor
-                    item.exchangeStatus == "PROPERTY_NOT_ENOUGH" -> "星数不足" to lackColor
+                    // 仅当星数已知时才展示差额，否则该差额是上次拉取的过期快照，与顶部「未获取」矛盾
+                    starKnown && item.gapAmount > 0 -> "差 ${item.gapAmount} 星" to lackColor
+                    starKnown && item.exchangeStatus == "PROPERTY_NOT_ENOUGH" -> "星数不足" to lackColor
                     item.exchangeStatus == "SOLD_OUT" -> "已抢光" to secondaryColor
                     item.exchangeStatus in listOf("", "INIT", "EXCHANGE_ABLE", "CAN_EXCHANGE", "ONLINE") -> "可兑换" to okColor
                     else -> item.exchangeStatus to secondaryColor
@@ -1033,16 +1042,28 @@ object ElemeMtopUtil {
                     setTextColor(if (isChecked) okColor else secondaryColor)
                     setPadding(0, 6, 0, 0)
                     setOnCheckedChangeListener { _, checked ->
-                        val set = LinkedHashSet(
-                            runCatching { ElemeTask.getElemeExchangeItems().value }.getOrNull() ?: emptySet<String>()
-                        )
-                        if (checked) set.add(item.id) else set.remove(item.id)
-                        ElemeTask.getElemeExchangeItems().value = set
-                        setTextColor(if (checked) okColor else secondaryColor)
+                        // 全链路容灾：任何异常（配置未加载、UID 为空、磁盘写入失败）都不得冒泡导致设置页闪退
                         runCatching {
-                            fansirsqi.xposed.sesame.data.Config.save(fansirsqi.xposed.sesame.util.maps.UserMap.currentUid, true)
+                            val set = LinkedHashSet(
+                                runCatching { ElemeTask.getElemeExchangeItems().value }.getOrNull() ?: emptySet<String>()
+                            )
+                            if (checked) set.add(item.id) else set.remove(item.id)
+                            ElemeTask.getElemeExchangeItems().value = set
+                            setTextColor(if (checked) okColor else secondaryColor)
+                            // 配置落盘放在后台线程，避免在主线程做磁盘 IO 卡顿/ANR
+                            Thread {
+                                runCatching {
+                                    fansirsqi.xposed.sesame.data.Config.save(
+                                        fansirsqi.xposed.sesame.util.maps.UserMap.currentUid, true
+                                    )
+                                }.onFailure { t ->
+                                    fansirsqi.xposed.sesame.util.Log.error("ElemeMall", "勾选兑换商品保存失败: ${t.message}")
+                                }
+                            }.start()
+                            fansirsqi.xposed.sesame.hook.Toast.show(if (checked) "已勾选自动兑换: $title" else "已取消自动兑换: $title")
+                        }.onFailure { t ->
+                            fansirsqi.xposed.sesame.util.Log.error("ElemeMall", "勾选兑换商品异常: ${t.message}")
                         }
-                        fansirsqi.xposed.sesame.hook.Toast.show(if (checked) "已勾选自动兑换: $title" else "已取消自动兑换: $title")
                     }
                 }
                 card.addView(cbExchange)
@@ -1098,14 +1119,18 @@ object ElemeMtopUtil {
                 .setTitle("幸运星兑换商城")
                 .setView(scrollView)
                 .setPositiveButton("关闭", null)
-                .setNeutralButton("拉取最新") { _, _ ->
-                    runCatching { showMallListDialog(context, true) }
-                }
                 .create()
-
+            // 用 setOnShowListener 内绑定按钮，避免 Builder 链 lambda 引用尚未初始化的 d
             d.setOnShowListener {
                 d.getButton(android.content.DialogInterface.BUTTON_POSITIVE)?.setTextColor(positiveButtonColor)
-                d.getButton(android.content.DialogInterface.BUTTON_NEUTRAL)?.setTextColor(neutralButtonColor)
+                d.getButton(android.content.DialogInterface.BUTTON_NEUTRAL)?.apply {
+                    setTextColor(neutralButtonColor)
+                    setOnClickListener {
+                        // 先关闭当前弹窗再重新拉取，避免快速连点叠加多个 Dialog 持有 Activity 引用
+                        runCatching { d.dismiss() }
+                        runCatching { showMallListDialog(context, true) }
+                    }
+                }
             }
             d.show()
         }
@@ -1327,16 +1352,23 @@ object ElemeMtopUtil {
                 }
                 val err = "[$api] 响应失败: $readableErr\n完整响应:\n$resp"
                 lastError = err
-                // 使用 Log.error 记录异常日志与完整报文
-                Log.error("ElemeMtopUtil", err)
-                val isExpectedBizStatus = ret.contains("FAIL_BIZ_CHANCE_DAY_NO_ENOUGH_REMAIN") ||
-                        ret.contains("ACT_LOTTERY_NOT_WINNING") ||
-                        ret.contains("REPEAT") || ret.contains("ALREADY") ||
-                        errorCode.contains("CHANCE") || errorCode.contains("NOT_WINNING") ||
-                        // 签到接口的模式不匹配与版本下线属于可预期业务状态，由 signIn 统一降级处理，避免重复刷屏报错
-                        ret.contains("REWARD_MODE_NOT_SIGNIN_AND_RECEIVE") ||
-                        ret.contains("FAIL_SYS_API_NOT_FOUNDED")
-                if (!isExpectedBizStatus) {
+                // 聚合 ret/errorCode/errorMsg 三处，判定是否为可预期的业务状态
+                val allErr = "$ret $errorCode $errorMessage $readableErr"
+                val isExpectedBizStatus = listOf(
+                    "FAIL_BIZ_CHANCE_DAY_NO_ENOUGH_REMAIN", "ACT_LOTTERY_NOT_WINNING",
+                    "REPEAT", "ALREADY", "CHANCE", "NOT_WINNING",
+                    // 签到模式不匹配与接口下线：由 signIn 统一降级处理
+                    "REWARD_MODE_NOT_SIGNIN_AND_RECEIVE", "API_NOT_FOUNDED", "NOT_FOUNDED",
+                    // 阶段未达成：可重试的临时状态，不是错误
+                    "STAGE_NOT_FINISH", "STAGE_COUNT_NOT_ENOUGH", "TASK_NOT_FINISH",
+                    // 风控拦截：业务层已单独记入名单并打印，此处不重复刷屏
+                    "405::行为受限", "417::"
+                ).any { allErr.contains(it) }
+                // 预期业务状态只写 error 日志（供排查），不写运行日志刷屏；真实错误则两处都记
+                if (isExpectedBizStatus) {
+                    Log.error("ElemeMtopUtil", err)
+                } else {
+                    Log.error("ElemeMtopUtil", err)
                     Log.other("饿了么", "❌ [$api] 响应失败: $readableErr\n完整响应:\n$resp")
                 }
                 MtopResult(isSuccess = false, isNotLogin = false, errorCode = errorCode, errorMsg = readableErr, data = dataObj, rawJson = root)

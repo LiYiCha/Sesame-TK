@@ -47,23 +47,20 @@ public class Config {
         if (newModels == null) {
             newModels = new HashMap<>();
         }
-        // 一次性迁移：管理类字段（账号状态/兑换商城/设备UA/风控名单）已从 ElemeTask
-        // 拆分至 ElemeManageTask，旧版配置中它们的值保存在 "ElemeTask" 键下；
-        // 此处将其转移到新键名，避免拆分后丢失已保存的 UA 字符串与风控勾选集合
-        if (newModels.containsKey("ElemeTask") && !newModels.containsKey("ElemeManageTask")) {
-            ModelFields legacyFields = newModels.get("ElemeTask");
-            ModelFields migratedFields = new ModelFields();
-            boolean hasLegacyField = false;
-            for (String manageFieldCode : new String[]{
+        // 一次性兼容迁移（读回用户之前已存储的值，不重新生成）：
+        // 管理类字段曾短暂拆分到独立的 ElemeManageTask 页面，用户保存的 UA/风控勾选被写在
+        // "ElemeManageTask" 键下；拆分撤销后字段回到 ElemeTask 页，其存储键也应为 "ElemeTask"。
+        // 若不搬回，用户之前保存的 UA 字符串与风控勾选将因键名不匹配而读不到（表现为"系统默认"）。
+        // 仅当 ElemeTask 键下尚无该字段时才迁入，绝不覆盖用户更新的值。
+        if (newModels.containsKey("ElemeManageTask")) {
+            ModelFields legacyManage = newModels.remove("ElemeManageTask");
+            ModelFields elemeFields = newModels.computeIfAbsent("ElemeTask", k -> new ModelFields());
+            for (String code : new String[]{
                     "elemeAccountStatus", "elemeRefreshMall", "elemeCustomUa", "elemeRiskTasks"}) {
-                ModelField<?> legacyField = legacyFields.get(manageFieldCode);
-                if (legacyField != null) {
-                    migratedFields.addField(legacyField);
-                    hasLegacyField = true;
+                ModelField<?> f = legacyManage.get(code);
+                if (f != null && f.getValue() != null && elemeFields.get(code) == null) {
+                    elemeFields.addField(f);
                 }
-            }
-            if (hasLegacyField) {
-                newModels.put("ElemeManageTask", migratedFields);
             }
         }
         // 遍历所有模型配置，合并字段配置

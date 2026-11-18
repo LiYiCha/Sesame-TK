@@ -62,7 +62,7 @@ class ElemeTask : ModelTask() {
         @JvmField
         val elemeAccountStatus = EmptyModelField(
             "elemeAccountStatus",
-            "账号状态"
+            "查看"
         ) { context ->
             ElemeMtopUtil.showAccountStatusDialog(context)
         }
@@ -166,14 +166,17 @@ class ElemeTask : ModelTask() {
         val modelFields = ModelFields()
         // 「目标兑换商品」已由【兑换商城】弹窗内的勾选框承载，设置页隐藏该字段（仍保留配置持久化）
         elemeExchangeItems.isHidden = true
-        // 账号状态/兑换商城/设备UA/风控名单已拆分至「饿了么管理」页面（ElemeManageTask），
-        // 字段实例仍在本 companion 中，运行时读写引用不变
+        // 账号状态/兑换商城/设备UA/风控名单统一在「饿了么」页面内展示（管理入口不再单独拆页）
         modelFields.addField(startTime)
         modelFields.addField(elemeLuckyStar)
         modelFields.addField(elemeFreeOrder)
         modelFields.addField(elemeBurstRed)
         modelFields.addField(elemeAutoExchange)
+        modelFields.addField(elemeAccountStatus)
+        modelFields.addField(elemeRefreshMall)
         modelFields.addField(elemeExchangeItems)
+        modelFields.addField(elemeCustomUa)
+        modelFields.addField(elemeRiskTasks)
         return modelFields
     }
 
@@ -186,11 +189,17 @@ class ElemeTask : ModelTask() {
             return
         }
 
-        if (taskExecutor == null || taskExecutor!!.isShutdown) {
-            taskExecutor = Executors.newCachedThreadPool()
+        // 局部快照：避免 stopTask() 在判空与 submit 之间把 taskExecutor 置 null 引发竞态空指针
+        val executor = synchronized(this) {
+            val current = taskExecutor
+            if (current == null || current.isShutdown) {
+                Executors.newCachedThreadPool().also { taskExecutor = it }
+            } else {
+                current
+            }
         }
 
-        currentFuture = taskExecutor!!.submit {
+        currentFuture = executor.submit {
             executionLock.lock()
             try {
                 if (elemeFreeOrder.value) {

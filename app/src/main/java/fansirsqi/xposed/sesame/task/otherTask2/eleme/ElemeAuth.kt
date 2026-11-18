@@ -413,6 +413,23 @@ object ElemeAuth {
         return "支付宝: $alipayMask ($alipayUid) | $elemeInfo"
     }
 
+    /**
+     * 饿了么绑定账号单行描述（供账号状态弹窗置顶展示）
+     * 形如「饿了么绑定: 账***号 (UID: 100***923)」，未获取到账号时明确标注未绑定
+     */
+    @JvmStatic
+    fun getElemeAccountLine(): String {
+        val elemeUser = DataStore.get(getUidKey("Eleme_Username"), String::class.java).orEmpty()
+        val elemeUid = DataStore.get(getUidKey(KEY_USER_ID), String::class.java).orEmpty()
+        return if (elemeUser.isNotEmpty() || elemeUid.isNotEmpty()) {
+            val userStr = if (elemeUser.isNotEmpty()) mask(elemeUser, 3, 3) else "账号已同步"
+            val uidStr = if (elemeUid.isNotEmpty()) mask(elemeUid, 3, 3) else "未知"
+            "饿了么绑定: $userStr (UID: $uidStr)"
+        } else {
+            "饿了么绑定: 未绑定（请在支付宝打开饿了么小程序完成授权）"
+        }
+    }
+
     private fun mask(str: String?, prefixLen: Int = 3, suffixLen: Int = 3): String {
         if (str.isNullOrEmpty()) return ""
         if (str.length <= prefixLen + suffixLen) return str

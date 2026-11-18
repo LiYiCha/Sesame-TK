@@ -26,6 +26,8 @@ object FreeOrderTask {
     const val FLAG_LOTTERY_DONE = "Eleme_LuckyStar_Lottery_Done"
     // 幸运星任务全流程正常完成标记：置位后抽免单任务无需再兜底执行
     const val FLAG_FLOW_DONE = "Eleme_TaskFlow_Done"
+    // 抽免单任务自身完成标记（与幸运星流程标记独立，避免两者共用导致互相屏蔽、只剩一个运行）
+    const val FLAG_FREEORDER_DONE = "Eleme_FreeOrder_Done"
     private val lock = ReentrantLock()
 
     fun handle() {
@@ -33,8 +35,13 @@ object FreeOrderTask {
             return
         }
 
-        // 幸运星任务全流程已正常完成时才整体跳过；若幸运星中途被风控中止，抽免单任务照常兜底补跑
+        // 幸运星任务全流程已正常完成时才整体跳过；若幸运星中途被风控中止，抽免单任务照常兜底补跑。
+        // 注意：此处只判断幸运星标记，不判断本任务自己的标记由下方独立字段处理，
+        // 避免历史上两任务共用 FLAG_FLOW_DONE 导致抽免单先跑后把幸运星永久屏蔽。
         if (Status.hasFlagToday(FLAG_FLOW_DONE)) {
+            return
+        }
+        if (Status.hasFlagToday(FLAG_FREEORDER_DONE)) {
             return
         }
 
@@ -59,8 +66,9 @@ object FreeOrderTask {
 
             // 1. 获取互动中心首页聚合数据
             val homepageResp = FreeOrderRpcCall.queryCenterHomepage(cookie)
-            val rootData = homepageResp?.optJSONObject("data") ?: homepageResp
-            val dataObj = rootData?.optJSONObject("data") ?: rootData
+            // 对齐 幸运星.py：d = r["data"]，业务字段（resource/signIn/orderFreeDraw）均在 d 下。
+            // 注意不可再下钻一层，否则 lotteries/orderFreeDraw 全部取不到，导致「获得次数却不抽奖」。
+            val dataObj = homepageResp?.optJSONObject("data") ?: homepageResp
 
             // 2. 连续签到攒免单打卡（签到获取抽奖次数）
             if (!Status.hasFlagToday(FLAG_SIGNIN)) {
@@ -206,7 +214,8 @@ object FreeOrderTask {
                                             handlePrizeFailure(missionDefId, title, prizeRes)
                                         }
                                     }
-                                } else if (staged == 0) {
+                                } else if (staged == 0 && LuckyStarRpcCall.isTaskRewardable(refreshedTask)) {
+                                    // 无阶段配置的单节点任务：仍须校验任务本身到达可领态，避免未完成就领奖报 STAGE_NOT_FINISH
                                     val prizeRes = LuckyStarRpcCall.receivePrize(cookie, refreshedTask, null)
                                     if (prizeRes.isSuccess) {
                                         Log.other("饿了么", "[抽免单] [$title]: +1 抽奖机会")
@@ -281,7 +290,8 @@ object FreeOrderTask {
                                             handlePrizeFailure(missionDefId, title, prizeRes)
                                         }
                                     }
-                                } else if (staged == 0) {
+                                } else if (staged == 0 && LuckyStarRpcCall.isTaskRewardable(refreshedTask)) {
+                                    // 无阶段配置的单节点任务：仍须校验任务本身到达可领态，避免未完成就领奖报 STAGE_NOT_FINISH
                                     val prizeRes = LuckyStarRpcCall.receivePrize(cookie, refreshedTask, null)
                                     if (prizeRes.isSuccess) {
                                         Log.other("饿了么", "[抽免单] [$title]: +1 抽奖机会")
@@ -400,9 +410,10 @@ object FreeOrderTask {
             Thread.sleep(RandomUtil.nextGaussianLong(500, 1000))
             val orderFreeData = dataObj?.optJSONObject("orderFreeDraw")
             val ofRes = FreeOrderRpcCall.orderFreeDraw(cookie, orderFreeData)
-            Status.setFlagToday(FLAG_ORDER_FREE)
-
+            // 仅抽奖成功才置位：失败/临时无资格时留空，交给后续幸运星任务兜底重试，
+            // 避免无条件置位把幸运星的下单免单抽奖永久屏蔽
             if (ofRes.isSuccess) {
+                Status.setFlagToday(FLAG_ORDER_FREE)
                 val prize = ElemeMtopUtil.extractPrizeDesc(ofRes.data ?: ofRes.rawJson)
                 if (prize.isNotEmpty()) {
                     Log.other("饿了么", "[抽免单] 🎲 下单免单抽奖: $prize")
@@ -424,8 +435,9 @@ object FreeOrderTask {
                 }
             }
 
-            // 免单兜底全流程执行完毕，置位完成标记（幸运星任务今日无需再跑）
-            Status.setFlagToday(FLAG_FLOW_DONE)
+            // 免单兜底全流程执行完毕，置位本任务独立标记（不再置位 FLAG_FLOW_DONE，
+            // 以免影响幸运星任务的独立执行；FLAG_FLOW_DONE 仅由幸运星任务全流程完成时置位）
+            Status.setFlagToday(FLAG_FREEORDER_DONE)
         } catch (t: Throwable) {
             val msg = "[抽免单] ❌ 执行异常: ${t.message}"
             Log.error(TAG, msg)

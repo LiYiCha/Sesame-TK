@@ -51,10 +51,14 @@ object BurstRedTask {
                     val reduction = coupon.optString("reductionYuan", "5")
                     val name = coupon.optString("rightName", "爆红包")
                     Log.other("饿了么", "[爆红包] 🎉 成功领取: $count 张 $reduction 元 $name")
+                    // 仅确认领取成功才置位；失败/响应异常时不置位，保留当天重试机会
+                    Status.setFlagToday(FLAG_TODAY)
+                } else {
+                    Log.other("饿了么", "[爆红包] 本次未返回领取结果，未置位完成标记，稍后可重试")
                 }
+            } else {
+                Log.other("饿了么", "[爆红包] 请求无响应，未置位完成标记，稍后可重试")
             }
-
-            Status.setFlagToday(FLAG_TODAY)
         } catch (t: Throwable) {
             Log.other("饿了么", "[爆红包] ❌ 执行异常: ${t.message}")
         } finally {

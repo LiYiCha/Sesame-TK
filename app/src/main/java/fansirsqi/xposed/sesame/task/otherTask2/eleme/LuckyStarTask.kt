@@ -407,7 +407,8 @@ object LuckyStarTask {
             if (taskArray != null && (finishedCount > 0 || hasRewardable)) {
                 // ==== 第二轮: 刷新任务进度并领取奖励 ====
                 Thread.sleep(RandomUtil.nextGaussianLong(1500, 2500))
-                val refreshedResp = LuckyStarRpcCall.queryTaskList(cookie)
+                // 与第一轮使用同一个 missionCollectionId（取自首页聚合），避免刷新查询换集合导致进度不一致
+                val refreshedResp = LuckyStarRpcCall.queryTaskList(cookie, collectionId = missionCollectionId)
                 val refreshedArray = extractTaskArray(refreshedResp) ?: taskArray
 
                 for (i in 0 until refreshedArray.length()) {

@@ -435,12 +435,15 @@ object LuckyStarRpcCall {
             }
         }
         val headers = mapOf("asac" to ASAC_SIGNIN)
-        // 接口尝试顺序（对齐幸运星.py；recordsignin 同时尝试 v1.1 与 v1.0，修复 v1.1 API 不存在时无兜底的问题）
-        val order = if (strategy == "SIGNIN_AND_RECEIVE") {
-            listOf(Pair(API_SIGNIN, "1.0"), Pair(API_RECORD_SIGNIN, "1.1"), Pair(API_RECORD_SIGNIN, "1.0"))
-        } else {
-            listOf(Pair(API_RECORD_SIGNIN, "1.1"), Pair(API_RECORD_SIGNIN, "1.0"), Pair(API_SIGNIN, "1.0"))
-        }
+        // 接口尝试顺序：signinandreceive 为两个抓包与 py 均确认存在的接口，优先且必试；
+        // recordsignin 在当前小程序版本实测返回 FAIL_SYS_API_NOT_FOUNDED（API 不存在），
+        // 仅作为最后兜底各试一次（v1.1/v1.0），失败属预期，不视为签到失败。
+        // 无论 strategy 取值如何都先走确定可用的 signinandreceive，避免每次无谓的下线 API 探测。
+        val order = listOf(
+            Pair(API_SIGNIN, "1.0"),
+            Pair(API_RECORD_SIGNIN, "1.1"),
+            Pair(API_RECORD_SIGNIN, "1.0")
+        )
 
         var lastResult = ElemeMtopUtil.MtopResult(isSuccess = false, isNotLogin = false, errorMsg = "未执行")
         for ((api, ver) in order) {
