@@ -50,7 +50,10 @@ public class OtherTask2 extends ModelTask {
     private BooleanModelField privilegeTask = new BooleanModelField("privilegeTask", "青春特权", true);
     private static final BooleanModelField gameCenterGold = new BooleanModelField("gameCenterGold", "游戏中心金币任务", false);
     private BooleanModelField monthTRA = new BooleanModelField("monthTRA", "月月赚转账红包", false);
-    private BooleanModelField scholarship = new BooleanModelField("scholarship", "奖学金", false);
+    // 需被 Scholarship.handle() 读取开关状态，故为 public（与 scholarshipExchange 一致）
+    public static final BooleanModelField scholarship = new BooleanModelField("scholarship", "奖学金", false);
+    public static final BooleanModelField scholarshipExchange = new BooleanModelField("scholarshipExchange", "奖学金|自动兑换红包", false);
+    public static final StringModelField scholarshipExchangeKeyword = new StringModelField("scholarshipExchangeKeyword", "奖学金|兑换商品关键词", "红包");
     private BooleanModelField touchPay = new BooleanModelField("touchpay", "碰一碰街区", false);
     private BooleanModelField CampusPaiSign = new BooleanModelField("CampusPaiSign", "校园派|签到", false);
     private BooleanModelField CampusPaiTask = new BooleanModelField("CampusPaiTask", "校园派|任务", false);
@@ -94,6 +97,8 @@ public class OtherTask2 extends ModelTask {
         modelFields.addField(gameCenterGold);
         modelFields.addField(monthTRA);//月月赚
         modelFields.addField(scholarship);//奖学金
+        modelFields.addField(scholarshipExchange);
+        modelFields.addField(scholarshipExchangeKeyword);
         modelFields.addField(touchPay);
         modelFields.addField(CampusPaiSign);
         modelFields.addField(CampusPaiTask);
@@ -184,7 +189,7 @@ public class OtherTask2 extends ModelTask {
                 // 第二组：常规任务
                 taskGroups.add(new TaskGroup("常规任务", Arrays.asList(
                         new TaskWrapper("奖学金任务", () -> {
-                            if (scholarship.getValue()) {
+                            if (scholarship.getValue() || scholarshipExchange.getValue()) {
                                 new Scholarship().handle();
                             }
                         }),

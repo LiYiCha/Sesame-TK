@@ -22,7 +22,7 @@ public class Scholarship extends BaseCommTask {
     @Override
     protected void handle() {
         try {
-            if (!Status.hasFlagToday("ScholarshipTask")) {
+            if (OtherTask2.scholarship.getValue() && !Status.hasFlagToday("ScholarshipTask")) {
                 //queryAvatar();
                 initUserInfo();
                 TimeUtil.sleep(RandomUtil.nextInt(13000, 15000));
@@ -34,8 +34,110 @@ public class Scholarship extends BaseCommTask {
                 }
                 queryUserInfo();
             }
+            if (OtherTask2.scholarshipExchange.getValue() && !Status.hasFlagToday("ScholarshipExchange")) {
+                TimeUtil.sleep(RandomUtil.nextInt(3000, 5000));
+                exchangeRedPacket();
+            }
         } catch (Exception e) {
             Log.error(TAG+"❌handle--异常:" + e);
+        }
+    }
+
+    // 自动兑换红包类商品（按所需奖学金数从高到低逐个尝试，orderSn 为 uid_毫秒时间戳，与抓包一致）
+    private void exchangeRedPacket() {
+        try {
+            String keyword = OtherTask2.scholarshipExchangeKeyword.getValue();
+            if (keyword == null || keyword.isEmpty()) {
+                keyword = "红包";
+            }
+            // 1. 查询当前余额
+            String accountStr = RequestManager.requestString("com.alipay.promobffweb.needle.equity.queryAccount",
+                    "[{\"param\":{\"TEMPLATE_VERSION\":\"WALLET\"}}]");
+            JSONObject accountJson = new JSONObject(accountStr);
+            if (!accountJson.optBoolean("success")) {
+                Log.other(TAG + "兑换红包❌查询余额失败:" + accountJson.optString("message"));
+                return;
+            }
+            long balance;
+            try {
+                balance = (long) Double.parseDouble(accountJson.optString("availableAmount", "0"));
+            } catch (NumberFormatException e) {
+                balance = accountJson.getJSONObject("data").getJSONObject("availableAmount").getLong("cent") / 100;
+            }
+            // 2. 查询商品列表并筛选关键词商品
+            TimeUtil.sleep(RandomUtil.nextInt(3000, 5000));
+            String listStr = RequestManager.requestString("com.alipay.promobffweb.needle.equity.queryCommodityList",
+                    "[{\"param\":{\"TEMPLATE_VERSION\":\"WALLET\"}}]");
+            JSONObject listJson = new JSONObject(listStr);
+            if (!listJson.optBoolean("success")) {
+                Log.other(TAG + "兑换红包❌查询商品列表失败:" + listJson.optString("message"));
+                return;
+            }
+            JSONArray commodities = listJson.optJSONArray("data");
+            List<JSONObject> matched = new ArrayList<>();
+            StringBuilder names = new StringBuilder();
+            if (commodities != null) {
+                for (int i = 0; i < commodities.length(); i++) {
+                    JSONObject item = commodities.getJSONObject(i);
+                    if (!item.optString("itemName", "").contains(keyword)) {
+                        continue;
+                    }
+                    matched.add(item);
+                    if (names.length() > 0) {
+                        names.append("、");
+                    }
+                    names.append(item.optString("itemName"))
+                            .append("(").append(item.optLong("purchaseTypeMap")).append("个奖学金,余")
+                            .append(item.optInt("remainInventory", 0)).append(")");
+                }
+            }
+            if (matched.isEmpty()) {
+                Log.other(TAG + "商品列表中无[" + keyword + "]类商品");
+                Status.setFlagToday("ScholarshipExchange");
+                return;
+            }
+            Log.other(TAG + "可兑换[" + keyword + "]商品:" + names);
+            // 3. 按所需奖学金数从高到低逐个尝试兑换
+            matched.sort((a, b) -> Long.compare(b.optLong("purchaseTypeMap"), a.optLong("purchaseTypeMap")));
+            // 商品列表无"已兑换"字段，是否兑过只能靠兑换接口返回 2023(购买次数超限) 判断
+            boolean balanceShort = false;
+            for (JSONObject item : matched) {
+                String itemName = item.optString("itemName");
+                long price = item.optLong("purchaseTypeMap");
+                if (!"ITEM_GOING".equals(item.optString("status")) || item.optInt("remainInventory", 0) <= 0) {
+                    Log.other(TAG + "兑换[" + itemName + "]跳过:已下架或无库存");
+                    continue;
+                }
+                if (price > balance) {
+                    Log.other(TAG + "兑换[" + itemName + "]跳过:余额不足(" + balance + "奖学金)");
+                    balanceShort = true;
+                    break;
+                }
+                String itemId = item.optString("itemId");
+                String orderSn = UserMap.getCurrentUid() + "_" + System.currentTimeMillis();
+                String result = RequestManager.requestString("com.alipay.promobffweb.needle.equity.exchangeCommodity",
+                        "[{\"itemId\":\"" + itemId + "\",\"orderSn\":\"" + orderSn + "\",\"param\":{\"TEMPLATE_VERSION\":\"WALLET\"}}]");
+                JSONObject resultJson = new JSONObject(result);
+                if (resultJson.optBoolean("success")) {
+                    balance -= price;
+                    Log.other(TAG + "兑换[" + itemName + "]✅消耗[" + price + "]奖学金,余额[" + balance + "]");
+                } else {
+                    int resultCode = resultJson.optInt("resultCode");
+                    String desc = resultJson.optString("resultDesc", "未知错误");
+                    if (resultCode == 2023) {
+                        Log.other(TAG + "兑换[" + itemName + "]跳过:已达兑换次数上限(今日/本周已兑换过)");
+                    } else {
+                        Log.other(TAG + "兑换[" + itemName + "]❌[" + resultCode + "-" + desc + "]");
+                    }
+                }
+                TimeUtil.sleep(RandomUtil.nextInt(3000, 6000));
+            }
+            // 余额不足时保留标志以便当日后续运行重试；其余情况(成功/超限/库存不足)当日不再尝试
+            if (!balanceShort) {
+                Status.setFlagToday("ScholarshipExchange");
+            }
+        } catch (Exception e) {
+            Log.error(TAG+"❌exchangeRedPacket--异常:" + e);
         }
     }
 
