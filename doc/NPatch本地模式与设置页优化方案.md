@@ -39,92 +39,43 @@
 
 ---
 
-## 二、NPatch 本地模式支持
+## 二、NPatch 本地模式：核查结论
 
-### 2.1 本地模式下模块怎么被加载
+### 2.1 配置本来就是跨进程共享的
 
-官方 `guide/modes` 与 `guide/introduction`：
-
-- 修补包自带 `assets/npatch/loader.bin` 与 `libnpatch.so`，与模块是否嵌入无关。
-- 运行时用目标包名向管理器（`top.nkbe.npatch`）查询模块与作用域：先连 Manager Binder，失败再查 ConfigProvider，两者都不可用才用上次同步的缓存。
-- 模块以**独立 APK** 安装，作用域由管理器数据库决定，模块不能自己决定被加载。
-- 模块分三类，同一套 Vector 运行时：Legacy（`assets/xposed_init`）、libxposed API 101、libxposed API 102。
-
-所以「本地模式下模块显示未激活」不是加载失败，而是**设置页与任务不在同一个沙盒**：
-设置页跑在模块 APK 的进程，任务跑在被修补的支付宝进程，两边私有目录互不可见。
-
-### 2.2 配置共享的两条官方路径
-
-官方对本地模式的模块明确给了两条路，区别只在模块用哪套接口：
-
-| 路径 | 适用模块 | 模块 App 侧 | 注入侧 | 官方依据 |
-|---|---|---|---|---|
-| **A. XSharedPreferences** | Legacy（`assets/xposed_init`） | 普通 `SharedPreferences` 写入 | `XSharedPreferences(包名, 文件名)` 只读 | `guide/introduction`：「Legacy 模块继续支持传统 `assets/xposed_init` 与 `XSharedPreferences`」 |
-| **B. Remote API** | 现代（API 101/102） | `NPatchRemoteClient` 读写 Manager 的 Store | `getRemotePreferences(group)` 只读 | `guide/remote-api` 全篇 |
-
-两条路的方向一致：**设置页写、注入侧只读**。这是框架的分层设计，不是可以绕开的限制。
-
-#### 路径 A 为什么可行（源码依据）
-
-Vector 的 `legacy/src/main/java/de/robv/android/xposed/XSharedPreferences.java`：
-
-```java
-// :180 由框架服务解析模块的 prefs 目录，而不是按调用进程的 UID 拼路径
-mFile = new File(VectorServiceClient.INSTANCE.getPrefsPath(packageName), prefFileName + ".xml");
-
-// :251 / :346 通过注入的文件服务读取，能跨 UID 打开模块 App 的私有文件
-try (InputStream is = SELinuxHelper.getAppDataFileService().getFileInputStream(filename)) { ... }
-```
-
-也就是说，`XSharedPreferences("模块包名", "文件名")` 在目标进程里读的是**模块 App 自己写的 prefs**，
-跨 UID 由框架服务完成。传统模块几十年都是这么做的（LSPosed wiki「New XSharedPreferences」给的就是这套写法）：
+代码事实（`util/Files.kt:56-67`）：
 
 ```kotlin
-// 注入侧（目标进程）
-val pref = XSharedPreferences("fansirsqi.xposed.sesame", "sesame_config")
-val json = pref.getString("ElemeTask", null)   // 只读
+// MAIN_DIR
+Environment.getExternalStorageDirectory() + "/Android/media/" + General.PACKAGE_NAME + "/sesame-TK"
+// CONFIG_DIR
+File(MAIN_DIR, "config")
 ```
 
-#### 路径 B 的适用面
+实际路径：`/storage/emulated/0/Android/media/com.eg.android.AlipayGphone/sesame-TK/config`。
 
-`NPatchRemoteClient` 是给「现代模块的设置 App」用的：需要 AAR、`<queries>` 声明、连接（同步最多 3 秒），
-数据存在 Manager 的 SQLite（`configs` 表）里，注入侧通过 libxposed 只读。它更适合需要 Remote Files、
-或设置 App 与模块本体分离的现代模块。本模块的设置页与任务同属一个 APK，用不上 Files，走 A 更直接。
+这是**公共媒体目录**，不是任何应用的私有目录。模块设置页（模块进程）与任务（支付宝进程）读写的是同一个 `config_v2.json`
+与同一批按 userId 划分的子目录。因此「本地模式下配置读不到」这个判断不成立——它从来没有因为进程不同而失效。
 
-### 2.3 本模块的差距
+### 2.2 之前那套方案错在哪
 
-现状配置读写是自研的 `util/DataStore`（直接读写模块私有目录文件）与 `data/Config.java`（模型字段 JSON）：
+| 判断 | 事实 | 结果 |
+|---|---|---|
+| 设置页写模块私有目录、任务读支付宝私有目录 | 两者都读写 `/sdcard/Android/media/<支付宝包名>/sesame-TK/config` | 前提错误 |
+| 因此需要 XSharedPreferences / Remote API 打通 | 公共目录已打通，不需要额外通道 | 方案多余 |
 
-- 设置页写：模块进程的私有目录；
-- 任务读：支付宝进程的私有目录（`DataStore` 按 `AppContext` 的路径解析）；
-- 两者都不是 `SharedPreferences`，框架的 `XSharedPreferences` 帮不上忙，Remote API 也没接。
+据此新增的 `PrefsBridge`、`Config` 的 prefs 分支、`xposedsharedprefs` 声明、`<queries>` 声明已全部回退，代码恢复到改动前状态。
 
-这就是本地模式下「配置读不到、功能像没激活」的全部原因。
+### 2.3 本地模式「未激活」该查什么
 
-### 2.4 已实现：配置镜像到 SharedPreferences
+按官方运行模型，模块能否被加载由管理器决定，与配置存储无关。排查顺序：
 
-> 代码已落地（`util/PrefsBridge.kt`、`Config.save/load`、`AndroidManifest.xml` 的 `xposedsharedprefs`）。
-> 是否真的跨进程可读，需按 2.5 在真机确认；集成模式行为不变。
+1. **作用域**：NPatch 管理器里是否把本模块勾选给 `com.eg.android.AlipayGphone`（`guide/modes`：作用域始终以管理器数据库为准）。
+2. **模块识别**：`META-INF/xposed/{module.prop, java_init.list, scope.list}` 是否被打包进 APK（APK 内检查，不是源码目录）。
+3. **注入是否发生**：注入进程启动后 `xp_env.txt` 是否更新、runtime 日志是否有 `Loaded process=` 记录。
+4. **账号一致**：设置页与注入进程的 `UserMap.currentUid` 是否相同；不同账号会落到不同的配置子目录，表现为「设置不生效」。
 
-只动存储后端，不动 hook（158 处 `de.robv` 调用全部保留）。
-
-| 项 | 改动 |
-|---|---|
-| 设置页写入 | `Config.save` 写文件后镜像到 `getSharedPreferences("sesame_config", MODE_PRIVATE)`（`PrefsBridge.writeConfig`），注入进程调用时自动跳过 |
-| 注入侧读取 | `Config.load` 先 `PrefsBridge.readConfig(userId)`（`XSharedPreferences` 只读），有值则用并回写本地文件缓存；否则走原文件逻辑 |
-| 运行期状态 | 计数、缓存、`status.json`、日志继续留本地文件，**不要**塞进 prefs（XML 全量重写，高频写会掉帧） |
-| 运行期改配置 | `XSharedPreferences` 只读，5 处 `setValue` 只改内存 + 本地覆盖表；读取顺序：本地覆盖 > prefs > 默认 |
-| meta-data | `AndroidManifest.xml` 已声明 `xposedsharedprefs=true`；`module.prop` 的 `minApiVersion=100` 满足 LSPosed `xposedminversion >= 93` |
-
-迁移不需要改数据结构：`Config` 仍是「一个模型一个 JSON 字符串」，只是从文件挪到 prefs 的一个 String 键。
-
-### 2.5 需要真机确认的三点
-
-1. `getSharedPreferences(name, MODE_WORLD_READABLE)` 在 NPatch 下是否被允许。LSPosed 明确 hook 了 `checkMode`；NPatch 是否同样处理未在文档中说明，若不支持则改用 `MODE_PRIVATE`，靠 Vector 服务读取。
-2. NPatch 本地模式下 `XSharedPreferences(模块包名, 文件名)` 的 `getFile().canRead()` 是否为 true。这是路径 A 能否成立的唯一判据。
-3. 集成模式下是否同进程。若设置页与任务同进程，`XSharedPreferences` 也能读，行为不受影响；不需要为集成模式单独分支。
-
-### 2.6 签名绕过等级（源码依据）
+### 2.4 签名绕过等级（源码依据）
 
 NPatch 的等级实现集中在 `patch-loader/src/main/java/top/nkbe/npatch/loader/SigBypass.java` 与
 `patch-loader/src/main/jni/src/jni/bypass_sig.cpp`、`svc_bypass.cpp`：
@@ -143,35 +94,6 @@ NPatch 的等级实现集中在 `patch-loader/src/main/java/top/nkbe/npatch/load
 2. **仍被判定时再试 5 Stealth**。支付宝 native 安全组件（如安全键盘、设备指纹库）会自行 `open` APK 校验签名，此时只有 GOT/PLT 重定向能覆盖；代价是 maps 中出现额外 so，需要配合管理器侧的库名隐藏。
 3. **4 Seccomp 不建议首选**。该级别在进程上安装 seccomp 过滤器，而支付宝自身也可能安装过滤器；两者叠加会返回 `EPERM`，表现为宿主 native 组件异常退出或功能静默失效，排查成本高。
 4. 需明确的预期：**等级越高不等于越不易被识别**。改包本身是强特征（APK 路径、`/proc/self/maps`、加载器 so 均与官方包不同），3 与 5 的差异只在覆盖的校验路径，不在「隐形」程度。若仅为规避识别而切换本地模式，收益低于风险；本地模式的真实价值是「免重新修补即可换模块」。
-
-### 2.7 官方文档引用与现状边界
-
-| 结论 | 出处 |
-|---|---|
-| 两种修补方式、Extreme/Seccomp/Stealth 仅本地模式可用 | 站点首页「两种修补方式」 |
-| 签名绕过 0–5 级定义、3/4/5 必须搭配 `--manager`、集成模式上限 High | `guide/usage.html` →「互斥规则」「签名绕过等级」 |
-| 本地模式后续步骤（装管理器 → 装修补包 → 选模块与作用域） | `guide/usage.html` →「本地模式的后续步骤」 |
-| Remote API 依赖 AAR、`<queries>` 声明、模块 App 用 `NPatchRemoteClient` 读写 | `guide/remote-api.html` →「添加 SDK」「建立连接」「API 参考」 |
-| 目标进程内 Remote Preferences 只读、`edit()` 抛 `UnsupportedOperationException` | `guide/remote-api.html` →「API 101/102 模块运行时」 |
-| 管理器包名 `top.nkbe.npatch`、authority `top.nkbe.npatch.remote` | `guide/remote-api.html` →「适用范围」「添加 SDK」 |
-| 本地模式运行模型、loader 来源、作用域以管理器为准 | `guide/modes` →「Local Mode」「Comparison」 |
-| Legacy 模块支持 `XSharedPreferences` | `guide/introduction`「模块 API 与运行能力」 |
-| Legacy 的 `XSharedPreferences` 仍走原文件路径，不会被自动重定向到 Remote API | `guide/faq`「Remote Preferences 与 Remote Files 存在哪里」 |
-| 注入侧只读、`edit()` 抛异常 | `guide/remote-api`「API 101/102 模块运行时」 |
-| `XSharedPreferences` 跨 UID 读取模块 prefs 的实现 | Vector `legacy/.../XSharedPreferences.java:180/251/346` |
-| New XSharedPreferences 模块侧写法（`MODE_WORLD_READABLE` + `XSharedPreferences(包名, 文件名)`） | LSPosed wiki「New XSharedPreferences」 |
-| 三类模块加载方式（Legacy / API 101 / API 102） | 站点首页「一套运行时，三种模块」 |
-| 各级别的 Java/native hook 面 | 源码 `patch-loader/.../SigBypass.java`、`patch-loader/src/main/jni/src/jni/bypass_sig.cpp`、`svc_bypass.cpp` |
-
-现状边界（避免误判为已支持）：
-
-- 当前仓库两条路径都没接：配置由自研 `DataStore` 直接读写模块私有目录，既不是 `SharedPreferences`，
-  也没调用 `getRemotePreferences`。因此本地模式下设置页与任务互不可见，本文是实施方案而非既有能力。
-- 设置页的「NPatch 环境」一行只陈述可验证事实（管理器是否安装、Provider 是否可解析），不代表本地模式已可用。
-- 已完成的前置只有两项：`AndroidManifest.xml` 的 `<queries>` 声明、`NpatchEnv` 的只读探测（管理器是否安装、Provider 是否可解析），二者不影响集成模式。
-- 集成模式暂不需要改造：现有配置在目标应用侧可读写，行为与现状一致；改用 SharedPreferences 后仍兼容。
-
----
 
 ## 三、设置页字段列表：评估后不采纳分组方案
 

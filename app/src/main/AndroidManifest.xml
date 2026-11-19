@@ -19,15 +19,6 @@
         tools:ignore="ProtectedPermissions" />
     <uses-permission android:name="com.android.alarm.permission.SET_ALARM" />
 
-    <!--
-      NPatch 本地模式：管理器通过 RemoteApiProvider 向模块 App 暴露 Remote Preferences / Remote Files。
-      Android 11+ 不声明 <queries> 时 PackageManager 与 Provider 解析都会失败，
-      因此显式声明 NPatch 的 remote authority 与管理器包名（仅用于探测与后续接入 Remote SDK）。
-    -->
-    <queries>
-        <provider android:authorities="top.nkbe.npatch.remote" />
-        <package android:name="top.nkbe.npatch" />
-    </queries>
 
     <application
         android:name="fansirsqi.xposed.sesame.MyApplication"
@@ -43,10 +34,6 @@
 
         <meta-data
             android:name="xposedmodule"
-            android:value="true" />
-        <!-- 允许注入进程通过 XSharedPreferences 读取模块配置（LSPosed 需要；NPatch 由 Vector 文件服务解析） -->
-        <meta-data
-            android:name="xposedsharedprefs"
             android:value="true" />
         <meta-data
             android:name="xposeddescription"
