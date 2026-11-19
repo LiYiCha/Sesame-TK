@@ -619,9 +619,29 @@ object ElemeMtopUtil {
     fun getUaSourceLabel(): String =
         if (ElemeTask.getElemeCustomUa().value.orEmpty().trim().isEmpty()) "内置模板" else "自定义UA"
 
-    /** 判断 UA 是否为支付宝小程序 WebView 结构（抓包特征：MYWeb/ + UWS/ + NebulaSDK/） */
-    private fun isMiniProgramUa(ua: String): Boolean =
-        ua.contains("MYWeb/") && ua.contains("UWS/") && ua.contains("NebulaSDK/")
+    /**
+     * 小程序 WebView UA 的判定特征：只取抓包中区分度最高的三段内核标记。
+     * MYWeb 是支付宝小程序容器、UWS 是 UC 内核服务、UCBS 是内核版本串，三者缺一即非该结构；
+     * 不校验 NebulaSDK/AlipayDefined 等通用段，避免把浏览器 UA 误判为小程序。
+     */
+    private val UA_TAIL_MARKS = arrayOf("MYWeb/", "UWS/", "UCBS/")
+
+    private fun isMiniProgramUa(ua: String): Boolean = UA_TAIL_MARKS.all { ua.contains(it) }
+
+    /**
+     * 精简 UA 体检结论，供任务日志使用：只输出「来源 + 结构与缺失项」，不打印整条 UA。
+     * 完整 UA 仍写 runtime 日志，便于排查但不污染运行日志。
+     */
+    @JvmStatic
+    fun briefUa(): String {
+        val ua = getActiveProfile().httpUa()
+        val missing = UA_TAIL_MARKS.filterNot { ua.contains(it) }.map { it.removeSuffix("/") }
+        return if (missing.isEmpty()) {
+            "${getUaSourceLabel()} · 小程序WebView ✅"
+        } else {
+            "${getUaSourceLabel()} · ⚠ 非小程序WebView（缺 ${missing.joinToString("/")}）"
+        }
+    }
 
     /** 复制文本到剪贴板，Android 13+ 由系统弹出隐私提示；失败返回 false */
     private fun copyTextToClipboard(context: android.content.Context, text: String): Boolean {
