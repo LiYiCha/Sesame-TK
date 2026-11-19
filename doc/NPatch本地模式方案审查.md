@@ -1,120 +1,113 @@
-# NPatch 本地模式方案 · 审查报告
+# NPatch 本地模式方案 · 审查报告（第二版）
 
-审查对象：`doc/NPatch本地模式与设置页优化方案.md` 第二章（本地模式实现方案）。
-依据：NPatch 官方 `guide/modes`、`guide/remote-api`、`guide/faq`；仓库当前代码与构建配置；libxposed API 102.0.0 源码。
-
-结论先行：**方案方向成立，但有 3 处必须修正，其中 2 处会导致方案直接失败**。修正后工作量约为原估算的五分之一，可以先做一次探针验证再决定是否开发。
+本版修正第一版的表述错误：第一版写成「不能升到 102」，容易被读成「方案要求升 102 而我反对」。
+实际问题是——**方案把已经完成的事列成了待办，并且写错了清单文件路径**。以下逐条核对。
 
 ---
 
-## 一、审查依据的仓库现状
+## 一、先把三个「API 版本」分开
 
-| 项 | 现状 | 依据 |
-|---|---|---|
-| 模块清单 | `minApiVersion=100`、`targetApiVersion=101`、`staticScope=true` | `app/src/main/resources/META-INF/xposed/module.prop` |
-| 现代入口 | `LibXposedRuntime : XposedModule()`，`onPackageReady` 调 `ApplicationHook.startHook` | `hook/libxposed/LibXposedRuntime.kt` |
-| hook 实现 | 全部 `de.robv`：`XC_MethodHook` 56、`findAndHookMethod` 23、`hookMethod` 14、`hookAllMethods` 3、`XC_MethodReplacement` 4，分布在 28 个文件 | `grep` 统计 |
-| 依赖 | `io.github.libxposed:api:102.0.0` 为 `compileOnly` | `app/build.gradle.kts:179` |
-| Remote 接口 | `XposedInterface.getRemotePreferences(String)`、`openRemoteFile(String)`、`PROP_CAP_REMOTE` 均存在 | `api-102.0.0-sources.jar` 内 `XposedInterface.java:67/543/563` |
-| 运行期写配置 | 5 处任务会在运行时把开关置 false | `AntFarmLoveChickenGathering.kt:98`、`AntFarmRankAward.kt:28`、`AntOcean.java:210`、`HuaBeiJin.java:104`、`OtherTask2.java:84` |
+这是第一版没讲清楚、也最容易误解的地方。
 
-关键事实：模块**已经**跑在 libxposed 现代管线上（`module.prop` 存在），只是 hook 逻辑借 101 的 legacy 桥运行。这一点直接推翻了原方案对工作量的判断。
+| 名称 | 当前值 | 位置 | 作用 | 能否随意改 |
+|---|---|---|---|---|
+| Gradle 依赖版本 | `102.0.0` | `app/build.gradle.kts:179`（`compileOnly`） | 只决定**编译期**能调用哪些接口方法；不打进 APK，不参与运行时 | 可以，纯编译期 |
+| `targetApiVersion` | `101` | `app/src/main/resources/META-INF/xposed/module.prop` | **运行时契约**：框架据此决定按哪个 API 档位加载。`>=102` 时框架在 ClassLoader 层封锁 `de.robv.android.xposed` | 不能随意改，见下 |
+| 框架实际 API | 设备决定 | `getApiVersion()` | NPatch 内置 Vector 核心的实现版本 | 不可控 |
+
+所以「这个 API 已经使用了」是对的——**依赖库是 102**；但模块向框架声明的契约仍是 **101**。两者不冲突，当前组合是刻意为之：
+编译期能调 102 的接口，运行时保留 `de.robv` 兼容。
+
+`targetApiVersion >= 102` 会封锁 legacy 的依据（不是推断）：
+
+- Vector PR #757 原文：「API 102 forbids a module targeting 102 or higher from reaching `de.robv.android.xposed`, and the module class loader is the only place that can be enforced」。
+- 已适配模块文档：「两者不能混用：`targetApiVersion >= 102` 的模块在 classloader 层面就被禁止访问 legacy 包，因此 `XposedHelpers`、`XSharedPreferences`、`XposedBridge.log` 全部不可用」。
+- 本仓库 `LibXposedRuntime.kt` 注释记录了同一结论。
+
+结论：**问题不是「要升 102」，而是「不能升 102」**。本仓库有 56 个 `XC_MethodHook`、23 处 `findAndHookMethod`，全靠 legacy 桥。
 
 ---
 
-## 二、必须修正的三处
+## 二、原方案逐条核对
 
-### 2.1 目标 API 不能升到 102（原方案的最大错误）
+方案文件：`doc/NPatch本地模式与设置页优化方案.md`，行号为核对时的实际行号。
 
-原方案 A 写「迁移 libxposed API 102」，并把 `module.prop` 指向 102。但：
-
-- `LibXposedRuntime.kt` 的注释已写明「`targetApiVersion=101` 保证现代管线下 legacy 桥可用（102 起被框架禁用）」。
-- 一旦升到 102，`ApplicationHook.startHook` 里的 56 个 `XC_MethodHook`、23 处 `findAndHookMethod` 会**整体失效**，任务功能直接归零。
-- 而 Remote 能力并非 102 专属：官方 `guide/remote-api` 对注入侧的描述是「API 101/102 模块在目标进程中通过 libxposed `XposedInterface` 取得只读的 Remote Preferences」，`XposedInterface` 的 Remote 方法在 API 100 就已存在。
-
-**修正**：保持 `targetApiVersion=101`，不迁移 hook。`LibXposedRuntime` 本身是 `XposedModule`（继承 `XposedInterfaceWrapper`），可以直接调用 `getRemotePreferences(group)`，读到后写入进程内缓存，供 legacy hook 代码沿用现有 `Config`/`DataStore` 读取。
-
-工作量从「重写 28 文件、158 处调用」降为「改 1 个入口 + 配置读取层 1 层分支」。
-
-### 2.2 Remote 的数据流方向写反了
-
-原方案 2.3 阶段 C 写「商城缓存、运行日志：设置页通过 Remote Files 只读拉取」。方向错误：
-
-- 官方：模块 App 取得的文件描述符**可读写**；**目标进程内 API 101/102 的 `openRemoteFile()` 只读**。
-- 注入进程（支付宝内跑任务的那一侧）没有写 Remote 的能力，写只能由模块 App 完成。
-
-后果：本地模式下，注入进程产生的三类数据无法回到设置页——
-
-| 数据 | 产生方 | 能否经 Remote 传给设置页 |
-|---|---|---|
-| 当日任务标记 `status.json`（flagList） | 注入进程 | 不能 |
-| 运行日志 | 注入进程 | 不能 |
-| 商城缓存（`ElemeMallEntity`） | 注入进程为主 | 不能 |
-
-而现有实现依赖这条路径：`showAccountStatusDialog` / `readTodayFlags` 直接读磁盘 `status.json`（代码注释写明「设置进程与钩子进程内存隔离，直接读文件」）。集成模式同 UID 可读，本地模式读不到。
-
-**修正**：把数据分成两类，方案里分别处理，不要混为一谈。
-
-| 类别 | 方向 | 载体 | 本地模式 |
+| # | 方案原文 | 仓库/官方事实 | 判定 |
 |---|---|---|---|
-| 用户配置（任务开关、UA、兑换商品、整点） | 设置页 → 注入 | Remote Preferences | 可行 |
-| 运行状态（flagList、日志、商城缓存） | 注入 → 设置页 | 无官方通道 | 降级 |
+| 1 | 2.3 表 A 行（第 92 行）：「迁移 libxposed API 102：入口改为 `XposedModule` + `assets/META-INF/xposed/module.prop`」 | 入口**已经是** `XposedModule`：`java_init.list` 指向 `LibXposedRuntime`，后者 `: XposedModule()`；`module.prop` 与 `scope.list` 都在 `app/src/main/resources/META-INF/xposed/` | ✗ 把已完成项列为待办；路径也写错（是 `resources/`，不是 `assets/`） |
+| 2 | 2.3 表 A 行：「重写 28 个文件、158 处 hook 调用」 | 只有把 `targetApiVersion` 提到 102 才需要重写；保持 101 则一处都不用改 | ✗ 工作量估算建立在错误前提上 |
+| 3 | 2.1 表（第 49 行）：「模块设置页所在进程：集成模式下目标应用进程」 | 官方 `guide/modes` 只说集成模式把模块 APK 打进 `assets/npatch/modules/`、Remote 数据存目标应用数据目录，**没有**说模块 Activity 合并进目标清单 | ⚠ 无依据的断言，需标注为待验证 |
+| 4 | 2.3 阶段 C：「商城缓存、日志：设置页通过 Remote Files 只读拉取」 | 官方：模块 App 侧可读写，**注入侧只读**。注入进程写不了 Remote | ✗ 方向反了 |
+| 5 | 2.6 风险 1 已提「运行期写配置会抛 `UnsupportedOperationException`」，但没给处理 | 实际 5 处运行期写开关：`AntFarmLoveChickenGathering.kt:98`、`AntFarmRankAward.kt:28`、`AntOcean.java:210`、`HuaBeiJin.java:104`、`OtherTask2.java:84` | ⚠ 已识别未解决 |
+| 6 | 2.4 阶段 A：「失败路径捕获三类异常，回退本地」 | 官方错误表就是这三类（`IllegalStateException`/`SecurityException`/`RemoteException`）；但本地模式下「回退本地」等于静默失效 | ⚠ 需明确提示，不能静默 |
+| 7 | 2.5 改动清单：「`util/DataStore.kt`、`data/Config.java` 读写后端抽象为 `ConfigSource`」 | `DataStore` 里有大量高频运行期写（`AntFarm.kt:1344/1359` 计数、`RpcTrafficCapture.kt:98/107/114` 模式位、`AntFarm.kt:2065` 答案缓存） | ✗ 整层接 Remote 会把高频写打到 Manager Binder |
 
-降级方式只有两种，必须二选一，不能假装能同步：
-1. 设置页在本地模式下不展示当日状态，改为提示「本地模式不支持读取运行状态」；
-2. 注入进程把状态写到外部可见目录（需存储权限/SAF），设置页再读——引入权限成本，不建议。
+其余陈述核对成立：`<queries>` 声明、包名 `top.nkbe.npatch`、authority `top.nkbe.npatch.remote`、NPatch v1.0.7+、Remote Preferences 注入侧只读且 `edit()` 抛异常、集成模式无 Manager Provider 连不上。
 
-### 2.3 运行期写配置会撞上只读实现
+---
 
-原方案在风险里提了一句，但没给处理方式。实际有 5 处任务在运行时把开关置 false（见上表）。这些 `setValue` 会落到 `Config` 持久化：
+## 三、必须修正的三处
 
-- 若 `Config` 后端在注入侧指向 Remote（只读），调用 `edit()` 会抛 `UnsupportedOperationException`；
-- 若吞掉异常，开关看起来关掉了，重启后又被 Remote 覆盖，表现为「关不掉的开关」。
+### 3.1 前提错了：现代入口已存在，不需要「迁移」
 
-**修正**：Remote 只承载「设置页写入的配置」，运行期变更一律写本地覆盖层，读取顺序为：
+`LibXposedRuntime` 已继承 `XposedModule`（→ `XposedInterfaceWrapper`），自带
+`getFrameworkProperties()`、`getApiVersion()`、`getRemotePreferences(String)`（`XposedInterface.java:543`）。
+Remote 读取不需要迁移，只需在 `onPackageReady` 加几行：
 
-```
-本地覆盖值（本次运行期写入） > Remote（用户在设置页保存的） > 字段默认值
+```kotlin
+val caps = getFrameworkProperties()
+val hasRemote = (caps and XposedInterface.PROP_CAP_REMOTE) != 0L
+val prefs = getRemotePreferences("sesame_config")   // 注入侧只读
 ```
 
-本地覆盖层用现有 `DataStore` 即可，键加前缀区分，避免与配置本身混淆。
+改动面因此不是 28 个文件，而是：探针 1 个文件、`Config` 读取分支 1 处、设置页连接桥 1 个类。
+
+### 3.2 Remote 方向反了，状态类功能必须降级
+
+| 数据 | 产生方 | 能否经 Remote 到设置页 |
+|---|---|---|
+| 任务开关、UA、兑换商品、整点 | 设置页写 | ✔ |
+| `status.json` 的 flagList | 注入进程写 | ✘ 无通道 |
+| 运行日志 | 注入进程写 | ✘ |
+| 商城缓存 | 注入进程写 | ✘ |
+
+现有 `showAccountStatusDialog` / `readTodayFlags` 读磁盘 `status.json`，本地模式不同 UID 读不到。
+必须明确降级：本地模式下不显示当日状态，或提示「仅集成模式可读」，不能假装同步。
+
+### 3.3 配置与状态必须分家
+
+`ConfigSource` 不能把整个 `DataStore` 抽出去，否则高频写（农场计数、抓包模式位）会经 Binder 打到管理器。
+正确切分：
+
+- **用户配置**（模型字段 JSON、UA、兑换商品）→ Remote：设置页写、注入读。
+- **运行期状态与缓存**（`DataStore` 计数/缓存/模式位、`status.json`）→ 一律留本地。
+- **运行期改配置**（上述 5 处 `setValue`）→ 写本地覆盖层；读取顺序：本地覆盖 > Remote > 默认。
 
 ---
 
-## 三、修正后的实施路径（每步可独立验证）
+## 四、修正后的路径
 
-| 阶段 | 内容 | 改动面 | 验证点 |
+| 阶段 | 内容 | 改动 | 验证 |
 |---|---|---|---|
-| P0 探针 | `LibXposedRuntime.onPackageReady` 里读 `frameworkProperties & PROP_CAP_REMOTE`，尝试 `getRemotePreferences("npatch_probe")` 并日志输出结果 | 1 个文件、约 20 行 | 本地模式与集成模式各跑一次，确认能力位与可读性 |
-| P1 注入侧只读 | `Config` 读取增加 Remote 分支：Remote 有值则用，无值回退 `DataStore` | 1 层分支 | 改一个开关，重启后仍生效 |
-| P2 设置页写入 | 引入 `npatch-remote-api` AAR，`NPatchRemoteClient.connectAsync`，写入 Remote + 本地双写 | 1 个桥类 + 保存路径 | 本地模式改开关，注入侧读到；集成模式行为不变 |
-| P3 状态降级 | 本地模式下账号状态弹窗/日志入口标注不可用原因 | 2 处 UI | 不再出现「空白状态」 |
+| P0 | 探针：`onPackageReady` 打印 `PROP_CAP_REMOTE`，试读一个 group 并输出结果 | `LibXposedRuntime.kt`，约 15 行 | 本地/集成各跑一次，确认 101 档位是否实现 Remote |
+| P1 | `Config` 读取加 Remote 分支（只读，失败回退本地） | 1 处分支 | 改开关重启后仍生效 |
+| P2 | 设置页引入 `npatch-remote-api` AAR，`connectAsync` 连接，保存时 Remote + 本地双写 | 1 个桥类 + 保存路径 | 本地模式改动可见；集成模式行为不变 |
+| P3 | 状态降级提示（账号状态、日志入口） | 2 处 UI | 不再出现空状态或误导文案 |
 
-P0 不改变任何行为，失败也只是多一行日志，应当先做。
-
----
-
-## 四、必须先真机验证的四件事
-
-1. **API 101 下 Remote 是否真的可用**：`PROP_CAP_REMOTE` 是否置位、`getRemotePreferences` 是否抛 `UnsupportedOperationException`。官方文档写「API 101/102」，但本项目 target 是 101，需实测。
-2. **集成模式下注入侧能否读到 host-local Store**：官方说集成模式的数据在目标应用目录，模块初始化时会收到进程内 `IXposedService`。若注入侧可读，则同一套代码两种模式通吃；若不可读，需按模式分流。
-3. **NPatchRemoteClient 连接行为**：`connect` 最多等 3 秒，连接期间 Manager 进程可能被拉起；设置页首次打开会明显卡顿，必须走 `connectAsync`。
-4. **group 命名**：不可为空、不含 `/` 与 `\`；现有配置键名（如 `ElemeTask`）可用，但要统一前缀，避免与探针 group 冲突。
+P0 不改任何行为，是唯一能证伪「101 不支持 Remote」的手段。
 
 ---
 
-## 五、安全与兼容边界
+## 五、仍需实测的三件事
 
-- **CK 不进 Remote**：Manager 的 Remote Store 不提供内容加密（官方明确「SDK 不为 Remote Files 提供内容加密」）。CK 等价于账号凭据，只保留在注入进程本地。这意味着本地模式下设置页无法展示/复制 CK——现有「复制CK」按钮需按模式禁用。
-- **集成模式回归**：P1 的分支必须保证 Remote 不可用时完全回到现有行为，否则会在用户当前可用环境里引入退化。
-- **作用域不归模块管**：模块无法自行决定被加载，方案里不应包含任何 scope 写入逻辑。
+1. **101 档位下 `PROP_CAP_REMOTE` 是否置位**：官方写「API 101/102」，但本模块声明 101，需实测。
+2. **集成模式下 `getRemotePreferences` 的行为**：返回可读的 host-local 实例，还是抛异常，决定是否按模式分流。
+3. **`NPatchRemoteClient.connect` 的耗时**：同步最多 3 秒，设置页必须走 `connectAsync`。
 
 ---
 
-## 六、审查结论
+## 六、结论
 
-1. 原方案的核心判断「必须迁移 API 102 才能读 Remote」错误，且按原方案执行会破坏现有全部 hook。改为「保持 101 + 在 `LibXposedRuntime` 内读 Remote」后，改动面从 158 处降到 3 个文件。
-2. 原方案把「状态回传」当成可行，实际方向相反。本地模式下状态类功能必须明确降级，不能承诺同步。
-3. 运行期写配置必须走本地覆盖层，否则会出现关不掉的开关。
-
-建议：先落 P0 探针，用一次真机运行确认 101 的 Remote 能力，再决定 P1～P3 是否值得做。若探针显示 101 不支持 Remote，则本地模式只剩「设置 UI 移入目标进程」一条路，成本远高于收益，应维持集成模式。
+- 现代入口、`module.prop`、`scope.list` 都已就绪，**不需要迁移 API**；方案第 92 行那条应删除。
+- 真正要做的是三件小事：读 Remote（探针 → Config 分支）、写 Remote（设置页桥）、状态降级。
+- 前提是 101 档位支持 Remote；若不支持，只剩「设置 UI 搬进目标进程」一条路，成本远高于收益，维持集成模式即可。

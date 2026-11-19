@@ -50,7 +50,7 @@
 | 维度 | 集成模式 `--embed` | 本地模式 `--manager` |
 |---|---|---|
 | 模块 APK 位置 | 目标应用 `assets/npatch/modules/<pkg>.apk` | 独立安装，管理器按作用域加载 |
-| 模块设置页所在进程 | 目标应用进程（支付宝） | 模块自身进程 |
+| 模块设置页所在进程 | 目标应用进程（待验证：官方未明说 Activity 是否合并） | 模块自身进程 |
 | 配置目录 | 目标应用私有目录（设置页与任务共用） | 两个进程各自私有目录（互不可见） |
 | 换模块 | 需重新修补 | 管理器内切换，无需重新修补 |
 | 签名绕过上限 | High（2） | Extreme（3）/ Seccomp（4）/ Stealth（5） |
@@ -75,40 +75,53 @@
 
 读写方向与本模块的模型完全吻合：设置在设置页写入，任务只读取。
 
-**关键限制（决定本模块能否落地）**：注入侧的只读通道由 libxposed `XposedInterface` 提供，
-官方 FAQ 的表述是「作用域内的 API 101/102 目标进程只取得读取与变更通知能力」，且
-「Legacy `XSharedPreferences` 不会自动迁移……Legacy 模块必须明确采用此 API」。
-本项目入口是 Legacy 的 `IXposedHookLoadPackage`（`assets/xposed_init`），共 28 个文件、
-158 处 `XposedBridge`/`XposedHelpers` 调用，属于 Legacy 管线。因此：
+**注入侧入口是否存在，取决于模块走哪条管线**：官方 FAQ 的表述是「作用域内的 API 101/102
+目标进程只取得读取与变更通知能力」，`XposedInterface` 就是这条只读通道。
 
-- 设置页侧（模块进程）可以正常用 `NPatchRemoteClient` 读写 Remote Store；
-- 任务侧（支付宝进程）没有公开入口读同一份 Remote Store；
-- 所以仅接入 Remote API **不足以**让 Legacy 模块在本地模式工作。
+本仓库是**双入口**：
 
-### 2.3 前置决策：两条可行路径
+- `app/src/main/resources/META-INF/xposed/{module.prop, scope.list, java_init.list}` → 现代管线，
+  入口 `LibXposedRuntime : XposedModule()`（继承 `XposedInterfaceWrapper`，自带
+  `getRemotePreferences()` / `getFrameworkProperties()`）；
+- `assets/xposed_init` → Legacy 管线，仅老框架使用。
+
+NPatch 按 `module.prop` 选择现代管线，因此在 NPatch 下注入侧**有** Remote 只读入口，不需要迁移。
+但 `targetApiVersion=101` 时框架是否真的实现该能力，必须先探针验证（见 2.3 路径 A）。
+
+需要注意的反向限制：`targetApiVersion >= 102` 会在 ClassLoader 层封锁 `de.robv.android.xposed`，
+而本仓库 hook 全部依赖 `de.robv`（56 个 `XC_MethodHook`、23 处 `findAndHookMethod`），
+所以**不能**为了 Remote 而把 target 提到 102。
+
+### 2.3 前置决策：三条路径
 
 | 路径 | 做法 | 代价 | 结论 |
 |---|---|---|---|
-| A. 迁移 libxposed API 102 | 入口改为 `XposedModule` + `assets/META-INF/xposed/module.prop`，hook 改用 `XposedInterface`，注入侧用 `getRemotePreferences` 读配置 | 重写 28 个文件、158 处 hook 调用；hook 行为需逐条回归 | 官方唯一完整路径，工作量大 |
-| B. 设置 UI 移入目标进程 | 保留 Legacy，在支付宝进程内用原生 View 提供设置界面，配置直接写目标应用私有目录 | 需重写设置界面（现有为 Web UI），但与任务天然同进程 | 可行，但不满足「Web 设置页」体验 |
+| A. 复用现有现代入口（首选） | `module.prop` 保持 101；在 `LibXposedRuntime.onPackageReady` 里用 `getRemotePreferences` 读配置，hook 继续走 legacy 桥 | 探针约 15 行 + `Config` 读取分支 1 处 + 设置页桥 1 个类 | 前提是 101 档位支持 Remote，需实测 |
+| B. 设置 UI 移入目标进程 | 在支付宝进程内用原生 View 提供设置界面，配置直接写目标应用私有目录 | 需重写设置界面（现有为 Web UI），但与任务天然同进程 | 仅在 A 走不通时考虑 |
 | C. 暂不支持本地模式 | 维持集成模式，配置与任务同进程 | 无 | 当前状态；签名绕过上限 High（2） |
 
-不建议为「更高级别的签名绕过」而迁移：改包本身（APK 路径、`/proc/self/maps`、加载器 so）已是最强特征，
+**不要把 target 提到 102 当作路径**：102 会在 ClassLoader 层封锁 `de.robv`，现有 hook 全部失效，
+重写规模是 28 个文件、158 处调用，且收益只是「本地模式可用」，不值得。
+
+不建议为「更高级别的签名绕过」而做任何迁移：改包本身（APK 路径、`/proc/self/maps`、加载器 so）已是最强特征，
 3/4/5 只扩大覆盖的校验路径，并不降低被识别概率。
 
-以下分阶段方案以路径 A 为目标，路径 B 可复用阶段 B 之外的思路。
+以下分阶段方案以路径 A 为目标。
 
 ### 2.4 分阶段实现
 
 #### 阶段 A：接入依赖与连接（可独立验证）
 
 1. `app/libs/` 放入 `npatch-remote-api-v<ver>-release.aar`，`implementation(files(...))`；
-   若 `io.github.libxposed:interface` 未传递到，显式添加 102.0.0。
+   `io.github.libxposed:api:102.0.0` 已经是 `compileOnly`（`app/build.gradle.kts:179`），编译期接口够用，
+   但 AAR 运行期需要 `io.github.libxposed:interface:102.0.0` 时再显式加（注意不要改 `module.prop`）。
 2. `AndroidManifest.xml` 已声明 `<queries>`（`top.nkbe.npatch.remote` 与包名 `top.nkbe.npatch`）。
 3. 新增 `NpatchRemoteBridge`：
    - `isAvailable(context)` → `NPatchRemoteClient.isAvailable(context)`
    - `connectAsync(context)` → 成功后在主线程回调，缓存 client
-   - 所有失败路径捕获 `IllegalStateException` / `SecurityException` / `RemoteException`，回退本地存储。
+   - 按官方错误表分别处理 `IllegalStateException`（未安装/超时）、`SecurityException`（模块未登记）、
+     `RemoteException`（Binder 断开，需丢弃 client 重连）；连接失败时在设置页明确提示
+     「NPatch 不可用，配置仅本机生效」，不静默回退。
 
 验证点：设备安装 NPatch 管理器且模块已登记时，设置页「设备信息 → NPatch 环境」应显示 Remote Provider 可用；未安装时该行降级为「未检测到 NPatch 管理器」，且不产生异常。
 
@@ -195,13 +208,15 @@ NPatch 的等级实现集中在 `patch-loader/src/main/java/top/nkbe/npatch/load
 | 目标进程内 Remote Preferences 只读、`edit()` 抛 `UnsupportedOperationException` | `guide/remote-api.html` →「API 101/102 模块运行时」 |
 | 管理器包名 `top.nkbe.npatch`、authority `top.nkbe.npatch.remote` | `guide/remote-api.html` →「适用范围」「添加 SDK」 |
 | 本地模式运行模型、loader 来源、作用域以管理器为准 | `guide/modes` →「Local Mode」「Comparison」 |
-| 注入侧只读、Legacy 不自动迁移 | `guide/faq`「Remote Preferences 与 Remote Files 存在哪里」、`guide/remote-api` 首段 |
+| 注入侧只读、Legacy `XSharedPreferences` 不自动迁移 | `guide/faq`「Remote Preferences 与 Remote Files 存在哪里」、`guide/remote-api` 首段 |
 | 三类模块加载方式（Legacy / API 101 / API 102） | 站点首页「一套运行时，三种模块」 |
 | 各级别的 Java/native hook 面 | 源码 `patch-loader/.../SigBypass.java`、`patch-loader/src/main/jni/src/jni/bypass_sig.cpp`、`svc_bypass.cpp` |
 
 现状边界（避免误判为已支持）：
 
-- 当前仓库**尚未接入** Remote API，且入口为 Legacy 管线，本地模式下配置仍写在本机私有目录，因此本地模式目前不可用；本文给出的是实施方案，不是既有能力。
+- 当前仓库**尚未接入** Remote API：NPatch 下走现代管线（`LibXposedRuntime`）、具备 `XposedInterface`，
+  但从未调用过 `getRemotePreferences`；配置仍写在本机私有目录，因此本地模式目前不可用。
+  本文是实施方案，不是既有能力。
 - 设置页的「NPatch 环境」一行只陈述可验证事实（管理器是否安装、Provider 是否可解析），不代表本地模式已可用。
 - 已完成的前置只有两项：`AndroidManifest.xml` 的 `<queries>` 声明、`NpatchEnv` 的只读探测（管理器是否安装、Provider 是否可解析），二者不影响集成模式。
 - 集成模式不需要任何改造，配置与任务同进程，行为与现状一致。
