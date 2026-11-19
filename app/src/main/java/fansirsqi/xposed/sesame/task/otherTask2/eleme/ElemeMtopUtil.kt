@@ -148,6 +148,7 @@ object ElemeMtopUtil {
 
     // 3. vivo X100 / X200 / iQOO 系列
     private val FAMILY_VIVO_IQOO = listOf(
+        DeviceTemplate("vivo Y70s SE", "vivo", "V2238A", "vivo/vivo,V2238A", "14", "AP3A.240905.015", "412|0|915"),
         DeviceTemplate("vivo X100", "vivo", "V2309A", "vivo/vivo,V2309A", "14", "AP3A.240905.015", "412|0|915"),
         DeviceTemplate("vivo X100 Pro", "vivo", "V2324A", "vivo/vivo,V2324A", "14", "AP3A.240905.015", "412|0|915"),
         DeviceTemplate("vivo X100 Ultra", "vivo", "V2366GA", "vivo/vivo,V2366GA", "14", "AP3A.240905.015", "412|0|915"),
@@ -356,6 +357,67 @@ object ElemeMtopUtil {
         )
     }
 
+    fun getSystemProp(prop: String): String {
+        return try {
+            val clazz = Class.forName("android.os.SystemProperties")
+            val getMethod = clazz.getMethod("get", String::class.java)
+            getMethod.invoke(null, prop) as? String ?: ""
+        } catch (_: Throwable) {
+            ""
+        }
+    }
+
+    fun getNativeMarketName(): String {
+        val candidates = listOf(
+            "ro.vivo.market.name", // vivo
+            "ro.product.marketname", // xiaomi
+            "ro.vendor.oplus.market.enname", // oneplus
+            "ro.vendor.oplus.market.name", // realme
+            "ro.oppo.market.name", // oppo
+            "ro.product.odm.device",
+            "ro.product.brand"
+        )
+        for (prop in candidates) {
+            val v = getSystemProp(prop).trim()
+            if (v.isNotBlank()) return v
+        }
+        val model = android.os.Build.MODEL.orEmpty()
+        return ALL_REAL_MODELS.firstOrNull { it.model.equals(model, ignoreCase = true) }?.marketingName.orEmpty()
+    }
+
+    /**
+     * 格式化机型展示名：品牌 + 营销名 + 型号代码（如 vivo y70s se  V2238A）
+     */
+    @JvmStatic
+    fun formatBrandModelDisplay(brand: String, marketingName: String?, model: String): String {
+        val b = brand.trim()
+        val m = model.trim()
+        val rawName = (marketingName?.trim()?.takeIf { it.isNotBlank() } ?: getNativeMarketName()).trim()
+        val cleanName = if (rawName.startsWith("自定义UA (", true)) "" else rawName
+
+        if (cleanName.isBlank()) {
+            return if (m.startsWith(b, true)) m else "$b  $m"
+        }
+
+        val withBrand = if (cleanName.startsWith(b, true)) {
+            cleanName
+        } else {
+            "$b $cleanName"
+        }
+
+        return if (withBrand.contains(m, true)) {
+            withBrand
+        } else {
+            "$withBrand  $m"
+        }
+    }
+
+    @JvmStatic
+    fun getDeviceUaSummary(): String {
+        val p = getActiveProfile()
+        return formatBrandModelDisplay(p.brand, p.marketingName, p.model)
+    }
+
     /**
      * 获取系统原生默认设备配置
      */
@@ -379,8 +441,8 @@ object ElemeMtopUtil {
             screenWs = "412|0|915",
             // 勿硬编码固定 DeviceId：每次实例化随机生成即可（会话内由 sessionProfile 缓存保证一致）
             deviceId = generateRandomDeviceId(),
-            // 营销名未知时留空，避免拼出「系统原版默认-V2238A」这类无意义展示名
-            marketingName = null
+            // 营销名自动识别本机机型（如 vivo y70s se）
+            marketingName = getNativeMarketName().takeIf { it.isNotBlank() }
         )
     }
 
@@ -432,16 +494,13 @@ object ElemeMtopUtil {
                 lastRecordedUaValue = ua
                 return
             }
-            // 机型展示名：空 UA 走内置模板（按本机指纹生成），非空 UA 用「营销名-型号代码」格式
+            // 机型展示名：品牌 + 营销名 + 型号代码（如 vivo y70s se  V2238A）
             val modelDisplay = if (ua.isEmpty()) {
-                // 无自定义 UA 时展示本机真实机型，而不是「系统原版默认」这类无信息量文案
                 val p = getDefaultNativeProfile()
-                val name = p.marketingName?.takeIf { it.isNotBlank() }
-                if (name != null && !name.contains(p.model)) "$name-${p.model}" else p.model
+                formatBrandModelDisplay(p.brand, p.marketingName, p.model)
             } else {
                 val p = parseCustomUa(ua)
-                val name = p.marketingName?.takeIf { it.isNotBlank() }
-                if (name != null && !name.contains(p.model)) "$name-${p.model}" else p.model
+                formatBrandModelDisplay(p.brand, p.marketingName, p.model)
             }
             val entry = JSONObject()
             entry.put("ua", ua)
@@ -498,11 +557,7 @@ object ElemeMtopUtil {
                 getActiveProfile()
             }
             val obj = JSONObject().apply {
-                // 机型展示格式统一为「营销名-型号代码」（如 Redmi K70E-2311FRAFDC），代码变化即指纹已更换
-                val displayModel = run {
-                    val name = profile.marketingName?.takeIf { it.isNotBlank() }
-                    if (name != null && !name.contains(profile.model)) "$name-${profile.model}" else profile.model
-                }
+                val displayModel = formatBrandModelDisplay(profile.brand, profile.marketingName, profile.model)
                 put("model", displayModel)
                 put("brandModel", profile.brandModel)
                 put("system", "Android ${profile.release} (Build/${profile.buildId})")
@@ -514,11 +569,11 @@ object ElemeMtopUtil {
             }
             obj.toString()
         }.getOrElse {
-            // 兜底返回本机真实信息，不编造「系统原版默认」这类无信息量字段
-            val b = android.os.Build::class.java
+            // 兜底返回本机真实信息
             val m = android.os.Build.MODEL.orEmpty()
             val brd = android.os.Build.BRAND.orEmpty()
-            "{\"model\":\"$m\",\"brandModel\":\"$brd/$m\",\"system\":\"Android ${android.os.Build.VERSION.RELEASE}\",\"kernel\":\"Chrome $CAPTURED_CHROME_VERSION / MYWeb $CAPTURED_MYWEB_VERSION\",\"screen\":\"\",\"alipayVer\":\"12.12.30.8000\",\"ua\":\"\",\"isCustom\":false}"
+            val disp = formatBrandModelDisplay(brd, null, m)
+            "{\"model\":\"$disp\",\"brandModel\":\"$brd/$m\",\"system\":\"Android ${android.os.Build.VERSION.RELEASE}\",\"kernel\":\"Chrome $CAPTURED_CHROME_VERSION / MYWeb $CAPTURED_MYWEB_VERSION\",\"screen\":\"\",\"alipayVer\":\"12.12.30.8000\",\"ua\":\"\",\"isCustom\":false}"
         }
     }
 
@@ -697,11 +752,7 @@ object ElemeMtopUtil {
         if (context is android.app.Activity && (context.isFinishing || context.isDestroyed)) return
 
         val profile = getActiveProfile()
-        // 机型展示格式统一为「营销名-型号代码」（如 Redmi K70E-2311FRAFDC）
-        val displayName = run {
-            val name = profile.marketingName?.takeIf { it.isNotBlank() }
-            if (name != null && !name.contains(profile.model)) "$name-${profile.model}" else profile.model
-        }
+        val displayName = formatBrandModelDisplay(profile.brand, profile.marketingName, profile.model)
         val source = if (ElemeTask.getElemeCustomUa().value.orEmpty().trim().isEmpty()) "内置模板（按当前机型生成）" else "自定义 UA"
         val detailMsg = "当前机型：$displayName\nUA 来源：$source"
 
@@ -769,12 +820,9 @@ object ElemeMtopUtil {
             else -> "已过期或临期（将在下次任务执行时自动刷新）"
         }
 
-        // 当前设备指纹（「营销名-型号代码」格式）
+        // 当前设备指纹（品牌 + 营销名 + 型号代码 格式）
         val profile = getActiveProfile()
-        val displayName = run {
-            val name = profile.marketingName?.takeIf { it.isNotBlank() }
-            if (name != null && !name.contains(profile.model)) "$name-${profile.model}" else profile.model
-        }
+        val displayName = formatBrandModelDisplay(profile.brand, profile.marketingName, profile.model)
         val uaSource = if (ElemeTask.getElemeCustomUa().value.orEmpty().trim().isEmpty()) "内置模板（按当前机型生成）" else "自定义 UA"
         // 自定义 UA 可能是历史遗留的 UC/浏览器结构（UCBrowser+GCanvas），与小程序 WebView 指纹不一致，需明确提示
         val activeUa = profile.httpUa()

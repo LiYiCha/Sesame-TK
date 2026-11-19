@@ -1231,6 +1231,9 @@ object DeviceInfoUtil {
         infoMap["XP 环境"] = xpEnv
         infoMap["Product"] = "${Build.MANUFACTURER} ${Build.PRODUCT}"
         infoMap["Device"] = getDeviceName()
+        infoMap["设备UA"] = runCatching {
+            fansirsqi.xposed.sesame.task.otherTask2.eleme.ElemeMtopUtil.getDeviceUaSummary()
+        }.getOrDefault("${Build.BRAND} ${getDeviceName()} ${Build.MODEL}".replace("  ", " "))
         infoMap["Android Version"] = "${Build.VERSION.RELEASE} SDK (${Build.VERSION.SDK_INT})"
         infoMap["OS Build"] = "${Build.DISPLAY}"
         infoMap["Module Version"] = "${BuildConfig.VERSION}.${BuildConfig.BUILD_TYPE} 📦"
