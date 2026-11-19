@@ -45,25 +45,29 @@ object NpatchEnv {
     }
 
     /**
-     * 运行模式判定。
+     * NPatch 运行模式：本地模式 / 集成模式。
      *
-     * 判据只有一个确定事实：当前进程名。
-     * - 目标是支付宝进程 → 设置页与任务同进程，说明模块被嵌进目标 APK（集成模式）；
-     * - 是模块自身进程 → 设置页与任务分离，配合已安装的管理器，说明由管理器下发作用域（本地模式）。
-     * 两者都不是时返回「未知」，不做猜测。
+     * 判据是当前进程名：
+     * 目标是支付宝进程 → 模块被嵌入目标 APK（集成模式）；
+     * 是模块自身进程且管理器已安装 → 模块独立安装、由管理器下发作用域（本地模式）。
+     * 两种情况都不成立时返回「未知」，并记录一次日志，避免静默显示错误结论。
      */
     @JvmStatic
     fun modeLabel(context: Context?, processName: String): String {
         val target = fansirsqi.xposed.sesame.data.General.PACKAGE_NAME
         val module = fansirsqi.xposed.sesame.data.General.MODULE_PACKAGE_NAME
-        return when {
-            processName == target || processName.startsWith("$target:") ->
-                "集成模式（设置页在目标进程内）"
-            processName == module || processName.startsWith("$module:") ->
-                if (isManagerInstalled(context)) "本地模式（设置页独立进程）"
-                else "模块独立进程（未检测到 NPatch 管理器）"
-            else -> "未知进程：$processName"
+        if (processName == target || processName.startsWith("$target:")) {
+            return "集成模式"
         }
+        if (processName == module || processName.startsWith("$module:")) {
+            if (isManagerInstalled(context)) {
+                return "本地模式"
+            }
+            Log.runtime(TAG, "无法识别 NPatch 模式：模块进程存在但未检测到管理器")
+            return "未知"
+        }
+        Log.runtime(TAG, "无法识别 NPatch 模式：未知进程 $processName")
+        return "未知"
     }
 
     /**
