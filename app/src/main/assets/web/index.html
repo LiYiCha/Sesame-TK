@@ -82,7 +82,7 @@
                                         </a>
                                     </div>
                                 </div>
-                                <div v-for="(item,index) in setData[tabs_index]" :key="item.name+index">
+                                <div v-for="(item,index) in visibleFields(setData[tabs_index])" :key="item.name+index">
                                     <!-- 布尔组件 -->
                                     <div class="flex-space-between pdTB10" v-if="item.type==='BOOLEAN'">
                                         <div class="title">{{item.name}}</div>
@@ -186,7 +186,7 @@
                                         </a>
                                     </div>
                                 </div>
-                                <div v-for="(item,index) in setData[tabs_index]" :key="item.name+index">
+                                <div v-for="(item,index) in visibleFields(setData[tabs_index])" :key="item.name+index">
                                     <div class="flex-space-between pdTB10" v-if="item.type==='BOOLEAN'">
                                         <div class="title">{{item.name}}</div>
                                         <div class="flex-center">
@@ -441,6 +441,19 @@
                     return JSON.parse(window.HOOK.getModel(item.modelCode));
                   })
                 );
+                // 字段显示依赖：dependOnCode 对应开关为关闭时，收起该模块的商品列表/整点等附属字段，
+                // 避免设置页把同一模块的开关与配置拆成两条互不相关的内容
+                function visibleFields(list) {
+                  if (!Array.isArray(list)) return [];
+                  return list.filter((f) => {
+                    if (!f || !f.dependOnCode) return true;
+                    const parent = list.find((x) => x && x.code === f.dependOnCode);
+                    if (!parent) return true;
+                    const expect = f.dependOnValue === false ? "false" : "true";
+                    return String(parent.configValue).toLowerCase() === expect;
+                  });
+                }
+
                 // 更新报名请改这儿
                 const isVersion = ref(true);
       
@@ -980,6 +993,7 @@
                   tabs,
                   currentTab,
                   setData,
+                  visibleFields,
                   isVersion,
                   com_person_list_filter,
                   person_list,

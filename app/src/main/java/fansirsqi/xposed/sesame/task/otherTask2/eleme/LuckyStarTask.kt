@@ -64,7 +64,7 @@ object LuckyStarTask {
             val alipayUidRaw = fansirsqi.xposed.sesame.util.maps.UserMap.currentUid.orEmpty()
             val alipayUidLog = if (alipayUidRaw.length > 8) alipayUidRaw.take(4) + "***" + alipayUidRaw.takeLast(4) else alipayUidRaw.ifEmpty { "未知" }
             Log.other("饿了么", "[幸运星] 账号: 支付宝 $alipayUidLog | ${ElemeAuth.getElemeAccountLine()}")
-            Log.other("饿了么", "[幸运星] 设备UA: ${ElemeMtopUtil.getActiveProfile().httpUa()}")
+            Log.other("饿了么", "[幸运星] 设备UA(${ElemeMtopUtil.getUaSourceLabel()}): ${ElemeMtopUtil.getActiveProfile().httpUa()}")
             val homepageResp = LuckyStarRpcCall.getHomepageData(cookie)
             val hpData = homepageResp?.optJSONObject("data") ?: homepageResp
             val initialStars = extractStarAmount(hpData)

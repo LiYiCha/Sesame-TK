@@ -272,7 +272,7 @@ class AntSports : ModelTask() {
         Log.runtime(TAG, "执行开始-" + name)
 
         try {
-            val loader = ApplicationHook.getClassLoader()
+            val loader = fansirsqi.xposed.sesame.hook.context.AppContext.getClassLoader()
             if (loader == null) {
                 Log.error(TAG, "ClassLoader is null, 跳过运动任务")
                 return
@@ -409,7 +409,7 @@ class AntSports : ModelTask() {
                 Runnable {
                     val step = tmpStepCount()
                     try {
-                        val loader = ApplicationHook.getClassLoader()
+                        val loader = fansirsqi.xposed.sesame.hook.context.AppContext.getClassLoader()
                         if (loader == null) {
                             Log.error(TAG, "ClassLoader is null, 跳过同步步数")
                             return@Runnable

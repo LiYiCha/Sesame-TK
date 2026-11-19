@@ -35,14 +35,6 @@ public class ToastUtil {
                 }
             } catch (Throwable ignored) {}
         }
-        if (appContext == null) {
-            try {
-                Context ctx = fansirsqi.xposed.sesame.hook.ApplicationHook.getAppContext();
-                if (ctx != null) {
-                    appContext = ctx.getApplicationContext();
-                }
-            } catch (Throwable ignored) {}
-        }
         return appContext;
     }
     /**

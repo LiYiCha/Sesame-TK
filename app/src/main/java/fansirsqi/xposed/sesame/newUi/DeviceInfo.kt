@@ -1229,6 +1229,9 @@ object DeviceInfoUtil {
         val xpEnv = ViewAppInfo.xpEnvSummary.takeIf { it.isNotBlank() && it != "未激活 / 未检测到" }
             ?: runCatching { fansirsqi.xposed.sesame.util.XpFrameworkDetector.getEnvironmentSummary() }.getOrDefault("未激活 / 未检测到")
         infoMap["XP 环境"] = xpEnv
+        infoMap["NPatch 环境"] = runCatching {
+            fansirsqi.xposed.sesame.util.NpatchEnv.summary(ViewAppInfo.context)
+        }.getOrDefault("未检测到 NPatch")
         infoMap["Product"] = "${Build.MANUFACTURER} ${Build.PRODUCT}"
         infoMap["Device"] = getDeviceName()
         infoMap["Android Version"] = "${Build.VERSION.RELEASE} SDK (${Build.VERSION.SDK_INT})"

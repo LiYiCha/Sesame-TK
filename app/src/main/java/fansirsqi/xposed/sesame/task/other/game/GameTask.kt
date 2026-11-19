@@ -185,7 +185,7 @@ enum class GameTask(
 
     private fun getDynamicUA(): String {
         val systemUa = System.getProperty("http.agent") ?: "Mozilla/5.0 (Linux; Android 15)"
-        val alipayVer = ApplicationHook.getAlipayVersion()
+        val alipayVer = fansirsqi.xposed.sesame.hook.context.AppContext.getAlipayVersion()
         return "$systemUa NebulaSDK/1.8.100112 Nebula AliApp(AP/$alipayVer) AlipayClient/$alipayVer"
     }
 }

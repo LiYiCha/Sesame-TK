@@ -190,10 +190,11 @@ public class PermissionUtil {
    */
   private static Context getContextSafely() {
     try {
-      if (!ApplicationHook.isHooked()) {
+      // 走 AppContext：ApplicationHook 实现了 Xposed 接口，加载它会解析 de.robv.* 类
+      if (!fansirsqi.xposed.sesame.hook.context.AppContext.isHooked()) {
         return null;
       }
-      return ApplicationHook.getAppContext();
+      return fansirsqi.xposed.sesame.hook.context.AppContext.getAppContext();
     } catch (Exception e) {
       return null;
     }

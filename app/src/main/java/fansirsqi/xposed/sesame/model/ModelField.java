@@ -56,6 +56,42 @@ public class ModelField<T> implements Serializable {
     public void setHidden(boolean hidden) {
         this.hidden = hidden;
     }
+
+    /**
+     * 显示依赖：仅当同模型内 dependOnCode 对应字段的值等于 dependOnValue 时才渲染本字段。
+     * 用于「开关关闭时收起其附属的列表/时间等配置」，避免设置页出现互不相关的孤立字段。
+     */
+    @JsonIgnore
+    public String dependOnCode = null;
+
+    /** 依赖字段期望的布尔值，默认 true（依赖开关为开时显示） */
+    @JsonIgnore
+    public boolean dependOnValue = true;
+
+    public String getDependOnCode() {
+        return dependOnCode;
+    }
+
+    public void setDependOnCode(String dependOnCode) {
+        this.dependOnCode = dependOnCode;
+    }
+
+    public boolean isDependOnValue() {
+        return dependOnValue;
+    }
+
+    public void setDependOnValue(boolean dependOnValue) {
+        this.dependOnValue = dependOnValue;
+    }
+
+    /**
+     * 链式声明显示依赖，返回自身便于在字段定义处一行写完
+     */
+    public ModelField<T> dependOn(String fieldCode, boolean expectValue) {
+        this.dependOnCode = fieldCode;
+        this.dependOnValue = expectValue;
+        return this;
+    }
     @Setter
     @Getter
     public volatile T value; // 当前值

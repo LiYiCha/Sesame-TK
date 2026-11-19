@@ -35,7 +35,10 @@ import fansirsqi.xposed.sesame.util.XpFrameworkDetector;
 public class ApplicationHook implements IXposedHookLoadPackage {
     static final String TAG = ApplicationHook.class.getSimpleName();
     private static final String modelVersion = BuildConfig.VERSION_NAME;
-    private static volatile boolean hooked = false;
+    /** hook 标记统一存放在 AppContext，避免非 hook 层为查询状态而加载本类（会解析 Xposed 接口） */
+    private static boolean isHookedFlag() {
+        return AppContext.isHooked();
+    }
     static final AtomicInteger reLoginCount = new AtomicInteger(0);
 
     //--------------------------------------------------------------
@@ -102,7 +105,7 @@ public class ApplicationHook implements IXposedHookLoadPackage {
         }
     }
 
-    public static boolean isHooked() { return hooked; }
+    public static boolean isHooked() { return isHookedFlag(); }
     public static String getModelVersion() { return modelVersion; }
     public static AtomicInteger getReLoginCount() { return reLoginCount; }
     public static boolean isInit() { return LifecycleManager.isInit(); }
@@ -184,7 +187,7 @@ public class ApplicationHook implements IXposedHookLoadPackage {
                 Log.printStackTrace(e);
             }
         } else if (General.PACKAGE_NAME.equals(packageName) && General.PACKAGE_NAME.equals(processName)) {
-            if (hooked) return;
+            if (isHookedFlag()) return;
             AppContext.setClassLoader(classLoader);
 
             // 最早期安装宿主崩溃记录器，覆盖启动窗口（早于任何模块 hook 与配置加载）
@@ -346,7 +349,7 @@ public class ApplicationHook implements IXposedHookLoadPackage {
             Log.printStackTrace(TAG, t);
         }
 
-        hooked = true;
+        AppContext.setHooked(true);
         Log.runtime(TAG, "load success: " + pkg);
     }
 }

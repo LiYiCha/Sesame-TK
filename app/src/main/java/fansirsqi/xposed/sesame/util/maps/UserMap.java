@@ -60,11 +60,11 @@ public class UserMap {
         // 设置当前用户ID
         setCurrentUserId(currentUserId);
         // 在主线程中执行初始化逻辑
-        ApplicationHook.getMainHandler().post(() -> {
+        fansirsqi.xposed.sesame.hook.context.AppContext.getMainHandler().post(() -> {
             ClassLoader loader;
             try {
                 // 获取类加载器
-                loader = ApplicationHook.getClassLoader();
+                loader = fansirsqi.xposed.sesame.hook.context.AppContext.getClassLoader();
             } catch (Exception e) {
                 Log.runtime("Error getting classloader");
                 return;
@@ -72,7 +72,7 @@ public class UserMap {
             try {
                 // 卸载现有数据
                 UserMap.unload();
-                String selfId = ApplicationHook.getUserId();
+                String selfId = fansirsqi.xposed.sesame.hook.context.AppContext.getUserId();
                 // 反射加载类
                 Class<?> clsUserIndependentCache = loader.loadClass("com.alipay.mobile.socialcommonsdk.bizdata.UserIndependentCache");
                 Class<?> clsAliAccountDaoOp = loader.loadClass("com.alipay.mobile.socialcommonsdk.bizdata.contact.data.AliAccountDaoOp");

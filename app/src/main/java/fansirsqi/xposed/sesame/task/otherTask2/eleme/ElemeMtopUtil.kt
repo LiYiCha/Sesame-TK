@@ -614,6 +614,25 @@ object ElemeMtopUtil {
         }.getOrDefault("")
     }
 
+    /** 当前 UA 来源标签：用于任务日志标注是内置模板还是用户自定义 */
+    @JvmStatic
+    fun getUaSourceLabel(): String =
+        if (ElemeTask.getElemeCustomUa().value.orEmpty().trim().isEmpty()) "内置模板" else "自定义UA"
+
+    /** 判断 UA 是否为支付宝小程序 WebView 结构（抓包特征：MYWeb/ + UWS/ + NebulaSDK/） */
+    private fun isMiniProgramUa(ua: String): Boolean =
+        ua.contains("MYWeb/") && ua.contains("UWS/") && ua.contains("NebulaSDK/")
+
+    /** 复制文本到剪贴板，Android 13+ 由系统弹出隐私提示；失败返回 false */
+    private fun copyTextToClipboard(context: android.content.Context, text: String): Boolean {
+        return runCatching {
+            val cm = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as? android.content.ClipboardManager
+                ?: return false
+            cm.setPrimaryClip(android.content.ClipData.newPlainText("ElemeCK", text))
+            true
+        }.getOrDefault(false)
+    }
+
     fun isDarkThemeMode(context: android.content.Context?): Boolean {
         if (context == null) return false
         return runCatching {
@@ -712,6 +731,13 @@ object ElemeMtopUtil {
             if (name != null && !name.contains(profile.model)) "$name-${profile.model}" else profile.model
         }
         val uaSource = if (ElemeTask.getElemeCustomUa().value.orEmpty().trim().isEmpty()) "内置模板（按当前机型生成）" else "自定义 UA"
+        // 自定义 UA 可能是历史遗留的 UC/浏览器结构（UCBrowser+GCanvas），与小程序 WebView 指纹不一致，需明确提示
+        val activeUa = profile.httpUa()
+        val uaStructLine = if (isMiniProgramUa(activeUa)) {
+            "• UA 结构: 与支付宝小程序 WebView 一致"
+        } else {
+            "• UA 结构: ⚠ 非小程序 WebView 结构（建议点「恢复默认」重生成）"
+        }
 
         // 风控名单数量
         val riskCount = runCatching { ElemeTask.getElemeRiskTasks().value.size }.getOrDefault(0)
@@ -736,7 +762,8 @@ object ElemeMtopUtil {
                 "• 来源: ${cookieStatus.source}\n\n" +
                 "【设备指纹】\n" +
                 "• 当前机型: $displayName\n" +
-                "• UA 来源: $uaSource\n\n" +
+                "• UA 来源: $uaSource\n" +
+                "$uaStructLine\n\n" +
                 "【风控与今日状态】\n" +
                 "• 风控名单: $riskCount 个任务\n" +
                 todayText
@@ -745,6 +772,15 @@ object ElemeMtopUtil {
             .setTitle("账号状态")
             .setMessage(detailMsg)
             .setPositiveButton("关闭", null)
+            .setNegativeButton("复制CK") { _, _ ->
+                val ck = runCatching { ElemeAuth.peekCookie() }.getOrNull().orEmpty()
+                if (ck.isEmpty()) {
+                    fansirsqi.xposed.sesame.hook.Toast.show("当前没有可用 CK，请先执行任务或手动授权")
+                } else {
+                    val ok = copyTextToClipboard(context, ck)
+                    fansirsqi.xposed.sesame.hook.Toast.show(if (ok) "CK 已复制到剪贴板（${ck.length} 字符）" else "复制失败，请长按文本手动选择")
+                }
+            }
             .setNeutralButton("校验并刷新CK") { _, _ ->
                 Thread {
                     val result = runCatching {
@@ -763,7 +799,10 @@ object ElemeMtopUtil {
         dialog.setOnShowListener {
             dialog.getButton(android.content.DialogInterface.BUTTON_POSITIVE)?.setTextColor(positiveButtonColor)
             dialog.getButton(android.content.DialogInterface.BUTTON_NEUTRAL)?.setTextColor(neutralButtonColor)
-            // 账号状态文本（含 CK 信息）允许长按选中复制
+            dialog.getButton(android.content.DialogInterface.BUTTON_NEGATIVE)?.setTextColor(neutralButtonColor)
+            // 长按仍可选中任意片段；整条 CK 走「复制CK」按钮，避免长选择手柄在长文本里难以操作
+            // 不额外设置 movementMethod：setTextIsSelectable(true) 已自带 ArrowKeyMovementMethod，
+            // 换成 LinkMovementMethod 反而会让长按选择失效
             dialog.findViewById<android.widget.TextView>(android.R.id.message)?.setTextIsSelectable(true)
         }
         dialog.findViewById<android.widget.TextView>(android.R.id.message)?.setTextColor(primaryTextColor)

@@ -494,7 +494,7 @@ class TopUpGold {
 
     private fun getUA(): String {
         val systemUa = System.getProperty("http.agent") ?: "Mozilla/5.0 (Linux; Android 15)"
-        val alipayVer = ApplicationHook.getAlipayVersion() ?: "10.8.50"
+        val alipayVer = fansirsqi.xposed.sesame.hook.context.AppContext.getAlipayVersion() ?: "10.8.50"
         return "$systemUa Version/4.0 Chrome/126.0.6478.122 MYWeb/1.3.126.260313173624 UWS/3.22.2.9999 UCBS/3.22.2.9999_220000000000 Mobile Safari/537.36 NebulaSDK/1.8.100112 Nebula AlipayDefined(nt:WIFI,ws:407|0|3.0) AliApp(AP/$alipayVer) AlipayClient/$alipayVer Language/zh-Hans isConcaveScreen/true Region/CNAriver/$alipayVer ChannelId(6) DTN/2.0"
     }
 }

@@ -35,6 +35,24 @@ public class AppContext {
     private static Handler mainHandler;
 
     /**
+     * hook 是否已生效。
+     * 该标记放在本类（纯 Android 依赖）而非 ApplicationHook，是为了让设置页、Toast、用户数据等
+     * 非 hook 层代码无需加载 ApplicationHook（其实现了 de.robv.android.xposed.IXposedHookLoadPackage），
+     * 否则在 NPatch 本地模式等缺少 Xposed 类的进程里会抛 NoClassDefFoundError 直接闪退。
+     */
+    private static volatile boolean hooked = false;
+
+    /** hook 状态查询（安全，不触发任何 Xposed 类解析） */
+    public static boolean isHooked() {
+        return hooked;
+    }
+
+    /** 由 hook 入口在注入成功后置位 */
+    public static void setHooked(boolean value) {
+        hooked = value;
+    }
+
+    /**
      * 获取 ClassLoader（显式方法，确保 Kotlin 可以访问）
      */
     public static ClassLoader getClassLoader() {

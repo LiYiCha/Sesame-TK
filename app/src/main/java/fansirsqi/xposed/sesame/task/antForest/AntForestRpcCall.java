@@ -21,7 +21,7 @@ public class AntForestRpcCall {
     private static String VERSION = "20250813";
 
     public static void init() {
-        AlipayVersion alipayVersion = ApplicationHook.getAlipayVersion();
+        AlipayVersion alipayVersion = fansirsqi.xposed.sesame.hook.context.AppContext.getAlipayVersion();
         Log.runtime("AntForestRpcCall", "当前目标应用版本: " + alipayVersion);
         try {
             switch (alipayVersion.getVersionString()) {

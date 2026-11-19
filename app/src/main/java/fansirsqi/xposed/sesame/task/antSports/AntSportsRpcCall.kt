@@ -48,7 +48,7 @@ object AntSportsRpcCall {
     /**
      * @brief 支付宝应用版本 - 动态获取
      */
-    private val ALIPAY_APP_VERSION =ApplicationHook.getAlipayVersion()
+    private val ALIPAY_APP_VERSION =fansirsqi.xposed.sesame.hook.context.AppContext.getAlipayVersion()
 
     /**
      * @brief 城市代码 - 杭州

@@ -33,6 +33,14 @@ public class ModelFieldShowDto implements Serializable {
      */
     private String desc;
     /**
+     * 显示依赖：同模型内该 code 对应字段为 dependOnValue 时才渲染本字段（null 表示无依赖）。
+     */
+    private String dependOnCode;
+    /**
+     * 依赖字段期望的布尔值。
+     */
+    private Boolean dependOnValue = null;
+    /**
      * 无参构造函数。
      */
     public ModelFieldShowDto() {
@@ -52,6 +60,10 @@ public class ModelFieldShowDto implements Serializable {
         dto.setExpandKey(modelField.getExpandKey());
         dto.setConfigValue(modelField.getConfigValue());
         dto.setDesc(modelField.getDesc());
+        dto.setDependOnCode(modelField.getDependOnCode());
+        if (modelField.getDependOnCode() != null) {
+            dto.setDependOnValue(modelField.isDependOnValue());
+        }
         return dto;
     }
 }

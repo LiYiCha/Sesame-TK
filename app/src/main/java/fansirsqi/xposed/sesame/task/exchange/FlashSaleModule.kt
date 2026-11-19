@@ -74,6 +74,18 @@ class FlashSaleModule : BaseFlashSaleTask() {
         10, 0, 23
     )
 
+    // 显示依赖：开关关闭时收起该模块的商品列表与开抢整点，避免页面出现互不相关的孤立字段
+    init {
+        neverLandList.dependOn("enableNeverLand", true)
+        packageExchangeList.dependOn("enablePackageExchange", true)
+        gameCenterGoldList.dependOn("enableGameCenterGold", true)
+        gameCenterGoldTargetHour.dependOn("enableGameCenterGold", true)
+        goldenBeanMallList.dependOn("enableGoldenBeanMall", true)
+        goldenBeanMallTargetHour.dependOn("enableGoldenBeanMall", true)
+        elemeMallList.dependOn("enableElemeMall", true)
+        elemeMallTargetHour.dependOn("enableElemeMall", true)
+    }
+
     // 子任务实例
     private val neverLandEX = NeverLandEX()
     protected val packageExchangeEX = PackageExchangeEX()
