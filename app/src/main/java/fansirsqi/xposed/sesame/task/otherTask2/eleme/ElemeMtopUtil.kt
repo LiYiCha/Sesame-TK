@@ -633,15 +633,15 @@ object ElemeMtopUtil {
      * 完整 UA 仍写 runtime 日志，便于排查但不污染运行日志。
      */
     @JvmStatic
-    fun briefUa(): String {
+    fun briefUa(): String = runCatching {
         val ua = getActiveProfile().httpUa()
         val missing = UA_TAIL_MARKS.filterNot { ua.contains(it) }.map { it.removeSuffix("/") }
-        return if (missing.isEmpty()) {
+        if (missing.isEmpty()) {
             "${getUaSourceLabel()} · 小程序WebView ✅"
         } else {
             "${getUaSourceLabel()} · ⚠ 非小程序WebView（缺 ${missing.joinToString("/")}）"
         }
-    }
+    }.getOrDefault("UA 读取失败")
 
     /** 复制文本到剪贴板，Android 13+ 由系统弹出隐私提示；失败返回 false */
     private fun copyTextToClipboard(context: android.content.Context, text: String): Boolean {

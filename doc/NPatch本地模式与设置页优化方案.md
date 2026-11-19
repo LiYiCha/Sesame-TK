@@ -150,6 +150,24 @@ NPatch 的等级实现集中在 `patch-loader/src/main/java/top/nkbe/npatch/load
 3. **4 Seccomp 不建议首选**。该级别在进程上安装 seccomp 过滤器，而支付宝自身也可能安装过滤器；两者叠加会返回 `EPERM`，表现为宿主 native 组件异常退出或功能静默失效，排查成本高。
 4. 需明确的预期：**等级越高不等于越不易被识别**。改包本身是强特征（APK 路径、`/proc/self/maps`、加载器 so 均与官方包不同），3 与 5 的差异只在覆盖的校验路径，不在「隐形」程度。若仅为规避识别而切换本地模式，收益低于风险；本地模式的真实价值是「免重新修补即可换模块」。
 
+### 2.7 官方文档引用与现状边界
+
+| 结论 | 出处 |
+|---|---|
+| 两种修补方式、Extreme/Seccomp/Stealth 仅本地模式可用 | 站点首页「两种修补方式」 |
+| 签名绕过 0–5 级定义、3/4/5 必须搭配 `--manager`、集成模式上限 High | `guide/usage.html` →「互斥规则」「签名绕过等级」 |
+| 本地模式后续步骤（装管理器 → 装修补包 → 选模块与作用域） | `guide/usage.html` →「本地模式的后续步骤」 |
+| Remote API 依赖 AAR、`<queries>` 声明、模块 App 用 `NPatchRemoteClient` 读写 | `guide/remote-api.html` →「添加 SDK」「建立连接」「API 参考」 |
+| 目标进程内 Remote Preferences 只读、`edit()` 抛 `UnsupportedOperationException` | `guide/remote-api.html` →「API 101/102 模块运行时」 |
+| 管理器包名 `top.nkbe.npatch`、authority `top.nkbe.npatch.remote` | `guide/remote-api.html` →「适用范围」「添加 SDK」 |
+| 各级别的 Java/native hook 面 | 源码 `patch-loader/.../SigBypass.java`、`patch-loader/src/main/jni/src/jni/bypass_sig.cpp`、`svc_bypass.cpp` |
+
+现状边界（避免误判为已支持）：
+
+- 当前仓库**尚未接入** Remote API，本地模式下配置仍写在本机私有目录，因此本地模式目前不可用；本文给出的是实施方案，不是既有能力。
+- 已完成的前置只有两项：`AndroidManifest.xml` 的 `<queries>` 声明、`NpatchEnv` 的只读探测（管理器是否安装、Provider 是否可解析），二者不影响集成模式。
+- 集成模式不需要任何改造，配置与任务同进程，行为与现状一致。
+
 ---
 
 ## 三、设置页字段列表方案
@@ -199,57 +217,50 @@ NPatch 的等级实现集中在 `patch-loader/src/main/java/top/nkbe/npatch/load
 3. 搜索与「仅看已开启」（纯前端）。
 4. 字段级重置与危险操作确认（后端补 `resetField` 桥方法）。
 
+### 3.6 界面原型
+
+原型文件：`doc/ui-prototype/index.html`（单文件，直接打开；支持 `#timeline` 切到时间线视图、`#m-AntForest` 定位指定模型）。
+
+字段数据由脚本从代码抽取，非示例编造：
+
+| 模型 | 字段数 | 来源 |
+|---|---|---|
+| 兑换任务 | 13 | `task/exchange/FlashSaleModule.kt` |
+| 饿了么 | 9（已剔除 `hidden` 的 `elemeExchangeItems`） | `task/otherTask2/eleme/ElemeTask.kt` |
+| 蚂蚁森林 | 60 | `task/antForest/AntForest.kt` |
+| 蚂蚁庄园 | 57 | `task/antFarm/AntFarm.kt` |
+
+原型覆盖的交互：左右对比（现状平铺 / 新方案卡片）、搜索、仅看已开启、分组默认收起可展开、依赖字段随开关隐藏、字段详情弹窗。
+
+已知的原型与实现差异：原型用静态示例值渲染开关与选中数量，实际页面读取 `configValue`；分组收起状态不持久化，实现时可存入 `localStorage`。
+
 ---
 
 ## 四、后续优化项方案
 
-### 4.1 服务端时钟校准（优先级最高）
+经评估，以下两项保留；时钟校准、失败分级重试、诊断包导出、配置快照回滚不再纳入：前两项分别被「秒杀提前量可调」与「遇风控立即停止」的现有策略覆盖，后两项与现有能力重复（配置已有「导出配置/导入配置」，日志已可查看）。
 
-秒杀以「整点减 200ms」发车，时间基准是本机 `System.currentTimeMillis()`。本机时钟偏差 1 秒，提前量即失效。
+### 4.1 指纹一致性自检
 
-- 采集：任一次 mtop 响应头或响应体中的服务端时间戳，与本地时间求差，取多次中位数。
-- 存储：`ClockOffsetStore`，按天衰减（偏差会随 NTP 校正变化）。
-- 使用：`BaseFlashSaleTask.calculateTargetTime` 改为 `now() + offset` 计算整点。
-- 展示：设置页秒杀分组显示「时钟偏差 +12ms」。
+现状只判断 UA 结构（`MYWeb/UWS/UCBS` 三段）。扩展为字段级一致性检查：
 
-### 4.2 指纹一致性自检
+| 检查项 | 冲突示例 |
+|---|---|
+| UA 机型代码 与 `DeviceProfile.model` | UA 为 `2311FRAFDC`，指纹为 `V2238A` |
+| UA 分辨率段 `ws:` 与 `DeviceProfile.screenWs` | `ws:393\|0\|873` 与 `384\|0\|2.8125` |
+| `AliApp(AP/x)` 与 `AlipayClient/x` 版本 | 12.12.26.8100 与 12.12.30.8000 |
+| `Chrome` 版本与 `MYWeb` 版本组合 | 已知组合集合之外的搭配 |
 
-现有 UA 判定只查结构。可扩展为一致性检查：
+输出改为逐项结论（命中几项、冲突在哪），而不是笼统的「格式异常」。实现位置：`ElemeMtopUtil.DeviceProfile` 增加 `consistencyIssues(): List<String>`，任务日志与账号状态弹窗复用。
 
-- UA 中的 Android 版本、机型代码、分辨率（`AlipayDefined(ws:...)`）必须与 `DeviceProfile` 自洽；
-- `AlipayClient` 版本与 `AliApp(AP/...)` 版本必须相同；
-- `Chrome` 版本与 `MYWeb` 版本组合需落在已知区间。
+### 4.2 任务时间线
 
-不一致时在日志给出具体冲突项（如「UA 分辨率 393|0|873 与设备指纹 384|0|2.8125 不一致」），而不是笼统的「格式异常」。
+原型见 `doc/ui-prototype/index.html#timeline`。
 
-### 4.3 失败分级重试
+数据来源与可行性：
 
-现状：秒杀固定重试 3 次，任务层遇到 405/417 直接拉黑。
+- 调度侧：`TaskCommon` / `AlarmScheduler` 持有各任务的下次触发时间，需在 `ModelTask` 暴露只读快照（`nextRunAt` 与 `lastRunResult`），不新增网络请求。
+- 展示侧：设置页新增一个只读页面，按时间排序渲染；每条含任务名、分组、状态（已执行/部分失败/待执行）、最近结果摘要。
+- 未执行过的任务显示「待首次执行」，不使用推测时间填充。
 
-分级：
-
-| 类别 | 判定 | 处理 |
-|---|---|---|
-| 可重试 | 网络异常、超时、`SYSTEM_BUSY` | 指数退避重试 |
-| 不可重试 | 405 行为受限、417 防作弊、账号风险 | 立即停止并记录 |
-| 需人工 | 会话失效、参数缺失、活动下线 | 停止并提示具体动作 |
-
-实现：在 `ElemeMtopUtil.execute` 返回 `MtopResult` 时附带 `retryable` 枚举，调用方不再各自判断错误码。
-
-### 4.4 诊断包导出
-
-一键生成 zip，内含：最近 500 行运行日志、当前 UA 与结构判定、CK 摘要（长度 + 前 6 位 + 过期时间，不含明文）、最近 10 条失败响应原文、配置快照（脱敏）。
-
-价值：用户反馈问题时无需逐条粘贴日志。
-
-### 4.5 配置快照与回滚
-
-每次任务运行前把当前 `Config` 序列化写入 `config_history/<timestamp>.json`，保留最近 5 份；设置页提供「查看/回滚」。
-
-价值：调试 UA、风控名单等改动后出现异常时，可一键回到上一状态。
-
-### 4.6 任务时间线视图
-
-汇总各任务下次执行时间与最近执行结果，按时间排序展示。数据来源是任务调度器的下次触发时间，需在 `ModelTask` 层暴露只读快照。
-
-价值：替代逐个进入模块确认「今天跑没跑、下次什么时候跑」。
+界面要素：左侧时间列 + 竖轴 + 状态圆点（绿=成功、橙=部分失败、灰=待执行），条目卡片显示任务名与所属分组。
