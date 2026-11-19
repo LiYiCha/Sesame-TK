@@ -11,6 +11,7 @@ import de.robv.android.xposed.callbacks.XC_LoadPackage
 import fansirsqi.xposed.sesame.data.General
 import fansirsqi.xposed.sesame.data.RunType
 import fansirsqi.xposed.sesame.data.ViewAppInfo
+import fansirsqi.xposed.sesame.hook.ApplicationHook
 import fansirsqi.xposed.sesame.hook.Toast
 import fansirsqi.xposed.sesame.hook.broadcast.SesameReceiver
 import fansirsqi.xposed.sesame.hook.context.AppContext
@@ -82,7 +83,7 @@ class LifecycleModule : HookModule {
             if (TaskScheduler.isStopped()) {
                 return
             }
-            val targetUid = AppContext.getUserId()
+            val targetUid = ApplicationHook.getUserId()
             if (targetUid == null) {
                 Log.runtime("用户未登录")
                 Toast.show("用户未登录")

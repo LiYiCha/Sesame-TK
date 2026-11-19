@@ -72,7 +72,7 @@ public class UserMap {
             try {
                 // 卸载现有数据
                 UserMap.unload();
-                String selfId = fansirsqi.xposed.sesame.hook.context.AppContext.getUserId();
+                String selfId = currentUserId;
                 // 反射加载类
                 Class<?> clsUserIndependentCache = loader.loadClass("com.alipay.mobile.socialcommonsdk.bizdata.UserIndependentCache");
                 Class<?> clsAliAccountDaoOp = loader.loadClass("com.alipay.mobile.socialcommonsdk.bizdata.contact.data.AliAccountDaoOp");

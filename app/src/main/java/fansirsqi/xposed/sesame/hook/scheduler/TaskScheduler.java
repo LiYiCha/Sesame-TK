@@ -12,6 +12,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import fansirsqi.xposed.sesame.data.Config;
+import fansirsqi.xposed.sesame.hook.ApplicationHook;
 import fansirsqi.xposed.sesame.hook.context.AppContext;
 import fansirsqi.xposed.sesame.hook.lifecycle.LifecycleManager;
 import fansirsqi.xposed.sesame.hook.resource.ExecutorManager;
@@ -214,7 +215,7 @@ public class TaskScheduler {
             }
 
             String currentUid = UserMap.getCurrentUid();
-            String targetUid = AppContext.getUserId();
+            String targetUid = ApplicationHook.getUserId();
             if (targetUid == null) {
                 Log.runtime("当前无登录用户，跳过自动登录");
                 return;

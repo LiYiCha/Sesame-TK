@@ -22,21 +22,15 @@ public class Toast {
      * @param force   是否强制显示
      */
     public static void show(CharSequence message, boolean force) {
-        try {
-            // 直接取 AppContext：ApplicationHook 实现了 Xposed 接口，
-            // 在缺少 Xposed 类的进程（如 NPatch 本地模式的设置页）里加载它会抛 NoClassDefFoundError
-            Context context = AppContext.getAppContext();
-            if (context == null) {
-                Log.runtime(TAG, "Context is null, cannot show toast");
-                return;
-            }
-            boolean shouldShow = force || (BaseModel.getShowToast() != null && BaseModel.getShowToast().getValue());
-            if (shouldShow) {
-                displayToast(context.getApplicationContext(), message);
-            }
-        } catch (Throwable t) {
-            // Toast 属辅助提示，任何异常（含 Error）都不得影响主流程
-            Log.runtime(TAG, "show err: " + t);
+        // AppContext 是纯 Android 类，不含任何 Xposed 引用：设置页进程取上下文不会触发类解析失败
+        Context context = AppContext.getAppContext();
+        if (context == null) {
+            Log.runtime(TAG, "Context is null, cannot show toast");
+            return;
+        }
+        boolean shouldShow = force || (BaseModel.getShowToast() != null && BaseModel.getShowToast().getValue());
+        if (shouldShow) {
+            displayToast(context.getApplicationContext(), message);
         }
     }
     /**

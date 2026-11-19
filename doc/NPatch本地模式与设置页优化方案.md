@@ -54,6 +54,13 @@
 本地模式「模块显示未激活、功能不可用」的根因是**配置与状态存储位置不同**，与激活检测逻辑无关：
 设置页把配置写入模块 APK 的私有目录，任务运行在支付宝进程，读取的是支付宝的私有目录，二者没有任何共享通道。
 
+官方的运行模型（`guide/modes`）：
+
+- 修补后的 APK 自带 `assets/npatch/loader.bin` 与 `assets/npatch/so/<abi>/libnpatch.so`，加载器与原生核心都来自被修补包，不从管理器提取。
+- 运行时用目标包名向管理器（`top.nkbe.npatch`）查询模块与作用域：先连 Manager Service，不可用再查 Manager ConfigProvider，两者都不可用才回退到目标应用上一次成功同步的模块缓存。
+- 作用域始终以管理器数据库为准，模块无法自行决定被加载。
+- 集成模式把模块 APK 打进 `assets/npatch/modules/`，Remote 数据存在目标应用自己的数据目录，因此模块 UI 与目标应用同目录；本地模式的数据统一存在管理器，按模块包名隔离。
+
 ### 2.2 共享通道：NPatch Remote API
 
 官方提供的通道是 Remote Preferences / Remote Files，由管理器保存并按模块包名隔离：
@@ -64,7 +71,30 @@
 
 读写方向与本模块的模型完全吻合：设置在设置页写入，任务只读取。
 
-### 2.3 分阶段实现
+**关键限制（决定本模块能否落地）**：注入侧的只读通道由 libxposed `XposedInterface` 提供，
+官方 FAQ 的表述是「作用域内的 API 101/102 目标进程只取得读取与变更通知能力」，且
+「Legacy `XSharedPreferences` 不会自动迁移……Legacy 模块必须明确采用此 API」。
+本项目入口是 Legacy 的 `IXposedHookLoadPackage`（`assets/xposed_init`），共 28 个文件、
+158 处 `XposedBridge`/`XposedHelpers` 调用，属于 Legacy 管线。因此：
+
+- 设置页侧（模块进程）可以正常用 `NPatchRemoteClient` 读写 Remote Store；
+- 任务侧（支付宝进程）没有公开入口读同一份 Remote Store；
+- 所以仅接入 Remote API **不足以**让 Legacy 模块在本地模式工作。
+
+### 2.3 前置决策：两条可行路径
+
+| 路径 | 做法 | 代价 | 结论 |
+|---|---|---|---|
+| A. 迁移 libxposed API 102 | 入口改为 `XposedModule` + `assets/META-INF/xposed/module.prop`，hook 改用 `XposedInterface`，注入侧用 `getRemotePreferences` 读配置 | 重写 28 个文件、158 处 hook 调用；hook 行为需逐条回归 | 官方唯一完整路径，工作量大 |
+| B. 设置 UI 移入目标进程 | 保留 Legacy，在支付宝进程内用原生 View 提供设置界面，配置直接写目标应用私有目录 | 需重写设置界面（现有为 Web UI），但与任务天然同进程 | 可行，但不满足「Web 设置页」体验 |
+| C. 暂不支持本地模式 | 维持集成模式，配置与任务同进程 | 无 | 当前状态；签名绕过上限 High（2） |
+
+不建议为「更高级别的签名绕过」而迁移：改包本身（APK 路径、`/proc/self/maps`、加载器 so）已是最强特征，
+3/4/5 只扩大覆盖的校验路径，并不降低被识别概率。
+
+以下分阶段方案以路径 A 为目标，路径 B 可复用阶段 B 之外的思路。
+
+### 2.4 分阶段实现
 
 #### 阶段 A：接入依赖与连接（可独立验证）
 
@@ -111,7 +141,7 @@ Remote Files 只接受单层文件名，禁止路径分隔符，与现有平铺�
 - 设置页顶部增加环境条：`集成模式（同进程，配置直连）` / `本地模式（Remote 已连接）` / `本地模式（Remote 不可用，配置仅本机生效）`。
 - 当处于第三态时，所有依赖配置的功能入口保持可见，但点击保存时给出一次明确提示，避免用户误以为配置已生效。
 
-### 2.4 改动清单
+### 2.5 改动清单
 
 | 文件 | 改动 |
 |---|---|
@@ -123,14 +153,14 @@ Remote Files 只接受单层文件名，禁止路径分隔符，与现有平铺�
 | `ui/WebSettingsActivity.java` | 暴露 `getRuntimeEnv()` 给设置页展示环境条 |
 | `assets/web/index.html` | 环境条与保存提示 |
 
-### 2.5 风险与验证
+### 2.6 风险与验证
 
 1. Remote Preferences 在目标进程为只读，任何既有「任务运行时写配置」的逻辑（如 `disableElemeLuckyStar` 关闭开关）会抛 `UnsupportedOperationException`，需改为写本地覆盖值并在设置页合并展示。
 2. 管理器进程被杀后 Binder 失效，需要重连逻辑与超时（同步 `connect` 最多 3 秒，UI 必须走异步）。
 3. 无法在没有真机的情况下验证注入侧行为，全部改动需在集成模式（回归）与本地模式（新功能）各跑一轮。
 4. 不实现热重载与作用域控制：这两项属于管理器职责，模块侧无收益。
 
-### 2.6 签名绕过等级选择（源码依据）
+### 2.7 签名绕过等级选择（源码依据）
 
 NPatch 的等级实现集中在 `patch-loader/src/main/java/top/nkbe/npatch/loader/SigBypass.java` 与
 `patch-loader/src/main/jni/src/jni/bypass_sig.cpp`、`svc_bypass.cpp`：
@@ -150,7 +180,7 @@ NPatch 的等级实现集中在 `patch-loader/src/main/java/top/nkbe/npatch/load
 3. **4 Seccomp 不建议首选**。该级别在进程上安装 seccomp 过滤器，而支付宝自身也可能安装过滤器；两者叠加会返回 `EPERM`，表现为宿主 native 组件异常退出或功能静默失效，排查成本高。
 4. 需明确的预期：**等级越高不等于越不易被识别**。改包本身是强特征（APK 路径、`/proc/self/maps`、加载器 so 均与官方包不同），3 与 5 的差异只在覆盖的校验路径，不在「隐形」程度。若仅为规避识别而切换本地模式，收益低于风险；本地模式的真实价值是「免重新修补即可换模块」。
 
-### 2.7 官方文档引用与现状边界
+### 2.8 官方文档引用与现状边界
 
 | 结论 | 出处 |
 |---|---|
@@ -160,11 +190,15 @@ NPatch 的等级实现集中在 `patch-loader/src/main/java/top/nkbe/npatch/load
 | Remote API 依赖 AAR、`<queries>` 声明、模块 App 用 `NPatchRemoteClient` 读写 | `guide/remote-api.html` →「添加 SDK」「建立连接」「API 参考」 |
 | 目标进程内 Remote Preferences 只读、`edit()` 抛 `UnsupportedOperationException` | `guide/remote-api.html` →「API 101/102 模块运行时」 |
 | 管理器包名 `top.nkbe.npatch`、authority `top.nkbe.npatch.remote` | `guide/remote-api.html` →「适用范围」「添加 SDK」 |
+| 本地模式运行模型、loader 来源、作用域以管理器为准 | `guide/modes` →「Local Mode」「Comparison」 |
+| 注入侧只读、Legacy 不自动迁移 | `guide/faq`「Remote Preferences 与 Remote Files 存在哪里」、`guide/remote-api` 首段 |
+| 三类模块加载方式（Legacy / API 101 / API 102） | 站点首页「一套运行时，三种模块」 |
 | 各级别的 Java/native hook 面 | 源码 `patch-loader/.../SigBypass.java`、`patch-loader/src/main/jni/src/jni/bypass_sig.cpp`、`svc_bypass.cpp` |
 
 现状边界（避免误判为已支持）：
 
-- 当前仓库**尚未接入** Remote API，本地模式下配置仍写在本机私有目录，因此本地模式目前不可用；本文给出的是实施方案，不是既有能力。
+- 当前仓库**尚未接入** Remote API，且入口为 Legacy 管线，本地模式下配置仍写在本机私有目录，因此本地模式目前不可用；本文给出的是实施方案，不是既有能力。
+- 设置页的「NPatch 环境」一行只陈述可验证事实（管理器是否安装、Provider 是否可解析），不代表本地模式已可用。
 - 已完成的前置只有两项：`AndroidManifest.xml` 的 `<queries>` 声明、`NpatchEnv` 的只读探测（管理器是否安装、Provider 是否可解析），二者不影响集成模式。
 - 集成模式不需要任何改造，配置与任务同进程，行为与现状一致。
 
@@ -219,9 +253,15 @@ NPatch 的等级实现集中在 `patch-loader/src/main/java/top/nkbe/npatch/load
 
 ### 3.6 界面原型
 
-原型文件：`doc/ui-prototype/index.html`（单文件，直接打开；支持 `#timeline` 切到时间线视图、`#m-AntForest` 定位指定模型）。
+原型文件：`doc/ui-prototype/index.html`（单文件，直接打开）。三块手机屏幕并排，同一份字段、同一套控件，只改变组织方式：
 
-字段数据由脚本从代码抽取，非示例编造：
+| 屏 | 内容 | 说明 |
+|---|---|---|
+| 左 | 现状平铺 | 兑换任务 13 项逐条铺开，开关与它的商品列表各占一行 |
+| 中 | 卡片分组 | 5 个分组行（健康岛 / 包裹兑换 / 游戏中心金币 / 金豆商城 / 饿了么商城）+ 饿了么 3 个开关、2 个动作、1 行高级设置 |
+| 右 | 任务时间线 | 时间轴 + 状态点（绿成功 / 橙部分失败 / 灰待执行）+ 结果摘要 |
+
+字段数据来自代码抽取，非示例编造：
 
 | 模型 | 字段数 | 来源 |
 |---|---|---|
@@ -230,11 +270,10 @@ NPatch 的等级实现集中在 `patch-loader/src/main/java/top/nkbe/npatch/load
 | 蚂蚁森林 | 60 | `task/antForest/AntForest.kt` |
 | 蚂蚁庄园 | 57 | `task/antFarm/AntFarm.kt` |
 
-原型覆盖的交互：左右对比（现状平铺 / 新方案卡片）、搜索、仅看已开启、分组默认收起可展开、依赖字段随开关隐藏、字段详情弹窗。
+分组规则：字段名形如 `前缀 | 子项` 时归入以「前缀」命名的分组，组头右侧复用名称以该前缀开头的布尔开关；
+分组默认收起，点击组头展开；组头带子项数量角标。依赖字段（`dependOnCode`）在父开关关闭时整行隐藏。
 
-已知的原型与实现差异：原型用静态示例值渲染开关与选中数量，实际页面读取 `configValue`；分组收起状态不持久化，实现时可存入 `localStorage`。
-
----
+原型与实现的差异：开关状态与「已选 N 项」为静态示例值，实际读取 `configValue`；分组展开状态不持久化，实现时可存入 `localStorage`。
 
 ## 四、后续优化项方案
 

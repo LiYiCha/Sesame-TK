@@ -5,22 +5,22 @@ import android.app.Service;
 import android.content.Context;
 import android.os.Handler;
 
-import de.robv.android.xposed.XposedHelpers;
 import fansirsqi.xposed.sesame.entity.AlipayVersion;
-import fansirsqi.xposed.sesame.util.Log;
 import lombok.Getter;
 
 /**
- * 应用上下文管理器
- * 负责管理应用的核心上下文对象和提供全局访问点
+ * 应用上下文管理器。
+ *
+ * 本类只持有纯 Android 对象（Context、Handler、ClassLoader、版本信息）与 hook 状态标记，
+ * 不引用任何 de.robv.* 类型，也不做任何目标应用反射。模块设置页、Toast 等非注入进程可以安全加载它；
+ * 需要 XposedHelpers 的支付宝反射方法放在 ApplicationHook。
+ *
+ * 这不是靠 try-catch 兜住 NoClassDefFoundError，而是通过消除依赖避免它发生。
  */
 public class AppContext {
     private static final String TAG = AppContext.class.getSimpleName();
 
     private static ClassLoader classLoader = null;
-
-    @Getter
-    private static Object microApplicationContextObject = null;
 
     @Getter
     @SuppressLint("StaticFieldLeak")
@@ -113,81 +113,5 @@ public class AppContext {
      */
     public static Context getAppContext() {
         return context;
-    }
-
-    /**
-     * 获取 MicroApplicationContext 对象
-     */
-    public static Object getMicroApplicationContext() {
-        if (microApplicationContextObject == null) {
-            try {
-                Class<?> alipayApplicationClass = XposedHelpers.findClass(
-                        "com.alipay.mobile.framework.AlipayApplication", classLoader
-                );
-                Object alipayApplicationInstance = XposedHelpers.callStaticMethod(
-                        alipayApplicationClass, "getInstance"
-                );
-                if (alipayApplicationInstance == null) {
-                    return null;
-                }
-                microApplicationContextObject = XposedHelpers.callMethod(
-                        alipayApplicationInstance, "getMicroApplicationContext"
-                );
-            } catch (Throwable t) {
-                Log.printStackTrace(t);
-            }
-        }
-        return microApplicationContextObject;
-    }
-
-    /**
-     * 根据服务接口名称获取服务对象
-     */
-    public static Object getServiceObject(String service) {
-        try {
-            return XposedHelpers.callMethod(getMicroApplicationContext(), "findServiceByInterface", service);
-        } catch (Throwable th) {
-            Log.runtime(TAG, "getServiceObject err");
-            Log.printStackTrace(TAG, th);
-        }
-        return null;
-    }
-
-    /**
-     * 获取用户对象
-     */
-    public static Object getUserObject() {
-        try {
-            return XposedHelpers.callMethod(
-                    getServiceObject(XposedHelpers.findClass("com.alipay.mobile.personalbase.service.SocialSdkContactService", classLoader).getName()),
-                    "getMyAccountInfoModelByLocal");
-        } catch (Throwable th) {
-            Log.runtime(TAG, "getUserObject err");
-            Log.printStackTrace(TAG, th);
-        }
-        return null;
-    }
-
-    /**
-     * 获取用户ID
-     */
-    public static String getUserId() {
-        try {
-            Object userObject = getUserObject();
-            if (userObject != null) {
-                return (String) XposedHelpers.getObjectField(userObject, "userId");
-            }
-        } catch (Throwable th) {
-            Log.runtime(TAG, "getUserId err");
-            Log.printStackTrace(TAG, th);
-        }
-        return null;
-    }
-
-    /**
-     * 重置 MicroApplicationContext（用于重新初始化）
-     */
-    public static void resetMicroApplicationContext() {
-        microApplicationContextObject = null;
     }
 }

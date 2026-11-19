@@ -1,6 +1,7 @@
 package fansirsqi.xposed.sesame.util
 
 import android.content.Context
+import android.content.pm.PackageManager
 
 /**
  * NPatch 运行环境探测。
@@ -28,19 +29,19 @@ object NpatchEnv {
     @JvmStatic
     fun isManagerInstalled(context: Context?): Boolean {
         if (context == null) return false
-        return runCatching {
+        return try {
             context.packageManager.getPackageInfo(MANAGER_PACKAGE, 0)
             true
-        }.getOrDefault(false)
+        } catch (e: PackageManager.NameNotFoundException) {
+            false
+        }
     }
 
-    /** Remote Provider 是否可解析（需要 <queries><provider android:authorities=...>） */
+    /** Remote Provider 是否可解析（需要 <queries><provider android:authorities=...>）；找不到时返回 null，不抛异常 */
     @JvmStatic
     fun isRemoteProviderAvailable(context: Context?): Boolean {
         if (context == null) return false
-        return runCatching {
-            context.packageManager.resolveContentProvider(REMOTE_AUTHORITY, 0) != null
-        }.getOrDefault(false)
+        return context.packageManager.resolveContentProvider(REMOTE_AUTHORITY, 0) != null
     }
 
     /**

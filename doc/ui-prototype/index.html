@@ -3,340 +3,258 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>设置页字段列表方案 · 真实字段原型</title>
+<title>设置页字段列表方案 · 手机界面三屏对比</title>
 <style>
 :root{
-  --bg:#0f1115; --panel:#151922; --card:#181b21; --line:#262a32; --line2:#2f343d;
-  --text:#e6e8ee; --muted:#8b93a3; --accent:#4c8dff; --ok:#2ecc71; --warn:#f0a020;
-  --btn:#232833;
+  --page:#0c0e12; --bg2:#101318; --card:#171b22; --card2:#1d222b; --line:#242a34;
+  --text:#e7eaf0; --muted:#8b93a3; --dim:#5d6574;
+  --accent:#4c8dff; --ok:#37c26b; --warn:#e8a33d;
 }
 [data-theme="light"]{
-  --bg:#f4f6f9; --panel:#ffffff; --card:#ffffff; --line:#e6e9ef; --line2:#eef1f6;
-  --text:#1f2329; --muted:#6b7280; --accent:#1976d2; --ok:#12a150; --warn:#c77700;
-  --btn:#f2f4f8;
+  --page:#eef1f6; --bg2:#f6f8fb; --card:#ffffff; --card2:#f3f5f9; --line:#e6eaf1;
+  --text:#1d2129; --muted:#6b7280; --dim:#9aa2b1;
+  --accent:#1976d2; --ok:#12a150; --warn:#c77700;
 }
 *{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--text);font:14px/1.5 -apple-system,"Segoe UI",Roboto,"PingFang SC","Microsoft YaHei",sans-serif}
-header{display:flex;align-items:center;gap:16px;padding:14px 20px;border-bottom:1px solid var(--line);background:var(--panel);position:sticky;top:0;z-index:10}
-header h1{font-size:15px;margin:0;font-weight:600}
-header .sub{color:var(--muted);font-size:12px}
-.tabs{display:flex;gap:6px;margin-left:auto}
-.tab{padding:6px 14px;border-radius:8px;background:var(--btn);cursor:pointer;font-size:13px;border:1px solid transparent}
-.tab.on{background:var(--accent);color:#fff;border-color:var(--accent)}
-.iconbtn{padding:6px 12px;border-radius:8px;background:var(--btn);cursor:pointer;font-size:13px}
-.wrap{display:grid;grid-template-columns:1fr 1fr;gap:0;height:calc(100vh - 58px)}
-.pane{overflow:auto;padding:18px 20px 60px}
-.pane.left{border-right:1px solid var(--line)}
-.pane h2{font-size:13px;color:var(--muted);font-weight:600;margin:0 0 12px;display:flex;align-items:center;gap:8px}
-.badge{font-size:11px;padding:1px 7px;border-radius:99px;background:var(--btn);color:var(--muted);border:1px solid var(--line2)}
-.badge.new{background:rgba(76,141,255,.14);color:var(--accent);border-color:rgba(76,141,255,.3)}
-.toolbar{display:flex;gap:8px;margin-bottom:12px;position:sticky;top:0;background:var(--bg);padding:4px 0 10px;z-index:5}
-.search{flex:1;display:flex;align-items:center;gap:8px;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:8px 12px}
-.search input{flex:1;background:none;border:0;outline:0;color:var(--text);font-size:13px}
-.chip{display:inline-flex;align-items:center;gap:6px;padding:8px 12px;border-radius:10px;background:var(--card);border:1px solid var(--line);cursor:pointer;font-size:12px;color:var(--muted);white-space:nowrap}
-.chip.on{color:var(--accent);border-color:rgba(76,141,255,.45);background:rgba(76,141,255,.1)}
-.card{background:var(--card);border:1px solid var(--line);border-radius:14px;margin-bottom:12px;overflow:hidden}
-.card-head{display:flex;align-items:center;gap:10px;padding:13px 14px;border-bottom:1px solid var(--line2)}
-.card-title{font-weight:600;font-size:14px}
-.card-group{font-size:11px;color:var(--muted);background:var(--btn);padding:1px 8px;border-radius:99px}
-.card-count{margin-left:auto;font-size:11px;color:var(--muted)}
-.row{display:flex;align-items:center;gap:10px;padding:11px 14px;border-bottom:1px solid var(--line2);cursor:pointer}
+html,body{margin:0}
+body{background:var(--page);color:var(--text);font:13px/1.45 -apple-system,"Segoe UI",Roboto,"PingFang SC","Microsoft YaHei",sans-serif;padding:22px 24px 28px}
+header{display:flex;align-items:center;gap:14px;margin-bottom:6px}
+header h1{font-size:16px;margin:0;font-weight:600}
+header .sub{color:var(--muted);font-size:12px;margin-left:2px}
+header .tools{margin-left:auto;display:flex;gap:8px}
+.btn{background:var(--card);border:1px solid var(--line);color:var(--muted);border-radius:9px;padding:6px 12px;font-size:12px;cursor:pointer}
+.btn:hover{color:var(--accent);border-color:var(--accent)}
+.note{color:var(--dim);font-size:11.5px;margin:0 0 16px}
+.stage{display:flex;gap:34px;align-items:flex-start;flex-wrap:wrap}
+.col{width:382px}
+.cap{margin:0 0 9px;font-size:12px;color:var(--muted)}
+.cap .l1{display:flex;align-items:center;gap:8px}
+.cap .l2{font-size:11px;color:var(--dim);margin-top:3px}
+.cap b{color:var(--text);font-size:12.5px;font-weight:600}
+.tag{font-size:10.5px;padding:1px 7px;border-radius:99px;border:1px solid var(--line);color:var(--muted)}
+.tag.bad{color:#e2707a;border-color:rgba(226,112,122,.35);background:rgba(226,112,122,.08)}
+.tag.good{color:var(--ok);border-color:rgba(55,194,107,.35);background:rgba(55,194,107,.08)}
+
+/* 手机外壳 */
+.phone{width:382px;height:806px;border-radius:38px;background:#05070a;border:8px solid #22262f;
+  box-shadow:0 26px 60px rgba(0,0,0,.55),inset 0 0 0 1px rgba(255,255,255,.04);position:relative;overflow:hidden}
+[data-theme="light"] .phone{border-color:#c9cfdb;box-shadow:0 20px 46px rgba(20,30,60,.18)}
+.notch{position:absolute;top:8px;left:50%;transform:translateX(-50%);width:96px;height:22px;border-radius:11px;background:#05070a;z-index:6}
+[data-theme="light"] .notch{background:#c9cfdb}
+.screen{position:absolute;inset:0;display:flex;flex-direction:column;background:var(--bg2)}
+.sbar{height:34px;display:flex;align-items:flex-end;justify-content:space-between;padding:0 18px 3px;font-size:10.5px;color:var(--muted)}
+.navbar{height:46px;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;
+  border-bottom:1px solid var(--line);background:var(--bg2);position:relative}
+.navbar .back{position:absolute;left:16px;color:var(--muted);font-size:15px}
+.body{flex:1;overflow-y:auto;padding:10px 12px 44px;scrollbar-width:none}
+.body::-webkit-scrollbar{display:none}
+
+/* 搜索条 */
+.searchbar{display:flex;gap:8px;margin-bottom:10px}
+.searchbar .ipt{flex:1;display:flex;align-items:center;gap:7px;background:var(--card);border:1px solid var(--line);
+  border-radius:10px;padding:7px 10px;color:var(--dim);font-size:12px}
+.chip{padding:7px 11px;border-radius:10px;border:1px solid var(--line);background:var(--card);color:var(--muted);font-size:11.5px;white-space:nowrap}
+
+/* 卡片与行 */
+.card{background:var(--card);border:1px solid var(--line);border-radius:13px;overflow:hidden;margin-bottom:10px}
+.card-h{display:flex;align-items:center;gap:8px;padding:10px 12px;border-bottom:1px solid var(--line);font-weight:600;font-size:13px}
+.card-h .grp{font-size:10.5px;font-weight:400;color:var(--muted);background:var(--card2);border:1px solid var(--line);border-radius:99px;padding:0 7px}
+.card-h .cnt{margin-left:auto;font-size:10.5px;color:var(--dim);font-weight:400}
+.row{display:flex;align-items:center;gap:8px;padding:0 12px;height:44px;border-bottom:1px solid var(--line);font-size:12.5px}
 .row:last-child{border-bottom:0}
-.row.sub{padding-left:34px;background:rgba(255,255,255,.012);position:relative}
-.row.sub:before{content:"";position:absolute;left:20px;top:10px;bottom:10px;width:2px;border-radius:2px;background:var(--line2)}
-.row.sub .nm{color:var(--text);opacity:.92}
 .row .nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.row .nm .path{color:var(--muted);font-size:12px}
-.row .ctrl{color:var(--muted);font-size:12px;display:flex;align-items:center;gap:6px}
-.row:hover{background:rgba(76,141,255,.06)}
-.arrow{color:var(--muted);font-size:11px;margin-right:2px}
-.sub-count{display:inline-block;margin-left:6px;font-size:11px;color:var(--muted);background:var(--btn);border:1px solid var(--line2);border-radius:99px;padding:0 6px;vertical-align:1px}
-.switch{width:40px;height:22px;border-radius:99px;background:#39404d;position:relative;transition:.18s;flex:none;cursor:pointer}
-.switch i{position:absolute;top:2px;left:2px;width:18px;height:18px;border-radius:50%;background:#fff;transition:.18s}
-.switch.on{background:var(--ok)}
-.switch.on i{left:20px}
-.card{scroll-margin-top:64px}
-.sect{padding:9px 14px;background:rgba(255,255,255,.02);color:var(--muted);font-size:12px;cursor:pointer;display:flex;align-items:center;gap:6px;border-bottom:1px solid var(--line2)}
-.sect:hover{color:var(--accent)}
-.empty{padding:40px 10px;text-align:center;color:var(--muted);font-size:13px}
-.legend{margin-top:16px;padding:12px 14px;border:1px dashed var(--line2);border-radius:12px;color:var(--muted);font-size:12px}
-.legend b{color:var(--text)}
-.tl{padding:4px 0}
-.tl-item{display:grid;grid-template-columns:72px 1fr;gap:10px;padding:0 0 18px;position:relative}
-.tl-item:before{content:"";position:absolute;left:63px;top:6px;bottom:-6px;width:1px;background:var(--line)}
-.tl-time{color:var(--muted);font-size:12px;text-align:right;padding:2px 8px 0 0}
-.tl-body{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px 12px;position:relative}
-.tl-body:before{content:"";position:absolute;left:-14px;top:14px;width:8px;height:8px;border-radius:50%;background:var(--accent);box-shadow:0 0 0 3px rgba(76,141,255,.18)}
-.tl-title{font-weight:600;font-size:13px;display:flex;gap:8px;align-items:center}
-.tl-meta{color:var(--muted);font-size:12px;margin-top:3px}
-.dot{width:7px;height:7px;border-radius:50%;display:inline-block}
-.ok{background:var(--ok)} .warn{background:var(--warn)} .idle{background:#5b6270}
-.hint{color:var(--muted);font-size:11px;margin:8px 0 0}
-dialog{border:1px solid var(--line);border-radius:14px;background:var(--panel);color:var(--text);padding:0;max-width:420px;width:90%}
-dialog::backdrop{background:rgba(0,0,0,.5)}
-.dlg-h{padding:13px 16px;border-bottom:1px solid var(--line);font-weight:600}
-.dlg-b{padding:14px 16px;font-size:13px;color:var(--muted);line-height:1.7;word-break:break-word}
-.dlg-b code{color:var(--text);background:var(--btn);padding:1px 6px;border-radius:6px}
-.dlg-f{padding:10px 16px;text-align:right;border-top:1px solid var(--line)}
-.dlg-f button{background:var(--accent);color:#fff;border:0;border-radius:8px;padding:7px 16px;font-size:13px;cursor:pointer}
-@media(max-width:900px){.wrap{grid-template-columns:1fr}.pane.left{border-right:0;border-bottom:1px solid var(--line)}}
+.row .val{color:var(--muted);font-size:11.5px;display:flex;align-items:center;gap:4px;white-space:nowrap}
+.row.group{height:46px;background:rgba(255,255,255,.015)}
+.row.group .nm{font-weight:500}
+.row.adv{height:40px;color:var(--muted);font-size:12px;background:rgba(255,255,255,.012)}
+.sw{width:38px;height:21px;border-radius:99px;background:#39404d;position:relative;flex:none}
+.sw i{position:absolute;top:2px;left:2px;width:17px;height:17px;border-radius:50%;background:#fff}
+.sw.on{background:var(--ok)}
+.sw.on i{left:19px}
+.pill{font-size:10px;color:var(--muted);background:var(--card2);border:1px solid var(--line);border-radius:99px;padding:0 6px;margin-left:5px}
+.arrow{color:var(--dim);font-size:10px}
+.more{height:38px;display:flex;align-items:center;justify-content:center;font-size:11.5px;color:var(--dim)}
+
+/* 时间线 */
+.tl{padding:6px 2px}
+.tl-i{display:grid;grid-template-columns:52px 1fr;gap:10px;position:relative;padding-bottom:14px}
+.tl-i:before{content:"";position:absolute;left:52px;top:22px;bottom:-4px;width:1px;background:var(--line)}
+.tl-i:last-child:before{display:none}
+.tl-t{font-size:11.5px;color:var(--muted);text-align:right;padding-top:7px;font-variant-numeric:tabular-nums}
+.tl-card{margin-left:14px;background:var(--card);border:1px solid var(--line);border-radius:11px;padding:8px 10px;position:relative}
+.tl-card:before{content:"";position:absolute;left:-19px;top:13px;width:7px;height:7px;border-radius:50%;background:var(--dim);
+  box-shadow:0 0 0 3px var(--bg2)}
+.tl-card.ok:before{background:var(--ok)}
+.tl-card.warn:before{background:var(--warn)}
+.tl-card .t1{font-size:12.5px;font-weight:600;display:flex;align-items:center;gap:6px}
+.tl-card .t2{font-size:11px;color:var(--muted);margin-top:2px}
+.tl-card .grp{font-size:10px;font-weight:400;color:var(--muted);background:var(--card2);border:1px solid var(--line);border-radius:99px;padding:0 6px}
+.state{font-size:10px;font-weight:400;border-radius:99px;padding:0 6px;border:1px solid var(--line);color:var(--muted);margin-left:auto}
+.state.ok{color:var(--ok);border-color:rgba(55,194,107,.3)}
+.state.warn{color:var(--warn);border-color:rgba(232,163,61,.3)}
+.foot{position:absolute;left:0;right:0;bottom:0;height:28px;z-index:5;background:var(--bg2);border-top:1px solid var(--line);
+  display:flex;align-items:center;justify-content:center;font-size:10px;color:var(--dim)}
 </style>
 </head>
 <body data-theme="dark">
 <header>
-  <h1>设置页字段列表方案</h1>
-  <span class="sub">字段数据由代码自动抽取（ElemeTask 9 / FlashSaleModule 13 / AntForest 60 / AntFarm 57）</span>
-  <div class="tabs">
-    <div class="tab on" data-view="fields" onclick="switchView('fields')">字段列表</div>
-    <div class="tab" data-view="timeline" onclick="switchView('timeline')">任务时间线</div>
-    <div class="iconbtn" onclick="toggleTheme()">切换主题</div>
-  </div>
+  <h1>设置页字段列表 · 三屏对比</h1>
+  <span class="sub">字段取自代码：兑换任务 13 · 饿了么 9（已剔除 hidden）· 蚂蚁森林 60 · 蚂蚁庄园 57</span>
+  <div class="tools"><button class="btn" onclick="toggleTheme()">切换主题</button></div>
 </header>
+<p class="note">三块屏幕是同一份数据、同一种控件，只有信息组织方式不同。左屏是当前实现，中屏是方案，右屏是新增的任务时间线。</p>
 
-<div class="wrap" id="view-fields">
-  <section class="pane left">
-    <h2>现状 <span class="badge">当前实现</span></h2>
-    <div id="current"></div>
-    <div class="legend">
-      <b>现状问题</b>：字段平铺、开关与其附属配置分离、无搜索、字段多时需长距离滚动（蚂蚁森林 60 项）。
-    </div>
-  </section>
+<div class="stage">
+  <div class="col">
+    <p class="cap"><span class="l1"><b>现状 · 平铺</b><span class="tag bad">22 个字段逐条平铺</span></span><span class="l2">开关与它的商品列表各占一行，模块之间没有边界</span></p>
+    <div class="phone"><div class="notch"></div><div class="screen">
+      <div class="sbar"><span>21:36</span><span>5G ▮▮▮ 86%</span></div>
+      <div class="navbar">设置</div>
+      <div class="body" id="p1"></div>
+    </div></div>
+  </div>
 
-  <section class="pane">
-    <h2>新方案 <span class="badge new">卡片 + 依赖收起 + 搜索</span></h2>
-    <div class="toolbar">
-      <label class="search">
-        <span style="color:var(--muted)">🔍</span>
-        <input id="q" placeholder="搜索字段名 / 字段代码 / 分组" oninput="render()">
-      </label>
-      <div class="chip" id="onlyOn" onclick="toggleOnlyOn()">仅看已开启</div>
-    </div>
-    <div id="next"></div>
-    <div class="legend">
-      <b>规则</b>：<br>
-      1. 依赖字段跟随父开关（开关关闭即隐藏，不占位）；<br>
-      2. 名称含 <code>|</code> 的字段归入同名前缀分组，缩进展示；<br>
-      3. 主开关 + 常用字段直接展示，其余收进「高级设置 (N)」；<br>
-      4. 搜索跨模型匹配，命中时自动展开。
-    </div>
-  </section>
+  <div class="col">
+    <p class="cap"><span class="l1"><b>方案 · 卡片分组</b><span class="tag good">22 行 → 12 行</span></span><span class="l2">分组收起子项；开关关闭时其列表整组隐藏</span></p>
+    <div class="phone"><div class="notch"></div><div class="screen">
+      <div class="sbar"><span>21:36</span><span>5G ▮▮▮ 86%</span></div>
+      <div class="navbar">设置</div>
+      <div class="body" id="p2"></div>
+    </div></div>
+  </div>
+
+  <div class="col">
+    <p class="cap"><span class="l1"><b>新增 · 任务时间线</b><span class="tag">读取调度器，不发请求</span></span><span class="l2">未运行过的显示「待首次执行」，不编造时间</span></p>
+    <div class="phone"><div class="notch"></div><div class="screen">
+      <div class="sbar"><span>21:36</span><span>5G ▮▮▮ 86%</span></div>
+      <div class="navbar"><span class="back">‹</span>任务时间线</div>
+      <div class="body" id="p3"></div>
+    </div></div>
+  </div>
 </div>
-
-<div class="wrap" id="view-timeline" style="display:none;grid-template-columns:1fr">
-  <section class="pane">
-    <h2>任务时间线 <span class="badge new">读取调度器下次触发时间</span></h2>
-    <div id="timeline"></div>
-    <p class="hint">时间为示例值；实现时取自各任务的调度快照（下次触发时间 + 最近一次执行结果），不新增网络请求。</p>
-  </section>
-</div>
-
-<dialog id="dlg">
-  <div class="dlg-h" id="dlgTitle"></div>
-  <div class="dlg-b" id="dlgBody"></div>
-  <div class="dlg-f"><button onclick="document.getElementById('dlg').close()">关闭</button></div>
-</dialog>
 
 <script>
-const MODELS = [{"group": "EXCHANGE", "groupName": "青春特权", "name": "兑换任务", "code": "FlashSaleModule", "fields": [{"type": "bool", "code": "enableNeverLand", "name": "健康岛兑换"}, {"type": "select", "code": "neverLandList", "name": "健康岛 | 商品列表"}, {"type": "bool", "code": "enablePackageExchange", "name": "包裹兑换"}, {"type": "select", "code": "packageExchangeList", "name": "包裹兑换 | 商品列表"}, {"type": "bool", "code": "enableGameCenterGold", "name": "游戏中心金币秒杀"}, {"type": "select", "code": "gameCenterGoldList", "name": "游戏中心金币 | 商品列表"}, {"type": "int", "code": "gameCenterGoldTargetHour", "name": "游戏中心金币 | 秒杀开抢整点(0-23点)"}, {"type": "bool", "code": "goldenBeanMallExchange", "name": "金豆商城秒杀"}, {"type": "select", "code": "goldenBeanMallList", "name": "金豆商城 | 商品列表"}, {"type": "int", "code": "goldenBeanMallTargetHour", "name": "金豆商城 | 秒杀开抢整点(0-23点)"}, {"type": "bool", "code": "enableElemeMall", "name": "饿了么商城秒杀"}, {"type": "select", "code": "elemeMallList", "name": "饿了么商城 | 兑换商品"}, {"type": "int", "code": "elemeMallTargetHour", "name": "饿了么商城 | 秒杀开抢整点(0-23点)"}], "deps": {"neverLandList": "enableNeverLand", "packageExchangeList": "enablePackageExchange", "gameCenterGoldList": "enableGameCenterGold", "gameCenterGoldTargetHour": "enableGameCenterGold", "goldenBeanMallList": "enableGoldenBeanMall", "goldenBeanMallTargetHour": "enableGoldenBeanMall", "elemeMallList": "enableElemeMall", "elemeMallTargetHour": "enableElemeMall"}}, {"group": "ELEME", "groupName": "饿了么", "name": "饿了么", "code": "ElemeTask", "fields": [{"type": "str", "code": "startTime", "name": "开始执行时间(关闭:-1)"}, {"type": "bool", "code": "elemeLuckyStar", "name": "幸运星任务"}, {"type": "bool", "code": "elemeFreeOrder", "name": "抽免单任务"}, {"type": "bool", "code": "elemeBurstRed", "name": "外卖爆红包"}, {"type": "empty", "code": "elemeAccountStatus", "name": "账号状态"}, {"type": "empty", "code": "elemeRefreshMall", "name": "兑换商城"}, {"type": "str", "code": "elemeCustomUa", "name": "设备UA"}, {"type": "str", "code": "elemeQuizActId", "name": "答题活动actId"}, {"type": "select", "code": "elemeRiskTasks", "name": "风控名单"}], "deps": {}}, {"group": "FOREST", "groupName": "森林", "name": "蚂蚁森林", "code": "AntForest", "fields": [{"type": "bool", "code": "collectEnergy", "name": "收集能量 | 开关"}, {"type": "bool", "code": "batchRobEnergy", "name": "一键收取 | 开关"}, {"type": "bool", "code": "pkEnergy", "name": "Pk榜收取 | 开关"}, {"type": "int", "code": "whackMoleGames", "name": "🎮 6秒拼手速 | 激进模式局数"}, {"type": "int", "code": "whackMoleMoleCount", "name": "🎮 6秒拼手速 | 兼容模式击打数"}, {"type": "str", "code": "whackMoleTime", "name": "🎮 6秒拼手速 | 执行时间"}, {"type": "bool", "code": "energyRain", "name": "能量雨 | 开关"}, {"type": "str", "code": "energyRainTime", "name": "能量雨 | 默认8点10分后执行"}, {"type": "int", "code": "CollectSelfEnergyThreshold", "name": "收自己单个能量球阈值"}, {"type": "int", "code": "robExpandCardLimt", "name": "收取翻倍能量阈值"}, {"type": "int", "code": "CollectBombEnergyLimit", "name": "单个炸弹能量大于该值收取"}, {"type": "select", "code": "dontCollectList", "name": "不收能量 | 配置列表"}, {"type": "select", "code": "giveEnergyRainList", "name": "赠送能量雨 | 配置列表"}, {"type": "bool", "code": "energyRainChance", "name": "兑换使用能量雨次卡 | 开关"}, {"type": "bool", "code": "collectWateringBubble", "name": "收取浇水金球 | 开关"}, {"type": "int", "code": "doubleCountLimit", "name": "双击卡 | 使用次数"}, {"type": "str", "code": "doubleCardTime", "name": "双击卡 | 使用时间/范围"}, {"type": "bool", "code": "DoubleCardConstant", "name": "限时双击永动机 | 开关"}, {"type": "str", "code": "bubbleBoostTime", "name": "加速器 | 使用时间/不能范围"}, {"type": "bool", "code": "shieldCardConstant", "name": "限时保护永动机 | 开关"}, {"type": "str", "code": "robExpandCardTime", "name": "1.1倍能量卡 | 使用时间/不能范围"}, {"type": "bool", "code": "stealthCardConstant", "name": "限时隐身永动机 | 开关"}, {"type": "int", "code": "returnWater10", "name": "返水 | 10克需收能量(关闭:0)"}, {"type": "int", "code": "returnWater18", "name": "返水 | 18克需收能量(关闭:0)"}, {"type": "int", "code": "returnWater33", "name": "返水 | 33克需收能量(关闭:0)"}, {"type": "int", "code": "waterFriendCount", "name": "浇水 | 克数(10 18 33 66)"}, {"type": "bool", "code": "notifyFriend", "name": "浇水 | 通知好友"}, {"type": "bool", "code": "giveProp", "name": "赠送道具"}, {"type": "select", "code": "whoYouWantToGiveTo", "name": "赠送 | 道具"}, {"type": "bool", "code": "collectProp", "name": "收集道具"}, {"type": "select", "code": "helpFriendCollectList", "name": "复活能量 | 好友列表"}, {"type": "select", "code": "alternativeAccountList", "name": "小号列表"}, {"type": "bool", "code": "vitalityExchange", "name": "活力值 | 兑换开关"}, {"type": "bool", "code": "userPatrol", "name": "保护地巡护"}, {"type": "bool", "code": "combineAnimalPiece", "name": "合成动物碎片"}, {"type": "bool", "code": "consumeAnimalProp", "name": "派遣动物伙伴"}, {"type": "bool", "code": "receiveForestTaskAward", "name": "森林任务"}, {"type": "bool", "code": "forestChouChouLe", "name": "森林寻宝任务"}, {"type": "bool", "code": "forestDailyDress", "name": "每日随机更换森林装扮"}, {"type": "bool", "code": "forestRead", "name": "无纸阅读"}, {"type": "bool", "code": "collectGiftBox", "name": "领取礼盒"}, {"type": "bool", "code": "medicalHealth", "name": "健康医疗任务 | 开关"}, {"type": "select", "code": "medicalHealthOption", "name": "健康医疗 | 选项"}, {"type": "bool", "code": "forestMarket", "name": "森林集市"}, {"type": "bool", "code": "greenRent", "name": "绿色租赁 | 浏览能量"}, {"type": "bool", "code": "youthPrivilege", "name": "青春特权 | 森林道具"}, {"type": "bool", "code": "studentCheckIn", "name": "青春特权 | 签到红包"}, {"type": "bool", "code": "ecoLife", "name": "绿色行动 | 开关"}, {"type": "str", "code": "ecoLifeTime", "name": "绿色行动 | 默认8点后执行"}, {"type": "bool", "code": "ecoLifeOpen", "name": "绿色任务 |  自动开通"}, {"type": "select", "code": "ecoLifeOption", "name": "绿色行动 | 选项"}, {"type": "str", "code": "queryInterval", "name": "查询间隔(毫秒或毫秒范围)"}, {"type": "str", "code": "collectInterval", "name": "收取间隔(毫秒或毫秒范围)"}, {"type": "str", "code": "doubleCollectInterval", "name": "双击间隔(毫秒或毫秒范围)"}, {"type": "bool", "code": "balanceNetworkDelay", "name": "平衡网络延迟"}, {"type": "int", "code": "advanceTime", "name": "提前时间(毫秒)"}, {"type": "int", "code": "tryCount", "name": "尝试收取(次数)"}, {"type": "int", "code": "retryInterval", "name": "重试间隔(毫秒)"}, {"type": "int", "code": "cycleinterval", "name": "循环间隔(毫秒)"}, {"type": "bool", "code": "showBagList", "name": "显示背包内容"}], "deps": {}}, {"group": "FARM", "groupName": "庄园", "name": "蚂蚁庄园", "code": "AntFarm", "fields": [{"type": "bool", "code": "feedAnimal", "name": "自动喂小鸡"}, {"type": "bool", "code": "doFarmTask", "name": "做饲料任务"}, {"type": "str", "code": "doFarmTaskTime", "name": "饲料任务执行时间 | 默认7:30后执行"}, {"type": "bool", "code": "receiveFarmTaskAward", "name": "收取饲料奖励"}, {"type": "bool", "code": "useBigEaterTool", "name": "加饭卡 | 使用"}, {"type": "bool", "code": "useAccelerateTool", "name": "加速卡 | 使用"}, {"type": "bool", "code": "useAccelerateToolContinue", "name": "加速卡 | 连续使用"}, {"type": "int", "code": "remainingTime", "name": "饲料剩余时间大于多少时直接使用加速（分钟）（-1关闭）"}, {"type": "bool", "code": "useAccelerateToolWhenMaxEmotion", "name": "加速卡 | 仅在满状态时使用"}, {"type": "bool", "code": "ignoreAcceLimit", "name": "按设置的时间进行游戏改分和抽抽乐"}, {"type": "bool", "code": "enableChouchoule", "name": "开启小鸡抽抽乐"}, {"type": "bool", "code": "autoExchange", "name": "IP抽抽乐自动从高到低兑换物品"}, {"type": "int", "code": "exchangeDaysBeforeEndIp", "name": "IP抽抽乐兑换提前天数(0=立即兑换)"}, {"type": "str", "code": "enableChouchouleTime", "name": "小鸡抽抽乐执行时间 | 默认8:00后执行"}, {"type": "bool", "code": "recordFarmGame", "name": "游戏改分(星星球、登山赛、飞行赛、揍小鸡)"}, {"type": "int", "code": "gameRewardMax", "name": "游戏改分预计最大产出饲料量(g)"}, {"type": "str", "code": "farmGameTime", "name": "小鸡游戏时间(范围)"}, {"type": "bool", "code": "enableDdrawGameCenterAward", "name": "开宝箱"}, {"type": "str", "code": "sleepTime", "name": "小鸡睡觉时间(关闭:-1)"}, {"type": "str", "code": "wakeupTime", "name": "小鸡起床时间(关闭:-1)"}, {"type": "bool", "code": "rewardFriend", "name": "打赏好友"}, {"type": "bool", "code": "getFeed", "name": "一起拿饲料"}, {"type": "select", "code": "getFeedlList", "name": "一起拿饲料 | 好友列表"}, {"type": "bool", "code": "acceptGift", "name": "收麦子"}, {"type": "bool", "code": "hireAnimal", "name": "雇佣小鸡 | 开启"}, {"type": "select", "code": "hireAnimalList", "name": "雇佣小鸡 | 好友列表"}, {"type": "select", "code": "npcAnimalTypeMulti", "name": "NPC智能调度(多选,按优先级)"}, {"type": "bool", "code": "sendBackAnimal", "name": "遣返 | 开启"}, {"type": "int", "code": "timeSendBack", "name": "投喂饲料后间隔时间赶鸡(分,<10关闭)"}, {"type": "select", "code": "dontSendFriendList", "name": "遣返 | 好友列表"}, {"type": "bool", "code": "notifyFriend", "name": "通知赶鸡 | 开启"}, {"type": "select", "code": "notifyFriendList", "name": "通知赶鸡 | 好友列表"}, {"type": "bool", "code": "donation", "name": "每日捐蛋 | 开启"}, {"type": "int", "code": "donationAmount", "name": "每日捐蛋 | 单次数量"}, {"type": "bool", "code": "loveChickenGathering", "name": "爱心鸡结号 | 开启"}, {"type": "int", "code": "loveChickenOvertakeAmount", "name": "爱心鸡结号 | 反超额外捐蛋数"}, {"type": "int", "code": "loveChickenContributionMargin", "name": "爱心鸡结号 | 一等奖爱心值余量"}, {"type": "bool", "code": "useSpecialFood", "name": "使用特殊食品"}, {"type": "bool", "code": "useNewEggCard", "name": "使用新蛋卡"}, {"type": "bool", "code": "signRegardless", "name": "庄园签到忽略饲料余量"}, {"type": "bool", "code": "receiveFarmToolReward", "name": "收取道具奖励"}, {"type": "bool", "code": "harvestProduce", "name": "收获爱心鸡蛋"}, {"type": "bool", "code": "kitchen", "name": "小鸡厨房"}, {"type": "bool", "code": "chickenDiary", "name": "小鸡日记"}, {"type": "bool", "code": "diaryTietze", "name": "小鸡日记 | 贴贴"}, {"type": "bool", "code": "listOrnaments", "name": "小鸡每日换装"}, {"type": "bool", "code": "family", "name": "家庭 | 开启"}, {"type": "select", "code": "familyOptions", "name": "家庭 | 选项"}, {"type": "select", "code": "notInviteList", "name": "家庭 | 好友分享排除列表"}, {"type": "str", "code": "giftFamilyDrawFragment", "name": "家庭 | 扭蛋碎片赠送用户ID(配置目录查看)"}, {"type": "bool", "code": "paradiseCoinExchangeBenefit", "name": "小鸡乐园 | 兑换权益"}, {"type": "select", "code": "paradiseCoinExchangeBenefitList", "name": "小鸡乐园 | 权益列表"}, {"type": "bool", "code": "visitAnimal", "name": "到访小鸡送礼"}, {"type": "bool", "code": "useSmartSchedulerManager", "name": "使用SmartSchedulerManager定时蹲点任务"}, {"type": "bool", "code": "doChouChouLeDonationTask", "name": "抽抽乐捐赠任务(禁止开启)"}, {"type": "bool", "code": "antFarmRankAward", "name": "领取排位奖励"}, {"type": "str", "code": "antFarmRankAwardTime", "name": "排位奖励领取时间 | 默认晚上20:10"}], "deps": {}}];
+/* 字段来自 FlashSaleModule.kt / ElemeTask.kt（elemeExchangeItems 为 hidden，已剔除） */
+const MALL = [
+  {t:'bool', n:'健康岛兑换', on:1},
+  {t:'select', n:'健康岛 | 商品列表', v:'已选 2 项'},
+  {t:'bool', n:'包裹兑换', on:1},
+  {t:'select', n:'包裹兑换 | 商品列表', v:'已选 1 项'},
+  {t:'bool', n:'游戏中心金币秒杀', on:1},
+  {t:'select', n:'游戏中心金币 | 商品列表', v:'已选 2 项'},
+  {t:'int', n:'游戏中心金币 | 秒杀开抢整点(0-23点)', v:'10'},
+  {t:'bool', n:'金豆商城秒杀', on:1},
+  {t:'select', n:'金豆商城 | 商品列表', v:'已选 2 项'},
+  {t:'int', n:'金豆商城 | 秒杀开抢整点(0-23点)', v:'10'},
+  {t:'bool', n:'饿了么商城秒杀', on:1},
+  {t:'select', n:'饿了么商城 | 兑换商品', v:'已选 3 项'},
+  {t:'int', n:'饿了么商城 | 秒杀开抢整点(0-23点)', v:'10'}
+];
+const ELEME = [
+  {t:'str', n:'开始执行时间(关闭:-1)', v:'0700'},
+  {t:'bool', n:'幸运星任务', on:1},
+  {t:'bool', n:'抽免单任务', on:1},
+  {t:'bool', n:'外卖爆红包', on:0},
+  {t:'act', n:'账号状态', v:'查看'},
+  {t:'act', n:'兑换商城', v:'查看'},
+  {t:'str', n:'设备UA', v:'内置模板'},
+  {t:'str', n:'答题活动actId', v:'未填写'},
+  {t:'select', n:'风控名单', v:'已选 4 项'}
+];
 
-// 组件模型：把平铺字段还原为「卡片 + 主开关 + 分组 + 高级」
-function buildModel(m, isNext){
-  const byCode = Object.fromEntries(m.fields.map(f=>[f.code,f]));
-  const deps = m.deps || {};
-  const rows = [];
-  const groups = new Map();
-  for(const f of m.fields){
-    const parts = f.name.split('|');
-    if(parts.length>1){
-      const head = parts[0].trim();
+const sw = on => `<span class="sw ${on?'on':''}"><i></i></span>`;
+const ctrl = f => f.t==='bool' ? sw(f.on) : `<span class="val">${f.v} <span class="arrow">›</span></span>`;
+
+/* ---------- 屏 1：现状，逐字段平铺 ---------- */
+(function(){
+  const card = (title, grp, fields) => `
+    <div class="card">
+      <div class="card-h">${title}<span class="grp">${grp}</span><span class="cnt">${fields.length} 项</span></div>
+      ${fields.map(f=>`<div class="row"><span class="nm">${f.n}</span>${ctrl(f)}</div>`).join('')}
+    </div>`;
+  document.getElementById('p1').innerHTML =
+    card('兑换任务','青春特权',MALL) +
+    `<div class="more">继续下滑：饿了么 9 项 · 蚂蚁森林 60 项 · 蚂蚁庄园 57 项</div>`;
+})();
+
+/* ---------- 屏 2：方案，分组 + 高级折叠 ---------- */
+(function(){
+  // 按「前缀 | 子项」归组；组头开关取名称以组名前缀开头的布尔字段
+  function group(fields){
+    const groups = new Map(), singles = [];
+    fields.forEach(f=>{
+      const i = f.n.indexOf('|');
+      if(i<0){ singles.push(f); return; }
+      const head = f.n.slice(0,i).trim();
       if(!groups.has(head)) groups.set(head, []);
       groups.get(head).push(f);
-    } else {
-      rows.push(f);
-    }
+    });
+    groups.forEach((items, head)=>{
+      items.parent = singles.find(x=>x.t==='bool' && x.n.startsWith(head)) || null;
+    });
+    return {groups, singles};
   }
-  return {m, rows, groups, deps, byCode, isNext};
-}
+  const g1 = group(MALL), g2 = group(ELEME);
 
-const state = { onlyOn:false, expanded:{}, hidden:{}, groupOpen:{} };
-MODELS.forEach(m=>{ state.expanded[m.code]=false; });
-
-function sw(on, code, parent){
-  return `<div class="switch ${on?'on':''}" onclick="event.stopPropagation();toggleSwitch('${code}','${parent||''}')"><i></i></div>`;
-}
-const onState = {};
-MODELS.forEach(m=>m.fields.forEach(f=>{ if(f.type==='bool') onState[f.code]=(m.code==='FlashSaleModule'); }));
-// 默认示例：兑换任务里健康岛/包裹/金币/金豆开启，饿了么幸运星与抽免单开启
-['enableNeverLand','enablePackageExchange','enableGameCenterGold','enableGoldenBeanMall','elemeLuckyStar','elemeFreeOrder','collectEnergy','feedAnimal','doFarmTask'].forEach(k=>onState[k]=true);
-
-function toggleSwitch(code,parent){
-  onState[code]=!onState[code];
-  if(parent) onState[parent]=onState[code];
-  render();
-}
-function toggleOnlyOn(){ state.onlyOn=!state.onlyOn; document.getElementById('onlyOn').classList.toggle('on',state.onlyOn); render(); }
-function toggleGroup(key){ state.expanded[key]=!state.expanded[key]; render(); }
-
-function ctrl(f){
-  if(f.type==='bool') return '';
-  if(f.type==='select') return '<span>已选 2 项</span><span>›</span>';
-  if(f.type==='int') return '<span>10</span><span>›</span>';
-  if(f.type==='str') return '<span>0700</span><span>›</span>';
-  return '<span>查看</span><span>›</span>';
-}
-
-function rowHtml(f, indent, modelCode){
-  const isOn = f.type==='bool' ? (onState[f.code]?1:0) : null;
-  const ctr = f.type==='bool' ? sw(!!isOn, f.code) : ctrl(f);
-  return `<div class="row ${indent?'sub':''}" onclick="showField('${modelCode}','${f.code}')">
-    <span class="nm">${f.name}</span>
-    <span class="ctrl">${ctr}</span>
-  </div>`;
-}
-
-function render(){
-  const q = (document.getElementById('q').value||'').trim().toLowerCase();
-
-  // 现状：全部字段平铺
-  document.getElementById('current').innerHTML = MODELS.map(m=>{
-    const hit = m.fields.filter(f=>!q || f.name.toLowerCase().includes(q) || f.code.toLowerCase().includes(q) || m.name.toLowerCase().includes(q));
-    if(!hit.length) return '';
-    const rows = hit.map(f=>rowHtml(f,false,m.code)).join('');
-    return `<div class="card"><div class="card-head"><span class="card-title">${m.name}</span>
-      <span class="card-group">${m.groupName}</span><span class="card-count">${hit.length} 项</span></div>${rows}</div>`;
-  }).join('') || '<div class="empty">无匹配字段</div>';
-
-  // 新方案
-  document.getElementById('next').innerHTML = MODELS.map(m=>{
-    const defs = buildModel(m,true);
-    // 依赖过滤
-    const visible = f => {
-      const parent = defs.deps[f.code];
-      if(!parent) return true;
-      return !!onState[parent];
-    };
-    const match = f => !q || f.name.toLowerCase().includes(q) || f.code.toLowerCase().includes(q);
-    const cardHit = !q || m.name.toLowerCase().includes(q) || m.groupName.toLowerCase().includes(q);
-
-    // 常用行：非分组字段中，非依赖、非高级；主开关永远展示
-    const common = defs.rows.filter(f=>visible(f) && (f.type==='bool' || f.type==='empty'));
-    const advRows = defs.rows.filter(f=>visible(f) && f.type!=='bool' && f.type!=='empty');
-
-    // 分组：前缀 -> 字段（父开关放在组头）
-    const groupBlocks = [];
-    for(const [head, items] of defs.groups){
-      // 组头开关的两种来源：组内形如「X | 开关」的布尔字段，或名称以组名前缀开头的布尔开关
-      const parentField = items.find(f=>f.type==='bool' && /\|\s*开关\s*$/.test(f.name))
-        || defs.rows.find(f=>f.type==='bool' && f.name.trim().startsWith(head))
-        || null;
-      const visItems = items.filter(visible).filter(f=>f!==parentField);
-      if(!visItems.length && !parentField) continue;
-      groupBlocks.push({head, items:visItems, parentField});
+  const groupRows = groups => {
+    let out = '';
+    for(const [head, items] of groups){
+      const p = items.parent;
+      out += `<div class="row group"><span class="nm">${head}<span class="pill">${items.length}</span></span>
+        <span class="val">${p?sw(p.on):''}<span class="arrow">▸</span></span></div>`;
     }
+    return out;
+  };
 
-    if(match && q){
-      // 搜索命中：直接平铺展示命中项
-      const hit = m.fields.filter(match);
-      if(!hit.length && !cardHit) return '';
-      const body = hit.map(f=>rowHtml(f, f.name.includes('|'), m.code)).join('');
-      return `<div class="card"><div class="card-head"><span class="card-title">${m.name}</span>
-        <span class="card-group">${m.groupName}</span><span class="card-count">命中 ${hit.length}</span></div>${body}</div>`;
-    }
-    if(!cardHit) return '';
+  const elemeBool = g2.singles.filter(f=>f.t==='bool');
+  const elemeAct  = g2.singles.filter(f=>f.t==='act');
+  const elemeAdv  = g2.singles.filter(f=>f.t!=='bool' && f.t!=='act');
 
-    // 仅看已开启：卡片内至少要有一个开启项
-    const anyOn = m.fields.some(f=>f.type==='bool' && onState[f.code]);
-    if(state.onlyOn && !anyOn) return '';
-
-    let body = '';
-    // 1) 主开关（不与分组同名）
-    const groupHeads = new Set([...defs.groups.keys()].map(s=>s.trim()));
-    // 已作为分组组头的开关不再重复出现在主开关区
-    const heads = new Set(groupBlocks.map(g=>g.parentField).filter(Boolean));
-    const mainSwitches = common.filter(f=>!heads.has(f) && !groupHeads.has(f.name.trim()));
-    body += mainSwitches.slice(0,6).map(f=>rowHtml(f,false,m.code)).join('');
-
-    // 2) 分组块：组头 = 组名 + 开关（若组内有开关字段）+ 展开箭头；子项默认收起
-    body += groupBlocks.map(g=>{
-      const gk = m.code + ':' + g.head;
-      const parentOn = g.parentField ? !!onState[g.parentField.code] : true;
-      const gOpen = !!state.groupOpen[gk] || !!q;
-      const arrow = g.items.length ? `<span class="arrow">${gOpen?'▾':'▸'}</span>` : '';
-      const headRow = `<div class="row" onclick="toggleGroup('${gk}')">
-          <span class="nm">${g.head}${g.items.length?`<span class="sub-count">${g.items.length}</span>`:''}</span>
-          <span class="ctrl">${arrow}${g.parentField?`<span onclick="event.stopPropagation();toggleSwitch('${g.parentField.code}')">${sw(parentOn,g.parentField.code)}</span>`:''}</span>
-        </div>`;
-      const items = gOpen ? g.items.map(f=>rowHtml(f,true,m.code)).join('') : '';
-      return headRow + items;
-    }).join('');
-
-    // 3) 高级区
-    const advAll = advRows.concat(common.filter(f=>!groupHeads.has(f.name.trim())).slice(6));
-    const advOpen = state.expanded[m.code] || !!q;
-    if(advAll.length){
-      body += `<div class="sect" onclick="toggleGroup('${m.code}')">高级设置 (${advAll.length}) ${advOpen?'▾':'▸'}</div>`;
-      if(advOpen) body += advAll.map(f=>rowHtml(f,false,m.code)).join('');
-    }
-
-    const total = m.fields.length;
-    return `<div class="card" id="m-${m.code}"><div class="card-head"><span class="card-title">${m.name}</span>
-      <span class="card-group">${m.groupName}</span><span class="card-count">共 ${total} 项</span></div>${body}</div>`;
-  }).join('') || '<div class="empty">无匹配内容</div>';
-}
-
-function showField(modelCode, code){
-  const m = MODELS.find(x=>x.code===modelCode);
-  const f = m.fields.find(x=>x.code===code);
-  if(!f) return;
-  document.getElementById('dlgTitle').textContent = f.name.replace(/\s*\|\s*/,' · ');
-  const typeMap={bool:'开关',select:'多选',int:'整数',str:'文本',empty:'动作'};
-  const dep = (m.deps||{})[code];
-  document.getElementById('dlgBody').innerHTML =
-    `字段代码：<code>${f.code}</code><br>`+
-    `控件类型：${typeMap[f.type]||f.type}<br>`+
-    `所属模型：${m.name}（${m.group}）<br>`+
-    (dep?`显示依赖：<code>${dep}</code> 开启时显示<br>`:'')+
-    `<br><span style="color:var(--muted)">说明区展示字段 desc；未配置 desc 时显示「未提供说明」，不编造文案。</span>`;
-  document.getElementById('dlg').showModal();
-}
-
-// 任务时间线：任务名取自 ModelOrder 中真实注册的模型
-const TASKS = [
-  {t:'07:00', name:'蚂蚁森林', group:'森林', st:'ok', txt:'已执行 · 收取能量 126g'},
-  {t:'07:30', name:'蚂蚁庄园', group:'庄园', st:'ok', txt:'已执行 · 喂食 3 次'},
-  {t:'08:00', name:'饿了么', group:'饿了么', st:'warn', txt:'部分失败 · 2 个任务 405 受限'},
-  {t:'10:00', name:'兑换任务', group:'青春特权', st:'idle', txt:'待执行 · 饿了么商城秒杀'},
-  {t:'10:30', name:'其他任务', group:'其他', st:'ok', txt:'已执行'},
-  {t:'12:00', name:'会员任务', group:'会员', st:'idle', txt:'待执行'},
-  {t:'20:00', name:'兑换任务', group:'青春特权', st:'idle', txt:'待执行 · 游戏中心金币'},
-  {t:'22:00', name:'其他任务2', group:'其他2', st:'idle', txt:'待执行'}
-];
-document.getElementById('timeline').innerHTML = `<div class="tl">` + TASKS.map(x=>`
-  <div class="tl-item">
-    <div class="tl-time">${x.t}</div>
-    <div class="tl-body">
-      <div class="tl-title"><span class="dot ${x.st}"></span>${x.name}<span class="card-group">${x.group}</span></div>
-      <div class="tl-meta">${x.txt}</div>
+  document.getElementById('p2').innerHTML = `
+    <div class="searchbar">
+      <div class="ipt">🔍 搜索字段名 / 字段代码</div>
+      <div class="chip">仅看已开启</div>
     </div>
-  </div>`).join('') + `</div>`;
-
-function switchView(v){
-  document.getElementById('view-fields').style.display = v==='fields'?'grid':'none';
-  document.getElementById('view-timeline').style.display = v==='timeline'?'grid':'none';
-  document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('on', t.dataset.view===v));
-}
-function toggleTheme(){
-  const b=document.body;
-  b.dataset.theme = b.dataset.theme==='dark'?'light':'dark';
-}
-render();
-// 支持 #timeline 直接切到时间线，或 #m-<code> 定位到指定模型卡片（便于分享具体视图）
-(function(){
-  const h = (location.hash||'').replace('#','');
-  if(!h) return;
-  if(h==='timeline'){ switchView('timeline'); return; }
-  setTimeout(()=>{ const el=document.getElementById(h); if(el) el.scrollIntoView({block:'start'}); },60);
+    <div class="card">
+      <div class="card-h">兑换任务<span class="grp">青春特权</span><span class="cnt">13 项 · 收 5 组</span></div>
+      ${groupRows(g1.groups)}
+    </div>
+    <div class="card">
+      <div class="card-h">饿了么<span class="grp">饿了么</span><span class="cnt">9 项</span></div>
+      ${elemeBool.map(f=>`<div class="row"><span class="nm">${f.n}</span>${sw(f.on)}</div>`).join('')}
+      ${elemeAct.map(f=>`<div class="row"><span class="nm">${f.n}</span><span class="val">${f.v} <span class="arrow">›</span></span></div>`).join('')}
+      <div class="row adv"><span class="nm">高级设置 (${elemeAdv.length})</span><span class="val"><span class="arrow">▸</span></span></div>
+    </div>`;
 })();
+
+/* ---------- 屏 3：任务时间线 ---------- */
+(function(){
+  const T = [
+    {t:'07:00', n:'蚂蚁森林', g:'森林', s:'ok',   d:'收取能量 126g · 帮收 4 次'},
+    {t:'07:30', n:'蚂蚁庄园', g:'庄园', s:'ok',   d:'喂食 3 次 · 收取饲料 2 份'},
+    {t:'08:00', n:'饿了么',   g:'饿了么', s:'warn', d:'幸运星完成 6 项，2 项 405 受限'},
+    {t:'10:00', n:'兑换任务', g:'青春特权', s:'',  d:'饿了么商城秒杀 · 待执行'},
+    {t:'10:30', n:'其他任务', g:'其他', s:'ok',   d:'已执行'},
+    {t:'12:00', n:'会员任务', g:'会员', s:'',     d:'待执行'},
+    {t:'20:00', n:'兑换任务', g:'青春特权', s:'',  d:'游戏中心金币 · 待执行'},
+    {t:'22:00', n:'其他任务2', g:'其他2', s:'',   d:'待执行'}
+  ];
+  const label = s => s==='ok' ? '<span class="state ok">成功</span>' : s==='warn' ? '<span class="state warn">部分失败</span>' : '<span class="state">待执行</span>';
+  document.getElementById('p3').innerHTML = `<div class="tl">` + T.map(x=>`
+    <div class="tl-i">
+      <div class="tl-t">${x.t}</div>
+      <div class="tl-card ${x.s}">
+        <div class="t1">${x.n}<span class="grp">${x.g}</span>${label(x.s)}</div>
+        <div class="t2">${x.d}</div>
+      </div>
+    </div>`).join('') + `</div>`;
+})();
+
+function toggleTheme(){
+  const b = document.body;
+  b.dataset.theme = b.dataset.theme==='dark' ? 'light' : 'dark';
+}
+if(location.hash==='#light'){ document.body.dataset.theme='light'; }
 </script>
 </body>
 </html>

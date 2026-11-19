@@ -21,6 +21,7 @@ import fansirsqi.xposed.sesame.data.Config;
 import fansirsqi.xposed.sesame.data.DataCache;
 import fansirsqi.xposed.sesame.data.General;
 import fansirsqi.xposed.sesame.data.Status;
+import fansirsqi.xposed.sesame.hook.ApplicationHook;
 import fansirsqi.xposed.sesame.hook.context.AppContext;
 import fansirsqi.xposed.sesame.hook.core.modules.MiscHookModule;
 import fansirsqi.xposed.sesame.hook.network.capture.RpcTrafficCapture;
@@ -240,7 +241,7 @@ public class LifecycleManager {
             // 已完成初始化、用户未变化且非离线且非强制时，跳过重复全量初始化，只按需补跑任务；
             // force=true（restart 广播/配置重载）不跳过，必须走全量重载，否则新配置不生效
             if (init && !offline && (force == null || !force)) {
-                String loggedInUser = AppContext.getUserId();
+                String loggedInUser = ApplicationHook.getUserId();
                 if (loggedInUser != null && loggedInUser.equals(UserMap.currentUid)) {
                     Log.runtime(TAG, "已初始化且用户未变化，跳过重复全量初始化");
                     if (!TaskScheduler.isStopped()) {
@@ -261,7 +262,7 @@ public class LifecycleManager {
             }
             destroyHandler(force);
             if (force) {
-                String userId = AppContext.getUserId();
+                String userId = ApplicationHook.getUserId();
                 if (userId == null) {
                     String activeUser = Files.getActiveUser();
                     if (activeUser != null && retryCount < 5) {

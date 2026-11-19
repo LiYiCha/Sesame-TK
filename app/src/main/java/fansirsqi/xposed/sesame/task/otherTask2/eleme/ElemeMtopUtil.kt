@@ -633,24 +633,19 @@ object ElemeMtopUtil {
      * 完整 UA 仍写 runtime 日志，便于排查但不污染运行日志。
      */
     @JvmStatic
-    fun briefUa(): String = runCatching {
-        val ua = getActiveProfile().httpUa()
-        val missing = UA_TAIL_MARKS.filterNot { ua.contains(it) }.map { it.removeSuffix("/") }
-        if (missing.isEmpty()) {
+    fun briefUa(): String {
+        val missing = UA_TAIL_MARKS.filterNot { getActiveProfile().httpUa().contains(it) }.map { it.removeSuffix("/") }
+        return if (missing.isEmpty()) {
             "${getUaSourceLabel()} · 小程序WebView ✅"
         } else {
             "${getUaSourceLabel()} · ⚠ 非小程序WebView（缺 ${missing.joinToString("/")}）"
         }
-    }.getOrDefault("UA 读取失败")
+    }
 
-    /** 复制文本到剪贴板，Android 13+ 由系统弹出隐私提示；失败返回 false */
-    private fun copyTextToClipboard(context: android.content.Context, text: String): Boolean {
-        return runCatching {
-            val cm = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as? android.content.ClipboardManager
-                ?: return false
-            cm.setPrimaryClip(android.content.ClipData.newPlainText("ElemeCK", text))
-            true
-        }.getOrDefault(false)
+    /** 复制文本到剪贴板，Android 13+ 由系统弹出隐私提示 */
+    private fun copyTextToClipboard(context: android.content.Context, text: String) {
+        val cm = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+        cm.setPrimaryClip(android.content.ClipData.newPlainText("ElemeCK", text))
     }
 
     fun isDarkThemeMode(context: android.content.Context?): Boolean {
@@ -695,7 +690,7 @@ object ElemeMtopUtil {
         }
         dialog.findViewById<android.widget.TextView>(android.R.id.message)?.setTextColor(primaryTextColor)
 
-        runCatching { dialog.show() }
+        dialog.show()
     }
 
     /**
@@ -760,7 +755,7 @@ object ElemeMtopUtil {
         }
 
         // 风控名单数量
-        val riskCount = runCatching { ElemeTask.getElemeRiskTasks().value.size }.getOrDefault(0)
+        val riskCount = ElemeTask.getElemeRiskTasks().value.size
 
         // 今日状态：任务未完成环节每次触发都会重新拉取并处理；签到/夺宝/下单抽奖/爆红包为每日单次，
         // 完成后置位标记当日不再请求
@@ -793,12 +788,12 @@ object ElemeMtopUtil {
             .setMessage(detailMsg)
             .setPositiveButton("关闭", null)
             .setNegativeButton("复制CK") { _, _ ->
-                val ck = runCatching { ElemeAuth.peekCookie() }.getOrNull().orEmpty()
+                val ck = ElemeAuth.peekCookie()
                 if (ck.isEmpty()) {
                     fansirsqi.xposed.sesame.hook.Toast.show("当前没有可用 CK，请先执行任务或手动授权")
                 } else {
-                    val ok = copyTextToClipboard(context, ck)
-                    fansirsqi.xposed.sesame.hook.Toast.show(if (ok) "CK 已复制到剪贴板（${ck.length} 字符）" else "复制失败，请长按文本手动选择")
+                    copyTextToClipboard(context, ck)
+                    fansirsqi.xposed.sesame.hook.Toast.show("CK 已复制到剪贴板（${ck.length} 字符）")
                 }
             }
             .setNeutralButton("校验并刷新CK") { _, _ ->
@@ -827,7 +822,7 @@ object ElemeMtopUtil {
         }
         dialog.findViewById<android.widget.TextView>(android.R.id.message)?.setTextColor(primaryTextColor)
 
-        runCatching { dialog.show() }
+        dialog.show()
     }
 
     /**

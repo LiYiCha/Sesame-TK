@@ -40,6 +40,7 @@ public class ApplicationHook implements IXposedHookLoadPackage {
         return AppContext.isHooked();
     }
     static final AtomicInteger reLoginCount = new AtomicInteger(0);
+    private static Object microApplicationContext = null;
 
     //--------------------------------------------------------------
     // 公共API - 委托给新模块
@@ -73,20 +74,41 @@ public class ApplicationHook implements IXposedHookLoadPackage {
         LifecycleManager.setOffline(offline);
     }
 
+    /**
+     * 支付宝 MicroApplicationContext。
+     *
+     * 这里的几个方法依赖 XposedHelpers 与目标应用的类，只有注入进程能调用；
+     * 它们刻意不放在 AppContext：设置页进程没有 de.robv.*，加载即抛 NoClassDefFoundError。
+     */
     public static Object getMicroApplicationContext() {
-        return AppContext.getMicroApplicationContext();
+        if (microApplicationContext != null) {
+            return microApplicationContext;
+        }
+        Class<?> alipayApplicationClass = XposedHelpers.findClass(
+                "com.alipay.mobile.framework.AlipayApplication", AppContext.getClassLoader());
+        Object alipayApplication = XposedHelpers.callStaticMethod(alipayApplicationClass, "getInstance");
+        if (alipayApplication == null) {
+            return null;
+        }
+        microApplicationContext = XposedHelpers.callMethod(alipayApplication, "getMicroApplicationContext");
+        return microApplicationContext;
     }
 
     public static Object getServiceObject(String service) {
-        return AppContext.getServiceObject(service);
+        Object micro = getMicroApplicationContext();
+        return micro == null ? null : XposedHelpers.callMethod(micro, "findServiceByInterface", service);
     }
 
     public static Object getUserObject() {
-        return AppContext.getUserObject();
+        String serviceName = XposedHelpers.findClass(
+                "com.alipay.mobile.personalbase.service.SocialSdkContactService", AppContext.getClassLoader()).getName();
+        Object serviceObject = getServiceObject(serviceName);
+        return serviceObject == null ? null : XposedHelpers.callMethod(serviceObject, "getMyAccountInfoModelByLocal");
     }
 
     public static String getUserId() {
-        return AppContext.getUserId();
+        Object userObject = getUserObject();
+        return userObject == null ? null : (String) XposedHelpers.getObjectField(userObject, "userId");
     }
 
     public static void reLoginByBroadcast() {
