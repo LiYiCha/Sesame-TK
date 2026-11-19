@@ -2318,63 +2318,6 @@ class AntMember : ModelTask() {
     }
 
     /**
-     * 若为小游戏或时长类任务，上报游戏时长并等待满足时长
-     */
-    private suspend fun reportGameDurationIfNeeded(task: JSONObject, taskTitle: String) {
-        var gameContract = GameCenterPlayRpcCall.resolveContract(task)
-        if (gameContract == null) {
-            val durationMatch = Regex("(\\d+)\\s*(?:秒|s)").find(taskTitle)
-            val isGameTask = (taskTitle.contains("玩") || taskTitle.contains("游戏")) && (durationMatch != null || taskTitle.contains("秒"))
-            if (isGameTask) {
-                val playTime = durationMatch?.groupValues?.get(1)?.toIntOrNull() ?: 30
-                val actionUrl = task.optString("actionUrl")
-                val targetUrl = task.optString("targetUrl")
-                val gameAppId = sequenceOf(
-                    task.optString("appId"),
-                    task.optString("gameAppId"),
-                    task.optString("game_id"),
-                    runCatching { Uri.parse(actionUrl).getQueryParameter("appId") }.getOrNull(),
-                    runCatching { Uri.parse(actionUrl).getQueryParameter("gameAppId") }.getOrNull(),
-                    runCatching { Uri.parse(actionUrl).getQueryParameter("game_id") }.getOrNull(),
-                    runCatching { Uri.parse(targetUrl).getQueryParameter("appId") }.getOrNull(),
-                    runCatching { Uri.parse(targetUrl).getQueryParameter("gameAppId") }.getOrNull(),
-                    runCatching { Uri.parse(targetUrl).getQueryParameter("game_id") }.getOrNull(),
-                ).firstOrNull { !it.isNullOrBlank() }.orEmpty()
-
-                val source = sequenceOf(
-                    task.optString("source"),
-                    task.optString("chInfo"),
-                    task.optString("oriChInfo"),
-                    runCatching { Uri.parse(actionUrl).getQueryParameter("source") }.getOrNull(),
-                    runCatching { Uri.parse(actionUrl).getQueryParameter("chInfo") }.getOrNull(),
-                    runCatching { Uri.parse(targetUrl).getQueryParameter("source") }.getOrNull(),
-                ).firstOrNull { !it.isNullOrBlank() } ?: "zfbhy_mc_wkenoz66"
-
-                if (gameAppId.isNotBlank()) {
-                    gameContract = GameCenterPlayRpcCall.Contract(gameAppId, playTime, source)
-                }
-            }
-        }
-
-        if (gameContract != null) {
-            Log.other(TAG, "芝麻信用💳[上报游戏时长]#$taskTitle 时长: ${gameContract.playTime}秒, appId: ${gameContract.gameAppId}")
-            try {
-                val ack = GameCenterPlayRpcCall.submitForAck(gameContract)
-                if (ack.accepted) {
-                    Log.other(TAG, "芝麻信用💳[时长上报已接受]#$taskTitle")
-                }
-            } catch (e: Throwable) {
-                Log.error(TAG, "芝麻信用💳上报游戏时长失败: $e")
-            }
-            val waitSeconds = (gameContract.playTime + 1).coerceAtLeast(31)
-            Log.runtime(TAG, "芝麻信用💳等待${waitSeconds}秒以满足游戏时长校验[$taskTitle]...")
-            delay(waitSeconds * 1000L)
-        } else {
-            delay(1000)
-        }
-    }
-
-    /**
      * 领取生活记录任务。
      *
      * 返回 PROMISE_HAS_PROCESSING_TEMPLATE / "存在进行中的生活记录" 表示该任务已有在途记录，
@@ -4293,6 +4236,63 @@ class AntMember : ModelTask() {
          */
         private fun isTaskInBlacklist(taskTitle: String?): Boolean {
             return TaskBlacklist.isTaskInBlacklist(taskTitle)
+        }
+
+        /**
+         * 若为小游戏或时长类任务，上报游戏时长并等待满足时长
+         */
+        private suspend fun reportGameDurationIfNeeded(task: JSONObject, taskTitle: String) {
+            var gameContract = GameCenterPlayRpcCall.resolveContract(task)
+            if (gameContract == null) {
+                val durationMatch = Regex("(\\d+)\\s*(?:秒|s)").find(taskTitle)
+                val isGameTask = (taskTitle.contains("玩") || taskTitle.contains("游戏")) && (durationMatch != null || taskTitle.contains("秒"))
+                if (isGameTask) {
+                    val playTime = durationMatch?.groupValues?.get(1)?.toIntOrNull() ?: 30
+                    val actionUrl = task.optString("actionUrl")
+                    val targetUrl = task.optString("targetUrl")
+                    val gameAppId = sequenceOf(
+                        task.optString("appId"),
+                        task.optString("gameAppId"),
+                        task.optString("game_id"),
+                        runCatching { Uri.parse(actionUrl).getQueryParameter("appId") }.getOrNull(),
+                        runCatching { Uri.parse(actionUrl).getQueryParameter("gameAppId") }.getOrNull(),
+                        runCatching { Uri.parse(actionUrl).getQueryParameter("game_id") }.getOrNull(),
+                        runCatching { Uri.parse(targetUrl).getQueryParameter("appId") }.getOrNull(),
+                        runCatching { Uri.parse(targetUrl).getQueryParameter("gameAppId") }.getOrNull(),
+                        runCatching { Uri.parse(targetUrl).getQueryParameter("game_id") }.getOrNull(),
+                    ).firstOrNull { !it.isNullOrBlank() }.orEmpty()
+
+                    val source = sequenceOf(
+                        task.optString("source"),
+                        task.optString("chInfo"),
+                        task.optString("oriChInfo"),
+                        runCatching { Uri.parse(actionUrl).getQueryParameter("source") }.getOrNull(),
+                        runCatching { Uri.parse(actionUrl).getQueryParameter("chInfo") }.getOrNull(),
+                        runCatching { Uri.parse(targetUrl).getQueryParameter("source") }.getOrNull(),
+                    ).firstOrNull { !it.isNullOrBlank() } ?: "zfbhy_mc_wkenoz66"
+
+                    if (gameAppId.isNotBlank()) {
+                        gameContract = GameCenterPlayRpcCall.Contract(gameAppId, playTime, source)
+                    }
+                }
+            }
+
+            if (gameContract != null) {
+                Log.other(TAG, "芝麻信用💳[上报游戏时长]#$taskTitle 时长: ${gameContract.playTime}秒, appId: ${gameContract.gameAppId}")
+                try {
+                    val ack = GameCenterPlayRpcCall.submitForAck(gameContract)
+                    if (ack.accepted) {
+                        Log.other(TAG, "芝麻信用💳[时长上报已接受]#$taskTitle")
+                    }
+                } catch (e: Throwable) {
+                    Log.error(TAG, "芝麻信用💳上报游戏时长失败: $e")
+                }
+                val waitSeconds = (gameContract.playTime + 1).coerceAtLeast(31)
+                Log.runtime(TAG, "芝麻信用💳等待${waitSeconds}秒以满足游戏时长校验[$taskTitle]...")
+                delay(waitSeconds * 1000L)
+            } else {
+                delay(1000)
+            }
         }
 
         /**
