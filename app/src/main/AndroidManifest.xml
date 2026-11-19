@@ -44,6 +44,10 @@
         <meta-data
             android:name="xposedmodule"
             android:value="true" />
+        <!-- 允许注入进程通过 XSharedPreferences 读取模块配置（LSPosed 需要；NPatch 由 Vector 文件服务解析） -->
+        <meta-data
+            android:name="xposedsharedprefs"
+            android:value="true" />
         <meta-data
             android:name="xposeddescription"
             android:value="竹外一枝斜，想佳人，天寒日暮" />

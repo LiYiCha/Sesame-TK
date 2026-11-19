@@ -67,6 +67,27 @@ object ElemeMtopUtil {
         fun eleUa(appId: String = ElemeAuth.APP_ID): String =
             "RenderWay/miniProgram MiniAppId/$appId MiniAppVersion/12.1.53 DeviceId/$deviceId AppName/ap $brandModel Android/$release AlipayClient/$alipayVer AliApp(AP/$alipayVer) userMode/student channel/mini_app subChannel/miniapp.alipay subSubChannel/miniapp.alipay.et"
 
+        /**
+         * 指纹一致性自检：UA 必须与当前 DeviceProfile 自洽。
+         *
+         * 只检查「模板里由 profile 填进去的字段」，不判断外部服务是否认可这组指纹；
+         * 返回空列表表示 UA 与指纹一致。
+         */
+        fun consistencyIssues(): List<String> {
+            val ua = httpUa()
+            val issues = ArrayList<String>(4)
+            if (!ua.contains("Android $release")) issues.add("Android 版本应为 $release")
+            if (!ua.contains(model)) issues.add("机型应为 $model")
+            if (!ua.contains("Build/$buildId")) issues.add("Build ID 应为 $buildId")
+            if (!ua.contains("ws:$screenWs")) issues.add("分辨率段应为 ws:$screenWs")
+            val aliApp = Regex("AliApp\\(AP/([^)]+)\\)").find(ua)?.groupValues?.get(1)
+            val client = Regex("AlipayClient/([^\\s]+)").find(ua)?.groupValues?.get(1)
+            if (aliApp != null && client != null && aliApp != client) {
+                issues.add("AliApp($aliApp) 与 AlipayClient($client) 版本不一致")
+            }
+            return issues
+        }
+
         fun httpUa(): String =
             if (!customHttpUa.isNullOrBlank()) {
                 customHttpUa
@@ -634,12 +655,21 @@ object ElemeMtopUtil {
      */
     @JvmStatic
     fun briefUa(): String {
-        val missing = UA_TAIL_MARKS.filterNot { getActiveProfile().httpUa().contains(it) }.map { it.removeSuffix("/") }
-        return if (missing.isEmpty()) {
-            "${getUaSourceLabel()} · 小程序WebView ✅"
+        val profile = getActiveProfile()
+        val ua = profile.httpUa()
+        val missing = UA_TAIL_MARKS.filterNot { ua.contains(it) }.map { it.removeSuffix("/") }
+        val structure = if (missing.isEmpty()) {
+            "小程序WebView ✅"
         } else {
-            "${getUaSourceLabel()} · ⚠ 非小程序WebView（缺 ${missing.joinToString("/")}）"
+            "⚠ 非小程序WebView（缺 ${missing.joinToString("/")}）"
         }
+        val issues = profile.consistencyIssues()
+        val consistency = if (issues.isEmpty()) {
+            ""
+        } else {
+            " · ⚠ 指纹 ${issues.size} 处不一致（${issues.first()}${if (issues.size > 1) " 等" else ""}）"
+        }
+        return "${getUaSourceLabel()} · $structure$consistency"
     }
 
     /** 复制文本到剪贴板，Android 13+ 由系统弹出隐私提示 */
@@ -748,11 +778,12 @@ object ElemeMtopUtil {
         val uaSource = if (ElemeTask.getElemeCustomUa().value.orEmpty().trim().isEmpty()) "内置模板（按当前机型生成）" else "自定义 UA"
         // 自定义 UA 可能是历史遗留的 UC/浏览器结构（UCBrowser+GCanvas），与小程序 WebView 指纹不一致，需明确提示
         val activeUa = profile.httpUa()
-        val uaStructLine = if (isMiniProgramUa(activeUa)) {
+        val uaIssues = profile.consistencyIssues()
+        val uaStructLine = (if (isMiniProgramUa(activeUa)) {
             "• UA 结构: 与支付宝小程序 WebView 一致"
         } else {
             "• UA 结构: ⚠ 非小程序 WebView 结构（建议点「恢复默认」重生成）"
-        }
+        }) + if (uaIssues.isEmpty()) "" else "\n• 指纹一致性: ⚠ " + uaIssues.joinToString("；")
 
         // 风控名单数量
         val riskCount = ElemeTask.getElemeRiskTasks().value.size

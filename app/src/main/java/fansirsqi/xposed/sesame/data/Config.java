@@ -16,6 +16,7 @@ import fansirsqi.xposed.sesame.task.ModelTask;
 import fansirsqi.xposed.sesame.task.TaskCommon;
 import fansirsqi.xposed.sesame.util.Files;
 import fansirsqi.xposed.sesame.util.JsonUtil;
+import fansirsqi.xposed.sesame.util.PrefsBridge;
 import fansirsqi.xposed.sesame.util.Log;
 import fansirsqi.xposed.sesame.util.maps.UserMap;
 import fansirsqi.xposed.sesame.util.StringUtil;
@@ -178,6 +179,9 @@ public class Config {
             if (!success) {
                 throw new IOException("配置文件保存失败");
             }
+            // 镜像到模块 SharedPreferences：NPatch 本地模式 / LSPosed 下注入进程用 XSharedPreferences 读取。
+            // 注入进程调用时 writeConfig 直接返回 false，不会写错地方。
+            PrefsBridge.writeConfig(userId, json);
             String userName;
             if (StringUtil.isEmpty(userId)) {
                 userName = "默认用户";
@@ -227,7 +231,12 @@ public class Config {
             boolean configV2FileExists = configV2File.exists();
             boolean defaultConfigV2FileExists = Files.getDefaultConfigV2File().exists();
 
-            if (configV2FileExists) {
+            String sharedJson = PrefsBridge.readConfig(userId);
+            if (sharedJson != null && !sharedJson.isEmpty()) {
+                Log.runtime(TAG, "配置来源: 模块 SharedPreferences（" + userName + "）");
+                JsonUtil.copyMapper().readerForUpdating(INSTANCE).readValue(sharedJson);
+                Files.write2FileAtomic(sharedJson, configV2File);
+            } else if (configV2FileExists) {
                 String json = Files.readFromFile(configV2File);
                 Log.runtime(TAG, "读取配置文件成功: " + configV2File.getPath());
                 JsonUtil.copyMapper().readerForUpdating(INSTANCE).readValue(json);

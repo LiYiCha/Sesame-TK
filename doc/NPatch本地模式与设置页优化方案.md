@@ -101,17 +101,20 @@ val json = pref.getString("ElemeTask", null)   // 只读
 
 这就是本地模式下「配置读不到、功能像没激活」的全部原因。
 
-### 2.4 推荐做法：把配置存储换成 SharedPreferences
+### 2.4 已实现：配置镜像到 SharedPreferences
+
+> 代码已落地（`util/PrefsBridge.kt`、`Config.save/load`、`AndroidManifest.xml` 的 `xposedsharedprefs`）。
+> 是否真的跨进程可读，需按 2.5 在真机确认；集成模式行为不变。
 
 只动存储后端，不动 hook（158 处 `de.robv` 调用全部保留）。
 
 | 项 | 改动 |
 |---|---|
-| 设置页写入 | `DataStore` 的配置类键改为写 `context.getSharedPreferences("sesame_config", MODE_PRIVATE)`；LSPosed 环境需要 `MODE_WORLD_READABLE`（框架 hook 了 `checkMode`），NPatch/Vector 由服务解析路径，两种模式都试一次，取可用的 |
-| 注入侧读取 | 新增 `PrefsBridge.read(key)`：先 `XSharedPreferences(BuildConfig.APPLICATION_ID, "sesame_config")`，文件可读则用；否则回退现有 `DataStore` |
+| 设置页写入 | `Config.save` 写文件后镜像到 `getSharedPreferences("sesame_config", MODE_PRIVATE)`（`PrefsBridge.writeConfig`），注入进程调用时自动跳过 |
+| 注入侧读取 | `Config.load` 先 `PrefsBridge.readConfig(userId)`（`XSharedPreferences` 只读），有值则用并回写本地文件缓存；否则走原文件逻辑 |
 | 运行期状态 | 计数、缓存、`status.json`、日志继续留本地文件，**不要**塞进 prefs（XML 全量重写，高频写会掉帧） |
 | 运行期改配置 | `XSharedPreferences` 只读，5 处 `setValue` 只改内存 + 本地覆盖表；读取顺序：本地覆盖 > prefs > 默认 |
-| meta-data | 本项目 `module.prop` 的 `minApiVersion=100`，满足 LSPosed 对 New XSharedPreferences 的 `xposedminversion >= 93` 要求 |
+| meta-data | `AndroidManifest.xml` 已声明 `xposedsharedprefs=true`；`module.prop` 的 `minApiVersion=100` 满足 LSPosed `xposedminversion >= 93` |
 
 迁移不需要改数据结构：`Config` 仍是「一个模型一个 JSON 字符串」，只是从文件挪到 prefs 的一个 String 键。
 
