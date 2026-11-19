@@ -186,6 +186,11 @@ class OrchardChouChouLe(private val executeIntervalInt: Int) {
                         } else {
                             Log.error(TAG, "农场抽抽乐任务完成失败[$title] raw=$finishRes")
                             failedTasks.add(taskType)
+                            val code = finishRes.optString("code", finishRes.optString("resultCode", ""))
+                            val desc = finishRes.optString("desc", finishRes.optString("resultDesc", finishRes.optString("errorMsg", "")))
+                            if (code.isNotEmpty() || desc.isNotEmpty()) {
+                                TaskBlacklist.autoAddToBlacklist(taskType, title, code, desc)
+                            }
                         }
                         CoroutineUtils.sleepCompat(executeIntervalInt.toLong())
                     }
@@ -198,8 +203,18 @@ class OrchardChouChouLe(private val executeIntervalInt: Int) {
                             Log.farm("农场抽抽乐🎁[领取任务奖励: $title] 增加${count}次机会")
                             progressed = true
                         } else {
-                            Log.error(TAG, "农场抽抽乐任务领奖失败[$title] raw=$awardRes")
-                            failedTasks.add(taskType)
+                            val code = awardRes.optString("code", awardRes.optString("resultCode", ""))
+                            if (code == "400000030" || code == "2600000016") {
+                                // 已领取过，不报错
+                                progressed = true
+                            } else {
+                                Log.error(TAG, "农场抽抽乐任务领奖失败[$title] raw=$awardRes")
+                                failedTasks.add(taskType)
+                                val desc = awardRes.optString("desc", awardRes.optString("resultDesc", awardRes.optString("errorMsg", "")))
+                                if (code.isNotEmpty() || desc.isNotEmpty()) {
+                                    TaskBlacklist.autoAddToBlacklist(taskType, title, code, desc)
+                                }
+                            }
                         }
                         CoroutineUtils.sleepCompat(executeIntervalInt.toLong())
                     }

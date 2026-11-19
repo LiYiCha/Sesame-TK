@@ -808,6 +808,23 @@ public class AntForestRpcCall {
         return RequestManager.requestString("com.alipay.antieptask.listTaskopengreen", args);
     }
 
+    /** 森林抽抽乐-同步抽奖次数 */
+    public static String drawSyncopengreen(String activityId, String sceneCode, String source)
+            throws JSONException {
+        JSONObject requestData = new JSONObject();
+        requestData.put("activityId", activityId);
+        JSONObject context = new JSONObject();
+        context.put("appMode", "normal");
+        requestData.put("context", context);
+        requestData.put("requestType", "RPC");
+        requestData.put("sceneCode", sceneCode);
+        requestData.put("source", source);
+
+        String args = "[" + requestData + "]";
+        Log.forest("drawSyncopengreen - 活动: " + activityId + ", 场景: " + sceneCode + ", source: " + source);
+        return RequestManager.requestString("com.alipay.antiepdrawprod.drawSyncopengreen", args);
+    }
+
     /** 森林抽抽乐-抽奖（最终修复版） */
     public static String drawopengreen(String activityId, String sceneCode, String source, String userId)
             throws JSONException {

@@ -374,12 +374,15 @@ class SesameAlchemy {
                     if (itemType == "BOTTLE" && itemId.isNotEmpty()) {
                         val useRes = AntMemberRpcCall.Zmxy.Alchemy.useItem(itemId, itemType)
                         val useJo = JSONObject(useRes)
-                        if (useJo.optBoolean("success") && useJo.optJSONObject("data")?.optBoolean("success") == true) {
+                        val isSuccess = (useJo.optBoolean("success") || useJo.optString("resultCode") == "SUCCESS" || useJo.optString("resultView") == "成功") &&
+                                (useJo.optJSONObject("data")?.optBoolean("success", true) != false)
+                        if (isSuccess) {
                             Log.other("芝麻炼金⚗️[使用体力药水成功]#恢复体力🚀")
-                            sleepCompat(1000)
+                            sleepCompat(1500)
                             return true
                         } else {
                             Log.runtime(TAG, "使用体力药水失败: ${useJo.optString("resultView")}")
+                            sleepCompat(1000)
                         }
                     }
                 }

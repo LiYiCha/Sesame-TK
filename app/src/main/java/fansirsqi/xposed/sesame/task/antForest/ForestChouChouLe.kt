@@ -5,6 +5,7 @@ import fansirsqi.xposed.sesame.data.Status
 import fansirsqi.xposed.sesame.util.RandomUtil
 import fansirsqi.xposed.sesame.util.TaskBlacklist
 import fansirsqi.xposed.sesame.task.TaskStatus
+import fansirsqi.xposed.sesame.task.common.GameCenterPlayRpcCall
 import fansirsqi.xposed.sesame.util.GlobalThreadPools.sleepCompat
 import fansirsqi.xposed.sesame.util.Log
 import fansirsqi.xposed.sesame.util.ResChecker
@@ -181,9 +182,25 @@ class ForestChouChouLe {
     }
 
     /**
+     * 奖励后刷新同步抽奖次数
+     */
+    private fun syncDrawAssetAfterTaskAward(s: Scene) {
+        runCatching {
+            val res = AntForestRpcCall.drawSyncopengreen(s.id, s.code, "taskaward").toJson()
+            if (res != null && res.check()) {
+                val balance = res.optJSONObject("drawAsset")?.optInt("blance", 0) ?: 0
+                Log.forest("${s.name} 奖励后刷新抽奖次数: $balance")
+            }
+        }.onFailure {
+            Log.printStackTrace(TAG, "${s.name} 奖励后刷新抽奖次数失败", it)
+        }
+    }
+
+    /**
      * 执行抽奖逻辑
      */
     private fun processLottery(s: Scene) {
+        syncDrawAssetAfterTaskAward(s)
         val enterResp = AntForestRpcCall.enterDrawActivityopengreen(s.id, s.code, SOURCE).toJson() ?: return
         if (!enterResp.check()) return
 
@@ -191,7 +208,7 @@ class ForestChouChouLe {
         var balance = drawAsset.optInt("blance", 0)
         val total = drawAsset.optInt("totalTimes", 0)
 
-        Log.runtime("${s.name} 剩余抽奖次数: $balance / $total")
+        Log.runtime("${s.name} 剩余抽奖次数: $balance (历史累计抽奖: $total 次)")
 
         var retry = 0
         // 最多抽50次，防止死循环
@@ -246,7 +263,7 @@ class ForestChouChouLe {
                 completed++
             } else {
                 allDone = false
-//                Log.runtime("${s.name} 未完成: $taskName [$taskStatus]")
+                Log.runtime("${s.name} 未完成: $taskName [$taskStatus]")
             }
         }
 
@@ -305,13 +322,24 @@ class ForestChouChouLe {
 //        Log.runtime("${s.name} 任务: $taskName [$taskStatus]")
 
         return when (taskStatus) {
-            TaskStatus.TODO.name -> handleTodoTask(s, taskName, taskCode, taskType, taskProdPlayType, timeCount)
+            TaskStatus.TODO.name -> handleTodoTask(s, taskName, taskCode, taskType, taskProdPlayType, timeCount, task)
             TaskStatus.FINISHED.name -> handleFinishedTask(s, taskName, taskCode, taskType)
             else -> false
         }
     }
 
-    private fun handleTodoTask(s: Scene, name: String, code: String, type: String, playType: String = "", timeCount: Int = 0): Boolean {
+    private fun handleTodoTask(s: Scene, name: String, code: String, type: String, playType: String = "", timeCount: Int = 0, task: JSONObject? = null): Boolean {
+        // 若为小游戏任务，上报游戏时长
+        val gameContract = GameCenterPlayRpcCall.resolveContract(task)
+        if (gameContract != null) {
+            try {
+                Log.forest("${s.name} 🎮 上报小游戏时长[${name}]: ${gameContract.playTime}s")
+                GameCenterPlayRpcCall.submit(gameContract)
+            } catch (e: Throwable) {
+                Log.error(TAG, "森林抽抽乐上报游戏时长失败: $e")
+            }
+        }
+
         return if (type == "NORMAL_DRAW_EXCHANGE_VITALITY") {
             // 活力值兑换
             Log.runtime("${s.name} 兑换活力值: $name")
@@ -387,6 +415,7 @@ class ForestChouChouLe {
         val res = AntForestRpcCall.receiveTaskAwardopengreen(SOURCE, code, type).toJson()
         return if (res != null && res.check()) {
             Log.forest("${s.name} 🧾 $name 奖励领取成功")
+            syncDrawAssetAfterTaskAward(s)
             true
         } else {
             val errorCode = res?.optString("code", "") ?: ""

@@ -275,13 +275,18 @@ object TaskBlacklist {
                 errorMsg.contains("防止作弊") ||
                 errorMsg.contains("三方打点")
 
-        val isPermanent = isUnsupportedRpc || isPromoProdEvent || isSignupRecordMissing || isTemplateNotExist || isInvalidArgument || isSecurityReject || isRiskRestricted || isRiskFiltered
+        // 9. 任务Token解析失败或需客户端交互
+        val isTokenFailed = errorMsg.contains("task token analysis failed") ||
+                errorMsg.contains("token analysis failed")
+
+        val isPermanent = isUnsupportedRpc || isPromoProdEvent || isSignupRecordMissing || isTemplateNotExist || isInvalidArgument || isSecurityReject || isRiskRestricted || isRiskFiltered || isTokenFailed
         val shouldAdd = isPermanent || isRateLimit
 
         if (shouldAdd) {
             val reason = when {
                 isRiskRestricted -> "风控拦截(405::行为受限)"
                 isRiskFiltered -> "防作弊过滤(417::三方打点mtop入口过滤)"
+                isTokenFailed -> "任务Token解析失败(需客户端交互)"
                 isUnsupportedRpc -> "接口不支持RPC调用"
                 isPromoProdEvent -> "不允许RPC完成事件规则任务(需真实交易)"
                 isSignupRecordMissing -> "任务报名记录不存在或已过期"
