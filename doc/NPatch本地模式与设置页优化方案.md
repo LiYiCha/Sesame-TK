@@ -39,145 +39,89 @@
 
 ---
 
-## 二、NPatch 本地模式实现方案
+## 二、NPatch 本地模式支持
 
-> 本章为初版方案。经代码审查，其中有 3 处必须修正（目标 API 版本、Remote 数据流方向、运行期写配置），
-> 修正后的路径与验证清单见 `doc/NPatch本地模式方案审查.md`。开发前以审查报告为准。
+### 2.1 本地模式下模块怎么被加载
 
+官方 `guide/modes` 与 `guide/introduction`：
 
-### 2.1 两种修补方式的运行模型
+- 修补包自带 `assets/npatch/loader.bin` 与 `libnpatch.so`，与模块是否嵌入无关。
+- 运行时用目标包名向管理器（`top.nkbe.npatch`）查询模块与作用域：先连 Manager Binder，失败再查 ConfigProvider，两者都不可用才用上次同步的缓存。
+- 模块以**独立 APK** 安装，作用域由管理器数据库决定，模块不能自己决定被加载。
+- 模块分三类，同一套 Vector 运行时：Legacy（`assets/xposed_init`）、libxposed API 101、libxposed API 102。
 
-| 维度 | 集成模式 `--embed` | 本地模式 `--manager` |
-|---|---|---|
-| 模块 APK 位置 | 目标应用 `assets/npatch/modules/<pkg>.apk` | 独立安装，管理器按作用域加载 |
-| 模块设置页所在进程 | 目标应用进程（待验证：官方未明说 Activity 是否合并） | 模块自身进程 |
-| 配置目录 | 目标应用私有目录（设置页与任务共用） | 两个进程各自私有目录（互不可见） |
-| 换模块 | 需重新修补 | 管理器内切换，无需重新修补 |
-| 签名绕过上限 | High（2） | Extreme（3）/ Seccomp（4）/ Stealth（5） |
+所以「本地模式下模块显示未激活」不是加载失败，而是**设置页与任务不在同一个沙盒**：
+设置页跑在模块 APK 的进程，任务跑在被修补的支付宝进程，两边私有目录互不可见。
 
-本地模式「模块显示未激活、功能不可用」的根因是**配置与状态存储位置不同**，与激活检测逻辑无关：
-设置页把配置写入模块 APK 的私有目录，任务运行在支付宝进程，读取的是支付宝的私有目录，二者没有任何共享通道。
+### 2.2 配置共享的两条官方路径
 
-官方的运行模型（`guide/modes`）：
+官方对本地模式的模块明确给了两条路，区别只在模块用哪套接口：
 
-- 修补后的 APK 自带 `assets/npatch/loader.bin` 与 `assets/npatch/so/<abi>/libnpatch.so`，加载器与原生核心都来自被修补包，不从管理器提取。
-- 运行时用目标包名向管理器（`top.nkbe.npatch`）查询模块与作用域：先连 Manager Service，不可用再查 Manager ConfigProvider，两者都不可用才回退到目标应用上一次成功同步的模块缓存。
-- 作用域始终以管理器数据库为准，模块无法自行决定被加载。
-- 集成模式把模块 APK 打进 `assets/npatch/modules/`，Remote 数据存在目标应用自己的数据目录，因此模块 UI 与目标应用同目录；本地模式的数据统一存在管理器，按模块包名隔离。
+| 路径 | 适用模块 | 模块 App 侧 | 注入侧 | 官方依据 |
+|---|---|---|---|---|
+| **A. XSharedPreferences** | Legacy（`assets/xposed_init`） | 普通 `SharedPreferences` 写入 | `XSharedPreferences(包名, 文件名)` 只读 | `guide/introduction`：「Legacy 模块继续支持传统 `assets/xposed_init` 与 `XSharedPreferences`」 |
+| **B. Remote API** | 现代（API 101/102） | `NPatchRemoteClient` 读写 Manager 的 Store | `getRemotePreferences(group)` 只读 | `guide/remote-api` 全篇 |
 
-### 2.2 共享通道：NPatch Remote API
+两条路的方向一致：**设置页写、注入侧只读**。这是框架的分层设计，不是可以绕开的限制。
 
-官方提供的通道是 Remote Preferences / Remote Files，由管理器保存并按模块包名隔离：
+#### 路径 A 为什么可行（源码依据）
 
-- 模块设置页侧：`NPatchRemoteClient.getRemotePreferences(group)`，可读写。
-- 目标进程侧：`XposedInterface.getRemotePreferences(group)`，**只读**。
-- 变更通知：管理器把 Diff 推送给已注入的 API 101/102 runtime，目标进程无需重启。
+Vector 的 `legacy/src/main/java/de/robv/android/xposed/XSharedPreferences.java`：
 
-读写方向与本模块的模型完全吻合：设置在设置页写入，任务只读取。
+```java
+// :180 由框架服务解析模块的 prefs 目录，而不是按调用进程的 UID 拼路径
+mFile = new File(VectorServiceClient.INSTANCE.getPrefsPath(packageName), prefFileName + ".xml");
 
-**注入侧入口是否存在，取决于模块走哪条管线**：官方 FAQ 的表述是「作用域内的 API 101/102
-目标进程只取得读取与变更通知能力」，`XposedInterface` 就是这条只读通道。
+// :251 / :346 通过注入的文件服务读取，能跨 UID 打开模块 App 的私有文件
+try (InputStream is = SELinuxHelper.getAppDataFileService().getFileInputStream(filename)) { ... }
+```
 
-本仓库是**双入口**：
+也就是说，`XSharedPreferences("模块包名", "文件名")` 在目标进程里读的是**模块 App 自己写的 prefs**，
+跨 UID 由框架服务完成。传统模块几十年都是这么做的（LSPosed wiki「New XSharedPreferences」给的就是这套写法）：
 
-- `app/src/main/resources/META-INF/xposed/{module.prop, scope.list, java_init.list}` → 现代管线，
-  入口 `LibXposedRuntime : XposedModule()`（继承 `XposedInterfaceWrapper`，自带
-  `getRemotePreferences()` / `getFrameworkProperties()`）；
-- `assets/xposed_init` → Legacy 管线，仅老框架使用。
+```kotlin
+// 注入侧（目标进程）
+val pref = XSharedPreferences("fansirsqi.xposed.sesame", "sesame_config")
+val json = pref.getString("ElemeTask", null)   // 只读
+```
 
-NPatch 按 `module.prop` 选择现代管线，因此在 NPatch 下注入侧**有** Remote 只读入口，不需要迁移。
-但 `targetApiVersion=101` 时框架是否真的实现该能力，必须先探针验证（见 2.3 路径 A）。
+#### 路径 B 的适用面
 
-需要注意的反向限制：`targetApiVersion >= 102` 会在 ClassLoader 层封锁 `de.robv.android.xposed`，
-而本仓库 hook 全部依赖 `de.robv`（56 个 `XC_MethodHook`、23 处 `findAndHookMethod`），
-所以**不能**为了 Remote 而把 target 提到 102。
+`NPatchRemoteClient` 是给「现代模块的设置 App」用的：需要 AAR、`<queries>` 声明、连接（同步最多 3 秒），
+数据存在 Manager 的 SQLite（`configs` 表）里，注入侧通过 libxposed 只读。它更适合需要 Remote Files、
+或设置 App 与模块本体分离的现代模块。本模块的设置页与任务同属一个 APK，用不上 Files，走 A 更直接。
 
-### 2.3 前置决策：三条路径
+### 2.3 本模块的差距
 
-| 路径 | 做法 | 代价 | 结论 |
-|---|---|---|---|
-| A. 复用现有现代入口（首选） | `module.prop` 保持 101；在 `LibXposedRuntime.onPackageReady` 里用 `getRemotePreferences` 读配置，hook 继续走 legacy 桥 | 探针约 15 行 + `Config` 读取分支 1 处 + 设置页桥 1 个类 | 前提是 101 档位支持 Remote，需实测 |
-| B. 设置 UI 移入目标进程 | 在支付宝进程内用原生 View 提供设置界面，配置直接写目标应用私有目录 | 需重写设置界面（现有为 Web UI），但与任务天然同进程 | 仅在 A 走不通时考虑 |
-| C. 暂不支持本地模式 | 维持集成模式，配置与任务同进程 | 无 | 当前状态；签名绕过上限 High（2） |
+现状配置读写是自研的 `util/DataStore`（直接读写模块私有目录文件）与 `data/Config.java`（模型字段 JSON）：
 
-**不要把 target 提到 102 当作路径**：102 会在 ClassLoader 层封锁 `de.robv`，现有 hook 全部失效，
-重写规模是 28 个文件、158 处调用，且收益只是「本地模式可用」，不值得。
+- 设置页写：模块进程的私有目录；
+- 任务读：支付宝进程的私有目录（`DataStore` 按 `AppContext` 的路径解析）；
+- 两者都不是 `SharedPreferences`，框架的 `XSharedPreferences` 帮不上忙，Remote API 也没接。
 
-不建议为「更高级别的签名绕过」而做任何迁移：改包本身（APK 路径、`/proc/self/maps`、加载器 so）已是最强特征，
-3/4/5 只扩大覆盖的校验路径，并不降低被识别概率。
+这就是本地模式下「配置读不到、功能像没激活」的全部原因。
 
-以下分阶段方案以路径 A 为目标。
+### 2.4 推荐做法：把配置存储换成 SharedPreferences
 
-### 2.4 分阶段实现
+只动存储后端，不动 hook（158 处 `de.robv` 调用全部保留）。
 
-#### 阶段 A：接入依赖与连接（可独立验证）
-
-1. `app/libs/` 放入 `npatch-remote-api-v<ver>-release.aar`，`implementation(files(...))`；
-   `io.github.libxposed:api:102.0.0` 已经是 `compileOnly`（`app/build.gradle.kts:179`），编译期接口够用，
-   但 AAR 运行期需要 `io.github.libxposed:interface:102.0.0` 时再显式加（注意不要改 `module.prop`）。
-2. `AndroidManifest.xml` 已声明 `<queries>`（`top.nkbe.npatch.remote` 与包名 `top.nkbe.npatch`）。
-3. 新增 `NpatchRemoteBridge`：
-   - `isAvailable(context)` → `NPatchRemoteClient.isAvailable(context)`
-   - `connectAsync(context)` → 成功后在主线程回调，缓存 client
-   - 按官方错误表分别处理 `IllegalStateException`（未安装/超时）、`SecurityException`（模块未登记）、
-     `RemoteException`（Binder 断开，需丢弃 client 重连）；连接失败时在设置页明确提示
-     「NPatch 不可用，配置仅本机生效」，不静默回退。
-
-验证点：设备安装 NPatch 管理器且模块已登记时，设置页「设备信息 → NPatch 环境」应显示 Remote Provider 可用；未安装时该行降级为「未检测到 NPatch 管理器」，且不产生异常。
-
-#### 阶段 B：配置读取抽象
-
-现状配置读写集中在 `fansirsqi.xposed.sesame.util.DataStore`（键值）与 `Config`（模型字段序列化）。
-
-1. 定义接口 `ConfigSource`：
-   - `String get(String key, String def)`
-   - `void put(String key, String value)`
-   - `Map<String, String> getAll()`
-2. 两个实现：
-   - `LocalConfigSource`：现有 DataStore，行为保持不变。
-   - `RemoteConfigSource`：包一层 `SharedPreferences`（Remote Preferences 返回标准 `SharedPreferences` 实例）。
-3. 选择逻辑（按进程角色分流，而不是按是否检测到 NPatch）：
-   - 目标进程（hook 侧，`AppContext.isHooked()` 为 true）：优先 Remote（只读），读不到时回退本地。
-   - 设置页进程：Remote（可写）优先，连接失败回退本地并提示「当前为本地存储，本地模式下配置不会同步到目标进程」。
-4. `Config` 的模型字段整体 JSON 仍以单键存储（例如 `ElemeTask` 一个键），迁移不涉及数据结构改造，仅替换读写后端。
-
-#### 阶段 C：文件类数据
-
-日志、商城缓存、CK 凭据属于文件型数据：
-
-| 数据 | 建议 |
+| 项 | 改动 |
 |---|---|
-| 商城缓存 `eleme_mall_cache.json` | 目标进程本地写；设置页需要展示时通过 Remote Files 只读拉取 |
-| 运行日志 | 保留目标进程本地；设置页查看日志改用 Remote Files 拉取副本 |
-| CK 凭据 | 不写入 Remote Files（管理器私有库无内容加密，且 CK 等价于账号凭据），仅存目标进程本地 |
+| 设置页写入 | `DataStore` 的配置类键改为写 `context.getSharedPreferences("sesame_config", MODE_PRIVATE)`；LSPosed 环境需要 `MODE_WORLD_READABLE`（框架 hook 了 `checkMode`），NPatch/Vector 由服务解析路径，两种模式都试一次，取可用的 |
+| 注入侧读取 | 新增 `PrefsBridge.read(key)`：先 `XSharedPreferences(BuildConfig.APPLICATION_ID, "sesame_config")`，文件可读则用；否则回退现有 `DataStore` |
+| 运行期状态 | 计数、缓存、`status.json`、日志继续留本地文件，**不要**塞进 prefs（XML 全量重写，高频写会掉帧） |
+| 运行期改配置 | `XSharedPreferences` 只读，5 处 `setValue` 只改内存 + 本地覆盖表；读取顺序：本地覆盖 > prefs > 默认 |
+| meta-data | 本项目 `module.prop` 的 `minApiVersion=100`，满足 LSPosed 对 New XSharedPreferences 的 `xposedminversion >= 93` 要求 |
 
-Remote Files 只接受单层文件名，禁止路径分隔符，与现有平铺文件名兼容。
+迁移不需要改数据结构：`Config` 仍是「一个模型一个 JSON 字符串」，只是从文件挪到 prefs 的一个 String 键。
 
-#### 阶段 D：降级与提示
+### 2.5 需要真机确认的三点
 
-- 设置页顶部增加环境条：`集成模式（同进程，配置直连）` / `本地模式（Remote 已连接）` / `本地模式（Remote 不可用，配置仅本机生效）`。
-- 当处于第三态时，所有依赖配置的功能入口保持可见，但点击保存时给出一次明确提示，避免用户误以为配置已生效。
+1. `getSharedPreferences(name, MODE_WORLD_READABLE)` 在 NPatch 下是否被允许。LSPosed 明确 hook 了 `checkMode`；NPatch 是否同样处理未在文档中说明，若不支持则改用 `MODE_PRIVATE`，靠 Vector 服务读取。
+2. NPatch 本地模式下 `XSharedPreferences(模块包名, 文件名)` 的 `getFile().canRead()` 是否为 true。这是路径 A 能否成立的唯一判据。
+3. 集成模式下是否同进程。若设置页与任务同进程，`XSharedPreferences` 也能读，行为不受影响；不需要为集成模式单独分支。
 
-### 2.5 改动清单
-
-| 文件 | 改动 |
-|---|---|
-| `app/build.gradle.kts` | 引入 Remote AAR 与 `libxposed:interface` |
-| `AndroidManifest.xml` | 已加 `<queries>` |
-| `util/NpatchEnv.kt` | 已实现探测；补充连接状态缓存 |
-| `util/NpatchRemoteBridge.kt` | 新增，封装 client 生命周期与异常降级 |
-| `util/DataStore.kt`、`data/Config.java` | 读写后端抽象为 `ConfigSource` |
-| `ui/WebSettingsActivity.java` | 暴露 `getRuntimeEnv()` 给设置页展示环境条 |
-| `assets/web/index.html` | 环境条与保存提示 |
-
-### 2.6 风险与验证
-
-1. Remote Preferences 在目标进程为只读，任何既有「任务运行时写配置」的逻辑（如 `disableElemeLuckyStar` 关闭开关）会抛 `UnsupportedOperationException`，需改为写本地覆盖值并在设置页合并展示。
-2. 管理器进程被杀后 Binder 失效，需要重连逻辑与超时（同步 `connect` 最多 3 秒，UI 必须走异步）。
-3. 无法在没有真机的情况下验证注入侧行为，全部改动需在集成模式（回归）与本地模式（新功能）各跑一轮。
-4. 不实现热重载与作用域控制：这两项属于管理器职责，模块侧无收益。
-
-### 2.7 签名绕过等级选择（源码依据）
+### 2.6 签名绕过等级（源码依据）
 
 NPatch 的等级实现集中在 `patch-loader/src/main/java/top/nkbe/npatch/loader/SigBypass.java` 与
 `patch-loader/src/main/jni/src/jni/bypass_sig.cpp`、`svc_bypass.cpp`：
@@ -197,7 +141,7 @@ NPatch 的等级实现集中在 `patch-loader/src/main/java/top/nkbe/npatch/load
 3. **4 Seccomp 不建议首选**。该级别在进程上安装 seccomp 过滤器，而支付宝自身也可能安装过滤器；两者叠加会返回 `EPERM`，表现为宿主 native 组件异常退出或功能静默失效，排查成本高。
 4. 需明确的预期：**等级越高不等于越不易被识别**。改包本身是强特征（APK 路径、`/proc/self/maps`、加载器 so 均与官方包不同），3 与 5 的差异只在覆盖的校验路径，不在「隐形」程度。若仅为规避识别而切换本地模式，收益低于风险；本地模式的真实价值是「免重新修补即可换模块」。
 
-### 2.8 官方文档引用与现状边界
+### 2.7 官方文档引用与现状边界
 
 | 结论 | 出处 |
 |---|---|
@@ -208,18 +152,21 @@ NPatch 的等级实现集中在 `patch-loader/src/main/java/top/nkbe/npatch/load
 | 目标进程内 Remote Preferences 只读、`edit()` 抛 `UnsupportedOperationException` | `guide/remote-api.html` →「API 101/102 模块运行时」 |
 | 管理器包名 `top.nkbe.npatch`、authority `top.nkbe.npatch.remote` | `guide/remote-api.html` →「适用范围」「添加 SDK」 |
 | 本地模式运行模型、loader 来源、作用域以管理器为准 | `guide/modes` →「Local Mode」「Comparison」 |
-| 注入侧只读、Legacy `XSharedPreferences` 不自动迁移 | `guide/faq`「Remote Preferences 与 Remote Files 存在哪里」、`guide/remote-api` 首段 |
+| Legacy 模块支持 `XSharedPreferences` | `guide/introduction`「模块 API 与运行能力」 |
+| Legacy 的 `XSharedPreferences` 仍走原文件路径，不会被自动重定向到 Remote API | `guide/faq`「Remote Preferences 与 Remote Files 存在哪里」 |
+| 注入侧只读、`edit()` 抛异常 | `guide/remote-api`「API 101/102 模块运行时」 |
+| `XSharedPreferences` 跨 UID 读取模块 prefs 的实现 | Vector `legacy/.../XSharedPreferences.java:180/251/346` |
+| New XSharedPreferences 模块侧写法（`MODE_WORLD_READABLE` + `XSharedPreferences(包名, 文件名)`） | LSPosed wiki「New XSharedPreferences」 |
 | 三类模块加载方式（Legacy / API 101 / API 102） | 站点首页「一套运行时，三种模块」 |
 | 各级别的 Java/native hook 面 | 源码 `patch-loader/.../SigBypass.java`、`patch-loader/src/main/jni/src/jni/bypass_sig.cpp`、`svc_bypass.cpp` |
 
 现状边界（避免误判为已支持）：
 
-- 当前仓库**尚未接入** Remote API：NPatch 下走现代管线（`LibXposedRuntime`）、具备 `XposedInterface`，
-  但从未调用过 `getRemotePreferences`；配置仍写在本机私有目录，因此本地模式目前不可用。
-  本文是实施方案，不是既有能力。
+- 当前仓库两条路径都没接：配置由自研 `DataStore` 直接读写模块私有目录，既不是 `SharedPreferences`，
+  也没调用 `getRemotePreferences`。因此本地模式下设置页与任务互不可见，本文是实施方案而非既有能力。
 - 设置页的「NPatch 环境」一行只陈述可验证事实（管理器是否安装、Provider 是否可解析），不代表本地模式已可用。
 - 已完成的前置只有两项：`AndroidManifest.xml` 的 `<queries>` 声明、`NpatchEnv` 的只读探测（管理器是否安装、Provider 是否可解析），二者不影响集成模式。
-- 集成模式不需要任何改造，配置与任务同进程，行为与现状一致。
+- 集成模式暂不需要改造：现有配置在目标应用侧可读写，行为与现状一致；改用 SharedPreferences 后仍兼容。
 
 ---
 
@@ -253,7 +200,7 @@ NPatch 的等级实现集中在 `patch-loader/src/main/java/top/nkbe/npatch/load
 
 ## 四、后续优化项方案
 
-经评估，以下两项保留；时钟校准、失败分级重试、诊断包导出、配置快照回滚不再纳入：前两项分别被「秒杀提前量可调」与「遇风控立即停止」的现有策略覆盖，后两项与现有能力重复（配置已有「导出配置/导入配置」，日志已可查看）。
+经评估，只保留指纹一致性自检；时钟校准、失败分级重试、诊断包导出、配置快照回滚不再纳入：前两项分别被「秒杀提前量可调」与「遇风控立即停止」的现有策略覆盖，后两项与现有能力重复（配置已有「导出配置/导入配置」，日志已可查看）。
 
 ### 4.1 指纹一致性自检
 
@@ -267,15 +214,3 @@ NPatch 的等级实现集中在 `patch-loader/src/main/java/top/nkbe/npatch/load
 | `Chrome` 版本与 `MYWeb` 版本组合 | 已知组合集合之外的搭配 |
 
 输出改为逐项结论（命中几项、冲突在哪），而不是笼统的「格式异常」。实现位置：`ElemeMtopUtil.DeviceProfile` 增加 `consistencyIssues(): List<String>`，任务日志与账号状态弹窗复用。
-
-### 4.2 任务时间线
-
-原型见 `doc/ui-prototype/index.html`（单屏设计稿，含顶部统计与时间轴）。
-
-数据来源与可行性：
-
-- 调度侧：`TaskCommon` / `AlarmScheduler` 持有各任务的下次触发时间，需在 `ModelTask` 暴露只读快照（`nextRunAt` 与 `lastRunResult`），不新增网络请求。
-- 展示侧：设置页新增一个只读页面，按时间排序渲染；每条含任务名、分组、状态（已执行/部分失败/待执行）、最近结果摘要。
-- 未执行过的任务显示「待首次执行」，不使用推测时间填充。
-
-界面要素：左侧时间列 + 竖轴 + 状态圆点（绿=成功、橙=部分失败、灰=待执行），条目卡片显示任务名与所属分组。
