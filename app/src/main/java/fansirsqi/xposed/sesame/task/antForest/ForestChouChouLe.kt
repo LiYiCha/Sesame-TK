@@ -208,7 +208,7 @@ class ForestChouChouLe {
         var balance = drawAsset.optInt("blance", 0)
         val total = drawAsset.optInt("totalTimes", 0)
 
-        Log.runtime("${s.name} 剩余抽奖次数: $balance (历史累计抽奖: $total 次)")
+        Log.forest("${s.name} 剩余抽奖次数: $balance / $total")
 
         var retry = 0
         // 最多抽50次，防止死循环
@@ -233,24 +233,71 @@ class ForestChouChouLe {
         }
     }
 
+    private fun isStructuredGameTask(
+        taskBaseInfo: JSONObject,
+        bizInfo: JSONObject,
+        prodPlayParam: JSONObject,
+    ): Boolean =
+        sequenceOf(
+            prodPlayParam.optJSONObject("taskCategorization"),
+            taskBaseInfo.optJSONObject("taskCategorization"),
+            bizInfo.optJSONObject("taskCategorization"),
+        ).filterNotNull().any {
+            it.optString("categorizationSecondLevel").equals("Game", ignoreCase = true)
+        }
+
+    private fun isAutomatableDrawTask(taskBaseInfo: JSONObject): Boolean {
+        val taskStatus = taskBaseInfo.optString("taskStatus").uppercase(Locale.ROOT)
+        if (taskStatus !in setOf(TaskStatus.TODO.name, "WAIT_COMPLETE")) {
+            return false
+        }
+        if (taskBaseInfo.optString("taskType") == "FOREST_ACTIVITY_DRAW_GYL") {
+            return false
+        }
+        val bizInfo = taskBaseInfo.optString("bizInfo").toJson() ?: JSONObject()
+        val prodPlayParam = taskBaseInfo.optString("prodPlayParam").toJson() ?: JSONObject()
+        val exchangeTask = taskBaseInfo.optString("taskProdPlayType") == "EXCHANGE_ASSET" &&
+                bizInfo.optJSONObject("exchangeAssetsInfo") != null &&
+                prodPlayParam.optString("acwSceneCode") == "VITALITY_EXCHANGE_DRAW"
+        if (exchangeTask) {
+            return true
+        }
+        if (isStructuredGameTask(taskBaseInfo, bizInfo, prodPlayParam) &&
+            GameCenterPlayRpcCall.resolveContract(taskBaseInfo, bizInfo) != null
+        ) {
+            return true
+        }
+        if (taskBaseInfo.optString("taskProdPlayType") == "VISIT_FLOAT_BALL") {
+            return !isStructuredGameTask(taskBaseInfo, bizInfo, prodPlayParam)
+        }
+        if (bizInfo.has("autoCompleteTask") && !bizInfo.optBoolean("autoCompleteTask")) {
+            return false
+        }
+        if (taskBaseInfo.optString("taskMode") != "ACC_ANTIEP") {
+            return true
+        }
+        return prodPlayParam.optJSONObject("taskCategorization")
+            ?.optString("categorizationSecondLevel") != "Game"
+    }
+
     /**
-     * 检查是否所有任务都已完成，并设置 Flag
+     * 检查是否所有可执行任务已处理且抽奖机会用尽，设置完成标记
      */
     private fun checkCompletion(s: Scene) {
         val resp = AntForestRpcCall.listTaskopengreen(s.taskCode, SOURCE).toJson() ?: return
         if (!resp.check()) return
 
         val taskList = resp.optJSONArray("taskInfoList") ?: return
-        var total = 0
+        var actionableTask = false
         var completed = 0
-        var allDone = true
+        var total = 0
 
         for (i in 0 until taskList.length()) {
             val task = taskList.optJSONObject(i) ?: continue
             val baseInfo = task.optJSONObject("taskBaseInfo") ?: continue
 
             val taskType = baseInfo.optString("taskType")
-            val taskStatus = baseInfo.optString("taskStatus")
+            val taskStatus = baseInfo.optString("taskStatus").uppercase(Locale.ROOT)
             val bizInfoStr = baseInfo.optString("bizInfo")
             val taskName = if (bizInfoStr.isNotEmpty()) {
                 JSONObject(bizInfoStr).optString("title", taskType)
@@ -258,22 +305,27 @@ class ForestChouChouLe {
 
             if (isBlockedTask(taskType, taskName)) continue
 
-            total++
+            val isPendingReward = taskStatus in setOf("FINISHED", "COMPLETE", "WAIT_RECEIVE", "TO_RECEIVE")
+            val isActionable = isPendingReward || isAutomatableDrawTask(baseInfo)
+
             if (taskStatus == TaskStatus.RECEIVED.name) {
                 completed++
-            } else {
-                allDone = false
-                Log.runtime("${s.name} 未完成: $taskName [$taskStatus]")
+                total++
+            } else if (isActionable) {
+                total++
+                actionableTask = true
+                Log.forest("${s.name} 待处理任务: $taskName [$taskStatus]")
             }
         }
 
-        Log.runtime("${s.name} 进度: $completed / $total")
-        if (allDone) {
+        val enterResp = AntForestRpcCall.enterDrawActivityopengreen(s.id, s.code, SOURCE).toJson()
+        val drawBalance = enterResp?.optJSONObject("drawAsset")?.optInt("blance", 0) ?: 0
+
+        if (!actionableTask && drawBalance == 0) {
             Status.setFlagToday(s.flag)
-            val msg = if (total > 0) "全部完成" else "无有效任务"
-            Log.runtime("✅ ${s.name} $msg ($completed/$total)")
+            Log.forest("✅ ${s.name} 全部完成 (有效任务已达成且抽奖次数已用尽: $completed/$total)")
         } else {
-            Log.runtime("⚠️ ${s.name} 未全部完成")
+            Log.forest("${s.name} 进度: $completed / $total, 剩余抽奖次数: $drawBalance")
         }
     }
 

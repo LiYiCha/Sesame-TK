@@ -2295,6 +2295,7 @@ class AntMember : ModelTask() {
                     val recordId = joinSesameTask(templateId, title)
                     if (recordId.isEmpty()) continue
 
+                    reportGameDurationIfNeeded(task, title)
                     delay(9000 + (Math.random() * 1000).toLong())
                     AntMemberRpcCall.Zmxy.Alchemy.taskFeedback(templateId, "BOTTLE")
                     delay(6000 + (Math.random() * 1000).toLong())
@@ -2314,6 +2315,63 @@ class AntMember : ModelTask() {
             Log.printStackTrace("$TAG.ensureStamina", t)
         }
         return@run false
+    }
+
+    /**
+     * 若为小游戏或时长类任务，上报游戏时长并等待满足时长
+     */
+    private suspend fun reportGameDurationIfNeeded(task: JSONObject, taskTitle: String) {
+        var gameContract = GameCenterPlayRpcCall.resolveContract(task)
+        if (gameContract == null) {
+            val durationMatch = Regex("(\\d+)\\s*(?:秒|s)").find(taskTitle)
+            val isGameTask = (taskTitle.contains("玩") || taskTitle.contains("游戏")) && (durationMatch != null || taskTitle.contains("秒"))
+            if (isGameTask) {
+                val playTime = durationMatch?.groupValues?.get(1)?.toIntOrNull() ?: 30
+                val actionUrl = task.optString("actionUrl")
+                val targetUrl = task.optString("targetUrl")
+                val gameAppId = sequenceOf(
+                    task.optString("appId"),
+                    task.optString("gameAppId"),
+                    task.optString("game_id"),
+                    runCatching { Uri.parse(actionUrl).getQueryParameter("appId") }.getOrNull(),
+                    runCatching { Uri.parse(actionUrl).getQueryParameter("gameAppId") }.getOrNull(),
+                    runCatching { Uri.parse(actionUrl).getQueryParameter("game_id") }.getOrNull(),
+                    runCatching { Uri.parse(targetUrl).getQueryParameter("appId") }.getOrNull(),
+                    runCatching { Uri.parse(targetUrl).getQueryParameter("gameAppId") }.getOrNull(),
+                    runCatching { Uri.parse(targetUrl).getQueryParameter("game_id") }.getOrNull(),
+                ).firstOrNull { !it.isNullOrBlank() }.orEmpty()
+
+                val source = sequenceOf(
+                    task.optString("source"),
+                    task.optString("chInfo"),
+                    task.optString("oriChInfo"),
+                    runCatching { Uri.parse(actionUrl).getQueryParameter("source") }.getOrNull(),
+                    runCatching { Uri.parse(actionUrl).getQueryParameter("chInfo") }.getOrNull(),
+                    runCatching { Uri.parse(targetUrl).getQueryParameter("source") }.getOrNull(),
+                ).firstOrNull { !it.isNullOrBlank() } ?: "zfbhy_mc_wkenoz66"
+
+                if (gameAppId.isNotBlank()) {
+                    gameContract = GameCenterPlayRpcCall.Contract(gameAppId, playTime, source)
+                }
+            }
+        }
+
+        if (gameContract != null) {
+            Log.other(TAG, "芝麻信用💳[上报游戏时长]#$taskTitle 时长: ${gameContract.playTime}秒, appId: ${gameContract.gameAppId}")
+            try {
+                val ack = GameCenterPlayRpcCall.submitForAck(gameContract)
+                if (ack.accepted) {
+                    Log.other(TAG, "芝麻信用💳[时长上报已接受]#$taskTitle")
+                }
+            } catch (e: Throwable) {
+                Log.error(TAG, "芝麻信用💳上报游戏时长失败: $e")
+            }
+            val waitSeconds = (gameContract.playTime + 1).coerceAtLeast(31)
+            Log.runtime(TAG, "芝麻信用💳等待${waitSeconds}秒以满足游戏时长校验[$taskTitle]...")
+            delay(waitSeconds * 1000L)
+        } else {
+            delay(1000)
+        }
     }
 
     /**
@@ -2410,6 +2468,7 @@ class AntMember : ModelTask() {
                     Log.other("芝麻炼金⚗️开宝箱得到更多，正在完成任务[$title]...")
                     val recordId = joinSesameTask(templateId, title)
                     if (recordId.isEmpty()) continue
+                    reportGameDurationIfNeeded(task, title)
                     delay(9000 + (Math.random() * 1000).toLong())
                     AntMemberRpcCall.Zmxy.Alchemy.taskFeedback(templateId)
                     delay(6000 + (Math.random() * 1000).toLong())
@@ -2573,9 +2632,8 @@ class AntMember : ModelTask() {
                             val upperView = resultView.uppercase()
                             val upperCode = resultCode.uppercase()
                             if (resultCode == "BUSINESS_CONCURRENCE_INTERCEPT" || resultView.contains("并发") || resultView.contains("太快")) {
-                                Log.runtime(TAG, "芝麻炼金⚗️遇到业务并发拦截，等待 3 秒后重试...")
-                                delay(3000)
-                                continue
+                                Log.error(TAG, "芝麻炼金失败: 业务并发拦截 ($resultCode)")
+                                break
                             } else if (resultView.contains("CAP_REACHED") || resultView.contains("CURRENT_LEVEL_MAX")) {
                                 capReached = true
                                 Log.other("芝麻炼金⚗️已达上限")
@@ -4430,44 +4488,8 @@ class AntMember : ModelTask() {
                     }
                 }
 
-                // 小游戏/时长类任务：上报游戏时长并等待足够时长以防 OP_REPEAT_CHECK
-                val durationMatch = Regex("(\\d+)\\s*(?:秒|s)").find(taskTitle)
-                val isGameTask = (taskTitle.contains("玩") || taskTitle.contains("游戏")) && (durationMatch != null || taskTitle.contains("秒"))
-                val playTime = durationMatch?.groupValues?.get(1)?.toIntOrNull() ?: 30
-
-                val actionUrl = task.optString("actionUrl")
-                val targetUrl = task.optString("targetUrl")
-                val gameAppId = sequenceOf(
-                    task.optString("appId"),
-                    task.optString("gameAppId"),
-                    runCatching { Uri.parse(actionUrl).getQueryParameter("appId") }.getOrNull(),
-                    runCatching { Uri.parse(actionUrl).getQueryParameter("gameAppId") }.getOrNull(),
-                    runCatching { Uri.parse(targetUrl).getQueryParameter("appId") }.getOrNull(),
-                    runCatching { Uri.parse(targetUrl).getQueryParameter("gameAppId") }.getOrNull(),
-                ).firstOrNull { !it.isNullOrBlank() }.orEmpty()
-
-                if (isGameTask && gameAppId.isNotBlank()) {
-                    Log.other(TAG, "芝麻信用💳[小游戏时长上报: $taskTitle]#时长${playTime}秒, appId: $gameAppId")
-                    try {
-                        GameCenterPlayRpcCall.submit(
-                            GameCenterPlayRpcCall.Contract(
-                                gameAppId = gameAppId,
-                                playTime = playTime,
-                                source = "zfbhy_mc_wkenoz66"
-                            )
-                        )
-                    } catch (e: Throwable) {
-                        Log.error(TAG, "芝麻信用💳上报游戏时长失败: $e")
-                    }
-                }
-
-                if (isGameTask) {
-                    val waitSeconds = (playTime + 1).coerceAtLeast(31)
-                    Log.runtime(TAG, "芝麻信用💳等待${waitSeconds}秒以满足游戏任务时长校验[$taskTitle]...")
-                    delay(waitSeconds * 1000L)
-                } else {
-                    delay(1000)
-                }
+                // 小游戏/时长类任务：上报游戏时长并等待满足时长
+                reportGameDurationIfNeeded(task, taskTitle)
 
                 // 完成任务
                 for (j in completedNum..<needCompleteNum) {

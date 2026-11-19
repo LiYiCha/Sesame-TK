@@ -95,6 +95,7 @@ public class OtherTask2 extends ModelTask {
         modelFields.addField(memberTaskNew);
         modelFields.addField(privilegeTask );
         modelFields.addField(gameCenterGold);
+        modelFields.addField(gameCenterGoldCashExchange);
         modelFields.addField(monthTRA);//月月赚
         modelFields.addField(scholarship);//奖学金
         modelFields.addField(scholarshipExchange);
@@ -108,10 +109,9 @@ public class OtherTask2 extends ModelTask {
         modelFields.addField(SesameTreeUpgrade);
         modelFields.addField(rceduService);
         modelFields.addField(sesameAlchemyMy);
-        modelFields.addField(playConsultFacade);
-        modelFields.addField(playConsultFacadeNum);
+//        modelFields.addField(playConsultFacade);
+//        modelFields.addField(playConsultFacadeNum);
         modelFields.addField(topUpGoldTask);
-        modelFields.addField(gameCenterGoldCashExchange);
         return modelFields;
     }
 

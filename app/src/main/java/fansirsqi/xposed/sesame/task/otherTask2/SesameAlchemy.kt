@@ -11,6 +11,8 @@ import fansirsqi.xposed.sesame.util.GlobalThreadPools.sleepCompat
 import fansirsqi.xposed.sesame.util.Log
 import fansirsqi.xposed.sesame.util.TaskBlacklist
 import fansirsqi.xposed.sesame.util.TimeUtil
+import fansirsqi.xposed.sesame.task.common.GameCenterPlayRpcCall
+import android.net.Uri
 import org.json.JSONObject
 import java.util.concurrent.locks.ReentrantLock
 import kotlin.concurrent.withLock
@@ -393,6 +395,59 @@ class SesameAlchemy {
         return false
     }
 
+    /** 若为小游戏或时长类任务，上报游戏时长并等待满足时长 */
+    private fun reportGameDurationIfNeeded(task: JSONObject, taskTitle: String) {
+        var gameContract = GameCenterPlayRpcCall.resolveContract(task)
+        if (gameContract == null) {
+            val durationMatch = Regex("(\\d+)\\s*(?:秒|s)").find(taskTitle)
+            val isGameTask = (taskTitle.contains("玩") || taskTitle.contains("游戏")) && (durationMatch != null || taskTitle.contains("秒"))
+            if (isGameTask) {
+                val playTime = durationMatch?.groupValues?.get(1)?.toIntOrNull() ?: 30
+                val actionUrl = task.optString("actionUrl")
+                val targetUrl = task.optString("targetUrl")
+                val gameAppId = sequenceOf(
+                    task.optString("appId"),
+                    task.optString("gameAppId"),
+                    task.optString("game_id"),
+                    runCatching { Uri.parse(actionUrl).getQueryParameter("appId") }.getOrNull(),
+                    runCatching { Uri.parse(actionUrl).getQueryParameter("gameAppId") }.getOrNull(),
+                    runCatching { Uri.parse(actionUrl).getQueryParameter("game_id") }.getOrNull(),
+                    runCatching { Uri.parse(targetUrl).getQueryParameter("appId") }.getOrNull(),
+                    runCatching { Uri.parse(targetUrl).getQueryParameter("gameAppId") }.getOrNull(),
+                    runCatching { Uri.parse(targetUrl).getQueryParameter("game_id") }.getOrNull(),
+                ).firstOrNull { !it.isNullOrBlank() }.orEmpty()
+
+                val source = sequenceOf(
+                    task.optString("source"),
+                    task.optString("chInfo"),
+                    task.optString("oriChInfo"),
+                    runCatching { Uri.parse(actionUrl).getQueryParameter("source") }.getOrNull(),
+                    runCatching { Uri.parse(actionUrl).getQueryParameter("chInfo") }.getOrNull(),
+                    runCatching { Uri.parse(targetUrl).getQueryParameter("source") }.getOrNull(),
+                ).firstOrNull { !it.isNullOrBlank() } ?: "zfbhy_mc_wkenoz66"
+
+                if (gameAppId.isNotBlank()) {
+                    gameContract = GameCenterPlayRpcCall.Contract(gameAppId, playTime, source)
+                }
+            }
+        }
+
+        if (gameContract != null) {
+            Log.other(TAG, "芝麻炼金⚗️[上报游戏时长]#$taskTitle 时长: ${gameContract.playTime}秒, appId: ${gameContract.gameAppId}")
+            try {
+                val ack = GameCenterPlayRpcCall.submitForAck(gameContract)
+                if (ack.accepted) {
+                    Log.other(TAG, "芝麻炼金⚗️[时长上报已接受]#$taskTitle")
+                }
+            } catch (e: Throwable) {
+                Log.error(TAG, "芝麻炼金⚗️上报游戏时长失败: $e")
+            }
+            val waitSeconds = (gameContract.playTime + 1).coerceAtLeast(31)
+            Log.runtime(TAG, "芝麻炼金⚗️等待${waitSeconds}秒以满足游戏时长校验[$taskTitle]...")
+            sleepCompat(waitSeconds * 1000L)
+        }
+    }
+
     /**
      * 确保拥有体力：
      * 1. 优先使用背包中现有的体力药水
@@ -433,6 +488,7 @@ class SesameAlchemy {
                     val recordId = joinActivity(templateId, title)
                     if (recordId.isEmpty()) continue
 
+                    reportGameDurationIfNeeded(task, title)
                     sleepCompat(9000 + (Math.random() * 1000).toLong())
                     feedbackTask(templateId, "BOTTLE")
                     sleepCompat(6000 + (Math.random() * 1000).toLong())
@@ -520,6 +576,7 @@ class SesameAlchemy {
                     Log.other("芝麻炼金⚗️开宝箱得到更多，正在完成任务[$title]...")
                     val recordId = joinActivity(templateId, title)
                     if (recordId.isEmpty()) continue
+                    reportGameDurationIfNeeded(task, title)
                     sleepCompat(9000 + (Math.random() * 1000).toLong())
                     feedbackTask(templateId)
                     sleepCompat(6000 + (Math.random() * 1000).toLong())
@@ -729,6 +786,7 @@ class SesameAlchemy {
                                 processedTasks.add(templateId)
                                 continue
                             }
+                            reportGameDurationIfNeeded(task, title)
                             sleepCompat(10000 + (Math.random() * 1000).toLong())
                             feedbackTask(templateId)
                             sleepCompat(6000 + (Math.random() * 1000).toLong())
