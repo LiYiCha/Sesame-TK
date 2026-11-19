@@ -1196,6 +1196,23 @@ private fun DeviceInfoRow(label: String, value: String, accentColor: Color) {
 
 object DeviceInfoUtil {
 
+    /**
+     * 当前进程名。API 28+ 直接取 Application.getProcessName()；
+     * 更低版本走 ActivityThread，取不到时用包名兜底（进程名只用于展示，不参与逻辑判断）。
+     */
+    private fun currentProcessName(): String {
+        if (Build.VERSION.SDK_INT >= 28) {
+            return android.app.Application.getProcessName()
+        }
+        return try {
+            val clazz = Class.forName("android.app.ActivityThread")
+            val thread = clazz.getDeclaredMethod("currentActivityThread").invoke(null)
+            clazz.getDeclaredMethod("getProcessName").invoke(thread) as String
+        } catch (e: ReflectiveOperationException) {
+            ViewAppInfo.context?.packageName.orEmpty()
+        }
+    }
+
     fun showInfo(vid: String, activeUser: String = "未登录"): Map<String, String> {
         fun getProp(prop: String): String {
             return try {
@@ -1229,9 +1246,10 @@ object DeviceInfoUtil {
         val xpEnv = ViewAppInfo.xpEnvSummary.takeIf { it.isNotBlank() && it != "未激活 / 未检测到" }
             ?: runCatching { fansirsqi.xposed.sesame.util.XpFrameworkDetector.getEnvironmentSummary() }.getOrDefault("未激活 / 未检测到")
         infoMap["XP 环境"] = xpEnv
-        infoMap["NPatch 环境"] = runCatching {
-            fansirsqi.xposed.sesame.util.NpatchEnv.summary(ViewAppInfo.context)
-        }.getOrDefault("未检测到 NPatch")
+        infoMap["NPatch 环境"] = fansirsqi.xposed.sesame.util.NpatchEnv.summary(ViewAppInfo.context)
+        infoMap["NPatch 模式"] = fansirsqi.xposed.sesame.util.NpatchEnv.modeLabel(
+            ViewAppInfo.context, currentProcessName()
+        )
         infoMap["Product"] = "${Build.MANUFACTURER} ${Build.PRODUCT}"
         infoMap["Device"] = getDeviceName()
         infoMap["Android Version"] = "${Build.VERSION.RELEASE} SDK (${Build.VERSION.SDK_INT})"
