@@ -35,7 +35,21 @@ class ElemeMallEX : BaseFlashSaleTask() {
     override fun getGroup(): ModelGroup = ModelGroup.EXCHANGE
     override fun getIcon(): String = "Default.png"
 
-    override fun getTargetHour(): Long = (targetHourField?.value ?: 10).toLong()
+    override fun getTargetHour(): Long {
+        // 1. 优先从用户已选的所有兑换商品中寻找有效的补货整点 (restockHour)
+        val selected = (runCatching { ElemeTask.getElemeExchangeItems().value }.getOrNull() ?: emptySet()) +
+            (elemeMallList?.value?.filter { it.isNotEmpty() }?.toSet() ?: emptySet())
+        if (selected.isNotEmpty()) {
+            val items = runCatching { ElemeMallEntity.getList().filter { it.id != "0" } }.getOrDefault(emptyList())
+            for (item in items) {
+                if (item.id in selected && item.restockHour in 0..23) {
+                    return item.restockHour.toLong()
+                }
+            }
+        }
+        // 2. 回退到用户配置的秒杀开抢整点字段，默认 10 点
+        return (targetHourField?.value ?: 10).toLong()
+    }
 
     override val exchangeMode: ExchangeMode
         get() = ExchangeMode.MULTI // 多商品模式：逐个兑换勾选商品，互不影响
@@ -56,7 +70,11 @@ class ElemeMallEX : BaseFlashSaleTask() {
             if (items.isEmpty()) {
                 return listOf(MemberBenefit("", "暂无数据（请在【饿了么→兑换商城】点「拉取最新」）"))
             }
-            return items.map { MemberBenefit(it.id, "${it.pureTitle.ifEmpty { it.name }} [${it.consumeAmount}星]") }
+            return items.map {
+                val title = it.pureTitle.ifEmpty { it.name }
+                val timeTag = if (it.timeDesc.isNotEmpty()) " [${it.timeDesc}]" else ""
+                MemberBenefit(it.id, "$title [${it.consumeAmount}星]$timeTag")
+            }
         }
     }
 
@@ -109,7 +127,8 @@ class ElemeMallEX : BaseFlashSaleTask() {
      * 用旧目录发车必然失败；刷新失败时沿用本地缓存继续，不影响发车。
      */
     override fun onBeforeFire() {
-        val selected = runCatching { ElemeTask.getElemeExchangeItems().value }.getOrNull() ?: emptySet()
+        val selected = (runCatching { ElemeTask.getElemeExchangeItems().value }.getOrNull() ?: emptySet()) +
+            (elemeMallList?.value?.filter { it.isNotEmpty() }?.toSet() ?: emptySet())
         if (selected.isEmpty()) return
         runCatching {
             val init = ElemeAuth.ensureCookie()

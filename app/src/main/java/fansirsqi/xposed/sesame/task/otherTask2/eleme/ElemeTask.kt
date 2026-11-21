@@ -72,7 +72,7 @@ class ElemeTask : ModelTask() {
             "目标兑换商品",
             LinkedHashSet<String>(),
             ElemeMallEntity::getList,
-            "允许自动兑换的目标商品 ID 集合。本字段已在设置页隐藏，请通过【兑换商城】弹窗内每个商品的「自动兑换」勾选框维护（实时保存）。"
+            "允许自动兑换的目标商品 ID 集合。已与【秒杀任务→饿了么商城秒杀】完全双向联调打通，通过【兑换商城】弹窗勾选商品将自动同步秒杀列表、开抢整点与任务开关。"
         )
 
         @JvmField

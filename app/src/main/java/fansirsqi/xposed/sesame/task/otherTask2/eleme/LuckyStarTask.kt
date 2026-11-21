@@ -289,41 +289,93 @@ object LuckyStarTask {
                     val actionValue = actionConfig?.optJSONObject("actionValue")
                     val pageSpm = actionValue?.optString("pageSpm").orEmpty()
                     val sceneCode = actionValue?.optString("scenceCode").orEmpty()
+                    val alipayLink = task.optJSONObject("ext")?.optJSONObject("extValue")?.optString("alipayActionLink").orEmpty()
+                    val taskCollectionId = task.optString("missionCollectionId")
+                        .ifEmpty { task.optString("missionCollectId") }
+                        .ifEmpty { LuckyStarRpcCall.COLLECTION_ID }
 
-                    if (actionType == "PAGEVIEW" && pageSpm.isNotEmpty()) {
-                        // 停留时长对齐 幸运星.py：任务给出 pageStageTime 时取 max(3, 值)，缺失时随机 8~16 秒，
-                        // 不使用标题关键字猜测，避免自造行为特征
+                    val isShopClick = (actionType == "THIRD" && sceneCode == "commercial_click") ||
+                            (title.contains("店铺") && (title.contains("点击") || title.contains("逛")))
+
+                    if (isShopClick) {
+                        // 店铺点击任务：对齐 tb2.log 真实生命周期：打开落地页 -> 3次商户点击与进店安全打点 -> 标记待领奖
+                        val o2iAction = if (alipayLink.contains("o2i_action=")) {
+                            Regex("""o2i_action=([^&]+)""").find(alipayLink)?.groupValues?.get(1) ?: "GY_TASK_$missionDefId"
+                        } else {
+                            "GY_TASK_$missionDefId"
+                        }
+                        if (alipayLink.isNotEmpty()) {
+                            LuckyStarRpcCall.reportAlscPageRecall(cookie, alipayLink, missionDefId, taskCollectionId)
+                            Thread.sleep(RandomUtil.nextGaussianLong(400, 800))
+                        }
+                        val shops = LuckyStarRpcCall.DEFAULT_SHOPS
+                        val total = actionValue?.optInt("finalStageCount")?.takeIf { it > 0 }
+                            ?: task.optJSONObject("stage")?.optInt("targetCount")?.takeIf { it > 0 }
+                            ?: 3
+                        val done = task.optJSONObject("stage")?.optInt("count") ?: 0
+                        val need = (total - done).coerceAtLeast(0).coerceAtMost(3)
+                        Log.other("饿了么", "[幸运星] 🛍️ 店铺点击[$title] 需${total}次/已${done}次/补${need}次")
+                        var clickSuccess = need == 0
+                        for (step in 1..need) {
+                            val shopId = shops.getOrNull(step - 1) ?: shops.random()
+                            val clickRes = LuckyStarRpcCall.reportAdShopClick(cookie, shopId, o2iAction)
+                            if (clickRes.isSuccess) {
+                                LuckyStarRpcCall.reportStoreEnter(cookie, shopId)
+                                Log.other("饿了么", "[幸运星] 点击店铺[$shopId]完成 ($step/$need)")
+                                clickSuccess = true
+                            } else {
+                                Log.other("饿了么", "[幸运星] 点击店铺[$shopId]失败: ${clickRes.errorCode}::${clickRes.errorMsg}")
+                                clickSuccess = false
+                                break
+                            }
+                            Thread.sleep(RandomUtil.nextGaussianLong(1500, 2500))
+                        }
+                        if (need > 0 && clickSuccess) {
+                            Log.other("饿了么", "[幸运星] 完成[$title]")
+                            finishedCount++
+                            hasRewardable = true
+                        }
+                    } else if (actionType == "PAGEVIEW" && pageSpm.isNotEmpty()) {
+                        val hasModLanding = alipayLink.isNotEmpty() && alipayLink.contains("/wow/alsc/mod/")
                         val pageStageTime = actionValue?.optInt("pageStageTime")?.let { maxOf(3, it) }
                             ?: RandomUtil.nextInt(8, 16)
-                        Thread.sleep(pageStageTime * 1000L + RandomUtil.nextGaussianLong(500, 1500))
 
-                        val viewRes = LuckyStarRpcCall.reportPageView(
-                            cookie = cookie,
-                            missionDefId = missionDefId,
-                            pageSpm = pageSpm,
-                            viewTime = pageStageTime + RandomUtil.nextInt(0, 3),
-                            instanceId = task.optString("instanceId").takeIf { it.isNotEmpty() },
-                            collectionId = task.optString("missionCollectionId")
-                                .ifEmpty { task.optString("missionCollectId") }
-                                .ifEmpty { LuckyStarRpcCall.COLLECTION_ID }
-                        )
-                        if (viewRes.isSuccess) {
+                        if (hasModLanding) {
+                            // 携带 ALSC 模块落地页的任务（对齐 tb2.log 44914007 等真实时序：打开落地页召回 -> 真实停留浏览 -> 服务端完成）
+                            Log.other("饿了么", "[幸运星] 🌐 访问落地页[$title] (模拟浏览 ${pageStageTime} 秒)")
+                            LuckyStarRpcCall.reportAlscPageRecall(cookie, alipayLink, missionDefId, taskCollectionId)
+                            Thread.sleep(pageStageTime * 1000L + RandomUtil.nextGaussianLong(500, 1500))
                             Log.other("饿了么", "[幸运星] 完成[$title]")
                             finishedCount++
                             hasRewardable = true
                         } else {
-                            val rawResp = viewRes.rawJson?.toString() ?: ElemeMtopUtil.lastResponse ?: viewRes.errorMsg
-                            val errDetail = "[幸运星] ❌ 浏览[$title]失败: ${viewRes.errorCode}::${viewRes.errorMsg}\n完整响应:\n$rawResp"
-                            Log.error(TAG, errDetail)
-                            Log.other("饿了么", errDetail)
-                            val msg = viewRes.errorMsg
-                            if (viewRes.errorCode == "405" || msg.contains("405") || msg.contains("行为受限") || msg.contains("受限")) {
-                                val reason = "405::行为受限"
-                                ElemeRiskTaskEntity.recordRiskTask(missionDefId.toString(), title, reason)
-                                TaskBlacklist.autoAddToBlacklist(missionDefId.toString(), title, "405", viewRes.errorMsg)
-                                Log.other("饿了么", "[幸运星] 🛡️ 任务[$missionDefId - $title]因【$reason】已自动加入风控名单，后续执行将自动跳过")
-                                Log.other("饿了么", "[幸运星] ⛔ 检测到接口行为受限 (405::行为受限)，为保护账号安全，停止今日后续浏览埋点")
-                                break
+                            // 站内纯打点浏览任务（对齐 tb2.log 48532001 等真实时序：真实停留 -> 上报成长事件 event.pageview）
+                            Thread.sleep(pageStageTime * 1000L + RandomUtil.nextGaussianLong(500, 1500))
+                            val viewRes = LuckyStarRpcCall.reportPageView(
+                                cookie = cookie,
+                                missionDefId = missionDefId,
+                                pageSpm = pageSpm,
+                                instanceId = task.optString("instanceId").takeIf { it.isNotEmpty() },
+                                collectionId = taskCollectionId
+                            )
+                            if (viewRes.isSuccess) {
+                                Log.other("饿了么", "[幸运星] 完成[$title]")
+                                finishedCount++
+                                hasRewardable = true
+                            } else {
+                                val rawResp = viewRes.rawJson?.toString() ?: ElemeMtopUtil.lastResponse ?: viewRes.errorMsg
+                                val is405 = viewRes.errorCode == "405" || viewRes.errorMsg.contains("405") || viewRes.errorMsg.contains("行为受限") || viewRes.errorMsg.contains("受限")
+                                val errDetail = "[幸运星] ❌ 浏览[$title]失败: ${viewRes.errorCode}::${viewRes.errorMsg}\n完整响应:\n$rawResp"
+                                Log.error(TAG, errDetail)
+                                Log.other("饿了么", errDetail)
+                                if (is405) {
+                                    val reason = "405::行为受限"
+                                    ElemeRiskTaskEntity.recordRiskTask(missionDefId.toString(), title, reason)
+                                    TaskBlacklist.autoAddToBlacklist(missionDefId.toString(), title, "405", viewRes.errorMsg)
+                                    Log.other("饿了么", "[幸运星] 🛡️ 任务[$missionDefId - $title]因【$reason】已自动加入风控名单，后续执行将自动跳过")
+                                    Log.other("饿了么", "[幸运星] ⛔ 检测到接口行为受限 (405::行为受限)，停止今日后续浏览埋点")
+                                    break
+                                }
                             }
                         }
                         Thread.sleep(RandomUtil.nextGaussianLong(1200, 2000))
@@ -385,10 +437,11 @@ object LuckyStarTask {
                 // 与第一轮使用同一个 missionCollectionId（取自首页聚合），避免刷新查询换集合导致进度不一致
                 val refreshedResp = LuckyStarRpcCall.queryTaskList(cookie, collectionId = missionCollectionId)
                 val refreshedArray = LuckyStarRpcCall.extractTaskArray(refreshedResp) ?: taskArray
+                var baichuanPrizeRiskBlocked = false
 
                 for (i in 0 until refreshedArray.length()) {
-                    // 账号级风控命中后不再继续领奖
-                    if (ElemeMtopUtil.accountRiskFlagged) break
+                    // 账号级风控或百川领奖风控命中后不再继续领奖
+                    if (ElemeMtopUtil.accountRiskFlagged || baichuanPrizeRiskBlocked) break
                     val task = refreshedArray.optJSONObject(i) ?: continue
                     val missionDefId = task.optLong("missionDefId").takeIf { it > 0 } ?: task.optLong("id")
                     val title = LuckyStarRpcCall.taskTitle(task)
@@ -422,6 +475,12 @@ object LuckyStarTask {
                                 rewardedCount++
                             } else {
                                 val rawResp = prizeRes.rawJson?.toString() ?: ElemeMtopUtil.lastResponse ?: prizeRes.errorMsg
+                                val isBaichuan = rawResp.contains("RISK_USER") || rawResp.contains("NO_DECISION_ITEM") || rawResp.contains("风控用户")
+                                if (isBaichuan) {
+                                    Log.other("饿了么", "[幸运星] 🛡️ 领奖[$title]被百川风控拦截: 风控用户(RISK_USER)，本轮跳过领奖")
+                                    baichuanPrizeRiskBlocked = true
+                                    break
+                                }
                                 val errDetail = "[幸运星] ❌ 领奖[$title]失败: ${prizeRes.errorCode}::${prizeRes.errorMsg}\n完整响应:\n$rawResp"
                                 Log.error(TAG, errDetail)
                                 Log.other("饿了么", errDetail)
@@ -447,20 +506,26 @@ object LuckyStarTask {
                             rewardedCount++
                         } else {
                             val rawResp = prizeRes.rawJson?.toString() ?: ElemeMtopUtil.lastResponse ?: prizeRes.errorMsg
+                            val isBaichuan = rawResp.contains("RISK_USER") || rawResp.contains("NO_DECISION_ITEM") || rawResp.contains("风控用户")
+                            if (isBaichuan) {
+                                Log.other("饿了么", "[幸运星] 🛡️ 领奖[$title]被百川风控拦截: 风控用户(RISK_USER)，本轮跳过领奖")
+                                baichuanPrizeRiskBlocked = true
+                                break
+                            }
                             val errDetail = "[幸运星] ❌ 领奖[$title]失败: ${prizeRes.errorCode}::${prizeRes.errorMsg}\n完整响应:\n$rawResp"
                             Log.error(TAG, errDetail)
                             Log.other("饿了么", errDetail)
-                                if (prizeRes.errorCode == "405" || prizeRes.errorCode == "417" || prizeRes.errorMsg.contains("受限") || prizeRes.errorMsg.contains("作弊")) {
-                                    val reason = if (prizeRes.errorCode == "417" || prizeRes.errorMsg.contains("417")) "417::防作弊领奖拦截" else "405::行为受限"
-                                    ElemeRiskTaskEntity.recordRiskTask(missionDefId.toString(), title, reason)
-                                    TaskBlacklist.autoAddToBlacklist(missionDefId.toString(), title, prizeRes.errorCode, prizeRes.errorMsg)
-                                    Log.other("饿了么", "[幸运星] 🛡️ 任务[$missionDefId - $title]因【$reason】已自动加入风控名单，后续执行将自动跳过")
-                                } else if (ElemeRiskTaskEntity.isTaskClosedError(prizeRes.errorCode, prizeRes.errorMsg)) {
-                                    // 累计奖励类任务有时会被平台关闭（阶段永远无法达成），自动加入风控名单停止重试
-                                    ElemeRiskTaskEntity.recordRiskTask(missionDefId.toString(), title, "任务已关闭或阶段无法达成")
-                                    Log.other("饿了么", "[幸运星] 任务[$missionDefId - $title]已关闭或不可用，已自动加入风控名单，后续执行将自动跳过")
-                                }
+                            if (prizeRes.errorCode == "405" || prizeRes.errorCode == "417" || prizeRes.errorMsg.contains("受限") || prizeRes.errorMsg.contains("作弊")) {
+                                val reason = if (prizeRes.errorCode == "417" || prizeRes.errorMsg.contains("417")) "417::防作弊领奖拦截" else "405::行为受限"
+                                ElemeRiskTaskEntity.recordRiskTask(missionDefId.toString(), title, reason)
+                                TaskBlacklist.autoAddToBlacklist(missionDefId.toString(), title, prizeRes.errorCode, prizeRes.errorMsg)
+                                Log.other("饿了么", "[幸运星] 🛡️ 任务[$missionDefId - $title]因【$reason】已自动加入风控名单，后续执行将自动跳过")
+                            } else if (ElemeRiskTaskEntity.isTaskClosedError(prizeRes.errorCode, prizeRes.errorMsg)) {
+                                // 累计奖励类任务有时会被平台关闭（阶段永远无法达成），自动加入风控名单停止重试
+                                ElemeRiskTaskEntity.recordRiskTask(missionDefId.toString(), title, "任务已关闭或阶段无法达成")
+                                Log.other("饿了么", "[幸运星] 任务[$missionDefId - $title]已关闭或不可用，已自动加入风控名单，后续执行将自动跳过")
                             }
+                        }
                             Thread.sleep(RandomUtil.nextGaussianLong(1200, 2200))
                         }
                     }

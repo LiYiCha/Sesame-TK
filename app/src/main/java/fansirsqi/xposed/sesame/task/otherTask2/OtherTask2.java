@@ -68,6 +68,7 @@ public class OtherTask2 extends ModelTask {
     private IntegerModelField playConsultFacadeNum = new IntegerModelField("playConsultFacadeNum","会员|转盘-次数",10);
     private BooleanModelField topUpGoldTask = new BooleanModelField("topUpGoldTask", "充值金任务", false);
     public static final BooleanModelField gameCenterGoldCashExchange = new BooleanModelField("gameCenterGoldCashExchange", "游戏金币|兑换现金", false);
+    public static final IntegerModelField gameCenterGoldCashMinAmount = new IntegerModelField("gameCenterGoldCashMinAmount", "游戏金币|最低兑换门槛(元, 0为全额/10为仅大额)", 0, 0, 100);
 
 
     public static BooleanModelField getGameCenterGold() {
@@ -76,6 +77,10 @@ public class OtherTask2 extends ModelTask {
 
     public static BooleanModelField getGameCenterGoldCashExchange() {
         return gameCenterGoldCashExchange;
+    }
+
+    public static IntegerModelField getGameCenterGoldCashMinAmount() {
+        return gameCenterGoldCashMinAmount;
     }
 
     public static void disableGameCenterGoldCashExchange(String reason) {
@@ -96,6 +101,8 @@ public class OtherTask2 extends ModelTask {
         modelFields.addField(privilegeTask );
         modelFields.addField(gameCenterGold);
         modelFields.addField(gameCenterGoldCashExchange);
+        gameCenterGoldCashMinAmount.dependOn("gameCenterGoldCashExchange", true);
+        modelFields.addField(gameCenterGoldCashMinAmount);
         modelFields.addField(monthTRA);//月月赚
         modelFields.addField(scholarship);//奖学金
         modelFields.addField(scholarshipExchange);

@@ -244,7 +244,15 @@ object ElemeMtopUtil {
     @JvmStatic
     fun getSafeAlipayVersion(fallback: String = "12.12.30.8000"): String {
         return try {
-            fansirsqi.xposed.sesame.hook.context.AppContext.getAlipayVersion()?.versionString?.takeIf { it.isNotEmpty() } ?: fallback
+            val v = fansirsqi.xposed.sesame.hook.context.AppContext.getAlipayVersion()?.versionString?.takeIf { it.isNotEmpty() }
+            if (!v.isNullOrEmpty()) return v
+            val ctx = fansirsqi.xposed.sesame.hook.context.AppContext.getContext()
+            if (ctx != null) {
+                val pkgInfo = ctx.packageManager?.getPackageInfo("com.eg.android.AlipayGphone", 0)
+                val verName = pkgInfo?.versionName
+                if (!verName.isNullOrEmpty()) return verName
+            }
+            fallback
         } catch (_: Throwable) {
             fallback
         }
@@ -573,7 +581,8 @@ object ElemeMtopUtil {
             val m = android.os.Build.MODEL.orEmpty()
             val brd = android.os.Build.BRAND.orEmpty()
             val disp = formatBrandModelDisplay(brd, null, m)
-            "{\"model\":\"$disp\",\"brandModel\":\"$brd/$m\",\"system\":\"Android ${android.os.Build.VERSION.RELEASE}\",\"kernel\":\"Chrome $CAPTURED_CHROME_VERSION / MYWeb $CAPTURED_MYWEB_VERSION\",\"screen\":\"\",\"alipayVer\":\"12.12.30.8000\",\"ua\":\"\",\"isCustom\":false}"
+            val dynamicVer = getSafeAlipayVersion()
+            "{\"model\":\"$disp\",\"brandModel\":\"$brd/$m\",\"system\":\"Android ${android.os.Build.VERSION.RELEASE}\",\"kernel\":\"Chrome $CAPTURED_CHROME_VERSION / MYWeb $CAPTURED_MYWEB_VERSION\",\"screen\":\"\",\"alipayVer\":\"$dynamicVer\",\"ua\":\"\",\"isCustom\":false}"
         }
     }
 
@@ -839,7 +848,8 @@ object ElemeMtopUtil {
         // 今日状态：任务未完成环节每次触发都会重新拉取并处理；签到/夺宝/下单抽奖/爆红包为每日单次，
         // 完成后置位标记当日不再请求
         val flags = readTodayFlags()
-        val todayText = "• 签到: ${if (flags.contains(FreeOrderTask.FLAG_SIGNIN)) "已完成" else "未完成"}\n" +
+        val todayText = "• 幸运星签到: ${if (flags.contains(FreeOrderTask.FLAG_SIGNIN)) "已完成" else "未完成"}\n" +
+                "• 免单打卡: ${if (flags.contains(FreeOrderTask.FLAG_ETMD_SIGNIN)) "已完成" else "未完成"}\n" +
                 "• 夺宝抽奖: ${if (flags.contains(FreeOrderTask.FLAG_LOTTERY_DONE)) "次数已用完" else "未完成"}\n" +
                 "• 下单免单抽奖: ${if (flags.contains(FreeOrderTask.FLAG_ORDER_FREE)) "已抽" else "未抽"}\n" +
                 "• 外卖爆红包: ${if (flags.contains("Eleme_BurstRed_Done")) "已领取" else "未领取"}"
@@ -1079,9 +1089,11 @@ object ElemeMtopUtil {
                 cornerRadius = 16f
             }
         }
-        // 汇总条用单个 TextView + Spannable 一行显示，避免多个子 View 在窄屏被挤成竖排
+        // 汇总条用单个 TextView + Spannable 一行显示，避免多个子 View 在窄屏被挤成竖排（与秒杀列表并集计算已选数）
         val selectedCount = mallItems.count { item ->
-            (runCatching { ElemeTask.getElemeExchangeItems().value }.getOrNull() ?: emptySet<String>()).contains(item.id)
+            val s1 = runCatching { ElemeTask.getElemeExchangeItems().value }.getOrNull() ?: emptySet<String>()
+            val s2 = runCatching { fansirsqi.xposed.sesame.task.exchange.FlashSaleModule.elemeMallList.value }.getOrNull() ?: emptySet<String>()
+            s1.contains(item.id) || s2.contains(item.id)
         }
         val summaryText = android.text.SpannableStringBuilder().apply {
             fun appendSeg(label: String, value: String, valueColor: Int) {
@@ -1173,22 +1185,45 @@ object ElemeMtopUtil {
                     card.addView(tvStock)
                 }
 
-                // 自动兑换勾选框：直接读写【目标兑换商品】勾选集合并实时落盘
+                // 自动兑换勾选框：直接读写【目标兑换商品】与【秒杀任务】勾选集合，双向联调并实时落盘
                 val cbExchange = android.widget.CheckBox(context).apply {
                     text = "自动兑换"
                     textSize = 12.5f
-                    val selected = runCatching { ElemeTask.getElemeExchangeItems().value }.getOrNull() ?: emptySet<String>()
-                    isChecked = selected.contains(item.id)
+                    val isInitiallySelected = runCatching {
+                        val s1 = ElemeTask.getElemeExchangeItems().value ?: emptySet<String>()
+                        val s2 = fansirsqi.xposed.sesame.task.exchange.FlashSaleModule.elemeMallList.value ?: emptySet<String>()
+                        s1.contains(item.id) || s2.contains(item.id)
+                    }.getOrDefault(false)
+                    isChecked = isInitiallySelected
                     setTextColor(if (isChecked) okColor else secondaryColor)
                     setPadding(0, 6, 0, 0)
                     setOnCheckedChangeListener { _, checked ->
                         // 全链路容灾：任何异常（配置未加载、UID 为空、磁盘写入失败）都不得冒泡导致设置页闪退
                         runCatching {
-                            val set = LinkedHashSet(
+                            val set1 = LinkedHashSet(
                                 runCatching { ElemeTask.getElemeExchangeItems().value }.getOrNull() ?: emptySet<String>()
                             )
-                            if (checked) set.add(item.id) else set.remove(item.id)
-                            ElemeTask.getElemeExchangeItems().value = set
+                            val set2 = LinkedHashSet(
+                                runCatching { fansirsqi.xposed.sesame.task.exchange.FlashSaleModule.elemeMallList.value }.getOrNull() ?: emptySet<String>()
+                            )
+                            if (checked) {
+                                set1.add(item.id)
+                                set2.add(item.id)
+                                // 自动开启秒杀任务开关
+                                fansirsqi.xposed.sesame.task.exchange.FlashSaleModule.enableElemeMall.value = true
+                                // 若商品有明确补货整点，自动同步设置秒杀开抢时间
+                                if (item.restockHour in 0..23) {
+                                    fansirsqi.xposed.sesame.task.exchange.FlashSaleModule.elemeMallTargetHour.value = item.restockHour
+                                }
+                            } else {
+                                set1.remove(item.id)
+                                set2.remove(item.id)
+                                if (set1.isEmpty() && set2.isEmpty()) {
+                                    fansirsqi.xposed.sesame.task.exchange.FlashSaleModule.enableElemeMall.value = false
+                                }
+                            }
+                            ElemeTask.getElemeExchangeItems().value = set1
+                            fansirsqi.xposed.sesame.task.exchange.FlashSaleModule.elemeMallList.value = set2
                             setTextColor(if (checked) okColor else secondaryColor)
                             // 配置落盘放在后台线程，避免在主线程做磁盘 IO 卡顿/ANR
                             Thread {
@@ -1200,7 +1235,8 @@ object ElemeMtopUtil {
                                     fansirsqi.xposed.sesame.util.Log.error("ElemeMall", "勾选兑换商品保存失败: ${t.message}")
                                 }
                             }.start()
-                            fansirsqi.xposed.sesame.hook.Toast.show(if (checked) "已勾选自动兑换: $title" else "已取消自动兑换: $title")
+                            val extraTip = if (checked && item.restockHour in 0..23) "（已联动秒杀任务，开抢时间: ${item.restockHour}点）" else if (checked) "（已联动开启秒杀任务）" else ""
+                            fansirsqi.xposed.sesame.hook.Toast.show(if (checked) "已勾选自动兑换: $title$extraTip" else "已取消自动兑换: $title")
                         }.onFailure { t ->
                             fansirsqi.xposed.sesame.util.Log.error("ElemeMall", "勾选兑换商品异常: ${t.message}")
                         }
@@ -1230,7 +1266,7 @@ object ElemeMtopUtil {
             }
 
             val tipTv = android.widget.TextView(context).apply {
-                text = "\n提示: 在商品卡片内勾选「自动兑换」（实时保存），并开启【兑换商品】开关后，星数达标将自动为您兑换！"
+                text = "\n提示: 在商品卡片内勾选「自动兑换」（已与【秒杀任务】完全联调打通，勾选即自动开启秒杀任务并同步补货整点！）。"
                 textSize = 12f
                 setTextColor(secondaryColor)
                 setPadding(0, 10, 0, 10)

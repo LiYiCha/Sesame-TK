@@ -22,6 +22,7 @@ object ElemeAuth {
     private const val KEY_COOKIE = "Eleme_Cookie"
     private const val KEY_EXPIRES = "Eleme_Cookie_Expires"
     private const val KEY_USER_ID = "Eleme_UserId"
+    private const val KEY_APP_TOKEN = "Eleme_App_Token"
 
     /** 默认小程序 User-Agent */
     /**
@@ -31,12 +32,9 @@ object ElemeAuth {
      */
     const val DEFAULT_UA = "Mozilla/5.0 (Linux; Android 16; V2238A Build/BP2A.250605.031.A3; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/126.0.6478.122 MYWeb/1.11.126.260911211123 UWS/3.22.2.9999 UCBS/3.22.2.9999_220000000000 Mobile Safari/537.36 NebulaSDK/1.8.100112 Nebula AlipayDefined(nt:WIFI,ws:384|0|2.8125) AliApp(AP/12.12.30.8000) AlipayClient/12.12.30.8000 Language/zh-Hans isConcaveScreen/false Region/CNAriver/12.12.30.8000"
 
-    /** 换票请求实际使用的 UA：优先用户自定义 UA，未设置时用与抓包一致的兜底模板 */
+    /** 换票请求实际使用的 UA：统一通过 ElemeMtopUtil 获取动态设备指纹与支付宝版本 */
     private fun currentUa(): String {
-        val custom = runCatching {
-            fansirsqi.xposed.sesame.task.otherTask2.eleme.ElemeTask.getElemeCustomUa().value.orEmpty().trim()
-        }.getOrNull().orEmpty()
-        return custom.ifEmpty { DEFAULT_UA }
+        return ElemeMtopUtil.getActiveProfile().httpUa()
     }
 
     /** 提前 30 分钟刷新避免边界失效 */
@@ -48,10 +46,36 @@ object ElemeAuth {
     private var memoryCookie: String = ""
     @Volatile
     private var memoryExpiresAt: Long = 0L
+    @Volatile
+    private var memoryAppToken: String = ""
 
     fun getUidKey(prefix: String): String {
         val uid = UserMap.currentUid
         return if (!uid.isNullOrEmpty()) "${prefix}_$uid" else prefix
+    }
+
+    /**
+     * 外部网络捕获注入真实小程序免单凭证 appToken
+     */
+    @Synchronized
+    fun saveCapturedAppToken(token: String) {
+        if (token.isBlank()) return
+        memoryAppToken = token
+        DataStore.put(getUidKey(KEY_APP_TOKEN), token)
+        Log.other("饿了么", "[授权] 已自动同步真机小程序免单凭证(appToken)")
+    }
+
+    /**
+     * 读取免单凭证 appToken（优先内存，其次本地存储）
+     */
+    fun getAppToken(): String {
+        if (memoryAppToken.isNotEmpty()) return memoryAppToken
+        val disk = DataStore.get(getUidKey(KEY_APP_TOKEN), String::class.java).orEmpty()
+        if (disk.isNotEmpty()) {
+            memoryAppToken = disk
+            return disk
+        }
+        return ""
     }
 
     /**

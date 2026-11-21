@@ -34,10 +34,29 @@ object LuckyStarRpcCall {
     const val API_CARD_DATA_RECALL = "mtop.alsc.card.cardDataRecallFacade"
     const val API_RIGHTS_PAGE_RECALL = "mtop.ele.rights.page.recall"
 
+    // 商业化广告点击（对齐 tb2.log 真实生命周期）
+    const val API_AD_ACTION = "mtop.o2o.ad.action.get"
+    const val API_STORE_ENTER = "mtop.alsc.security.xteam.report.store.enter"
+    const val API_PAGE_RECALL = "mtop.alsc.activity.recall.pagerecall"
+
+    val DEFAULT_SHOPS = listOf("E17114852004455759851", "E10646771939934355446", "E5546719372226793034")
+
     // 趣味话题答题/猜价格（对齐 幸运星.py quiz_query/quiz_submit/quiz_award）
     const val API_QUIZ_QUERY = "mtop.alsc.interact.playapp.quiz.query"
     const val API_QUIZ_SUBMIT = "mtop.alsc.interact.playapp.quiz.submit"
     const val API_QUIZ_AWARD = "mtop.alsc.interact.playapp.quiz.award"
+
+    // 天天免单 (ETMD) 专属 API 与常量（严格对齐 tb2.log 抓包）
+    const val API_ETMD_HOMEPAGE = "mtop.alsc.interact.et.md.homepage"
+    const val API_ETMD_SIGN_QUERY = "mtop.koubei.interactioncenter.sign.component.querysigninfo"
+    const val API_ETMD_SIGN_RECORD = "mtop.koubei.interactioncenter.sign.component.recordsignin"
+    const val API_ETMD_ICON_DRAW = "mtop.ele.growth.fission.client.etmd.et.icondraw"
+
+    const val ETMD_COLLECTION_ID = "2602"
+    const val ETMD_BIZ_SCENE = "ETMD"
+    const val ETMD_CHANNEL_SCENE = "ETMD_CHANNEL"
+    const val ETMD_VERSION = "1.10.27"
+    const val ETMD_DEFAULT_UNION_PARAMS = "scene=bc3900efd5aa428f895605cdeabca7e8"
 
     const val ASAC_PRIZE = "alscadOjfleDPawx9zVoT0"
     const val ASAC_PAGEVIEW = "alscFS8BNTO6jivYS7XOAM"
@@ -60,16 +79,23 @@ object LuckyStarRpcCall {
     }
 
     /**
-     * 查询任务列表（支持全量列表或单任务精准刷新）
+     * 查询任务列表（支持全量列表或单任务精准刷新，兼容幸运星 3112 与天天免单 2602）
      * @param missionId 若指定则仅刷新该任务状态
      */
-    fun queryTaskList(cookie: String, missionId: Long? = null, collectionId: String = COLLECTION_ID): JSONObject? {
+    fun queryTaskList(
+        cookie: String,
+        missionId: Long? = null,
+        collectionId: String = COLLECTION_ID,
+        bizScene: String = if (collectionId == ETMD_COLLECTION_ID) ETMD_CHANNEL_SCENE else BIZ_SCENE
+    ): JSONObject? {
         val (lat, lng) = getCoordinates()
         val locInfo = "[\"{\\\"lng\\\":\\\"$lng\\\",\\\"lat\\\":\\\"$lat\\\"}\"]"
         val data = JSONObject().apply {
             put("missionCollectionId", collectionId)
-            put("bizScene", BIZ_SCENE)
-            put("launchChannels", "[]")
+            put("bizScene", bizScene)
+            if (bizScene == BIZ_SCENE) {
+                put("launchChannels", "[]")
+            }
             if (missionId != null && missionId > 0) {
                 put("missionIds", "[$missionId]")
             }
@@ -77,7 +103,9 @@ object LuckyStarRpcCall {
             put("longitude", lng)
             put("latitude", lat)
             put("locationInfos", locInfo)
-            put("spPageId", SP_PAGE_ID)
+            if (bizScene == BIZ_SCENE) {
+                put("spPageId", SP_PAGE_ID)
+            }
             put("instance", "INNER")
         }
         return ElemeMtopUtil.send(API_QUERY_TASK, data.toString(), cookie, method = "GET")
@@ -135,9 +163,14 @@ object LuckyStarRpcCall {
     }
 
     /**
-     * 智能领取任务奖励（自动适配多阶段 stageCount 与单节点参数）
+     * 智能领取任务奖励（严格对齐 tb2.log 真实参数与 Header asac）
      */
-    fun receivePrize(cookie: String, task: JSONObject, targetStage: JSONObject? = null): ElemeMtopUtil.MtopResult {
+    fun receivePrize(
+        cookie: String,
+        task: JSONObject,
+        targetStage: JSONObject? = null,
+        bizScene: String = BIZ_SCENE
+    ): ElemeMtopUtil.MtopResult {
         val missionDefId = task.optLong("missionDefId").takeIf { it > 0 } ?: task.optLong("id")
         val missionXId = task.optString("missionXId")
         val collectionId = task.optString("missionCollectionId").ifEmpty {
@@ -148,63 +181,58 @@ object LuckyStarRpcCall {
 
         val (lat, lng) = getCoordinates()
         val locInfo = "[\"{\\\"lng\\\":\\\"$lng\\\",\\\"lat\\\":\\\"$lat\\\"}\"]"
+        val count = if (stage != null && stage.has("stageCount")) {
+            stage.optInt("stageCount")
+        } else {
+            task.optJSONObject("actionConfig")?.optJSONObject("actionValue")?.optInt("finalStageCount")?.takeIf { it > 0 } ?: 1
+        }
         val data = JSONObject().apply {
-            put("sync", true)
-            put("bizScene", BIZ_SCENE)
+            put("missionCollectionId", collectionId.toIntOrNull() ?: 3112)
+            put("missionId", missionDefId)
+            if (missionXId.isNotEmpty()) {
+                put("missionXId", missionXId)
+            }
+            put("extInfo", "{\"triggerScene\":\"MISSION_LIST\"}")
+            put("count", count)
+            if (instanceId.isNotEmpty()) {
+                put("instanceId", instanceId)
+            }
+            put("bizScene", bizScene)
             put("accountPlan", "HAVANA_COMMON")
             put("longitude", lng)
             put("latitude", lat)
             put("locationInfos", locInfo)
-            put("missionCollectionId", collectionId.toIntOrNull() ?: 3112)
-            put("missionId", missionDefId)
-            put("asac", ASAC_PRIZE)
-            if (missionXId.isNotEmpty()) {
-                put("missionXId", missionXId)
-            }
-            if (instanceId.isNotEmpty()) {
-                put("instanceId", instanceId)
-            }
-            if (stage != null) {
-                if (stage.has("stageCount")) {
-                    put("count", stage.optInt("stageCount"))
-                }
-                if (stage.has("stageSum")) {
-                    put("sum", stage.optInt("stageSum"))
-                }
-            } else {
-                put("count", 1)
-                put("extInfo", "{\"triggerScene\":\"MISSION_LIST\"}")
-            }
+            put("spPageId", SP_PAGE_ID)
+            put("instance", "INNER")
         }
-        // 对齐 幸运星.py：asac 仅随 data 传递，不额外携带 header（避免多带 header 触发风控）
-        return ElemeMtopUtil.execute(API_RECEIVE_PRIZE, data.toString(), cookie, method = "GET")
+        val headers = mapOf("asac" to ASAC_PRIZE)
+        return ElemeMtopUtil.execute(API_RECEIVE_PRIZE, data.toString(), cookie, method = "GET", version = "1.0", extraHeaders = headers)
     }
 
     /**
-     * 浏览任务埋点上报（模拟停留并提交事件）
+     * 浏览任务埋点上报（严格对齐 tb2.log 真实生命周期与 Header asac）
      */
     fun reportPageView(
         cookie: String,
         missionDefId: Long,
         pageSpm: String,
-        viewTime: Int = 15,
         instanceId: String? = null,
-        collectionId: String = COLLECTION_ID
+        collectionId: String = COLLECTION_ID,
+        bizScene: String = BIZ_SCENE
     ): ElemeMtopUtil.MtopResult {
         val (lat, lng) = getCoordinates()
         val locInfo = "[\"{\\\"lng\\\":\\\"$lng\\\",\\\"lat\\\":\\\"$lat\\\"}\"]"
         val data = JSONObject().apply {
             put("sync", true)
-            put("bizScene", BIZ_SCENE)
+            put("collectionId", collectionId.toIntOrNull() ?: 3112)
+            put("missionId", missionDefId)
+            put("pageFrom", pageSpm.ifEmpty { "a2ogi.bx1500380" })
+            put("actionCode", "PAGEVIEW")
+            put("bizScene", bizScene)
             put("accountPlan", "HAVANA_COMMON")
             put("longitude", lng)
             put("latitude", lat)
             put("locationInfos", locInfo)
-            put("collectionId", collectionId.toLongOrNull() ?: 3112L)
-            put("missionId", missionDefId)
-            put("pageFrom", pageSpm)
-            put("actionCode", "PAGEVIEW")
-            put("viewTime", viewTime)
             if (!instanceId.isNullOrEmpty()) {
                 put("instanceId", instanceId)
             }
@@ -213,6 +241,39 @@ object LuckyStarRpcCall {
         }
         val headers = mapOf("asac" to ASAC_PAGEVIEW)
         return ElemeMtopUtil.execute(API_PAGEVIEW, data.toString(), cookie, method = "GET", version = "1.1", extraHeaders = headers)
+    }
+
+    /**
+     * 活动落地页/H5模块召回（如“浏览外卖品质好店”、“点击3个店铺”主会场、安心权益等）
+     * 严格遵循 tb2.log 真实生命周期：打开落地页向服务端登记页面访问与挂载任务
+     */
+    fun reportAlscPageRecall(
+        cookie: String,
+        pageUrl: String,
+        missionDefId: Long? = null,
+        collectionId: String = COLLECTION_ID,
+        bizScene: String = BIZ_SCENE,
+        asac: String = ASAC_PAGEVIEW
+    ): ElemeMtopUtil.MtopResult {
+        val (lat, lng) = getCoordinates()
+        var path = pageUrl
+        if (missionDefId != null && !path.contains("missionid=")) {
+            val sep = if (path.contains("?")) "&" else "?"
+            path = "$path${sep}missioncollectid=$collectionId&missionid=$missionDefId&bizscene=$bizScene&taskfrom=a2ogi.bx1500380&taskpageviewasac=$asac&preloadSite=eleme&miniAppFrom=elmc&longitude=$lng&latitude=$lat"
+        }
+        val locDto = JSONObject().apply {
+            put("latitude", lat.toDoubleOrNull() ?: 25.274215)
+            put("longitude", lng.toDoubleOrNull() ?: 110.299121)
+            put("locationType", "realTime")
+        }
+        val data = JSONObject().apply {
+            put("source", "ALSC_MOD")
+            put("bizCode", "")
+            put("pagePath", path)
+            put("locationDTO", locDto.toString())
+            put("pageScreenDTO", "{}")
+        }
+        return ElemeMtopUtil.execute(API_PAGE_RECALL, data.toString(), cookie, method = "GET", version = "1.0")
     }
 
     /**
@@ -244,6 +305,64 @@ object LuckyStarRpcCall {
             put("missionXId", missionXId)
         }
         return ElemeMtopUtil.execute(API_TRIGGER, data.toString(), cookie, method = "GET", version = "1.1")
+    }
+
+    /**
+     * 商业化广告/店铺点击上报（如“在页面内点击3个店铺”）
+     * 对齐 tb2.log 真实调用链路：通过 mtop.o2o.ad.action.get 独立上报店铺点击行为
+     */
+    fun reportAdShopClick(
+        cookie: String,
+        shopId: String,
+        o2iAction: String = "GY_TASK_44914003"
+    ): ElemeMtopUtil.MtopResult {
+        val (lat, lng) = getCoordinates()
+        val now = System.currentTimeMillis()
+        val randomSuffix = (1000..9999).random().toString() + (1000..9999).random().toString()
+        val clickId = "O2O_A20_${randomSuffix.take(6)}$now"
+        val pObj = JSONObject().apply {
+            put("spmid", "a13.b_activity_m179203_8")
+            put("visit_time", now)
+            put("biz_unit", 3)
+            put("shop_id", shopId)
+            put("ct", now - (10..50).random())
+            put("spm", "a13.b_activity_m179203_8.mod121408-1739948095277DPCDy.whole-card")
+            put("o2i_action", o2iAction)
+            put("latitude", lat.toDoubleOrNull() ?: 25.274215)
+            put("longitude", lng.toDoubleOrNull() ?: 110.299121)
+            put("ua", JSONObject())
+            put("alsc_exsrc", "ES0000008947")
+            put("gmkey", "CLK")
+            put("alsc_clk_id", clickId)
+            put("alsc_pvid", "a13.b_activity_m179203_8_${java.util.UUID.randomUUID()}_$now")
+            put("typekey", "action")
+            put("o2oclickid", clickId)
+            put("advertiser_id", shopId)
+            put("advertiser_type", 1)
+            put("publish_object_id", shopId)
+            put("publish_object_type", 2)
+            put("is_shop", 1)
+            put("is_goods", 0)
+            put("is_coupon", 0)
+            put("adVersion", "2.2.2-H5")
+            put("is_ad", 0)
+        }
+        val data = JSONObject().apply {
+            put("actionId", clickId)
+            put("o2oclickid", clickId)
+            put("p", pObj.toString())
+        }
+        return ElemeMtopUtil.execute(API_AD_ACTION, data.toString(), cookie, method = "GET", version = "1.0")
+    }
+
+    /**
+     * 模拟进店安全打点（对齐 tb2.log 真实调用链路：店铺点击后进店上报）
+     */
+    fun reportStoreEnter(cookie: String, shopId: String): ElemeMtopUtil.MtopResult {
+        val data = JSONObject().apply {
+            put("shopId", shopId)
+        }
+        return ElemeMtopUtil.execute(API_STORE_ENTER, data.toString(), cookie, method = "POST", version = "1.0")
     }
 
     /**
@@ -354,14 +473,23 @@ object LuckyStarRpcCall {
     }
 
     /**
-     * 查询签到提醒与弹窗服务（模拟页面弹窗行为，对应 tb.log 第 1508 行）
+     * 查询签到提醒与弹窗服务（模拟页面弹窗行为，兼容幸运星与天天免单，对齐 tb2.log Line 2268/2279）
      */
-    fun querySubscribeRemind(cookie: String): JSONObject? {
+    fun querySubscribeRemind(
+        cookie: String,
+        sceneCode: String = "TaobaoFlashxyxqd",
+        bizScene: String? = null,
+        version: String? = null
+    ): JSONObject? {
         val data = JSONObject().apply {
-            put("sceneCode", "TaobaoFlashxyxqd")
+            if (!bizScene.isNullOrEmpty()) put("bizScene", bizScene)
+            if (!version.isNullOrEmpty()) put("version", version)
             put("dimensionList", "[\"DEFAULT\"]")
             put("channel", "ALIPAY")
-            put("spPageId", SP_PAGE_ID)
+            put("sceneCode", sceneCode)
+            if (bizScene == null) {
+                put("spPageId", SP_PAGE_ID)
+            }
             put("instance", "INNER")
         }
         return ElemeMtopUtil.send(API_SUBSCRIBE_REMIND, data.toString(), cookie, method = "GET")
@@ -653,5 +781,86 @@ object LuckyStarRpcCall {
         }
         val headers = mapOf("asac" to ASAC_QUIZ_AWARD)
         return ElemeMtopUtil.execute(API_QUIZ_AWARD, data.toString(), cookie, method = "GET", version = "1.0", extraHeaders = headers)
+    }
+
+    /**
+     * 查询天天免单 (ETMD) 首页配置与主会场数据（对齐 tb2.log 真实生命周期）
+     * @param modules 传 ["mainPage"] 时拉取主会场抽奖卡片与机会数；传 null 时拉取初始外显与组件配置
+     */
+    fun queryEtmdHomepage(
+        cookie: String,
+        modules: String? = null,
+        unionParams: String = ETMD_DEFAULT_UNION_PARAMS
+    ): JSONObject? {
+        val (lat, lng) = getCoordinates()
+        val data = JSONObject().apply {
+            put("bizScene", ETMD_BIZ_SCENE)
+            put("version", ETMD_VERSION)
+            if (!modules.isNullOrEmpty()) {
+                put("modules", modules)
+                put("unionParams", unionParams)
+            } else {
+                put("cpnCodes", "[\"PLAY_NOTICE_CPN\",\"PLAY_RESOURCE_CPN\",\"ETMD_MOOD_CONFIG_CPN\",\"ETMD_PENDING_CARD_COMPONENT\"]")
+            }
+            put("latitude", lat)
+            put("longitude", lng)
+            put("instance", "INNER")
+        }
+        return ElemeMtopUtil.send(API_ETMD_HOMEPAGE, data.toString(), cookie, method = "GET", version = "1.0")
+    }
+
+    /**
+     * 查询天天免单签到组件信息（对齐 tb2.log Line 2271, 2283）
+     * 用于提取 copyId 与今日是否已打卡
+     */
+    fun queryEtmdSignInfo(cookie: String): JSONObject? {
+        val (lat, lng) = getCoordinates()
+        val data = JSONObject().apply {
+            put("bizScene", ETMD_BIZ_SCENE)
+            put("latitude", lat)
+            put("longitude", lng)
+            put("instance", "INNER")
+        }
+        return ElemeMtopUtil.send(API_ETMD_SIGN_QUERY, data.toString(), cookie, method = "GET", version = "1.0")
+    }
+
+    /**
+     * 天天免单打卡签到（对齐 tb2.log Line 2312, 2317）
+     * 连续签到直接发放免单抽奖机会 (stageReward.prizeType = MD_CHANCE)
+     */
+    fun recordEtmdSignIn(cookie: String, copyId: String): ElemeMtopUtil.MtopResult {
+        val (lat, lng) = getCoordinates()
+        val data = JSONObject().apply {
+            put("copyId", copyId)
+            put("bizScene", ETMD_BIZ_SCENE)
+            put("latitude", lat)
+            put("longitude", lng)
+            put("instance", "INNER")
+        }
+        return ElemeMtopUtil.execute(API_ETMD_SIGN_RECORD, data.toString(), cookie, method = "GET", version = "1.1")
+    }
+
+    /**
+     * 天天免单抽奖/开奖（对齐 tb2.log Line 2359, 2364, 2385, 2391）
+     * 消耗免单抽奖机会，获取免单/奶茶/大额优惠券
+     */
+    fun drawEtmdIcon(
+        cookie: String,
+        unionParams: String = ETMD_DEFAULT_UNION_PARAMS,
+        token: String = ""
+    ): ElemeMtopUtil.MtopResult {
+        val (lat, lng) = getCoordinates()
+        val actualToken = token.ifEmpty { ElemeAuth.getAppToken() }
+            .ifEmpty { "kFkKL6PahD2hOZGY8TW8WN7Gqv5faZEm0vjOXHCQJ0NsAgjCzXb9oQEB" }
+        val data = JSONObject().apply {
+            put("bizScene", ETMD_BIZ_SCENE)
+            put("version", ETMD_VERSION)
+            put("unionParams", unionParams)
+            put("latitude", lat)
+            put("longitude", lng)
+            put("token", actualToken)
+            put("instance", "INNER")
+        }
+        return ElemeMtopUtil.execute(API_ETMD_ICON_DRAW, data.toString(), cookie, method = "GET", version = "1.0")
     }
 }

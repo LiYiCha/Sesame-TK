@@ -50,8 +50,24 @@ public class ElemeMallEntity extends MapperEntity {
     public String timeDesc;
     public String ruleDesc;
     public String stockDesc;
+    public int restockHour = -1;
 
-    public ElemeMallEntity(String id, String name, String pureTitle, int consumeAmount, String actId, String exchangeCollectionId, String actCode, String exchangeStatus, int gapAmount, String timeDesc, String ruleDesc, String stockDesc) {
+    public static int parseHourFromTimeDesc(String text) {
+        if (text == null || text.isEmpty()) return -1;
+        try {
+            java.util.regex.Matcher m = java.util.regex.Pattern.compile("(\\d{1,2})点").matcher(text);
+            if (m.find()) {
+                return Integer.parseInt(m.group(1));
+            }
+            java.util.regex.Matcher m2 = java.util.regex.Pattern.compile("\\s+(\\d{1,2}):\\d{2}").matcher(text);
+            if (m2.find()) {
+                return Integer.parseInt(m2.group(1));
+            }
+        } catch (Throwable ignored) {}
+        return -1;
+    }
+
+    public ElemeMallEntity(String id, String name, String pureTitle, int consumeAmount, String actId, String exchangeCollectionId, String actCode, String exchangeStatus, int gapAmount, String timeDesc, String ruleDesc, String stockDesc, int restockHour) {
         this.id = id;
         this.name = name;
         this.pureTitle = pureTitle != null && !pureTitle.isEmpty() ? pureTitle : name;
@@ -64,6 +80,11 @@ public class ElemeMallEntity extends MapperEntity {
         this.timeDesc = timeDesc != null ? timeDesc : "";
         this.ruleDesc = ruleDesc != null ? ruleDesc : "";
         this.stockDesc = stockDesc != null ? stockDesc : "";
+        this.restockHour = restockHour;
+    }
+
+    public ElemeMallEntity(String id, String name, String pureTitle, int consumeAmount, String actId, String exchangeCollectionId, String actCode, String exchangeStatus, int gapAmount, String timeDesc, String ruleDesc, String stockDesc) {
+        this(id, name, pureTitle, consumeAmount, actId, exchangeCollectionId, actCode, exchangeStatus, gapAmount, timeDesc, ruleDesc, stockDesc, parseHourFromTimeDesc(timeDesc));
     }
 
     public ElemeMallEntity(String id, String name, int consumeAmount, String actId, String exchangeCollectionId, String actCode, String exchangeStatus, int gapAmount, String timeDesc, String ruleDesc, String stockDesc) {
@@ -75,10 +96,14 @@ public class ElemeMallEntity extends MapperEntity {
         loadFromLocalCache();
     }
 
-    public static synchronized void recordItem(String id, String name, String pureTitle, int cost, String actId, String colId, String actCode, String status, int gap, String timeDesc, String ruleDesc, String stockDesc) {
+    public static synchronized void recordItem(String id, String name, String pureTitle, int cost, String actId, String colId, String actCode, String status, int gap, String timeDesc, String ruleDesc, String stockDesc, int restockHour) {
         if (id != null && !id.trim().isEmpty()) {
-            MALL_ITEMS.put(id.trim(), new ElemeMallEntity(id.trim(), name, pureTitle, cost, actId, colId, actCode, status, gap, timeDesc, ruleDesc, stockDesc));
+            MALL_ITEMS.put(id.trim(), new ElemeMallEntity(id.trim(), name, pureTitle, cost, actId, colId, actCode, status, gap, timeDesc, ruleDesc, stockDesc, restockHour));
         }
+    }
+
+    public static synchronized void recordItem(String id, String name, String pureTitle, int cost, String actId, String colId, String actCode, String status, int gap, String timeDesc, String ruleDesc, String stockDesc) {
+        recordItem(id, name, pureTitle, cost, actId, colId, actCode, status, gap, timeDesc, ruleDesc, stockDesc, parseHourFromTimeDesc(timeDesc));
     }
 
     public static synchronized void recordItem(String id, String name, int cost, String actId, String colId, String actCode, String status, int gap, String timeDesc, String ruleDesc, String stockDesc) {
@@ -124,8 +149,25 @@ public class ElemeMallEntity extends MapperEntity {
             }
 
             // 提取秒杀兑换时间表、排期与规则
+            String cornerMark = it.optString("cornerMark", "");
+            String matDesc = mat != null ? mat.optString("description", "") : "";
+            String exchangeStartTime = ex != null ? ex.optString("exchangeStartTime", "") : "";
+
             String timeDesc = "";
-            if (ex != null) {
+            if (cornerMark.contains("补货") || cornerMark.contains("开抢") || cornerMark.contains("点")) {
+                timeDesc = cornerMark;
+            }
+            if (matDesc.contains("补货") || matDesc.contains("更新库存") || matDesc.contains("点")) {
+                if (timeDesc.isEmpty()) {
+                    timeDesc = matDesc;
+                } else if (!matDesc.equals(timeDesc) && !matDesc.contains(timeDesc)) {
+                    timeDesc = timeDesc + " (" + matDesc + ")";
+                }
+            }
+            if (timeDesc.isEmpty() && !exchangeStartTime.isEmpty()) {
+                timeDesc = exchangeStartTime + " 开抢/补货";
+            }
+            if (timeDesc.isEmpty() && ex != null) {
                 timeDesc = ex.optString("exchangeTimeDesc");
                 if (timeDesc.isEmpty()) timeDesc = ex.optString("timeDesc");
                 if (timeDesc.isEmpty() && ex.has("startTime") && ex.has("endTime")) {
@@ -136,7 +178,14 @@ public class ElemeMallEntity extends MapperEntity {
                 timeDesc = biz.optString("seckillTimeDesc");
                 if (timeDesc.isEmpty()) timeDesc = biz.optString("countdownDesc");
             }
-            // 无真实补货时间时保持为空，UI 层据此隐藏该行，不展示无意义的兜底文案
+            if (timeDesc.isEmpty() && !cornerMark.isEmpty()) {
+                timeDesc = cornerMark;
+            }
+
+            int restockHour = parseHourFromTimeDesc(timeDesc);
+            if (restockHour < 0 && !exchangeStartTime.isEmpty()) {
+                restockHour = parseHourFromTimeDesc(exchangeStartTime);
+            }
 
             // 提取使用门槛与说明
             String ruleDesc = "";
@@ -181,7 +230,7 @@ public class ElemeMallEntity extends MapperEntity {
 
             String actCode = it.optString("actCode");
 
-            recordItem(exchangeId, displayName, title, cost, actId, colId, actCode, status, gap, timeDesc, ruleDesc, stockDesc);
+            recordItem(exchangeId, displayName, title, cost, actId, colId, actCode, status, gap, timeDesc, ruleDesc, stockDesc, restockHour);
         }
 
         // 写入本地持久化缓存
@@ -250,6 +299,7 @@ public class ElemeMallEntity extends MapperEntity {
                 jo.put("timeDesc", item.timeDesc);
                 jo.put("ruleDesc", item.ruleDesc);
                 jo.put("stockDesc", item.stockDesc);
+                jo.put("restockHour", item.restockHour);
                 arr.put(jo);
             }
             // 结构与商品列表一起持久化：meta 存刷新时间与星数，list 存商品
@@ -297,8 +347,9 @@ public class ElemeMallEntity extends MapperEntity {
                 String timeDesc = jo.optString("timeDesc");
                 String ruleDesc = jo.optString("ruleDesc");
                 String stockDesc = jo.optString("stockDesc");
+                int restockHour = jo.optInt("restockHour", parseHourFromTimeDesc(timeDesc));
                 if (!id.isEmpty() && !name.isEmpty()) {
-                    recordItem(id, name, pureTitle, cost, actId, colId, actCode, status, gap, timeDesc, ruleDesc, stockDesc);
+                    recordItem(id, name, pureTitle, cost, actId, colId, actCode, status, gap, timeDesc, ruleDesc, stockDesc, restockHour);
                 }
             }
         } catch (Throwable t) {

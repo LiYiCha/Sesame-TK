@@ -74,6 +74,13 @@ public class AppContext {
     }
 
     /**
+     * 获取应用上下文（显式方法，确保 Kotlin 可以访问）
+     */
+    public static Context getContext() {
+        return context;
+    }
+
+    /**
      * 设置支付宝版本
      */
     public static void setAlipayVersion(AlipayVersion version) {

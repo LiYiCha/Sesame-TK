@@ -216,6 +216,14 @@ internal object RpcHooks {
                             } else {
                                 HttpSnapshot.findMethod(callback.javaClass, "isSticky", 0)?.invoke(callback) as? Boolean ?: false
                             }
+                            if (responsePayload?.contains("\"appToken\"") == true) {
+                                runCatching {
+                                    val token = org.json.JSONObject(responsePayload).optString("appToken")
+                                    if (token.isNotEmpty()) {
+                                        fansirsqi.xposed.sesame.task.otherTask2.eleme.ElemeAuth.saveCapturedAppToken(token)
+                                    }
+                                }
+                            }
                             val matched = responsePayload != null &&
                                 RpcTrafficCapture.recordPendingResponse(callback, responsePayload, terminal = !kept)
                             val links = PendingRegistry.linksSnapshot(callback)

@@ -243,11 +243,11 @@ class GameCenterGold : BaseCommTask() {
     }
 
     /**
-     * 11. 兑换提现现金红包 RPC
+     * 11. 兑换提现现金红包 RPC (必须包含 withdrawalTierType 参数)
      */
-    private fun doGoldExchangePrize(prizeConfigId: String, outBizNo: String, sendSign: String, sendSignNew: String): String {
+    private fun doGoldExchangePrize(prizeConfigId: String, outBizNo: String, sendSign: String, sendSignNew: String, withdrawalTierType: String): String {
         val method = "com.alipay.gamecenteruprod.biz.rpc.p2e.doGoldExchangePrize"
-        val params = "[{\"__git\":\"$GIT\",\"appId\":\"$APP_ID\",\"outBizNo\":\"$outBizNo\",\"p2eVersion\":\"$P2E_VERSION\",\"prizeConfigId\":\"$prizeConfigId\",\"sendSign\":\"$sendSign\",\"sendSignNew\":\"$sendSignNew\"}]"
+        val params = "[{\"__git\":\"$GIT\",\"appId\":\"$APP_ID\",\"outBizNo\":\"$outBizNo\",\"p2eVersion\":\"$P2E_VERSION\",\"prizeConfigId\":\"$prizeConfigId\",\"sendSign\":\"$sendSign\",\"sendSignNew\":\"$sendSignNew\",\"withdrawalTierType\":\"$withdrawalTierType\"}]"
         return RequestManager.requestString(method, params)
     }
 
@@ -621,18 +621,34 @@ class GameCenterGold : BaseCommTask() {
                 return
             }
 
+            // 关键优化：按提现金额从大到小降序排序（10元大额档位第一优先）
+            canExgPrizes.sortWith { a, b ->
+                val amountA = a.optString("prizeAmount", "0").toDoubleOrNull() ?: 0.0
+                val amountB = b.optString("prizeAmount", "0").toDoubleOrNull() ?: 0.0
+                amountB.compareTo(amountA)
+            }
+
+            val minAmount = OtherTask2.getGameCenterGoldCashMinAmount().value ?: 0
             var exchangedCount = 0
             for (prize in canExgPrizes) {
                 val prizeAmountStr = prize.optString("prizeAmount", "0")
-                val consumeGold = prize.optString("consumeGold", "0")
+                val prizeAmount = prizeAmountStr.toDoubleOrNull() ?: 0.0
+                if (minAmount > 0 && prizeAmount < minAmount) {
+                    Log.other("$displayName: 忽略低于最低门槛(${minAmount}元)的奖品【${prizeAmountStr}元】")
+                    continue
+                }
+
+                val confirmPopup = prize.optJSONObject("confirmPopup")
+                val consumeGold = confirmPopup?.optString("consumeGold") ?: prize.optString("consumeGold", "0")
                 val prizeConfigId = prize.optString("prizeConfigId")
                 val outBizNo = prize.optString("outBizNo")
                 val sendSign = prize.optString("sendSign")
                 val sendSignNew = prize.optString("sendSignNew")
+                val withdrawalTierType = prize.optString("withdrawalTierType")
 
                 if (prizeConfigId.isNotEmpty() && outBizNo.isNotEmpty()) {
-                    Log.other("$displayName: 发现可提现金额【${prizeAmountStr}元】(消耗金币: $consumeGold)，正在发起提现...")
-                    val doRes = doGoldExchangePrize(prizeConfigId, outBizNo, sendSign, sendSignNew)
+                    Log.other("$displayName: 发现可提现金额【${prizeAmountStr}元】(消耗金币: $consumeGold, 档位: $withdrawalTierType)，正在发起提现...")
+                    val doRes = doGoldExchangePrize(prizeConfigId, outBizNo, sendSign, sendSignNew, withdrawalTierType)
                     if (doRes.isNotEmpty()) {
                         val doJson = JSONObject(doRes)
                         if (doJson.optBoolean("success")) {
@@ -654,8 +670,7 @@ class GameCenterGold : BaseCommTask() {
                 Log.runtime(TAG, "已成功兑换 $exchangedCount 笔现金红包，已无更多可提现金额，自动关闭【游戏金币|兑换现金】开关并退出")
                 OtherTask2.disableGameCenterGoldCashExchange("已完成兑换，已无剩余可提现金额")
             } else {
-                Log.runtime(TAG, "未完成任何现金提现，自动关闭【游戏金币|兑换现金】开关并退出")
-                OtherTask2.disableGameCenterGoldCashExchange("未完成提现或无可提现金额")
+                Log.runtime(TAG, "未完成任何现金提现，保留【游戏金币|兑换现金】开关供下次任务重试")
             }
         } catch (e: Exception) {
             Log.error(TAG, "处理金币提现兑换异常: ${e.message}")

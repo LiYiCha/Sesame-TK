@@ -60,19 +60,7 @@ class FlashSaleModule : BaseFlashSaleTask() {
         0, 0, 23
     )
 
-    // 饿了么幸运星商城秒杀
-    private val enableElemeMall = BooleanModelField("enableElemeMall", "饿了么商城秒杀", false)
-    private val elemeMallList = SelectModelField(
-        "elemeMallList",
-        "饿了么商城 | 兑换商品",
-        linkedSetOf(),
-        ElemeMallEX::getExchangeItemListForUI
-    )
-    private val elemeMallTargetHour = IntegerModelField(
-        "elemeMallTargetHour",
-        "饿了么商城 | 秒杀开抢整点(0-23点)",
-        10, 0, 23
-    )
+    // 饿了么幸运星商城秒杀字段已提升至 companion object，支持与 ElemeTask 及弹窗双向实时联动
 
     // 显示依赖：开关关闭时收起该模块的商品列表与开抢整点，避免页面出现互不相关的孤立字段
     init {
@@ -98,6 +86,24 @@ class FlashSaleModule : BaseFlashSaleTask() {
 
     companion object {
         private val TASK_EXECUTOR: ExecutorService = Executors.newFixedThreadPool(10)
+
+        // 饿了么幸运星商城秒杀（提升为伴生对象以与 ElemeTask 及商城弹窗进行完全双向联动）
+        @JvmField
+        val enableElemeMall = BooleanModelField("enableElemeMall", "饿了么商城秒杀", false)
+        @JvmField
+        val elemeMallList = SelectModelField(
+            "elemeMallList",
+            "饿了么商城 | 兑换商品",
+            linkedSetOf(),
+            ElemeMallEX::getExchangeItemListForUI,
+            "饿了么幸运星兑换商城商品，已与【饿了么任务→兑换商城】双向联调打通，勾选实时同步。"
+        )
+        @JvmField
+        val elemeMallTargetHour = IntegerModelField(
+            "elemeMallTargetHour",
+            "饿了么商城 | 秒杀开抢整点(0-23点)",
+            10, 0, 23
+        )
 
         private const val NEVERLAND_LIST = "neverland_list"
         private const val BAOGUO_LIST = "baoguo_list"
@@ -244,7 +250,12 @@ class FlashSaleModule : BaseFlashSaleTask() {
         if (enablePackageExchange.value) submitSubTask("包裹兑换", packageExchangeEX)
         if (enableGameCenterGold.value) submitSubTask("游戏金币秒杀", gameCenterGoldEX)
         if (enableGoldenBeanMall.value) submitSubTask("金豆商城秒杀", goldenBeanMallEX)
-        if (enableElemeMall.value) submitSubTask("饿了么商城秒杀", elemeMallEX)
+        // 饿了么秒杀任务：若开启开关，或在秒杀列表/兑换商城弹窗中勾选了商品，均自动发车
+        val hasElemeItems = elemeMallList.value.isNotEmpty() ||
+            (runCatching { fansirsqi.xposed.sesame.task.otherTask2.eleme.ElemeTask.getElemeExchangeItems().value }.getOrNull()?.isNotEmpty() == true)
+        if (enableElemeMall.value || hasElemeItems) {
+            submitSubTask("饿了么商城秒杀", elemeMallEX)
+        }
     }
 
     /**
