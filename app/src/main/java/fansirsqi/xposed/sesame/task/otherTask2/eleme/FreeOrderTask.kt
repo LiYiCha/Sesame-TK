@@ -29,6 +29,8 @@ object FreeOrderTask {
 
     /** 天天免单签到打卡（攒抽奖机会）：每日单次 */
     const val FLAG_ETMD_SIGNIN = "Eleme_Etmd_SignIn_Done"
+    /** 天天免单中奖标记：当日抽中免单后置位，不再继续抽奖（对齐幸运星规范） */
+    const val FLAG_ETMD_WON = "Eleme_Etmd_Won_Done"
     /** 下单免单抽奖：当日抽中/抽成功一次后置位 */
     const val FLAG_ORDER_FREE = "Eleme_OrderFree_Done"
 
@@ -99,29 +101,33 @@ object FreeOrderTask {
                 }
             }
 
-            // 2. 进入免单主会场拉取抽奖配置，并消耗当前已有抽奖机会
+            // 2. 进入免单主会场拉取抽奖配置，并消耗当前已有抽奖机会（若已中免单则不再抽奖）
             var currentUnionParams = LuckyStarRpcCall.ETMD_DEFAULT_UNION_PARAMS
             var availableDraws = 0
-            try {
-                Thread.sleep(RandomUtil.nextGaussianLong(400, 800))
-                val mainPageResp = LuckyStarRpcCall.queryEtmdHomepage(cookie, modules = "[\"mainPage\"]")
-                val mainPageData = mainPageResp?.optJSONObject("data")?.optJSONObject("data")
-                    ?.optJSONObject("mainPage")?.optJSONObject("data")
-                if (mainPageData != null) {
-                    val popup = mainPageData.optJSONObject("popupShareWinV2")
-                    availableDraws = popup?.optJSONObject("freeCardInfo")?.optInt("count") ?: 0
-                    val union = mainPageData.optString("unionParams")
-                    if (union.isNotEmpty()) {
-                        currentUnionParams = union
+            if (Status.hasFlagToday(FLAG_ETMD_WON)) {
+                Log.other("饿了么", "[抽免单] 🎯 今日已成功抽中免单，跳过抽奖环节")
+            } else {
+                try {
+                    Thread.sleep(RandomUtil.nextGaussianLong(400, 800))
+                    val mainPageResp = LuckyStarRpcCall.queryEtmdHomepage(cookie, modules = "[\"mainPage\"]")
+                    val mainPageData = mainPageResp?.optJSONObject("data")?.optJSONObject("data")
+                        ?.optJSONObject("mainPage")?.optJSONObject("data")
+                    if (mainPageData != null) {
+                        val popup = mainPageData.optJSONObject("popupShareWinV2")
+                        availableDraws = popup?.optJSONObject("freeCardInfo")?.optInt("count") ?: 0
+                        val union = mainPageData.optString("unionParams")
+                        if (union.isNotEmpty()) {
+                            currentUnionParams = union
+                        }
                     }
-                }
 
-                if (availableDraws > 0) {
-                    Log.other("饿了么", "[抽免单] 当前可用抽免单机会: ${availableDraws} 次，开始开奖...")
-                    availableDraws = runDrawLottery(cookie, currentUnionParams, availableDraws)
+                    if (availableDraws > 0) {
+                        Log.other("饿了么", "[抽免单] 当前可用抽免单机会: ${availableDraws} 次，开始开奖...")
+                        availableDraws = runDrawLottery(cookie, currentUnionParams, availableDraws)
+                    }
+                } catch (e: Throwable) {
+                    Log.error(TAG, "主会场抽奖异常: ${e.message}")
                 }
-            } catch (e: Throwable) {
-                Log.error(TAG, "主会场抽奖异常: ${e.message}")
             }
 
             // 3. 推进免单专属任务（做任务获得抽奖机会，Collection 2602, ETMD_CHANNEL）
@@ -348,10 +354,14 @@ object FreeOrderTask {
                 Log.error(TAG, "免单专属任务推进异常: ${e.message}")
             }
 
-            // 4. 任务推进完成后，消耗新赢取到的抽免单机会（闭环开奖）
+            // 4. 任务推进完成后，消耗新赢取到的抽免单机会（闭环开奖，若已中免单则不再抽奖）
             if (earnedChances > 0) {
-                Log.other("饿了么", "[抽免单] 任务推进完成，新获得 ${earnedChances} 次抽免单机会，开始开奖...")
-                runDrawLottery(cookie, currentUnionParams, earnedChances)
+                if (Status.hasFlagToday(FLAG_ETMD_WON)) {
+                    Log.other("饿了么", "[抽免单] 任务新获得 ${earnedChances} 次机会，因今日已成功抽中免单，停止继续抽奖")
+                } else {
+                    Log.other("饿了么", "[抽免单] 任务推进完成，新获得 ${earnedChances} 次抽免单机会，开始开奖...")
+                    runDrawLottery(cookie, currentUnionParams, earnedChances)
+                }
             }
 
             // 5. 下单赢免单抽奖（若有下单机会且当日未抽过）
@@ -411,7 +421,10 @@ object FreeOrderTask {
                 if (prizeDesc.isNotEmpty() && !prizeDesc.contains("未中奖") && !prizeDesc.contains("NO_COUPON")) {
                     Log.other("饿了么", "[抽免单] 🎉 抽免单命中奖励: $prizeDesc (剩余: ${count}次)")
                     if (prizeDesc.contains("免单")) {
+                        Status.setFlagToday(FLAG_ETMD_WON)
                         Notify.sendPrizeNotification("🎉 饿了么免单中奖通知", "恭喜在天天抽免单中成功命中【$prizeDesc】！请及时使用。")
+                        Log.other("饿了么", "[抽免单] 🎯 恭喜成功抽中免单大奖: $prizeDesc，停止继续抽奖")
+                        break
                     }
                 } else {
                     val statusText = if (btnText.isNotEmpty()) btnText else "未中奖"
