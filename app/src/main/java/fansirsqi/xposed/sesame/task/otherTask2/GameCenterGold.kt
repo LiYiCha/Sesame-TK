@@ -628,16 +628,9 @@ class GameCenterGold : BaseCommTask() {
                 amountB.compareTo(amountA)
             }
 
-            val minAmount = OtherTask2.getGameCenterGoldCashMinAmount().value ?: 0
             var exchangedCount = 0
             for (prize in canExgPrizes) {
                 val prizeAmountStr = prize.optString("prizeAmount", "0")
-                val prizeAmount = prizeAmountStr.toDoubleOrNull() ?: 0.0
-                if (minAmount > 0 && prizeAmount < minAmount) {
-                    Log.other("$displayName: 忽略低于最低门槛(${minAmount}元)的奖品【${prizeAmountStr}元】")
-                    continue
-                }
-
                 val confirmPopup = prize.optJSONObject("confirmPopup")
                 val consumeGold = confirmPopup?.optString("consumeGold") ?: prize.optString("consumeGold", "0")
                 val prizeConfigId = prize.optString("prizeConfigId")
