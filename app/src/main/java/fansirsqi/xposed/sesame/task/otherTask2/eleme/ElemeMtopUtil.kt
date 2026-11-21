@@ -850,6 +850,7 @@ object ElemeMtopUtil {
         val flags = readTodayFlags()
         val todayText = "• 幸运星签到: ${if (flags.contains(FreeOrderTask.FLAG_SIGNIN)) "已完成" else "未完成"}\n" +
                 "• 免单打卡: ${if (flags.contains(FreeOrderTask.FLAG_ETMD_SIGNIN)) "已完成" else "未完成"}\n" +
+                "• 免单抽奖: ${if (flags.contains(FreeOrderTask.FLAG_ETMD_WON)) "🎉 今日已抽中免单" else "未中免单"}\n" +
                 "• 夺宝抽奖: ${if (flags.contains(FreeOrderTask.FLAG_LOTTERY_DONE)) "次数已用完" else "未完成"}\n" +
                 "• 下单免单抽奖: ${if (flags.contains(FreeOrderTask.FLAG_ORDER_FREE)) "已抽" else "未抽"}\n" +
                 "• 外卖爆红包: ${if (flags.contains("Eleme_BurstRed_Done")) "已领取" else "未领取"}"
