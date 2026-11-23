@@ -144,12 +144,16 @@ object TaskBlacklist {
 
         val allBlacklist = getBlacklist()
         for (item in allBlacklist) {
-            if (item.isBlank()) continue
-            // 1. 完全匹配
-            if (cleanInfo.equals(item, ignoreCase = true)) return true
+            val cleanItem = item.trim()
+            if (cleanItem.isBlank()) continue
 
-            // 2. 双向模糊匹配（标题或关键词互相包含）
-            if (cleanInfo.contains(item, ignoreCase = true) || item.contains(cleanInfo, ignoreCase = true)) {
+            // 1. 完全匹配（任务ID或任务全名相同）
+            if (cleanInfo.equals(cleanItem, ignoreCase = true)) return true
+
+            // 2. 安全模糊匹配：
+            // - 仅允许任务标题包含黑名单关键字（cleanInfo.contains(cleanItem)），严禁反向包含，防止短任务名被长规则误杀
+            // - 关键字长度必须 >= 3 字符，避免单个字（如"去"、"1"、"逛"）导致大面积误杀正常任务
+            if (cleanItem.length >= 3 && cleanInfo.contains(cleanItem, ignoreCase = true)) {
                 return true
             }
         }
@@ -189,22 +193,28 @@ object TaskBlacklist {
     @JvmStatic
     @JvmOverloads
     fun removeFromBlacklist(taskId: String, taskTitle: String = "") {
-        val perm = loadPermanent()
-        val daily = loadDaily()
-        var changed = false
-        if (taskId.isNotBlank()) {
-            if (perm.remove(taskId.trim())) changed = true
-            if (daily.remove(taskId.trim())) changed = true
-        }
-        if (taskTitle.isNotBlank()) {
-            if (perm.remove(taskTitle.trim())) changed = true
-            if (daily.remove(taskTitle.trim())) changed = true
-        }
-        if (changed) {
-            savePermanent(perm)
-            saveDaily(daily)
-            val info = if (taskTitle.isNotBlank()) "$taskId - $taskTitle" else taskId
-            Log.runtime(TAG, "任务[$info]已从黑名单移除")
+        try {
+            val perm = loadPermanent()
+            val daily = loadDaily()
+            var changed = false
+            if (taskId.isNotBlank()) {
+                if (perm.remove(taskId.trim())) changed = true
+                if (daily.remove(taskId.trim())) changed = true
+                removeReason(taskId.trim())
+            }
+            if (taskTitle.isNotBlank()) {
+                if (perm.remove(taskTitle.trim())) changed = true
+                if (daily.remove(taskTitle.trim())) changed = true
+                removeReason(taskTitle.trim())
+            }
+            if (changed) {
+                savePermanent(perm)
+                saveDaily(daily)
+                val info = if (taskTitle.isNotBlank()) "$taskId - $taskTitle" else taskId
+                Log.runtime(TAG, "任务[$info]已从黑名单移除")
+            }
+        } catch (e: Exception) {
+            Log.error(TAG, "从黑名单移除异常: ${e.message}")
         }
     }
 
@@ -213,9 +223,14 @@ object TaskBlacklist {
      */
     @JvmStatic
     fun clearBlacklist() {
-        savePermanent(emptySet())
-        saveDaily(emptySet())
-        Log.runtime(TAG, "已清空任务黑名单")
+        try {
+            savePermanent(emptySet())
+            saveDaily(emptySet())
+            clearAllReasons()
+            Log.runtime(TAG, "已清空任务黑名单")
+        } catch (e: Exception) {
+            Log.error(TAG, "清空任务黑名单异常: ${e.message}")
+        }
     }
 
     /**
@@ -338,6 +353,26 @@ object TaskBlacklist {
             val time = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.CHINA).format(java.util.Date())
             map[taskInfo] = "$reason [$time]"
             DataStore.put(REASONS_KEY, map)
+        } catch (_: Throwable) {}
+    }
+
+    private fun removeReason(taskInfo: String) {
+        ensureInit()
+        try {
+            val raw = DataStore.getOrCreate(REASONS_KEY, object : TypeReference<Any>() {})
+            if (raw is Map<*, *>) {
+                val map = raw.entries.associate { it.key.toString() to it.value.toString() }.toMutableMap()
+                if (map.remove(taskInfo) != null) {
+                    DataStore.put(REASONS_KEY, map)
+                }
+            }
+        } catch (_: Throwable) {}
+    }
+
+    private fun clearAllReasons() {
+        ensureInit()
+        try {
+            DataStore.put(REASONS_KEY, emptyMap<String, String>())
         } catch (_: Throwable) {}
     }
 
