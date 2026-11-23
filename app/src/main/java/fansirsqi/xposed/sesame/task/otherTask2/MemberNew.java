@@ -1272,7 +1272,12 @@ public class MemberNew extends BaseCommTask {
             
             while (currentBizNo != null && !currentBizNo.isEmpty()) {
                 // 查询广告任务情况
-                JSONObject queryResult = new JSONObject(AntMemberRpcCall.querySignFloatingBallAdTask(currentBizNo));
+                String queryStr = AntMemberRpcCall.querySignFloatingBallAdTask(currentBizNo);
+                if (queryStr == null || queryStr.trim().isEmpty()) {
+                    Log.error(TAG, "查询宝箱广告任务返回为空");
+                    break;
+                }
+                JSONObject queryResult = new JSONObject(queryStr);
                 if (checkBoxError1009(queryResult)) {
                     break;
                 }
@@ -1311,7 +1316,12 @@ public class MemberNew extends BaseCommTask {
                 TimeUtil.sleep(waitTime);
                 
                 // 触发广告任务完成
-                JSONObject triggerResult = new JSONObject(AntMemberRpcCall.triggerAdTask(taskBizNo, taskType));
+                String triggerStr = AntMemberRpcCall.triggerAdTask(taskBizNo, taskType);
+                if (triggerStr == null || triggerStr.trim().isEmpty()) {
+                    Log.error(TAG, "触发宝箱广告任务返回为空");
+                    break;
+                }
+                JSONObject triggerResult = new JSONObject(triggerStr);
                 
                 // 检查1009错误
                 if (checkBoxError1009(triggerResult)) {
