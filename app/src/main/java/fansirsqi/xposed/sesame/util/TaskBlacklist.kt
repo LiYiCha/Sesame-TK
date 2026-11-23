@@ -127,6 +127,12 @@ object TaskBlacklist {
         }
     }
 
+    @JvmStatic
+    fun getPermanentList(): Set<String> = loadPermanent()
+
+    @JvmStatic
+    fun getDailyList(): Set<String> = loadDaily()
+
     /**
      * 判断任务是否在黑名单中
      * @param taskInfo 任务ID或任务标题

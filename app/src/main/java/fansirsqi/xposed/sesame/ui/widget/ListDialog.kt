@@ -1,8 +1,10 @@
 package fansirsqi.xposed.sesame.ui.widget
 
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.DialogInterface
 import android.content.Intent
+import android.content.IntentFilter
 import android.view.LayoutInflater
 import android.view.View
 import android.widget.Button
@@ -79,19 +81,92 @@ object ListDialog {
     }
 
     private fun showListDialog(c: Context, title: CharSequence, selectModelFieldFunc: SelectModelFieldFunc, hasCount: Boolean, listType: ListType) {
-        val listDialog = MaterialAlertDialogBuilder(c)
+        val fieldCode = (selectModelFieldFunc as? SelectModelField)?.code.orEmpty()
+        val isExchangeField = fieldCode in listOf(
+            "neverLandList", "packageExchangeList", "gameCenterGoldList",
+            "goldenBeanMallList", "elemeMallList", "elemeExchangeItems", "myBankWelfareExchangeList"
+        )
+
+        val builder = MaterialAlertDialogBuilder(c)
             .setTitle(title)
             .setView(getListView(c, selectModelFieldFunc, hasCount, listType))
             .setPositiveButton(c.getString(R.string.close), null)
-            .create()
-            
+
+        if (isExchangeField) {
+            builder.setNeutralButton("🔄 获取最新列表", null)
+        }
+
+        val listDialog = builder.create()
+
+        var refreshReceiver: BroadcastReceiver? = null
+
         listDialog.setOnShowListener { p1 ->
             val d = p1 as AlertDialog
             val layoutBatchProcess = d.findViewById<RelativeLayout>(R.id.layout_batch_process)
             layoutBatchProcess?.visibility =
                 if (listType == ListType.CHECK && !hasCount) View.VISIBLE else View.GONE
             ListAdapter.get(c).notifyDataSetChanged()
+
+            if (isExchangeField) {
+                val neutralBtn = d.getButton(DialogInterface.BUTTON_NEUTRAL)
+                neutralBtn?.setTextColor(ContextCompat.getColor(c, R.color.selection_color))
+                neutralBtn?.setOnClickListener {
+                    neutralBtn.isEnabled = false
+                    neutralBtn.text = "拉取中..."
+                    Toast.makeText(c, "正在向支付宝请求拉取最新商品...", Toast.LENGTH_SHORT).show()
+
+                    val filter = IntentFilter("fansirsqi.xposed.sesame.fetchExchangeList.success")
+                    refreshReceiver = object : BroadcastReceiver() {
+                        override fun onReceive(context: Context?, intent: Intent?) {
+                            try {
+                                c.unregisterReceiver(this)
+                            } catch (_: Throwable) {}
+                            refreshReceiver = null
+                            val count = intent?.getIntExtra("count", 0) ?: 0
+                            val freshList = runCatching { (selectModelFieldFunc as SelectModelField).expandValue }.getOrNull() ?: emptyList()
+                            ListAdapter.get(c).setBaseList(freshList)
+                            ListAdapter.get(c).notifyDataSetChanged()
+                            Toast.makeText(c, "商品列表已更新 ($count 项)", Toast.LENGTH_SHORT).show()
+                            neutralBtn.isEnabled = true
+                            neutralBtn.text = "🔄 获取最新列表"
+                        }
+                    }
+                    try {
+                        ContextCompat.registerReceiver(c, refreshReceiver, filter, ContextCompat.RECEIVER_EXPORTED)
+                    } catch (t: Throwable) {
+                        c.registerReceiver(refreshReceiver, filter)
+                    }
+
+                    val req = Intent("com.eg.android.AlipayGphone.sesame.memberOperation").apply {
+                        putExtra("operation", "FETCH_EXCHANGE_LIST")
+                        putExtra("fieldCode", fieldCode)
+                    }
+                    c.sendBroadcast(req)
+
+                    neutralBtn.postDelayed({
+                        try {
+                            refreshReceiver?.let { c.unregisterReceiver(it) }
+                        } catch (_: Throwable) {}
+                        refreshReceiver = null
+                        val freshList = runCatching { (selectModelFieldFunc as SelectModelField).expandValue }.getOrNull()
+                        if (!freshList.isNullOrEmpty()) {
+                            ListAdapter.get(c).setBaseList(freshList)
+                            ListAdapter.get(c).notifyDataSetChanged()
+                        }
+                        neutralBtn.isEnabled = true
+                        neutralBtn.text = "🔄 获取最新列表"
+                    }, 4000)
+                }
+            }
         }
+
+        listDialog.setOnDismissListener {
+            try {
+                refreshReceiver?.let { c.unregisterReceiver(it) }
+            } catch (_: Throwable) {}
+            refreshReceiver = null
+        }
+
         listDialog.show()
         val positiveButton = listDialog.getButton(DialogInterface.BUTTON_POSITIVE)
         positiveButton?.setTextColor(ContextCompat.getColor(c, R.color.selection_color))

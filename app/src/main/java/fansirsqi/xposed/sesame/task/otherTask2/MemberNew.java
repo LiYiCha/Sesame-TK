@@ -1283,13 +1283,23 @@ public class MemberNew extends BaseCommTask {
                 
                 JSONObject videoTaskInfo = queryResult.optJSONObject("videoTaskInfo");
                 if (videoTaskInfo == null) {
+                    videoTaskInfo = queryResult.optJSONObject("adTaskInfo");
+                }
+                if (videoTaskInfo == null) {
+                    videoTaskInfo = queryResult.optJSONObject("currentTaskInfo");
+                }
+                if (videoTaskInfo == null) {
+                    videoTaskInfo = queryResult.optJSONObject("taskInfo");
+                }
+                if (videoTaskInfo == null) {
                     Log.runtime(TAG, "宝箱广告任务信息为空,当前无广告");
                     break;
                 }
                 
                 String taskStatus = videoTaskInfo.optString("taskStatus");
-                String taskBizNo = videoTaskInfo.optString("bizNo");
+                String taskBizNo = videoTaskInfo.optString("bizNo", currentBizNo);
                 int awardNum = videoTaskInfo.optInt("awardNum");
+                String taskType = videoTaskInfo.optString("taskType", "AD_MIXED_TASK");
                 
                 // 只处理PROCESSING状态的任务
                 if (!"PROCESSING".equals(taskStatus)) {
@@ -1301,7 +1311,7 @@ public class MemberNew extends BaseCommTask {
                 TimeUtil.sleep(waitTime);
                 
                 // 触发广告任务完成
-                JSONObject triggerResult = new JSONObject(AntMemberRpcCall.triggerAdTask(taskBizNo));
+                JSONObject triggerResult = new JSONObject(AntMemberRpcCall.triggerAdTask(taskBizNo, taskType));
                 
                 // 检查1009错误
                 if (checkBoxError1009(triggerResult)) {
@@ -1317,6 +1327,12 @@ public class MemberNew extends BaseCommTask {
                     
                     // 检查是否有下一个任务
                     JSONObject nextVideoTaskInfo = triggerResult.optJSONObject("nextVideoTaskInfo");
+                    if (nextVideoTaskInfo == null) {
+                        nextVideoTaskInfo = triggerResult.optJSONObject("nextTaskInfo");
+                    }
+                    if (nextVideoTaskInfo == null) {
+                        nextVideoTaskInfo = triggerResult.optJSONObject("currentTaskInfo");
+                    }
                     if (nextVideoTaskInfo != null) {
                         String nextTaskStatus = nextVideoTaskInfo.optString("taskStatus");
                         String nextBizNo = nextVideoTaskInfo.optString("bizNo");

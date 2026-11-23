@@ -11,6 +11,11 @@ import fansirsqi.xposed.sesame.task.ModelTask
 import fansirsqi.xposed.sesame.task.antForest.EnergyWaitingManager
 import fansirsqi.xposed.sesame.task.otherTask2.PrivilegeTask
 import fansirsqi.xposed.sesame.task.otherTask2.SeckillScheduler
+import fansirsqi.xposed.sesame.task.exchange.NeverLandEX
+import fansirsqi.xposed.sesame.task.exchange.PackageExchangeEX
+import fansirsqi.xposed.sesame.task.exchange.GameCenterGoldEX
+import fansirsqi.xposed.sesame.task.exchange.GoldenBeanMallEX
+import fansirsqi.xposed.sesame.task.exchange.ElemeMallEX
 import fansirsqi.xposed.sesame.util.Files
 import fansirsqi.xposed.sesame.util.GlobalThreadPools
 import fansirsqi.xposed.sesame.util.Log
@@ -105,6 +110,10 @@ class ExtendHandle {
                     }
                 }
                 "SYNC_SECKILL_TASKS" -> SeckillScheduler.syncTasks(context)
+                "FETCH_EXCHANGE_LIST" -> {
+                    val fieldCode = intent.getStringExtra("fieldCode").orEmpty()
+                    handleFetchExchangeList(context, fieldCode)
+                }
                 else -> Log.runtime("未知的会员操作: ${intent.getStringExtra("operation")}")
             }
         }
@@ -184,6 +193,55 @@ class ExtendHandle {
             } catch (e: Exception) {
                 Log.error("[ReRunReceiver]处理重新执行任务请求时出错❌: ${e.message}")
                 Log.printStackTrace("ApplicationHook.ReRunReceiver", e)
+            }
+        }
+
+        /**
+         * 供设置页商品列表弹窗「🔄 获取最新列表」调用：
+         * 跨进程接收 UI 请求，在宿主后台线程拉取对应子模块的最新兑换商品并写入 DataStore 缓存
+         */
+        @JvmStatic
+        fun handleFetchExchangeList(context: Context, fieldCode: String) {
+            GlobalThreadPools.execute {
+                try {
+                    var count = 0
+                    when (fieldCode) {
+                        "neverLandList" -> {
+                            count = NeverLandEX.refreshItemsFromAPI().size
+                        }
+                        "packageExchangeList" -> {
+                            count = PackageExchangeEX.refreshItemsFromAPI().size
+                        }
+                        "gameCenterGoldList" -> {
+                            count = GameCenterGoldEX.refreshItemsFromAPI().size
+                        }
+                        "goldenBeanMallList" -> {
+                            count = GoldenBeanMallEX.refreshItemsFromAPI().size
+                        }
+                        "elemeMallList", "elemeExchangeItems" -> {
+                            count = ElemeMallEX.refreshItemsFromAPI().size
+                        }
+                        else -> {
+                            count += NeverLandEX.refreshItemsFromAPI().size
+                            count += PackageExchangeEX.refreshItemsFromAPI().size
+                            count += GameCenterGoldEX.refreshItemsFromAPI().size
+                            count += GoldenBeanMallEX.refreshItemsFromAPI().size
+                        }
+                    }
+                    val reply = Intent("fansirsqi.xposed.sesame.fetchExchangeList.success").apply {
+                        putExtra("fieldCode", fieldCode)
+                        putExtra("count", count)
+                    }
+                    context.sendBroadcast(reply)
+                    Log.other("ExtendHandle", "拉取兑换商品列表完成[$fieldCode]: $count 项")
+                } catch (e: Exception) {
+                    Log.error("ExtendHandle", "拉取兑换商品列表异常[$fieldCode]: ${e.message}")
+                    val reply = Intent("fansirsqi.xposed.sesame.fetchExchangeList.failed").apply {
+                        putExtra("fieldCode", fieldCode)
+                        putExtra("error", e.message)
+                    }
+                    context.sendBroadcast(reply)
+                }
             }
         }
 

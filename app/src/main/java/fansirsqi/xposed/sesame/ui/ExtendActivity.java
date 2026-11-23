@@ -69,6 +69,11 @@ public class ExtendActivity extends BaseActivity {
         Button restartModule = findViewById(R.id.restart_module);
         restartModule.setOnClickListener(new RestartModule());
 
+        // 任务黑名单可视化管理
+        Button btnManageBlacklist = findViewById(R.id.manage_task_blacklist);
+        if (btnManageBlacklist != null) {
+            btnManageBlacklist.setOnClickListener(v -> fansirsqi.xposed.sesame.ui.widget.TaskBlacklistDialog.show(ExtendActivity.this));
+        }
     }
     /**
      * 发送广播事件

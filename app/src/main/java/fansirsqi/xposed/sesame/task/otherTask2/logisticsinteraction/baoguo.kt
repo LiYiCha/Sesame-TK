@@ -1,6 +1,8 @@
 package fansirsqi.xposed.sesame.task.otherTask2.logisticsinteraction
 
+import android.net.Uri
 import fansirsqi.xposed.sesame.data.Status
+import fansirsqi.xposed.sesame.task.common.GameCenterPlayRpcCall
 import fansirsqi.xposed.sesame.util.GlobalThreadPools
 import fansirsqi.xposed.sesame.util.Log
 import fansirsqi.xposed.sesame.util.RandomUtil
@@ -86,13 +88,19 @@ object baoguo {
                     if (!canAccess) continue
                     if (status == "RECEIVE_SUCCESS" || status == "DONE") continue
 
-                    // 黑名单过滤（标题或任务ID命中黑名单直接跳过）
-                    if (TaskBlacklist.isTaskInBlacklist(title) || TaskBlacklist.isTaskInBlacklist(taskId)) {
+                    // 检查是否为小游戏时长类任务
+                    val gameContract = resolveBaoguoGameContract(task, material, title)
+                    if (gameContract != null) {
+                        // 若曾经被旧版本误加入黑名单，主动解除
+                        if (TaskBlacklist.isTaskInBlacklist(title) || TaskBlacklist.isTaskInBlacklist(taskId)) {
+                            TaskBlacklist.removeFromBlacklist(taskId, title)
+                        }
+                    } else if (TaskBlacklist.isTaskInBlacklist(title) || TaskBlacklist.isTaskInBlacklist(taskId)) {
                         continue
                     }
 
-                    // 过滤无法通过 RPC 模拟的下单/真实交易事件规则任务
-                    if (taskType == "TRANSFORMER" && (title.contains("订单") || title.contains("搬家") || title.contains("跑腿") || title.contains("拉货") || title.contains("通关") || title.contains("玩一玩") || title.contains("消除") || title.contains("游戏"))) {
+                    // 过滤无法通过 RPC 模拟的下单/真实交易事件规则任务（实物服务类）
+                    if (taskType == "TRANSFORMER" && (title.contains("订单") || title.contains("搬家") || title.contains("跑腿") || title.contains("拉货"))) {
                         TaskBlacklist.autoAddToBlacklist(taskId, title, "10000005", "promoprod不允许完成事件规则任务")
                         continue
                     }
@@ -113,7 +121,21 @@ object baoguo {
                         Thread.sleep(RandomUtil.nextLong(2000, 3500))
                     }
 
-                    // Step B: 完成任务 (Trigger Send)
+                    // Step B: 若为小游戏类任务，上报小游戏浏览/游玩时长
+                    if (gameContract != null) {
+                        try {
+                            Log.other(TAG, "包裹游历📦[上报小游戏时长]#$title 时长: ${gameContract.playTime}秒, appId: ${gameContract.gameAppId}")
+                            val ack = GameCenterPlayRpcCall.submitForAck(gameContract)
+                            if (ack.accepted) {
+                                Log.other(TAG, "包裹游历📦[时长上报已接受]#$title")
+                            }
+                        } catch (e: Throwable) {
+                            Log.error(TAG, "包裹游历📦上报游戏时长失败: $e")
+                        }
+                        Thread.sleep(RandomUtil.nextLong(2500, 4000))
+                    }
+
+                    // Step C: 完成任务 (Trigger Send)
                     val triggerRes = baoguoRpcCall.handleTask(taskId, "send", tci)
                     val triggerJo = runCatching { JSONObject(triggerRes) }.getOrNull()
                     if (triggerJo != null && triggerJo.optBoolean("success")) {
@@ -207,5 +229,40 @@ object baoguo {
         } finally {
             Status.setFlagToday("baoguo_account_last_query")
         }
+    }
+
+    /**
+     * 解析包裹游历小游戏时长契约
+     */
+    private fun resolveBaoguoGameContract(task: JSONObject, material: JSONObject?, title: String): GameCenterPlayRpcCall.Contract? {
+        val durationContract = GameCenterPlayRpcCall.resolveContract(task, material)
+        if (durationContract != null) return durationContract
+
+        val isGame = title.contains("玩") || title.contains("游戏") || title.contains("通关") || title.contains("消除")
+        val taskGotoUrl = material?.optString("taskGotoUrl").orEmpty().ifBlank {
+            task.optJSONObject("taskExtProps")?.optString("TASK_MORPHO_DETAIL").orEmpty()
+        }
+        val isGameUrl = taskGotoUrl.contains("gameCenter", ignoreCase = true) ||
+                taskGotoUrl.contains("outer_multi_type_task", ignoreCase = true) ||
+                taskGotoUrl.contains("MINI_APP_PROMOLAYER", ignoreCase = true)
+
+        if (!isGame && !isGameUrl) return null
+
+        val uri = runCatching { Uri.parse(taskGotoUrl) }.getOrNull()
+        val appId = sequenceOf(
+            uri?.getQueryParameter("appId"),
+            uri?.getQueryParameter("gameAppId"),
+            task.optString("appId"),
+            material?.optString("appId")
+        ).firstOrNull { !it.isNullOrBlank() } ?: return null
+
+        val source = uri?.getQueryParameter("chInfo")?.takeIf { it.isNotBlank() }
+            ?: uri?.getQueryParameter("source")?.takeIf { it.isNotBlank() }
+            ?: "wdkd_mc_xjajah06"
+
+        val durationMatch = Regex("(\\d+)\\s*(?:秒|s)").find(title)
+        val playTime = durationMatch?.groupValues?.get(1)?.toIntOrNull() ?: 35
+
+        return GameCenterPlayRpcCall.Contract(appId, playTime, source)
     }
 }

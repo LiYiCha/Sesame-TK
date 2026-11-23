@@ -60,6 +60,22 @@ class ElemeMallEX : BaseFlashSaleTask() {
     companion object {
         private const val TAG = "ElemeMallEX"
 
+        @JvmStatic
+        fun refreshItemsFromAPI(): List<MemberBenefit> {
+            runCatching {
+                val init = fansirsqi.xposed.sesame.task.otherTask2.eleme.ElemeAuth.ensureCookie()
+                if (init.isNotEmpty()) {
+                    val cookie = fansirsqi.xposed.sesame.task.otherTask2.eleme.ElemeAuth.validateOrRefreshCookie(init) ?: init
+                    val resp = LuckyStarRpcCall.queryMallList(cookie)
+                    if (resp != null) {
+                        ElemeMallEntity.updateFromMallResponse(resp)
+                        ElemeMallEntity.recordFetchSnapshot(System.currentTimeMillis(), ElemeMallEntity.getLastStarAmount())
+                    }
+                }
+            }
+            return getExchangeItemListForUI()
+        }
+
         /**
          * 供秒杀设置页商品列表使用：只读本地商城缓存，绝不发起网络请求。
          * 返回 MemberBenefit(id=商品exchangeId, name=名称[所需星数])。

@@ -325,7 +325,7 @@ object GameCenterPlayRpcCall {
 
         val urlQueue = mutableListOf<String>()
         objects.forEach { value ->
-            listOf("targetUrl", "actionUrl", "jumpUrl", "pageUrl", "taskJumpUrl")
+            listOf("targetUrl", "actionUrl", "jumpUrl", "pageUrl", "taskJumpUrl", "taskGotoUrl")
                 .map { key -> value.optString(key) }
                 .filterTo(urlQueue) { it.isNotBlank() }
         }

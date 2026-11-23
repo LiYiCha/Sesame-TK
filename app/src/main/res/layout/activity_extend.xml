@@ -114,7 +114,25 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:text="模块重新加载"
-                android:layout_marginBottom="8dp"
+                android:layout_marginBottom="16dp"
+                style="@style/Widget.App.Button.Main" />
+
+            <!-- 规则与黑名单管理 -->
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="🛡️ 规则与黑名单"
+                android:textSize="18sp"
+                android:textStyle="bold"
+                android:textColor="@color/textColorPrimary"
+                android:layout_marginBottom="12dp" />
+
+            <Button
+                android:id="@+id/manage_task_blacklist"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="🚫 任务黑名单可视化管理"
+                android:layout_marginBottom="16dp"
                 style="@style/Widget.App.Button.Main" />
         </LinearLayout>
 

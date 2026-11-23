@@ -238,24 +238,28 @@ public class AntMemberRpcCall {
     //=================会员宝箱
     public static String querySignFloatingBall() {
         return RequestManager.requestString("com.alipay.amic.biz.rpc.signin.h5.querySignFloatingBall",
-                "[{\"extMap\":{},\"sourcePassMap\":{\"innerSource\":\"\",\"source\":\"myTab\",\"unid\":\"\"}}]");
+                "[{\"extMap\":{},\"sourcePassMap\":{\"innerSource\":\"\",\"source\":\"mytab\",\"unid\":\"\"}}]");
     }
 
     public static String triggerSignFloatingBall(String bizNo) {
         return RequestManager.requestString("com.alipay.amic.biz.rpc.signin.h5.triggerSignFloatingBall",
-                "[{\"bizNo\":\""+bizNo+"\",\"extMap\":{},\"sourcePassMap\":{\"innerSource\":\"\",\"source\":\"myTab\",\"unid\":\"\"},\"taskType\":\"MULTIPLE_TIMER_TASK\"}]");
+                "[{\"bizNo\":\""+bizNo+"\",\"extMap\":{},\"sourcePassMap\":{\"innerSource\":\"\",\"source\":\"mytab\",\"unid\":\"\"},\"taskType\":\"MULTIPLE_TIMER_TASK\"}]");
     }
 
 
     // 查询宝箱广告任务
     public static String querySignFloatingBallAdTask(String bizNo) {
         return RequestManager.requestString("com.alipay.amic.biz.rpc.signin.h5.querySignFloatingBallAdTask",
-                "[{\"adType\":\"AD_VIDEO_TASK\",\"bizNo\":\""+bizNo+"\",\"extMap\":{},\"sourcePassMap\":{\"innerSource\":\"\",\"source\":\"myTab\",\"unid\":\"\"}}]");
+                "[{\"adType\":\"AD_MIXED_TASK\",\"bizNo\":\""+bizNo+"\",\"extMap\":{},\"sourceInfo\":\"signin\",\"sourcePassMap\":{\"innerSource\":\"\",\"source\":\"mytab\",\"unid\":\"\"}}]");
     }
     // 完成宝箱广告任务
     public static String triggerAdTask(String bizNo) {
+        return triggerAdTask(bizNo, "AD_MIXED_TASK");
+    }
+    public static String triggerAdTask(String bizNo, String taskType) {
+        String type = (taskType == null || taskType.isEmpty()) ? "AD_MIXED_TASK" : taskType;
         return RequestManager.requestString("com.alipay.amic.biz.rpc.signin.h5.triggerSignFloatingBall",
-                "[{\"bizNo\":\""+bizNo+"\",\"extMap\":{},\"sourcePassMap\":{\"innerSource\":\"\",\"source\":\"myTab\",\"unid\":\"\"},\"taskType\":\"AD_VIDEO_TASK\"}]");
+                "[{\"bizNo\":\""+bizNo+"\",\"extMap\":{},\"sourcePassMap\":{\"innerSource\":\"\",\"source\":\"mytab\",\"unid\":\"\"},\"taskType\":\"" + type + "\"}]");
     }
 
     // ================= 游戏中心 60 秒召回任务 =================

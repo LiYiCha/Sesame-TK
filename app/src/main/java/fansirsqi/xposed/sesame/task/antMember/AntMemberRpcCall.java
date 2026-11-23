@@ -2018,10 +2018,13 @@ public class AntMemberRpcCall {
      * 查询签到浮窗广告任务
      * 对应: com.alipay.amic.biz.rpc.signin.h5.querySignFloatingBallAdTask
      */
-    public static String querySignFloatingBallAdTask(String templateId) {
+    public static String querySignFloatingBallAdTask(String bizNo) {
         try {
             JSONObject args = new JSONObject();
-            args.put("templateId", templateId);
+            args.put("adType", "AD_MIXED_TASK");
+            args.put("bizNo", bizNo);
+            args.put("extMap", new JSONObject());
+            args.put("sourceInfo", "signin");
             args.put("sourcePassMap", buildMemberSourcePassMap());
             return RequestManager.requestString(
                     "com.alipay.amic.biz.rpc.signin.h5.querySignFloatingBallAdTask",
