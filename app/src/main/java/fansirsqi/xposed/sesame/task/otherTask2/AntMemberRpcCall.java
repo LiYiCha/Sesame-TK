@@ -10,11 +10,23 @@ import fansirsqi.xposed.sesame.util.RandomUtil;
 import java.util.UUID;
 
 public class AntMemberRpcCall {
-    public static String executeTask(String str, String str2) {
+    public static String executeTask(String bizParam, String bizSubType, String bizType) {
+        return executeTask(bizParam, bizSubType, bizType, null);
+    }
+
+    public static String executeTask(String bizParam, String bizSubType, String bizType, String outBizNo) {
         try {
             JSONObject args = new JSONObject();
-            args.put("configId", str);
-            args.put("adTaskFlag", true);
+            if (bizParam != null && !bizParam.isEmpty()) {
+                args.put("bizParam", bizParam);
+            }
+            if (bizSubType != null && !bizSubType.isEmpty()) {
+                args.put("bizSubType", bizSubType);
+            }
+            if (bizType != null && !bizType.isEmpty()) {
+                args.put("bizType", bizType);
+            }
+            args.put("outBizNo", (outBizNo != null && !outBizNo.isEmpty()) ? outBizNo : String.valueOf(System.currentTimeMillis()));
             args.put("sourcePassMap", buildSourcePassMap());
             return RequestManager.requestString(
                     "com.alipay.amic.memtask.h5.MemTaskManagerFacade.executeTask",
@@ -24,11 +36,22 @@ public class AntMemberRpcCall {
         }
     }
 
+    public static String executeTask(String str, String str2) {
+        if (str != null && str.contains("#")) {
+            String[] split = str.split("#");
+            String bizType = split.length > 0 ? split[0] : "BROWSE";
+            String bizSubType = split.length > 1 ? split[1] : "UNLIMITED";
+            String bizParam = split.length > 2 ? split[2] : (split.length > 1 ? split[1] : "");
+            return executeTask(bizParam, bizSubType, bizType);
+        }
+        return executeTask(str, "UNLIMITED", str2 != null && !str2.isEmpty() ? str2 : "BROWSE");
+    }
+
     private static JSONObject buildSourcePassMap() {
         JSONObject map = new JSONObject();
         try {
             map.put("innerSource", "");
-            map.put("source", "myTab");
+            map.put("source", "mytab");
             map.put("unid", "");
         } catch (Exception ignored) {}
         return map;
@@ -47,13 +70,22 @@ public class AntMemberRpcCall {
     }
 
     public static String applyTask(String str, Long l) {
-        return RequestManager.requestString("com.alipay.amic.memtask.h5.MemTaskManagerFacade.applyTask",
-                "[{\"alipayGrowthTask\":false,\"sourcePassMap\":" + buildSourcePassMap() + ",\"taskConfigId\":" + l + "}]");
+        try {
+            JSONObject args = new JSONObject();
+            args.put("alipayGrowthTask", false);
+            args.put("source", "antmember");
+            args.put("sourcePassMap", buildSourcePassMap());
+            args.put("taskConfigId", String.valueOf(l));
+            return RequestManager.requestString(
+                    "com.alipay.amic.memtask.h5.MemTaskManagerFacade.applyTask",
+                    "[" + args + "]");
+        } catch (Exception e) {
+            return "";
+        }
     }
 
     public static String applyTask2(Long l) {
-        return RequestManager.requestString("com.alipay.amic.memtask.h5.MemTaskManagerFacade.applyTask",
-                "[{\"alipayGrowthTask\":false,\"sourcePassMap\":" + buildSourcePassMap() + ",\"taskConfigId\":" + l + "}]");
+        return applyTask("", l);
     }
 
     private static String getUniqueId() {

@@ -572,6 +572,7 @@ public class MemberNew extends BaseCommTask {
         Long taskId;
         String rewardPoints;
         String businessType;
+        String businessSubType;
         String businessId;
         int retryCount;
         int currentCount;
@@ -605,8 +606,9 @@ public class MemberNew extends BaseCommTask {
             if (targetBusinessArray != null && targetBusinessArray.length() > 0) {
                 String targetBusiness = targetBusinessArray.getString(0);
                 String[] split = targetBusiness.split("#");
-                info.businessType = split.length > 2 ? split[1] : split[0];
-                info.businessId = split.length > 2 ? split[2] : split[1];
+                info.businessType = split.length > 0 ? split[0] : "BROWSE";
+                info.businessSubType = split.length > 1 ? split[1] : "UNLIMITED";
+                info.businessId = split.length > 2 ? split[2] : (split.length > 1 ? split[1] : "");
             }
             
             info.isHybrid = taskItem.optBoolean("hybrid", false);
@@ -670,6 +672,28 @@ public class MemberNew extends BaseCommTask {
                 return false;
             }
 
+            // 动态从 applyResult 回传的 taskProcessVO 提取或校准 targetBusiness
+            try {
+                JSONObject resultData = applyResult.optJSONObject("resultData");
+                JSONObject taskProcessVO = resultData != null ? resultData.optJSONObject("taskProcessVO") : null;
+                if (taskProcessVO != null) {
+                    JSONArray tbArray = taskProcessVO.optJSONArray("targetBusiness");
+                    if (tbArray != null && tbArray.length() > 0) {
+                        String tb = tbArray.getString(0);
+                        String[] split = tb.split("#");
+                        if (split.length > 0 && (taskInfo.businessType == null || taskInfo.businessType.isEmpty())) {
+                            taskInfo.businessType = split[0];
+                        }
+                        if (split.length > 1 && (taskInfo.businessSubType == null || taskInfo.businessSubType.isEmpty())) {
+                            taskInfo.businessSubType = split[1];
+                        }
+                        if (split.length > 2 && (taskInfo.businessId == null || taskInfo.businessId.isEmpty())) {
+                            taskInfo.businessId = split[2];
+                        }
+                    }
+                }
+            } catch (Exception ignored) {}
+
             // 浏览类任务等待服务端要求时长（分段，单段不超过30秒）
             if (taskInfo.browseSeconds > 0) {
                 Log.runtime(TAG, "浏览等待[" + taskInfo.taskName + "]#" + taskInfo.browseSeconds + "秒");
@@ -683,7 +707,10 @@ public class MemberNew extends BaseCommTask {
             }
 
             // 执行任务
-            JSONObject executeResult = new JSONObject(AntMemberRpcCall.executeTask(taskInfo.businessId, taskInfo.businessType));
+            String bizParam = taskInfo.businessId;
+            String bizSubType = (taskInfo.businessSubType != null && !taskInfo.businessSubType.isEmpty()) ? taskInfo.businessSubType : "UNLIMITED";
+            String bizType = (taskInfo.businessType != null && !taskInfo.businessType.isEmpty()) ? taskInfo.businessType : "BROWSE";
+            JSONObject executeResult = new JSONObject(AntMemberRpcCall.executeTask(bizParam, bizSubType, bizType));
             
             // 检查1009错误
             if (executeResult.optInt("error", 0) == 1009) {

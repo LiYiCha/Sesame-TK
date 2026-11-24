@@ -235,9 +235,20 @@ public class AntMemberRpcCall {
     public static String executeTask(String bizParam, String bizSubType, String bizType, Long taskConfigId) {
         try {
             JSONObject args = new JSONObject();
-            args.put("configId", taskConfigId);
+            if (bizParam != null && !bizParam.isEmpty()) {
+                args.put("bizParam", bizParam);
+            }
+            if (bizSubType != null && !bizSubType.isEmpty()) {
+                args.put("bizSubType", bizSubType);
+            }
+            if (bizType != null && !bizType.isEmpty()) {
+                args.put("bizType", bizType);
+            }
+            args.put("outBizNo", String.valueOf(System.currentTimeMillis()));
+            if (taskConfigId != null && taskConfigId > 0) {
+                args.put("configId", taskConfigId);
+            }
             args.put("sourcePassMap", buildMemberSourcePassMap());
-            args.put("taskProcessId", "");
             return RequestManager.requestString("com.alipay.amic.memtask.h5.MemTaskManagerFacade.executeTask",
                     "[" + args + "]");
         } catch (Exception e) {
@@ -2000,12 +2011,23 @@ public class AntMemberRpcCall {
      * 触发签到浮窗
      * 对应: com.alipay.amic.biz.rpc.signin.h5.triggerSignFloatingBall
      */
+    public static String triggerSignFloatingBall(String bizNo) {
+        return triggerSignFloatingBall("signInBall", bizNo);
+    }
+
     public static String triggerSignFloatingBall(String scene, String templateId) {
         try {
             JSONObject args = new JSONObject();
-            args.put("scene", scene);
-            args.put("templateId", templateId);
+            if (templateId != null && !templateId.isEmpty()) {
+                args.put("bizNo", templateId);
+                args.put("templateId", templateId);
+            }
+            if (scene != null && !scene.isEmpty()) {
+                args.put("scene", scene);
+            }
+            args.put("extMap", new JSONObject());
             args.put("sourcePassMap", buildMemberSourcePassMap());
+            args.put("taskType", "MULTIPLE_TIMER_TASK");
             return RequestManager.requestString(
                     "com.alipay.amic.biz.rpc.signin.h5.triggerSignFloatingBall",
                     "[" + args + "]");

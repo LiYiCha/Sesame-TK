@@ -2092,13 +2092,17 @@ class AntMember : ModelTask() {
                 return@run
             }
             val data = jo.optJSONObject("data")
-            val templateId = data?.optString("templateId", "") ?: ""
-            if (templateId.isEmpty()) return@run
+            val bizNo = sequenceOf(
+                jo.optString("bizNo"),
+                data?.optString("bizNo"),
+                data?.optString("templateId")
+            ).firstOrNull { !it.isNullOrBlank() }.orEmpty()
+            if (bizNo.isEmpty()) return@run
             delay(500)
             if (data?.optString("playType", "").equals("video", ignoreCase = true)) {
                 // 视频类浮球先完成广告任务
                 var handled = false
-                val adJo = JSONObject(AntMemberRpcCall.querySignFloatingBallAdTask(templateId))
+                val adJo = JSONObject(AntMemberRpcCall.querySignFloatingBallAdTask(bizNo))
                 if (ResChecker.checkRes(TAG, adJo)) {
                     // 广告任务对象与 bizId 取法：taskInfo/currentTaskInfo/nextTaskInfo/videoTaskInfo → adBizId/logExtMap.bizId/extInfo
                     val taskObject = adJo.optJSONObject("taskInfo")
@@ -2129,13 +2133,13 @@ class AntMember : ModelTask() {
                 }
                 return@run
             }
-            val triggerResp = AntMemberRpcCall.triggerSignFloatingBall("signInBall", templateId)
+            val triggerResp = AntMemberRpcCall.triggerSignFloatingBall("signInBall", bizNo)
             val triggerJo = JSONObject(triggerResp)
             if (ResChecker.checkRes(TAG, triggerJo)) {
                 Log.runtime(TAG, "会员签到🎖️V2浮窗触发成功")
                 // 浮窗广告任务
                 delay(500)
-                val adResp = AntMemberRpcCall.querySignFloatingBallAdTask(templateId)
+                val adResp = AntMemberRpcCall.querySignFloatingBallAdTask(bizNo)
                 val adJo = JSONObject(adResp)
                 if (ResChecker.checkRes(TAG, adJo)) {
                     Log.runtime(TAG, "会员签到🎖️V2浮窗广告任务已查询")
