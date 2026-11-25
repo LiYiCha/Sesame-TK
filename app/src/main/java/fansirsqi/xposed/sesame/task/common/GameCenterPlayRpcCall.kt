@@ -318,6 +318,12 @@ object GameCenterPlayRpcCall {
                 "bizInfo",
                 "taskCategorization",
                 "categorizationParamModel",
+                "taskExtProps",
+                "TASK_MORPHO_DETAIL",
+                "originalMap",
+                "extInfo",
+                "simpleTaskConfig",
+                "taskConfigInfo",
             ).forEach { key ->
                 addObject(parseObject(current.opt(key)))
             }
@@ -343,6 +349,19 @@ object GameCenterPlayRpcCall {
                     ?.takeIf { it.isNotBlank() && it !in visitedUrls }
                     ?.let(urlQueue::add)
             }
+            runCatching { uri.getQueryParameter("cdpQueryParams") }
+                .getOrNull()
+                ?.takeIf { it.isNotBlank() }
+                ?.let { cdpParams ->
+                    val syntheticUrl = "https://dummy?$cdpParams"
+                    if (syntheticUrl !in visitedUrls) {
+                        urlQueue.add(syntheticUrl)
+                    }
+                }
+            runCatching { uri.getQueryParameter("originalMap") }
+                .getOrNull()
+                ?.let(::parseObject)
+                ?.let(::addObject)
         }
 
         val nestedFirstUris = uris.asReversed()
@@ -389,6 +408,18 @@ object GameCenterPlayRpcCall {
             return null
         }
         return Contract(gameAppId, playTime, source)
+    }
+
+    /** 从任务标题/描述文本中解析游戏时长（支持 秒/s/分钟） */
+    fun parseDurationSeconds(text: String?): Int? {
+        if (text.isNullOrBlank()) return null
+        Regex("(\\d+)\\s*(?:秒|s|S)").find(text)?.groupValues?.get(1)?.toIntOrNull()?.let {
+            if (it > 0) return it
+        }
+        Regex("(\\d+)\\s*分钟").find(text)?.groupValues?.get(1)?.toIntOrNull()?.let {
+            if (it > 0) return it * 60
+        }
+        return null
     }
 
     fun submit(contract: Contract): String =

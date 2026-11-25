@@ -2,6 +2,7 @@ package fansirsqi.xposed.sesame.task.otherTask2.logisticsinteraction
 
 import android.net.Uri
 import fansirsqi.xposed.sesame.data.Status
+import fansirsqi.xposed.sesame.task.antOrchard.AntOrchardRpcCall
 import fansirsqi.xposed.sesame.task.common.GameCenterPlayRpcCall
 import fansirsqi.xposed.sesame.util.GlobalThreadPools
 import fansirsqi.xposed.sesame.util.Log
@@ -235,34 +236,99 @@ object baoguo {
      * 解析包裹游历小游戏时长契约
      */
     private fun resolveBaoguoGameContract(task: JSONObject, material: JSONObject?, title: String): GameCenterPlayRpcCall.Contract? {
-        val durationContract = GameCenterPlayRpcCall.resolveContract(task, material)
+        val taskExtProps = task.optJSONObject("taskExtProps")
+        val morphoDetail = taskExtProps?.optString("TASK_MORPHO_DETAIL")
+            ?.takeIf { it.isNotBlank() }
+            ?.let { runCatching { JSONObject(it) }.getOrNull() }
+
+        val taskGotoUrl = material?.optString("taskGotoUrl").orEmpty().ifBlank {
+            morphoDetail?.optString("taskGotoUrl").orEmpty()
+        }
+        val uri = taskGotoUrl.takeIf { it.isNotBlank() }?.let { runCatching { Uri.parse(it) }.getOrNull() }
+        val cdpQueryParams = uri?.getQueryParameter("cdpQueryParams").orEmpty()
+        val cdpUri = cdpQueryParams.takeIf { it.isNotBlank() }
+            ?.let { runCatching { Uri.parse("https://dummy?$it") }.getOrNull() }
+        val originalMap = sequenceOf(
+            cdpUri?.getQueryParameter("originalMap"),
+            uri?.getQueryParameter("originalMap"),
+        ).firstOrNull { !it.isNullOrBlank() }
+            ?.let { runCatching { JSONObject(it) }.getOrNull() }
+
+        val durationContract = GameCenterPlayRpcCall.resolveContract(task, material, taskExtProps, morphoDetail, originalMap)
         if (durationContract != null) return durationContract
 
-        val isGame = title.contains("玩") || title.contains("游戏") || title.contains("通关") || title.contains("消除")
-        val taskGotoUrl = material?.optString("taskGotoUrl").orEmpty().ifBlank {
-            task.optJSONObject("taskExtProps")?.optString("TASK_MORPHO_DETAIL").orEmpty()
-        }
+        // 通关/充值等事件型游戏任务（非时长类），不强行伪造时长上报
+        val originalTaskId = originalMap?.optString("taskId").orEmpty()
+        val isPassOrConversionTask = originalTaskId.contains("game_pass", ignoreCase = true) ||
+            originalTaskId.contains("pass_every", ignoreCase = true) ||
+            originalTaskId.contains("recharge", ignoreCase = true) ||
+            title.contains("通关") ||
+            title.contains("通过") ||
+            title.contains("充值") ||
+            title.contains("首充")
+        if (isPassOrConversionTask) return null
+
+        val isGame = title.contains("玩") || title.contains("游戏") || title.contains("消除")
         val isGameUrl = taskGotoUrl.contains("gameCenter", ignoreCase = true) ||
-                taskGotoUrl.contains("outer_multi_type_task", ignoreCase = true) ||
-                taskGotoUrl.contains("MINI_APP_PROMOLAYER", ignoreCase = true)
+            taskGotoUrl.contains("outer_multi_type_task", ignoreCase = true) ||
+            taskGotoUrl.contains("MINI_APP_PROMOLAYER", ignoreCase = true)
 
         if (!isGame && !isGameUrl) return null
 
-        val uri = runCatching { Uri.parse(taskGotoUrl) }.getOrNull()
         val appId = sequenceOf(
             uri?.getQueryParameter("appId"),
             uri?.getQueryParameter("gameAppId"),
+            cdpUri?.getQueryParameter("appId"),
+            cdpUri?.getQueryParameter("gameAppId"),
+            originalMap?.optString("appId"),
+            originalMap?.optString("gameAppId"),
             task.optString("appId"),
             material?.optString("appId")
         ).firstOrNull { !it.isNullOrBlank() } ?: return null
 
-        val source = uri?.getQueryParameter("chInfo")?.takeIf { it.isNotBlank() }
-            ?: uri?.getQueryParameter("source")?.takeIf { it.isNotBlank() }
-            ?: "wdkd_mc_xjajah06"
+        val source = sequenceOf(
+            uri?.getQueryParameter("chInfo"),
+            uri?.getQueryParameter("source"),
+            cdpUri?.getQueryParameter("chInfo"),
+            cdpUri?.getQueryParameter("source"),
+            originalMap?.optString("subScene"),
+        ).firstOrNull { !it.isNullOrBlank() } ?: "wdkd_mc_xjajah06"
 
-        val durationMatch = Regex("(\\d+)\\s*(?:秒|s)").find(title)
-        val playTime = durationMatch?.groupValues?.get(1)?.toIntOrNull() ?: 35
+        val textCandidates = listOfNotNull(
+            title,
+            material?.optString("subTitle"),
+            material?.optString("taskDesc"),
+            morphoDetail?.optString("subTitle"),
+            morphoDetail?.optString("taskDesc"),
+            task.optString("taskDesc"),
+        ).filter { it.isNotBlank() }
 
-        return GameCenterPlayRpcCall.Contract(appId, playTime, source)
+        val parsedSeconds = textCandidates.firstNotNullOfOrNull { GameCenterPlayRpcCall.parseDurationSeconds(it) }
+            ?: queryFloatingBallDuration(appId, source)
+            ?: return null
+
+        return GameCenterPlayRpcCall.Contract(appId, parsedSeconds, source)
     }
+
+    private fun queryFloatingBallDuration(gameAppId: String, chInfo: String): Int? =
+        runCatching {
+            val res = AntOrchardRpcCall.queryOptionalPlayFloatingBall(gameAppId, chInfo)
+            if (res.isBlank()) return@runCatching null
+            val jo = JSONObject(res)
+            val taskList = jo.optJSONObject("floatingBallPlayInfo")?.optJSONArray("taskList") ?: return@runCatching null
+            for (i in 0 until taskList.length()) {
+                val item = taskList.optJSONObject(i) ?: continue
+                val params = item.optJSONArray("multiStageVisitFloatBallParams")
+                if (params != null) {
+                    for (j in 0 until params.length()) {
+                        val t = params.optJSONObject(j)?.optInt("timeCount", 0) ?: 0
+                        if (t > 0) return@runCatching t
+                    }
+                }
+                val t = item.optInt("timeCount", 0).takeIf { it > 0 }
+                    ?: item.optInt("playTime", 0).takeIf { it > 0 }
+                if (t != null) return@runCatching t
+            }
+            null
+        }.getOrNull()
 }

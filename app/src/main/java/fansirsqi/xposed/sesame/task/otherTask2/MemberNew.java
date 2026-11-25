@@ -579,6 +579,7 @@ public class MemberNew extends BaseCommTask {
         int targetCount;
         boolean isHybrid;
         int browseSeconds;
+        GameCenterPlayRpcCall.Contract gameContract;
     }
     
     /**
@@ -626,6 +627,7 @@ public class MemberNew extends BaseCommTask {
             }
 
             info.browseSeconds = readBrowseSeconds(taskItem);
+            info.gameContract = GameCenterPlayRpcCall.INSTANCE.resolveContract(taskItem, taskConfig);
 
             return info;
         } catch (Exception e) {
@@ -703,6 +705,17 @@ public class MemberNew extends BaseCommTask {
                     int chunk = Math.min(30, taskInfo.browseSeconds - waited);
                     TimeUtil.sleep(chunk * 1000);
                     waited += chunk;
+                }
+            }
+
+            // 若为小游戏时长任务，上报小游戏时长
+            if (taskInfo.gameContract != null) {
+                try {
+                    Log.other(TAG, "会员任务检测到小游戏[" + taskInfo.taskName + "]，开始上报时长(" + taskInfo.gameContract.getPlayTime() + "s)...");
+                    GameCenterPlayRpcCall.INSTANCE.submitForAck(taskInfo.gameContract);
+                    TimeUtil.sleep(1500);
+                } catch (Throwable t) {
+                    Log.error(TAG, "会员任务上报小游戏时长失败: " + t.getMessage());
                 }
             }
 

@@ -399,10 +399,20 @@ class SesameAlchemy {
     private fun reportGameDurationIfNeeded(task: JSONObject, taskTitle: String) {
         var gameContract = GameCenterPlayRpcCall.resolveContract(task)
         if (gameContract == null) {
-            val durationMatch = Regex("(\\d+)\\s*(?:秒|s)").find(taskTitle)
-            val isGameTask = (taskTitle.contains("玩") || taskTitle.contains("游戏")) && (durationMatch != null || taskTitle.contains("秒"))
+            val isPassOrConversionTask = taskTitle.contains("通关") || taskTitle.contains("通过") ||
+                taskTitle.contains("充值") || taskTitle.contains("首充")
+            val parsedDuration = if (isPassOrConversionTask) null else listOf(
+                taskTitle,
+                task.optString("subTitle"),
+                task.optString("subtitle"),
+                task.optString("taskDesc"),
+                task.optString("desc"),
+            ).firstNotNullOfOrNull { GameCenterPlayRpcCall.parseDurationSeconds(it) }
+            val isGameTask = !isPassOrConversionTask &&
+                (taskTitle.contains("玩") || taskTitle.contains("游戏")) &&
+                (parsedDuration != null || taskTitle.contains("秒") || taskTitle.contains("分钟"))
             if (isGameTask) {
-                val playTime = durationMatch?.groupValues?.get(1)?.toIntOrNull() ?: 30
+                val playTime = parsedDuration ?: 30
                 val actionUrl = task.optString("actionUrl")
                 val targetUrl = task.optString("targetUrl")
                 val gameAppId = sequenceOf(
